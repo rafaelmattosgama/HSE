@@ -1,0 +1,817 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  N1_CORPORATE
+  N2_PLANT_MANAGER
+  N3_SAFETY
+  N4_SUPERVISOR
+  N5_OPERATOR
+  N6_QR_REPORTER
+  MEDICO
+}
+
+enum PlantAccessTokenType {
+  REPORT
+  KIOSK
+}
+
+enum CommunicationType {
+  UNSAFE_ACT
+  UNSAFE_CONDITION
+  NEAR_MISS
+  FIRST_AID
+  ACCIDENT
+}
+
+enum CommunicationStatus {
+  SUBMITTED
+  PENDING_VALIDATION
+  VALID_OPEN
+  ONGOING
+  CLOSED
+  REJECTED
+  INVALID
+}
+
+enum SeverityPotential {
+  LOW
+  MED
+  HIGH
+}
+
+enum LeaveClassification {
+  LE_30
+  GT_30
+}
+
+enum CommunicationSource {
+  BACKOFFICE
+  TOKEN_REPORT
+  TOKEN_KIOSK
+}
+
+enum ActionSourceType {
+  COMMUNICATION
+  SEWO
+  MANUAL
+}
+
+enum ActionCategory {
+  CORRECTIVE
+  PREVENTIVE
+  IMPROVEMENT
+}
+
+enum ActionPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ActionStatus {
+  OPEN
+  ONGOING
+  CLOSED
+}
+
+enum SEWOStatus {
+  DRAFT
+  IN_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum SEWOAttachmentType {
+  EVENT_EVIDENCE
+  BEFORE
+  AFTER
+  OTHER
+}
+
+enum AlertRuleTriggerType {
+  N_IN_X_DAYS
+  CONSECUTIVE
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+enum ReportType {
+  WEEKLY_DIGEST
+  MONTHLY
+  ANNUAL
+}
+
+enum ReportScope {
+  PLANT
+  CORPORATE
+}
+
+model Plant {
+  id               String               @id @default(uuid())
+  code             String               @unique
+  name             String
+  timezone         String
+  defaultLanguage  String
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  users            UserPlantRole[]
+  accessTokens     PlantAccessToken[]
+  areas            Area[]
+  lines            Line[]
+  workstations     Workstation[]
+  equipments       Equipment[]
+  shifts           Shift[]
+  riskThemes       RiskTheme[]
+  unsafeActTypes   UnsafeActType[]
+  unsafeCondTypes  UnsafeConditionType[]
+  nearMissTypes    NearMissType[]
+  bodyParts        BodyPart[]
+  injuryTypes      InjuryType[]
+  employees        EmployeeDirectory[]
+  communications   Communication[]
+  actions          Action[]
+  sewoRecords      SEWO[]
+  kpiInputs        SafetyKpiMonthlyInput[]
+  recipientLists   ReportRecipientList[]
+  alertRules       AlertRule[]
+  notifications    Notification[]
+  systemParameters SystemParameter[]
+  reportRuns       ReportRun[]
+  auditLogs        AuditLog[]
+}
+
+model User {
+  id                   String                 @id @default(uuid())
+  email                String?                @unique
+  passwordHash         String?
+  name                 String
+  language             String                 @default("pt")
+  isActive             Boolean                @default(true)
+  forcePasswordChange  Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  emailVerified        DateTime?
+  image                String?
+  accounts             Account[]
+  sessions             Session[]
+  authenticators       Authenticator[]
+  plantRoles           UserPlantRole[]
+  reportedCommunications Communication[]      @relation("ReporterUser")
+  validatedCommunications Communication[]     @relation("ValidatedByUser")
+  manualClosedCommunications Communication[]  @relation("ManuallyClosedByUser")
+  actionsOwned         Action[]               @relation("ActionOwner")
+  actionReopened       Action[]               @relation("ActionReopenedBy")
+  actionClosed         Action[]               @relation("ActionClosedBy")
+  actionCoOwned        ActionCoOwner[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  sewoPerformed        SEWO[]                 @relation("SewoPerformedBy")
+  sewoApproved         SEWO[]                 @relation("SewoApprovedBy")
+  communicationAtt     CommunicationAttachment[]
+  actionEvidenceAtt    ActionEvidenceAttachment[]
+  sewoAttachment       SEWOAttachment[]
+}
+
+model Role {
+  id        String       @id @default(uuid())
+  code      RoleCode     @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  users     UserPlantRole[]
+}
+
+model UserPlantRole {
+  id        String    @id @default(uuid())
+  userId    String
+  plantId   String
+  roleId    String
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plant     Plant     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, plantId, roleId])
+  @@index([plantId])
+  @@index([roleId])
+}
+
+model PlantAccessToken {
+  id         String              @id @default(uuid())
+  plantId    String
+  type       PlantAccessTokenType
+  tokenHash  String
+  isActive   Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  revokedAt  DateTime?
+  createdBy  String?
+  plant      Plant               @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@index([plantId, type, isActive])
+  @@unique([plantId, type, tokenHash])
+}
+
+model Area {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+  sewoRecords     SEWO[]
+
+  @@unique([plantId, code])
+}
+
+model Line {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+  sewoRecords     SEWO[]
+
+  @@unique([plantId, code])
+}
+
+model Workstation {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model Equipment {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model Shift {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  employees EmployeeDirectory[]
+  sewoRecords SEWO[]
+
+  @@unique([plantId, code])
+}
+
+model RiskTheme {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model UnsafeActType {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model UnsafeConditionType {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model NearMissType {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model BodyPart {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model InjuryType {
+  id        String   @id @default(uuid())
+  plantId   String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@unique([plantId, code])
+}
+
+model EmployeeDirectory {
+  id         String   @id @default(uuid())
+  plantId    String
+  employeeNo String
+  name       String
+  dept       String?
+  shiftId    String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  plant      Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  shift      Shift?   @relation(fields: [shiftId], references: [id])
+  targetCommunications Communication[] @relation("TargetEmployee")
+
+  @@unique([plantId, employeeNo])
+  @@index([plantId, name])
+}
+
+model Communication {
+  id                    String              @id @default(uuid())
+  plantId               String
+  type                  CommunicationType
+  status                CommunicationStatus @default(SUBMITTED)
+  source                CommunicationSource @default(BACKOFFICE)
+  eventDatetime         DateTime
+  reportedAt            DateTime            @default(now())
+  reporterName          String
+  reporterEmployeeNo    String?
+  reporterUserId        String?
+  targetText            String?
+  targetEmployeeNo      String?
+  targetEmployeeId      String?
+  areaId                String?
+  lineId                String?
+  workstationId         String?
+  equipmentId           String?
+  riskThemeId           String
+  unsafeActTypeId       String?
+  unsafeConditionTypeId String?
+  nearMissTypeId        String?
+  description           String
+  severityPotential     SeverityPotential?
+  isContractor          Boolean?            @default(false)
+  bodyPartId            String?
+  injuryTypeId          String?
+  hasLeave              Boolean?            @default(false)
+  returnDate            DateTime?
+  lostDays              Int?
+  classification        LeaveClassification?
+  validationNotes       String?
+  validatedBy           String?
+  validatedAt           DateTime?
+  invalidationReason    String?
+  manuallyClosedBy      String?
+  manuallyClosedAt      DateTime?
+  manualCloseReason     String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  plant                 Plant               @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  reporterUser          User?               @relation("ReporterUser", fields: [reporterUserId], references: [id])
+  targetEmployee        EmployeeDirectory?  @relation("TargetEmployee", fields: [targetEmployeeId], references: [id])
+  area                  Area?               @relation(fields: [areaId], references: [id])
+  line                  Line?               @relation(fields: [lineId], references: [id])
+  workstation           Workstation?        @relation(fields: [workstationId], references: [id])
+  equipment             Equipment?          @relation(fields: [equipmentId], references: [id])
+  riskTheme             RiskTheme           @relation(fields: [riskThemeId], references: [id])
+  unsafeActType         UnsafeActType?      @relation(fields: [unsafeActTypeId], references: [id])
+  unsafeConditionType   UnsafeConditionType? @relation(fields: [unsafeConditionTypeId], references: [id])
+  nearMissType          NearMissType?       @relation(fields: [nearMissTypeId], references: [id])
+  bodyPart              BodyPart?           @relation(fields: [bodyPartId], references: [id])
+  injuryType            InjuryType?         @relation(fields: [injuryTypeId], references: [id])
+  validatedByUser       User?               @relation("ValidatedByUser", fields: [validatedBy], references: [id])
+  manuallyClosedByUser  User?               @relation("ManuallyClosedByUser", fields: [manuallyClosedBy], references: [id])
+  attachments           CommunicationAttachment[]
+  actions               Action[]
+  alertEvents           AlertEvent[]
+  sewoRecords           SEWO[]
+
+  @@index([plantId, status, eventDatetime])
+  @@index([riskThemeId, eventDatetime])
+}
+
+model CommunicationAttachment {
+  id              String        @id @default(uuid())
+  communicationId String
+  fileKey         String
+  fileName        String
+  contentType     String
+  createdAt       DateTime      @default(now())
+  uploadedByUserId String?
+  communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  uploadedByUser  User?         @relation(fields: [uploadedByUserId], references: [id])
+
+  @@index([communicationId])
+}
+
+model Action {
+  id               String          @id @default(uuid())
+  plantId          String
+  sourceType       ActionSourceType
+  communicationId  String?
+  sewoId           String?
+  category         ActionCategory
+  priority         ActionPriority
+  title            String
+  description      String
+  ownerUserId      String
+  dueDate          DateTime
+  status           ActionStatus    @default(OPEN)
+  closedAt         DateTime?
+  closedBy         String?
+  closureComment   String?
+  reopenedAt       DateTime?
+  reopenedBy       String?
+  reopenReason     String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  plant            Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communication    Communication?  @relation(fields: [communicationId], references: [id])
+  sewo             SEWO?           @relation(fields: [sewoId], references: [id])
+  ownerUser        User            @relation("ActionOwner", fields: [ownerUserId], references: [id])
+  closedByUser     User?           @relation("ActionClosedBy", fields: [closedBy], references: [id])
+  reopenedByUser   User?           @relation("ActionReopenedBy", fields: [reopenedBy], references: [id])
+  coOwners         ActionCoOwner[]
+  evidenceAttachments ActionEvidenceAttachment[]
+  sewoLinks        SEWOActionLink[]
+
+  @@index([plantId, status, dueDate])
+}
+
+model ActionCoOwner {
+  id        String   @id @default(uuid())
+  actionId  String
+  userId    String
+  createdAt DateTime @default(now())
+  action    Action   @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([actionId, userId])
+}
+
+model ActionEvidenceAttachment {
+  id            String   @id @default(uuid())
+  actionId      String
+  fileKey       String
+  fileName      String
+  contentType   String
+  uploadedAt    DateTime @default(now())
+  uploadedById  String?
+  action        Action   @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  uploadedBy    User?    @relation(fields: [uploadedById], references: [id])
+}
+
+model SafetyKpiMonthlyInput {
+  id          String   @id @default(uuid())
+  plantId     String
+  year        Int
+  month       Int
+  hoursWorked Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  plant       Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@unique([plantId, year, month])
+}
+
+model ReportRecipientList {
+  id         String         @id @default(uuid())
+  plantId    String?
+  name       String
+  scope      ReportScope
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  plant      Plant?         @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  recipients ReportRecipient[]
+}
+
+model ReportRecipient {
+  id         String              @id @default(uuid())
+  listId     String
+  email      String
+  name       String?
+  isActive   Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  list       ReportRecipientList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, email])
+}
+
+model AlertRule {
+  id                 String         @id @default(uuid())
+  plantId            String
+  name               String
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  plant              Plant          @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  repetitionRule     RepetitionRule?
+  events             AlertEvent[]
+
+  @@index([plantId, isActive])
+}
+
+model RepetitionRule {
+  id                   String               @id @default(uuid())
+  alertRuleId          String               @unique
+  triggerType          AlertRuleTriggerType
+  thresholdCount       Int
+  windowDays           Int                  @default(30)
+  consecutiveCount     Int?
+  sameWorkstation      Boolean              @default(true)
+  sameEquipment        Boolean              @default(true)
+  sameRiskTheme        Boolean              @default(true)
+  sameWorker           Boolean              @default(false)
+  manualResetAt        DateTime?
+  alertRule            AlertRule            @relation(fields: [alertRuleId], references: [id], onDelete: Cascade)
+}
+
+model AlertEvent {
+  id              String        @id @default(uuid())
+  alertRuleId     String
+  communicationId String?
+  payloadJson     Json
+  triggeredAt     DateTime      @default(now())
+  alertRule       AlertRule     @relation(fields: [alertRuleId], references: [id], onDelete: Cascade)
+  communication   Communication? @relation(fields: [communicationId], references: [id])
+
+  @@index([triggeredAt])
+}
+
+model SEWO {
+  id                            String      @id @default(uuid())
+  plantId                       String
+  communicationId               String
+  eventClassification           String
+  areaId                        String?
+  lineId                        String?
+  shiftId                       String?
+  analysisDate                  DateTime
+  performedByUserId             String
+  whatText                      String
+  whereText                     String
+  whoText                       String
+  usualWorkYesNo                Boolean
+  whichText                     String?
+  howText                       String
+  immediateCorrectiveActionText String
+  status                        SEWOStatus  @default(DRAFT)
+  approvedByUserId              String?
+  approvedAt                    DateTime?
+  approvalComment               String?
+  causeCatalogVersionId         String
+  createdAt                     DateTime    @default(now())
+  updatedAt                     DateTime    @updatedAt
+  plant                         Plant       @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communication                 Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  area                          Area?       @relation(fields: [areaId], references: [id])
+  line                          Line?       @relation(fields: [lineId], references: [id])
+  shift                         Shift?      @relation(fields: [shiftId], references: [id])
+  performedBy                   User        @relation("SewoPerformedBy", fields: [performedByUserId], references: [id])
+  approvedBy                    User?       @relation("SewoApprovedBy", fields: [approvedByUserId], references: [id])
+  causeCatalogVersion           SEWOCauseCatalogVersion @relation(fields: [causeCatalogVersionId], references: [id])
+  attachments                   SEWOAttachment[]
+  causeSelections               SEWOCauseSelection[]
+  actions                       Action[]
+  actionLinks                   SEWOActionLink[]
+}
+
+model SEWOAttachment {
+  id            String             @id @default(uuid())
+  sewoId        String
+  type          SEWOAttachmentType
+  fileKey       String
+  fileName      String
+  contentType   String
+  createdAt     DateTime           @default(now())
+  uploadedById  String?
+  sewo          SEWO               @relation(fields: [sewoId], references: [id], onDelete: Cascade)
+  uploadedBy    User?              @relation(fields: [uploadedById], references: [id])
+}
+
+model SEWOCauseCatalogVersion {
+  id          String                 @id @default(uuid())
+  version     Int                    @unique
+  name        String
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  categories  SEWOCauseCategory[]
+  sewoRecords SEWO[]
+}
+
+model SEWOCauseCategory {
+  id          String                   @id @default(uuid())
+  versionId   String
+  name        String
+  sortOrder   Int
+  version     SEWOCauseCatalogVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  items       SEWOCauseItem[]
+
+  @@index([versionId, sortOrder])
+}
+
+model SEWOCauseItem {
+  id          String             @id @default(uuid())
+  categoryId  String
+  label       String
+  sortOrder   Int
+  category    SEWOCauseCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  selections  SEWOCauseSelection[]
+
+  @@index([categoryId, sortOrder])
+}
+
+model SEWOCauseSelection {
+  id           String       @id @default(uuid())
+  sewoId       String
+  causeItemId  String
+  selected     Boolean      @default(false)
+  isRootCause  Boolean      @default(false)
+  comment      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  sewo         SEWO         @relation(fields: [sewoId], references: [id], onDelete: Cascade)
+  causeItem    SEWOCauseItem @relation(fields: [causeItemId], references: [id], onDelete: Cascade)
+
+  @@unique([sewoId, causeItemId])
+}
+
+model SEWOActionLink {
+  id        String   @id @default(uuid())
+  sewoId    String
+  actionId  String
+  createdAt DateTime @default(now())
+  sewo      SEWO     @relation(fields: [sewoId], references: [id], onDelete: Cascade)
+  action    Action   @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@unique([sewoId, actionId])
+}
+
+model Notification {
+  id         String             @id @default(uuid())
+  userId     String?
+  plantId    String?
+  title      String
+  body       String
+  status     NotificationStatus @default(UNREAD)
+  channel    String             @default("DASHBOARD")
+  createdAt  DateTime           @default(now())
+  readAt     DateTime?
+  user       User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plant      Plant?             @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([plantId, createdAt])
+}
+
+model SystemParameter {
+  id         String   @id @default(uuid())
+  plantId    String?
+  key        String
+  valueJson  Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  plant      Plant?   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@unique([plantId, key])
+}
+
+model ReportRun {
+  id          String     @id @default(uuid())
+  plantId     String?
+  type        ReportType
+  periodStart DateTime
+  periodEnd   DateTime
+  fileKeys    Json
+  recipients  Json
+  status      String
+  error       String?
+  createdAt   DateTime   @default(now())
+  completedAt DateTime?
+  plant       Plant?     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+}
+
+model IdempotencyKey {
+  id          String   @id @default(uuid())
+  scope       String
+  key         String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  action     String
+  diffJson   Json
+  actorUserId String?
+  plantId    String?
+  createdAt  DateTime @default(now())
+  actorUser  User?    @relation(fields: [actorUserId], references: [id])
+  plant      Plant?   @relation(fields: [plantId], references: [id])
+
+  @@index([plantId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Authenticator {
+  credentialID         String @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+}

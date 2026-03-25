@@ -1,0 +1,15 @@
+process.env.NEXTAUTH_SECRET ??= "test-secret-1234567890";
+process.env.NEXTAUTH_URL ??= "http://localhost:3000";
+process.env.APP_URL ??= "http://localhost:3000";
+process.env.NEXT_PUBLIC_APP_URL ??= "http://localhost:3000";
+process.env.DATABASE_URL ??= "postgresql://ehs:ehs@localhost:5433/ehs";
+process.env.REDIS_URL ??= "redis://localhost:6380";
+process.env.SMTP_HOST ??= "localhost";
+process.env.SMTP_PORT ??= "1025";
+process.env.SMTP_FROM ??= "EHS <noreply@ehs.local>";
+process.env.S3_ENDPOINT ??= "http://localhost:9000";
+process.env.S3_REGION ??= "us-east-1";
+process.env.S3_ACCESS_KEY ??= "minio";
+process.env.S3_SECRET_KEY ??= "minio123";
+process.env.S3_BUCKET ??= "ehs-attachments";
+process.env.TOKEN_PEPPER ??= "test-pepper-1234567890123456";
