@@ -5,6 +5,7 @@ import { getCreatableRoles } from "@/lib/rbac/user-management";
 import { UserManager } from "@/components/feature/user-manager";
 import { QrTokenManager } from "@/components/feature/qr-token-manager";
 import { SlaEditor } from "@/components/feature/sla-editor";
+import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminPage({
@@ -23,7 +24,7 @@ export default async function AdminPage({
   const canManageUsers = actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
 
-  const [sla, recipients, rules] = await prisma.$transaction([
+  const [sla, recipients, rules, areas, workstations, workers] = await prisma.$transaction([
     prisma.systemParameter.findUnique({
       where: {
         plantId_key: {
@@ -47,6 +48,18 @@ export default async function AdminPage({
       include: {
         repetitionRule: true,
       },
+    }),
+    prisma.area.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: { name: "asc" },
+    }),
+    prisma.workstation.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: { name: "asc" },
+    }),
+    prisma.employeeDirectory.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -101,6 +114,12 @@ export default async function AdminPage({
         />
         <QrTokenManager />
       </section>
+
+      <MasterDataManager
+        initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+        initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+        initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+      />
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Recipient lists</h2>

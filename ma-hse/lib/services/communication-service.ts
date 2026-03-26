@@ -48,6 +48,16 @@ export const CommunicationService = {
         returnDate: input.payload.returnDate,
         lostDays: leave.lostDays,
         classification: leave.classification,
+        attachments: input.payload.attachments?.length
+          ? {
+              createMany: {
+                data: input.payload.attachments,
+              },
+            }
+          : undefined,
+      },
+      include: {
+        attachments: true,
       },
     });
 

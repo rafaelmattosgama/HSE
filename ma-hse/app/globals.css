@@ -3,14 +3,53 @@
 :root {
   --font-sans: var(--font-sora);
   --font-mono: var(--font-plex-mono);
-  --background: #f6faf9;
+  --background: #ffffff;
   --foreground: #0f172a;
   --card: #ffffff;
-  --muted: #f1f5f9;
+  --muted: #f8fafc;
   --border: #cbd5e1;
-  --primary: #0f766e;
+  --primary: #002663;
   --primary-foreground: #f8fafc;
   --danger: #b91c1c;
+  --app-background: radial-gradient(circle at top right, #dbe7ff 0%, #ffffff 48%, #f7faff 100%);
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --surface-subtle: #eef2ff;
+  --text-strong: #0f172a;
+  --text-default: #334155;
+  --text-muted: #64748b;
+  --brand-50: #e7eefb;
+  --brand-100: #d3e0f9;
+  --brand-300: #8aa6dd;
+  --brand-400: #6b8ccf;
+  --brand-700: #002663;
+  --brand-800: #001f52;
+  --brand-900: #00153a;
+}
+
+html[data-theme="black"] {
+  --background: #000000;
+  --foreground: #e6edf8;
+  --card: #0a0f17;
+  --muted: #111827;
+  --border: #1f2937;
+  --primary: #7fa3ff;
+  --primary-foreground: #020407;
+  --danger: #f87171;
+  --app-background: #000000;
+  --surface: #0a0f17;
+  --surface-muted: #111827;
+  --surface-subtle: #0f172a;
+  --text-strong: #f8fbff;
+  --text-default: #d7e1f0;
+  --text-muted: #94a3b8;
+  --brand-50: #0d1a31;
+  --brand-100: #132444;
+  --brand-300: #4d6fb3;
+  --brand-400: #6b8fe3;
+  --brand-700: #7fa3ff;
+  --brand-800: #9ab6ff;
+  --brand-900: #d7e4ff;
 }
 
 @theme inline {
@@ -28,7 +67,10 @@ body {
   margin: 0;
   font-family: var(--font-sans), sans-serif;
   color: var(--foreground);
-  background: var(--background);
+  background: var(--app-background);
+  transition:
+    background 180ms ease,
+    color 180ms ease;
 }
 
 a {
@@ -45,5 +87,104 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+html[data-theme] .bg-white {
+  background-color: var(--surface) !important;
+}
+
+html[data-theme] .bg-white\/80 {
+  background-color: color-mix(in srgb, var(--surface) 80%, transparent) !important;
+}
+
+html[data-theme] .bg-slate-50 {
+  background-color: var(--surface-muted) !important;
+}
+
+html[data-theme] .bg-slate-100 {
+  background-color: var(--surface-subtle) !important;
+}
+
+html[data-theme] .border-slate-200,
+html[data-theme] .border-slate-300,
+html[data-theme] .border-amber-200 {
+  border-color: var(--border) !important;
+}
+
+html[data-theme] .text-slate-900 {
+  color: var(--text-strong) !important;
+}
+
+html[data-theme] .text-slate-700,
+html[data-theme] .text-slate-600 {
+  color: var(--text-default) !important;
+}
+
+html[data-theme] .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme] .text-teal-700 {
+  color: var(--brand-700) !important;
+}
+
+html[data-theme] .text-teal-900 {
+  color: var(--brand-900) !important;
+}
+
+html[data-theme] .bg-teal-50 {
+  background-color: var(--brand-50) !important;
+}
+
+html[data-theme] .bg-teal-50\/40 {
+  background-color: color-mix(in srgb, var(--brand-50) 40%, transparent) !important;
+}
+
+html[data-theme] .border-teal-300 {
+  border-color: var(--brand-300) !important;
+}
+
+html[data-theme] .border-teal-400 {
+  border-color: var(--brand-400) !important;
+}
+
+html[data-theme] .bg-teal-700 {
+  background-color: var(--brand-700) !important;
+}
+
+html[data-theme] .bg-teal-800 {
+  background-color: var(--brand-800) !important;
+}
+
+html[data-theme] .hover\:bg-slate-100:hover {
+  background-color: var(--surface-subtle) !important;
+}
+
+html[data-theme] .hover\:bg-teal-50:hover {
+  background-color: var(--brand-50) !important;
+}
+
+html[data-theme] .hover\:bg-teal-50\/40:hover {
+  background-color: color-mix(in srgb, var(--brand-50) 40%, transparent) !important;
+}
+
+html[data-theme] .hover\:border-teal-300:hover {
+  border-color: var(--brand-300) !important;
+}
+
+html[data-theme] .hover\:bg-teal-800:hover {
+  background-color: var(--brand-800) !important;
+}
+
+html[data-theme="black"] .shadow-sm {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+html[data-theme="black"] .bg-amber-50 {
+  background-color: rgba(180, 120, 20, 0.12) !important;
+}
+
+html[data-theme="black"] .text-amber-900 {
+  color: #f8d58a !important;
 }

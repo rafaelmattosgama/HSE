@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
@@ -27,6 +27,20 @@ export default function LoginPage() {
 
     if (result?.error) {
       setError(result.error);
+      return;
+    }
+
+    const session = await getSession();
+    const isCorporate = session?.user?.plantRoles?.some((entry) => entry.role === "N1_CORPORATE");
+    const primaryPlant = session?.user?.plantRoles?.find((entry) => entry.plantCode)?.plantCode;
+
+    if (isCorporate) {
+      window.location.href = "/app/corporate";
+      return;
+    }
+
+    if (primaryPlant) {
+      window.location.href = `/app/${primaryPlant}/dashboards`;
       return;
     }
 

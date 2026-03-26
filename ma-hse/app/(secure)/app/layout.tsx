@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/layout/logout-button";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { authOptions } from "@/lib/auth/options";
 
 export default async function SecureAppLayout({
@@ -27,6 +28,7 @@ export default async function SecureAppLayout({
             MA HSE
           </Link>
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             <div className="text-sm text-slate-600">{session.user.name}</div>
             <LogoutButton />
           </div>

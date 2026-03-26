@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { ActionCategory, ActionSourceType, RoleCode } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
@@ -6,6 +6,7 @@ import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { createCommunicationInput } from "@/lib/validation/dtos";
+import { ActionService } from "@/lib/services/action-service";
 import { CommunicationService } from "@/lib/services/communication-service";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ plantCode: string }> }) {
@@ -65,6 +66,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     payload: parsed.data,
     reporterUserId: auth.session.user.id,
   });
+
+  if (parsed.data.quickAction) {
+    await ActionService.create({
+      plantId: plant.id,
+      actorUserId: auth.session.user.id,
+      payload: {
+        sourceType: ActionSourceType.COMMUNICATION,
+        communicationId: communication.id,
+        category: ActionCategory.CORRECTIVE,
+        priority: parsed.data.quickAction.priority,
+        title: parsed.data.quickAction.title,
+        description: parsed.data.quickAction.description,
+        ownerUserId: parsed.data.quickAction.ownerUserId,
+        dueDate: parsed.data.quickAction.dueDate,
+      },
+    });
+  }
 
   return ok(communication, { status: 201 });
 }

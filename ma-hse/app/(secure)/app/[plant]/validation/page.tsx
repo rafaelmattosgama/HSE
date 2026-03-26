@@ -1,4 +1,5 @@
 import { ValidationActions } from "@/components/feature/validation-actions";
+import { formatCommunicationType } from "@/lib/helpers";
 import { prisma } from "@/lib/prisma";
 
 export default async function ValidationPage({
@@ -34,7 +35,7 @@ export default async function ValidationPage({
           <article key={row.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-4">
               <div>
-                <h2 className="font-semibold text-slate-900">{row.type}</h2>
+                <h2 className="font-semibold text-slate-900">{formatCommunicationType(row.type)}</h2>
                 <p className="text-sm text-slate-500">{row.reporterName} | {row.eventDatetime.toISOString()}</p>
               </div>
               <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">{row.status}</span>

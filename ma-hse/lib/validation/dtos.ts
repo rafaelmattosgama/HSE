@@ -27,6 +27,24 @@ export const createCommunicationInput = z
     injuryTypeId: optionalUuid,
     hasLeave: z.boolean().optional(),
     returnDate: z.coerce.date().optional(),
+    attachments: z
+      .array(
+        z.object({
+          fileKey: z.string().min(3),
+          fileName: z.string().min(1),
+          contentType: z.string().min(3),
+        }),
+      )
+      .optional(),
+    quickAction: z
+      .object({
+        title: z.string().min(3),
+        description: z.string().min(5),
+        ownerUserId: z.string().uuid(),
+        priority: z.nativeEnum(ActionPriority),
+        dueDate: z.coerce.date().optional(),
+      })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     const baseRequired = ["eventDatetime", "reporterName", "riskThemeId", "description"] as const;
@@ -53,15 +71,30 @@ export const createCommunicationInput = z
       });
     }
 
-    if (
-      (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) &&
-      !value.severityPotential
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Severity potential is required",
-        path: ["severityPotential"],
-      });
+    if (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) {
+      if (!value.targetEmployeeId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Involved worker is required",
+          path: ["targetEmployeeId"],
+        });
+      }
+
+      if (!value.bodyPartId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Body part affected is required",
+          path: ["bodyPartId"],
+        });
+      }
+
+      if (!value.injuryTypeId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Injury type is required",
+          path: ["injuryTypeId"],
+        });
+      }
     }
   });
 
@@ -170,6 +203,40 @@ export const createPlantUserInput = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const createMasterDataItemInput = z.object({
+  type: z.enum(["area", "workstation"]),
+  code: z.string().min(1),
+  name: z.string().min(2),
+});
+
+export const createWorkerInput = z.object({
+  employeeNo: z.string().min(1),
+  name: z.string().min(2),
+  dept: z.string().optional(),
+});
+
+export const createCorporatePlantInput = z.object({
+  code: z.string().min(2),
+  name: z.string().min(2),
+  timezone: z.string().min(2),
+  defaultLanguage: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+  n1: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
+  }),
+  n2: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
+  }),
+  n3: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
+  }),
+});
+
 export const changePasswordInput = z
   .object({
     currentPassword: z.string().min(1, "Current password is required"),
@@ -205,4 +272,7 @@ export type ApproveSEWOInput = z.infer<typeof approveSEWOInput>;
 export type UpdateAlertRuleInput = z.infer<typeof updateAlertRuleInput>;
 export type IssuePresignedUploadInput = z.infer<typeof issuePresignedUploadInput>;
 export type CreatePlantUserInput = z.infer<typeof createPlantUserInput>;
+export type CreateMasterDataItemInput = z.infer<typeof createMasterDataItemInput>;
+export type CreateWorkerInput = z.infer<typeof createWorkerInput>;
+export type CreateCorporatePlantInput = z.infer<typeof createCorporatePlantInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;

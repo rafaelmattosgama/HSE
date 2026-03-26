@@ -1,4 +1,8 @@
+import { RoleCode } from "@prisma/client";
 import { endOfMonth, startOfMonth } from "date-fns";
+import { getServerSession } from "next-auth";
+import { formatCommunicationType } from "@/lib/helpers";
+import { authOptions } from "@/lib/auth/options";
 import { KpiService } from "@/lib/services/kpi-service";
 import { prisma } from "@/lib/prisma";
 
@@ -8,7 +12,9 @@ export default async function DashboardsPage({
   params: Promise<{ plant: string }>;
 }) {
   const { plant } = await params;
+  const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const actorRole = session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
 
   const now = new Date();
   const year = now.getUTCFullYear();
@@ -29,6 +35,42 @@ export default async function DashboardsPage({
       },
     },
   });
+
+  const [pendingValidation, openCommunications, myOpenActions, clinicalCases] = await prisma.$transaction([
+    prisma.communication.count({
+      where: {
+        plantId: plantRow.id,
+        status: {
+          in: ["SUBMITTED", "PENDING_VALIDATION"],
+        },
+      },
+    }),
+    prisma.communication.count({
+      where: {
+        plantId: plantRow.id,
+        status: {
+          in: ["VALID_OPEN", "ONGOING"],
+        },
+      },
+    }),
+    prisma.action.count({
+      where: {
+        plantId: plantRow.id,
+        ownerUserId: session?.user.id,
+        status: {
+          in: ["OPEN", "ONGOING"],
+        },
+      },
+    }),
+    prisma.communication.count({
+      where: {
+        plantId: plantRow.id,
+        type: {
+          in: ["FIRST_AID", "ACCIDENT"],
+        },
+      },
+    }),
+  ]);
 
   return (
     <>
@@ -56,12 +98,68 @@ export default async function DashboardsPage({
         </article>
       </section>
 
+      {actorRole === RoleCode.N2_PLANT_MANAGER ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Open communications</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{openCommunications}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Pending validation</p>
+            <p className="mt-2 text-2xl font-bold text-amber-700">{pendingValidation}</p>
+          </article>
+        </section>
+      ) : null}
+
+      {actorRole === RoleCode.N3_SAFETY ? (
+        <section className="grid gap-4 md:grid-cols-3">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Pending validation</p>
+            <p className="mt-2 text-2xl font-bold text-amber-700">{pendingValidation}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Open communications</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{openCommunications}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Clinical cases</p>
+            <p className="mt-2 text-2xl font-bold text-rose-700">{clinicalCases}</p>
+          </article>
+        </section>
+      ) : null}
+
+      {actorRole === RoleCode.N4_SUPERVISOR || actorRole === RoleCode.N5_OPERATOR ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">My open actions</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{myOpenActions}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Open communications</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{openCommunications}</p>
+          </article>
+        </section>
+      ) : null}
+
+      {actorRole === RoleCode.MEDICO ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Clinical cases</p>
+            <p className="mt-2 text-2xl font-bold text-rose-700">{clinicalCases}</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Pending validation</p>
+            <p className="mt-2 text-2xl font-bold text-amber-700">{pendingValidation}</p>
+          </article>
+        </section>
+      ) : null}
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Events by Type</h2>
         <ul className="mt-3 space-y-2 text-sm">
           {kpi.byType.map((entry) => (
             <li key={entry.type} className="flex justify-between border-b border-slate-100 pb-2">
-              <span>{entry.type}</span>
+              <span>{formatCommunicationType(entry.type)}</span>
               <span className="font-semibold">{entry._count}</span>
             </li>
           ))}

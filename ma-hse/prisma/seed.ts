@@ -201,7 +201,15 @@ async function upsertMasterData(plantId: string) {
 
   await upsertRows("area", [
     { code: "A1", name: "Assembly" },
-    { code: "A2", name: "Packaging" },
+    { code: "A2", name: "Rollforming" },
+    { code: "A3", name: "Logistics" },
+    { code: "A4", name: "Maintenance"},
+    { code: "A5", name: "Quality"},
+    { code: "A6", name: "Administrative"},
+    { code: "A7", name: "HSE"},
+    { code: "A8", name: "Cleaning"},
+    { code: "A9", name: "Projects"},
+    { code: "A10", name: "External company"}
   ]);
   await upsertRows("line", [
     { code: "L1", name: "Line 1" },
@@ -218,6 +226,8 @@ async function upsertMasterData(plantId: string) {
   await upsertRows("shift", [
     { code: "S1", name: "Shift 1" },
     { code: "S2", name: "Shift 2" },
+    { code: "S3", name: "Shift 3" },
+    { Code: "S4", name: "Central"}
   ]);
   await upsertRows("riskTheme", [
     { code: "RT01", name: "PPE Non-compliance" },
@@ -236,8 +246,27 @@ async function upsertMasterData(plantId: string) {
     { code: "NM02", name: "Near Collision" },
   ]);
   await upsertRows("bodyPart", [
-    { code: "BP01", name: "Hand" },
-    { code: "BP02", name: "Back" },
+    { code: "BP01", name: "Head" },
+    { code: "BP02", name: "Left Eye" },
+    { code: "BP03", name: "Right Eye" },
+    { code: "BP04", name: "Left Shoulder" },
+    { code: "BP05", name: "Right Shoulder" },
+    { code: "BP06", name: "Left Arm" },
+    { code: "BP07", name: "Right Arm" },
+    { code: "BP08", name: "Left Hand" },
+    { code: "BP09", name: "Right Hand" },
+    { code: "BP10", name: "Chest" },
+    { code: "BP11", name: "Upper Back" },
+    { code: "BP12", name: "Lower Back" },
+    { code: "BP13", name: "Abdomen" },
+    { code: "BP14", name: "Left Hip" },
+    { code: "BP15", name: "Right Hip" },
+    { code: "BP16", name: "Left Leg" },
+    { code: "BP17", name: "Right Leg" },
+    { code: "BP18", name: "Left Knee" },
+    { code: "BP19", name: "Right Knee" },
+    { code: "BP20", name: "Left Foot" },
+    { code: "BP21", name: "Right Foot" },
   ]);
   await upsertRows("injuryType", [
     { code: "IT01", name: "Cut" },
@@ -642,7 +671,7 @@ async function seedPlantScenario(input: {
     workstationId: input.fixture.workstationId,
     equipmentId: input.fixture.equipmentId,
     riskThemeId: input.fixture.riskThemeId,
-    description: `${SEED_TAG} ${input.plantCode.toUpperCase()} - closed lost-time accident`,
+    description: `${SEED_TAG} ${input.plantCode.toUpperCase()} - closed lost-time injury`,
     severityPotential: SeverityPotential.HIGH,
     isContractor: true,
     bodyPartId: input.fixture.bodyPartId,
