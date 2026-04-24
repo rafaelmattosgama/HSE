@@ -1,6 +1,7 @@
-import { ValidationActions } from "@/components/feature/validation-actions";
-import { formatCommunicationType } from "@/lib/helpers";
+import { ValidationQueue } from "@/components/feature/validation-queue";
 import { prisma } from "@/lib/prisma";
+import { translateForViewer } from "@/lib/services/viewer-translation-service";
+import { getLocale } from "next-intl/server";
 
 export default async function ValidationPage({
   params,
@@ -8,6 +9,7 @@ export default async function ValidationPage({
   params: Promise<{ plant: string }>;
 }) {
   const { plant } = await params;
+  const locale = await getLocale();
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
 
   const pending = await prisma.communication.findMany({
@@ -17,36 +19,37 @@ export default async function ValidationPage({
         in: ["SUBMITTED", "PENDING_VALIDATION"],
       },
     },
-    orderBy: {
-      reportedAt: "desc",
+    include: {
+      area: true,
+      workstation: true,
     },
+    orderBy: [
+      { eventDatetime: "asc" },
+      { reportedAt: "asc" },
+    ],
     take: 100,
   });
+  const translatedDescriptions = await translateForViewer(locale, pending.map((row) => row.description));
 
   return (
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Validation Queue (N3)</h1>
-        <p className="mt-1 text-sm text-slate-600">Only validated communications move into KPI calculations.</p>
+        <h1 className="text-2xl font-bold text-slate-900">Validation Queue</h1>
+        <p className="mt-1 text-sm text-slate-600">Validate or reject communications directly from the queue, with the key context visible on each card.</p>
       </header>
 
-      <div className="space-y-4">
-        {pending.map((row) => (
-          <article key={row.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-semibold text-slate-900">{formatCommunicationType(row.type)}</h2>
-                <p className="text-sm text-slate-500">{row.reporterName} | {row.eventDatetime.toISOString()}</p>
-              </div>
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">{row.status}</span>
-            </div>
-
-            <p className="mb-4 text-sm text-slate-700">{row.description}</p>
-
-            <ValidationActions communicationId={row.id} />
-          </article>
-        ))}
-      </div>
+      <ValidationQueue
+        plant={plant}
+        rows={pending.map((row, index) => ({
+          id: row.id,
+          type: row.type,
+          reporterName: row.reporterName,
+          eventDatetime: row.eventDatetime.toISOString(),
+          department: row.area?.name ?? "-",
+          location: row.workstation?.name ?? "-",
+          description: translatedDescriptions[index] ?? row.description,
+        }))}
+      />
     </>
   );
 }

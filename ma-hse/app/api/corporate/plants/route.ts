@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { hash } from "bcryptjs";
 import { RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
+import { DEFAULT_INJURY_TYPES } from "@/lib/defaults/injury-types";
 import { parseBody } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac/guards";
@@ -62,8 +63,10 @@ const DEFAULT_MASTER_DATA = {
     { code: "BP21", name: "Right Foot" },
   ],
   injuryTypes: [
-    { code: "IT01", name: "Cut" },
-    { code: "IT02", name: "Bruise" },
+    ...DEFAULT_INJURY_TYPES.map((name, index) => ({
+      code: `IT${String(index + 1).padStart(2, "0")}`,
+      name,
+    })),
   ],
 } as const;
 

@@ -30,26 +30,26 @@
 html[data-theme="black"] {
   --background: #000000;
   --foreground: #e6edf8;
-  --card: #0a0f17;
-  --muted: #111827;
-  --border: #1f2937;
+  --card: #09111d;
+  --muted: #0f1724;
+  --border: #334155;
   --primary: #7fa3ff;
   --primary-foreground: #020407;
   --danger: #f87171;
-  --app-background: #000000;
-  --surface: #0a0f17;
-  --surface-muted: #111827;
-  --surface-subtle: #0f172a;
+  --app-background: radial-gradient(circle at top right, #0e1a31 0%, #05080f 42%, #000000 100%);
+  --surface: #09111d;
+  --surface-muted: #101a29;
+  --surface-subtle: #162235;
   --text-strong: #f8fbff;
   --text-default: #d7e1f0;
-  --text-muted: #94a3b8;
+  --text-muted: #aab8cd;
   --brand-50: #0d1a31;
-  --brand-100: #132444;
+  --brand-100: #19345b;
   --brand-300: #4d6fb3;
   --brand-400: #6b8fe3;
   --brand-700: #7fa3ff;
   --brand-800: #9ab6ff;
-  --brand-900: #d7e4ff;
+  --brand-900: #f8fbff;
 }
 
 @theme inline {
@@ -125,6 +125,22 @@ html[data-theme] .text-slate-500 {
   color: var(--text-muted) !important;
 }
 
+html[data-theme] .text-white {
+  color: #f8fbff !important;
+}
+
+html[data-theme] .text-red-700 {
+  color: color-mix(in srgb, var(--danger) 86%, white 14%) !important;
+}
+
+html[data-theme] .text-amber-700 {
+  color: #d7a92e !important;
+}
+
+html[data-theme] .text-rose-700 {
+  color: #fb7185 !important;
+}
+
 html[data-theme] .text-teal-700 {
   color: var(--brand-700) !important;
 }
@@ -135,6 +151,10 @@ html[data-theme] .text-teal-900 {
 
 html[data-theme] .bg-teal-50 {
   background-color: var(--brand-50) !important;
+}
+
+html[data-theme] .bg-teal-100 {
+  background-color: var(--brand-100) !important;
 }
 
 html[data-theme] .bg-teal-50\/40 {
@@ -154,6 +174,10 @@ html[data-theme] .bg-teal-700 {
 }
 
 html[data-theme] .bg-teal-800 {
+  background-color: var(--brand-800) !important;
+}
+
+html[data-theme] .bg-slate-900 {
   background-color: var(--brand-800) !important;
 }
 
@@ -178,7 +202,7 @@ html[data-theme] .hover\:bg-teal-800:hover {
 }
 
 html[data-theme="black"] .shadow-sm {
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42) !important;
 }
 
 html[data-theme="black"] .bg-amber-50 {

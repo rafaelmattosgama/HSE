@@ -13,13 +13,28 @@ const transporter = nodemailer.createTransport({
 });
 
 export const EmailService = {
-  async sendMail(input: { to: string | string[]; subject: string; html: string; text?: string }) {
+  async sendMail(input: {
+    to: string | string[];
+    subject: string;
+    html: string;
+    text?: string;
+    attachments?: Array<{
+      filename: string;
+      content: Buffer;
+      contentType: string;
+    }>;
+  }) {
     await transporter.sendMail({
       from: env.SMTP_FROM,
       to: input.to,
       subject: input.subject,
       html: input.html,
       text: input.text,
+      attachments: input.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.content,
+        contentType: attachment.contentType,
+      })),
     });
   },
 

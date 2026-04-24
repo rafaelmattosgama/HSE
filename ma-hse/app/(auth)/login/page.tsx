@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
@@ -31,8 +32,13 @@ export default function LoginPage() {
     }
 
     const session = await getSession();
-    const isCorporate = session?.user?.plantRoles?.some((entry) => entry.role === "N1_CORPORATE");
+    const isCorporate = session?.user?.plantRoles?.some((entry) => entry.role === "N0_ADMIN" || entry.role === "N1_CORPORATE");
     const primaryPlant = session?.user?.plantRoles?.find((entry) => entry.plantCode)?.plantCode;
+
+    if (session?.user?.plantRoles?.some((entry) => entry.role === "N0_ADMIN")) {
+      window.location.href = "/app/settings";
+      return;
+    }
 
     if (isCorporate) {
       window.location.href = "/app/corporate";
@@ -73,7 +79,9 @@ export default function LoginPage() {
   return (
     <main className="mx-auto grid min-h-screen w-full max-w-6xl grid-cols-1 items-center gap-8 px-6 py-10 md:grid-cols-2">
       <section className="rounded-3xl bg-gradient-to-br from-teal-700 via-cyan-700 to-emerald-600 p-8 text-white shadow-2xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-100">Multi-Plant EHS</p>
+        <div className="flex h-20 w-32 items-center justify-center rounded-2xl border border-white/20 bg-white px-3 py-2 shadow-lg">
+          <Image src="/max-safety-logo.svg" alt="MAx Safety" width={96} height={42} className="h-auto w-full" priority />
+        </div>
         <h1 className="mt-3 text-4xl font-bold leading-tight">Saude, Seguranca do Trabalho e Ambiente</h1>
         <p className="mt-5 text-sm text-teal-50">
           MVP com comunicacoes, validacao N3, plano CAPA, S-EWO, KPIs, alertas e relatorios automatizados por planta.

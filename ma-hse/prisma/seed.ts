@@ -30,7 +30,7 @@ type SeedUserDefinition = {
   name: string;
   language: string;
   roleBindings: Array<{
-    plantCode: "pl01" | "pl02";
+    plantCode: "pl01" | "pl02" | "pl1";
     role: RoleCode;
   }>;
 };
@@ -86,11 +86,12 @@ function calculateLeaveFields(eventDatetime: Date, hasLeave?: boolean | null, re
 
   return {
     lostDays,
-    classification: lostDays <= 30 ? LeaveClassification.LE_30 : LeaveClassification.GT_30,
+    classification: lostDays < 30 ? LeaveClassification.MINOR : LeaveClassification.SERIOUS,
   };
 }
 
 const roles: RoleCode[] = [
+  RoleCode.N0_ADMIN,
   RoleCode.N1_CORPORATE,
   RoleCode.N2_PLANT_MANAGER,
   RoleCode.N3_SAFETY,
@@ -99,6 +100,256 @@ const roles: RoleCode[] = [
   RoleCode.N6_QR_REPORTER,
   RoleCode.MEDICO,
 ];
+
+const PL1_WORKSTATIONS = [
+  "WorkStation",
+  "RollForming",
+  "ES01",
+  "ES02",
+  "ES03",
+  "ES04",
+  "ES05",
+  "ES06",
+  "ES07",
+  "PT11",
+  "PT12",
+  "PT13D",
+  "PT13G",
+  "PT14",
+  "PT15D",
+  "PT15G",
+  "PT16",
+  "PT17",
+  "PT18",
+  "PT19",
+  "PT20",
+  "PT21D",
+  "PT21G",
+  "PT22",
+  "PT23",
+  "PT24",
+  "PT25",
+  "PT26",
+  "PT27",
+  "PT28",
+  "PT29",
+  "PT30",
+  "PT31",
+  "PT32",
+  "PT33",
+  "PT34",
+  "PT39",
+  "PT41",
+  "PT43",
+  "PT50",
+  "PT51",
+  "REB01",
+  "Quality wall",
+  "Shipping Logistics",
+  "Receiving Logistics",
+  "Metrology",
+  "Destructive",
+  "Maintenance",
+  "General",
+  "Re-work",
+  "Exterior",
+  "Forklift corridor",
+  "Waste Warehouse",
+  "Pedestrian walkways",
+] as const;
+
+const PL1_WORKERS = [
+  "1-ILDA HENRIQUES ALEXANDRE",
+  "3-JOSÉ ALEXANDRE MOREIRA MILHEIRO DE OLIVEIRA",
+  "4-ANTÓNIO DURVAL LIMA DA SILVA",
+  "6-VILSON ARANTES COELHO FILHO",
+  "7-ALMIR ASSIS NEVES",
+  "10-GUTO DE OLIVEIRA SANTOS",
+  "11-JOÃO PAULO PEREIRA LOUREIRO",
+  "13-NEUSA CALDAS BARBEITOS",
+  "15-RAFAEL MATTOS DA SILVA GAMA",
+  "17-LÚCIA ALEXANDRA VIANA DE BARROS",
+  "22-DIANA SOFIA ALMEIDA REIS",
+  "26-LUÍS MIGUEL CORREIA PEREIRA",
+  "29-ÁLVARO MIGUEL LOPES SOUSA",
+  "30-Mª EMÍLIA BRITO MARINHO",
+  "31-LILIANA CRISTINA MOTA SILVA",
+  "32-PAULA DE JESUS NOGUEIRA",
+  "34-CARINA CARMO PEREIRA MOTA",
+  "38-Mª AMBROSINA DANTAS ALVES",
+  "39-LUIS CARLOS ARAÚJO",
+  "40-MANUEL LEANDRO SILVA VIEIRA",
+  "50-CATARINA SOFIA FERNANDES PEDREIRA",
+  "52-HUGO ALEXANDRE FREITAS FERNANDES",
+  "53-LETÍCIA MARISA OLIVEIRA RODRIGUES",
+  "56-ANABELA ARAÚJO FERNANDES",
+  "57-ANA MARGARIDA RIBEIRO CRUZ",
+  "58-MARGARIDA BRITO FERNANDES",
+  "60-Mª ISABEL LOPES PRADO",
+  "64-DAVIDE BEZERRA FERREIRA",
+  "68-BENEDITA ALVES DIAS",
+  "77-SÓNIA ALEXANDRA FERNANDES CUNHA",
+  "85-MARTA SOFIA COSTA ARAÚJO",
+  "86-LUÍS PEDRO ARAÚJO BARBOSA TEIXEIRA",
+  "87-RAFAEL INÁCIO TORRES GONÇALVES",
+  "93-VALDEMAR MANUEL QUINTIÃO LUIS",
+  "103-HÉLDER ROMÃO MONTEIRO AFONSO",
+  "106-PEDRO MEIRIM FERREIRA ADRIÃO",
+  "107-SÓNIA ALEXANDRA PEREIRA GONÇALVES",
+  "110-Mª ISABEL DAS NEVES VIANA",
+  "113-ANDREIA FILIPA SOUSA GROVE REIS",
+  "116-CRISTINA Mª ARANTES DE SOUSA FERREIRA",
+  "117-HELENA Mª LAMEIRA ALVES COSTA FERREIRA",
+  "118-SANDRA MANUELA MARTINS BRITO LOPES",
+  "128-CÁTIA SOFIA DE CASTRO CUNHA",
+  "131-MARINA DA CRUZ MENDES SILVA",
+  "139-MARGARIDA  PEREIRA DIAS",
+  "149-Mª AFONSO DOS SANTOS",
+  "151-JORGE GABRIEL ALVES ROCHA",
+  "152-JOÃO FILIPE RIBEIRO CASTRO",
+  "156-ROSA Mª MENDES VAZ RODRIGUES",
+  "158-TERESA DE JESUS SILVA SANTOS BARANDAS",
+  "163-ANA Mª GONÇALVES DE CASTRO",
+  "165-TIAGO FILIPE DOMINGUES SEQUEIRA",
+  "188-Mª DEL CARMEN RODRIGUEZ BAHAMONDE",
+  "192-Mª JOSEFINA DA CUNHA GOMES",
+  "195-HENRIQUE FERNANDES DA COSTA",
+  "196-HUGO LUCIANO LEITE ALVES SILVA",
+  "202-SARA FILIPA AMORIM ARAÚJO",
+  "206-HUGO MIGUEL LAGIDO MARTINS",
+  "207-PAULA ALEXANDRE SOUSA",
+  "209-ANA MADALENA FREITAS BARBOSA",
+  "213-SOFIA ISABEL RIBEIRO BARBOSA",
+  "214-DIOGO ALEXANDRE AMARAL AFONSO",
+  "215-RUBEN DUARTE VIEIRA MARQUES",
+  "216-DANIELA CUNHA RIBEIRO",
+  "217-FÁBIO MANUEL COUTINHO FERNANDES",
+  "218-CÁTIA SORAIA FERNANDES RODRIGUES",
+  "235-LUIS CLÁUDIO MIRANDA SANTOS",
+  "237-RÚBEN DA COSTA TEIXEIRA",
+  "239-FRANCIS LEONARDO CIRINO DE JESUS",
+  "242-Mª JOSÉ GARCÍA DIAZ",
+  "244-IVANI GONÇALVES DE ARAÚJO",
+  "246-MARISA NUNES MARTINS",
+  "248-JOANA DIAS FERNANDES",
+  "250-IVAN SAIENKO",
+  "252-DANIEL RODRÍGUEZ LAIÑO",
+  "259-LUDMILA RODRIGUES DONINO",
+  "260-MARIA LUIZA PÉREZ BERTOMEU",
+  "265-ALEXANDRE JOÃO GONÇALVES AMORIM",
+  "266-RAFAEL COSTA RIBEIRO",
+  "267-MARISOL DE LAS NIEVES BLANCO MÍGUEZ",
+  "271-MARCELO TRONCOSO VASCONCELOS",
+  "272-ARMANDO JORGE CERQUEIRA MIGUEL",
+  "273-HENRIQUE D'ALMEIDA VÁ-JENG MATEUS",
+  "274-PAULO MIGUEL DE SOUSA LIMA",
+  "219-PEDRO MIGUEL FREITAS TRILHO",
+  "276-YASMIN LUENA SANTIAGO LAMEIRA",
+  "275-CÁSSIO ALEVES SANTOS DA SILVA",
+  "277-SOFIA ISABEL BRITO PEREIRA",
+  "E418-DUARTE JORGE BARRETO RODRIGUES",
+  "278-DANIELA MARINHA RIBEIRO MENDES",
+  "279-DAVID DA SILVA SANTOS",
+  "281-SANDRA CRISTINA BORRALHO PINHEIRO",
+  "282-SUSANA LUÍSA PEREIRA DA SILVA AMORIM",
+  "280-DIOGO PEDRO FONTINHAS DE ALMEIDA",
+  "E431-ANA PAULA DA SILVA CORUCHO",
+  "E435-JORGE MANUEL SARAIVA RODRIGUES FERNANDES",
+  "E443-Mª SANDRA IGLESIAS IGLESIAS",
+  "E441-STEFFANNY SÍLVIA FERREIRA FARIAS",
+  "E449-NATIANE LOPES R. FRANÇA",
+  "E455-JULIANA GONÇALVES RICARDO",
+  "E428-ELIZABETH NAIARA PEREIRA DE ARAÚJO",
+  "E429-FLORENCIA JORGELINA RUBIOLO",
+  "E459-ERICKA MARIA BARBOSA",
+  "E460-ANDREIA SOFIA DA SILVA LEAL GUERRA",
+  "E463-GISELLE MARTINS ÂNGELO",
+  "E469-TIAGO ANDRÉ NUNES DOS SANTOS",
+  "E470-JORGE GABRIEL DE ARAÚJO GONÇALVES",
+  "E473-FILIPE ALVES",
+  "E475-SUZANA MANUELA FERREIRA",
+  "E476-WILTON DIAS MUNIZ",
+  "E477-LÍDIA RAQUEL PENAFORTE ARAÚJO",
+  "E478-LILLYA PAVLENKO",
+  "E482-RENATA MARTINS ZUPIROLLI",
+  "E485-EMANOEL MOURA RYBU NETO",
+  "E488-TACIANE CÁSSIA DOS SANTOS",
+  "E490-ESTÉFANI SOUZA DE OLIVEIRA",
+  "E491-ERIKA SKARLETH DE CASTRO VALVERDE",
+  "E492-GLENDA THAYLA SILVA E SIILVA",
+  "E493-ELISABETE CORREIA MACIEL",
+  "E495-INGRIDE RODRIGUES",
+  "E498-NICOLAS CUNHA DA COSTA",
+  "E502-CARLOS DANIEL CONDE AMORIM",
+  "E503-ANA BRIGIDA DA SILVA GOMES",
+  "E506-ANAÍS FERNANDEZ PINHEIRO",
+  "E507-RUI BRUM NETTO",
+  "S001-ANDRÉ LUIZ ALMEIDA",
+  "S002-JONHATAN CÂNDIDO DA CUNHA PERNETA",
+  "E508-GABRIEL ALEXANDRE DE BRITO MARTINS",
+] as const;
+
+const PL1_INJURY_TYPES = [
+  "Contusao (pisadura)",
+  "Corte / laceracao",
+  "Perfuracao",
+  "Amputacao (total ou parcial)",
+  "Esmagamento",
+  "Hematoma",
+  "Abrasao / escoriacao",
+  "Fratura simples",
+  "Fratura exposta",
+  "Fratura multipla",
+  "Fissura ossea",
+  "Luxacao",
+  "Subluxacao",
+  "Distensao muscular",
+  "Rotura muscular",
+  "Entorse",
+  "Rotura de ligamentos",
+  "Tendinite",
+  "Tenossinovite",
+  "Mialgia (dor muscular)",
+  "Entorse articular",
+  "Inflamacao articular",
+  "Limitacao de movimentos",
+  "Derrame articular",
+  "Concussao cerebral",
+  "Traumatismo cranioencefalico (TCE)",
+  "Lesao nervosa periferica",
+  "Dormencia / parestesia",
+  "Perda de consciencia",
+  "Vertigens pos-trauma",
+  "Queimadura termica",
+  "Queimadura quimica",
+  "Queimadura eletrica",
+  "Dermatite de contacto",
+  "Irritacao cutanea",
+  "Bolhas",
+  "Corpo estranho no olho",
+  "Irritacao ocular",
+  "Queimadura ocular",
+  "Perda parcial ou total da visao",
+  "Trauma acustico",
+  "Perda auditiva temporaria",
+  "Perda auditiva permanente",
+  "Dor no ouvido",
+  "Lesao por esforcos repetitivos (LER)",
+  "DORT",
+  "Sindrome do tunel carpico",
+  "Lombalgia",
+  "Cervicalgia",
+  "Hemorragia interna",
+  "Lesao em orgaos internos",
+  "Contusao toracica",
+  "Traumatismo abdominal",
+  "Intoxicacao",
+  "Asfixia",
+  "Choque eletrico",
+  "Golpe de calor",
+  "Hipotermia",
+  "Reacao alergica",
+] as const;
 
 async function upsertMasterData(plantId: string) {
   const upsertRows = async (
@@ -227,7 +478,7 @@ async function upsertMasterData(plantId: string) {
     { code: "S1", name: "Shift 1" },
     { code: "S2", name: "Shift 2" },
     { code: "S3", name: "Shift 3" },
-    { Code: "S4", name: "Central"}
+    { code: "S4", name: "Central"}
   ]);
   await upsertRows("riskTheme", [
     { code: "RT01", name: "PPE Non-compliance" },
@@ -272,6 +523,77 @@ async function upsertMasterData(plantId: string) {
     { code: "IT01", name: "Cut" },
     { code: "IT02", name: "Bruise" },
   ]);
+}
+
+async function upsertPl1MasterData(plantId: string) {
+  for (const [index, name] of PL1_WORKSTATIONS.entries()) {
+    await prisma.workstation.upsert({
+      where: {
+        plantId_code: {
+          plantId,
+          code: `PL1-WS-${String(index + 1).padStart(3, "0")}`,
+        },
+      },
+      update: {
+        name,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        code: `PL1-WS-${String(index + 1).padStart(3, "0")}`,
+        name,
+        isActive: true,
+      },
+    });
+  }
+
+  for (const worker of PL1_WORKERS) {
+    const separatorIndex = worker.indexOf("-");
+    const employeeNo = separatorIndex >= 0 ? worker.slice(0, separatorIndex) : worker;
+    const name = separatorIndex >= 0 ? worker.slice(separatorIndex + 1) : worker;
+
+    await prisma.employeeDirectory.upsert({
+      where: {
+        plantId_employeeNo: {
+          plantId,
+          employeeNo,
+        },
+      },
+      update: {
+        name,
+        dept: null,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        employeeNo,
+        name,
+        dept: null,
+        isActive: true,
+      },
+    });
+  }
+
+  for (const [index, name] of PL1_INJURY_TYPES.entries()) {
+    await prisma.injuryType.upsert({
+      where: {
+        plantId_code: {
+          plantId,
+          code: `PL1-IT-${String(index + 1).padStart(3, "0")}`,
+        },
+      },
+      update: {
+        name,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        code: `PL1-IT-${String(index + 1).padStart(3, "0")}`,
+        name,
+        isActive: true,
+      },
+    });
+  }
 }
 
 async function getOrCreateRecipientList(input: { name: string; scope: "PLANT" | "CORPORATE"; plantId?: string }) {
@@ -882,6 +1204,103 @@ async function seedPlantScenario(input: {
   };
 }
 
+async function seedSimulationSet(input: {
+  plantId: string;
+  plantCode: "pl01" | "pl02";
+  fixture: PlantFixture;
+  reporterUserId: string;
+  targetEmployeeId: string;
+  targetEmployeeNo: string;
+  targetEmployeeName: string;
+  year: number;
+  counts: {
+    unsafeAct: number;
+    unsafeCondition: number;
+    nearMiss: number;
+    firstAid: number;
+    minorInjury: number;
+    seriousInjury: number;
+  };
+}) {
+  const plan: Array<{ type: CommunicationType; count: number; classification?: LeaveClassification }> = [
+    { type: CommunicationType.UNSAFE_ACT, count: input.counts.unsafeAct },
+    { type: CommunicationType.UNSAFE_CONDITION, count: input.counts.unsafeCondition },
+    { type: CommunicationType.NEAR_MISS, count: input.counts.nearMiss },
+    { type: CommunicationType.FIRST_AID, count: input.counts.firstAid },
+    { type: CommunicationType.ACCIDENT, count: input.counts.minorInjury, classification: LeaveClassification.MINOR },
+    { type: CommunicationType.ACCIDENT, count: input.counts.seriousInjury, classification: LeaveClassification.SERIOUS },
+  ];
+
+  let counter = 1;
+  for (const item of plan) {
+    for (let index = 0; index < item.count; index += 1) {
+      const month = (counter % 4) + 1;
+      const day = (counter % 24) + 1;
+      const eventDatetime = new Date(Date.UTC(input.year, month - 1, day, 9, 0, 0));
+
+      await upsertCommunication({
+        id: stableUuid(`simulation:${input.plantCode}:${item.type}:${item.classification ?? "NONE"}:${counter}`),
+        plantId: input.plantId,
+        type: item.type,
+        status: CommunicationStatus.CLOSED,
+        source: CommunicationSource.BACKOFFICE,
+        eventDatetime,
+        reportedAt: eventDatetime,
+        reporterName: `Simulation ${input.plantCode.toUpperCase()}`,
+        reporterUserId: input.reporterUserId,
+        reporterEmployeeNo: input.targetEmployeeNo,
+        targetEmployeeId: item.type === CommunicationType.UNSAFE_ACT || item.type === CommunicationType.NEAR_MISS || item.type === CommunicationType.ACCIDENT || item.type === CommunicationType.FIRST_AID ? input.targetEmployeeId : null,
+        targetEmployeeNo: item.type === CommunicationType.UNSAFE_ACT || item.type === CommunicationType.NEAR_MISS || item.type === CommunicationType.ACCIDENT || item.type === CommunicationType.FIRST_AID ? input.targetEmployeeNo : null,
+        targetText: item.type === CommunicationType.UNSAFE_ACT || item.type === CommunicationType.NEAR_MISS ? input.targetEmployeeName : null,
+        areaId: input.fixture.areaId,
+        lineId: input.fixture.lineId,
+        workstationId: input.fixture.workstationId,
+        equipmentId: input.fixture.equipmentId,
+        riskThemeId: input.fixture.riskThemeId,
+        unsafeActTypeId: item.type === CommunicationType.UNSAFE_ACT ? input.fixture.unsafeActTypeId : null,
+        unsafeConditionTypeId: item.type === CommunicationType.UNSAFE_CONDITION ? input.fixture.unsafeConditionTypeId : null,
+        nearMissTypeId: item.type === CommunicationType.NEAR_MISS ? input.fixture.nearMissTypeId : null,
+        description: `${SEED_TAG} simulation ${input.plantCode.toUpperCase()} ${item.type} #${counter}`,
+        bodyPartId: item.type === CommunicationType.FIRST_AID || item.type === CommunicationType.ACCIDENT ? input.fixture.bodyPartId : null,
+        injuryTypeId: item.type === CommunicationType.FIRST_AID || item.type === CommunicationType.ACCIDENT ? input.fixture.injuryTypeId : null,
+        hasLeave: item.type === CommunicationType.ACCIDENT,
+        initialLostDays: item.classification === LeaveClassification.SERIOUS ? 35 : item.type === CommunicationType.ACCIDENT ? 5 : null,
+        lostDays: item.classification === LeaveClassification.SERIOUS ? 35 : item.type === CommunicationType.ACCIDENT ? 5 : null,
+        classification: item.classification ?? null,
+        validatedBy: input.reporterUserId,
+        validatedAt: eventDatetime,
+      });
+
+      counter += 1;
+    }
+  }
+
+  for (let month = 1; month <= 4; month += 1) {
+    await prisma.plantMonthlyInput.upsert({
+      where: {
+        plantId_year_month: {
+          plantId: input.plantId,
+          year: input.year,
+          month,
+        },
+      },
+      update: {
+        workerCount: 120 + month,
+        hoursWorked: new Prisma.Decimal(`${15000 + month * 500}.00`),
+        standardHours: new Prisma.Decimal(`${16000 + month * 500}.00`),
+      },
+      create: {
+        plantId: input.plantId,
+        year: input.year,
+        month,
+        workerCount: 120 + month,
+        hoursWorked: new Prisma.Decimal(`${15000 + month * 500}.00`),
+        standardHours: new Prisma.Decimal(`${16000 + month * 500}.00`),
+      },
+    });
+  }
+}
+
 async function main() {
   await Promise.all(
     roles.map((code) =>
@@ -894,6 +1313,12 @@ async function main() {
   );
 
   const plantDefinitions = [
+    {
+      code: "pl1" as const,
+      name: "PL1",
+      timezone: "Europe/Lisbon",
+      defaultLanguage: "pt",
+    },
     {
       code: "pl01" as const,
       name: "Turin Plant",
@@ -927,15 +1352,24 @@ async function main() {
     ),
   );
 
-  const plantByCode = new Map(plants.map((plant) => [plant.code as "pl01" | "pl02", plant]));
+  const plantByCode = new Map(plants.map((plant) => [plant.code as "pl01" | "pl02" | "pl1", plant]));
 
   for (const plant of plants) {
     await upsertMasterData(plant.id);
+    if (plant.code === "pl1") {
+      await upsertPl1MasterData(plant.id);
+    }
   }
 
   const passwordHash = await hash(SEED_DEFAULT_PASSWORD, 12);
 
   const seedUsers: SeedUserDefinition[] = [
+    {
+      email: "admin.n0@ma-hse.local",
+      name: "Admin N0",
+      language: "pt",
+      roleBindings: [{ plantCode: "pl1", role: RoleCode.N0_ADMIN }],
+    },
     {
       email: "corporate@ma-hse.local",
       name: "Corporate N1",
@@ -1319,9 +1753,65 @@ async function main() {
     catalogVersionId: catalog.id,
   });
 
+  const employeePl01 = await prisma.employeeDirectory.findUniqueOrThrow({
+    where: {
+      plantId_employeeNo: {
+        plantId: requireValue(plantByCode.get("pl01"), "Missing plant pl01").id,
+        employeeNo: "IT1001",
+      },
+    },
+  });
+  const employeePl02 = await prisma.employeeDirectory.findUniqueOrThrow({
+    where: {
+      plantId_employeeNo: {
+        plantId: requireValue(plantByCode.get("pl02"), "Missing plant pl02").id,
+        employeeNo: "BR2001",
+      },
+    },
+  });
+
+  await seedSimulationSet({
+    plantId: requireValue(plantByCode.get("pl01"), "Missing plant pl01").id,
+    plantCode: "pl01",
+    fixture: fixturePl01,
+    reporterUserId: safetyPl01.id,
+    targetEmployeeId: employeePl01.id,
+    targetEmployeeNo: employeePl01.employeeNo,
+    targetEmployeeName: employeePl01.name,
+    year: 2026,
+    counts: {
+      unsafeAct: 25,
+      unsafeCondition: 15,
+      nearMiss: 5,
+      firstAid: 2,
+      minorInjury: 2,
+      seriousInjury: 1,
+    },
+  });
+
+  await seedSimulationSet({
+    plantId: requireValue(plantByCode.get("pl02"), "Missing plant pl02").id,
+    plantCode: "pl02",
+    fixture: fixturePl02,
+    reporterUserId: safetyPl02.id,
+    targetEmployeeId: employeePl02.id,
+    targetEmployeeNo: employeePl02.employeeNo,
+    targetEmployeeName: employeePl02.name,
+    year: 2026,
+    counts: {
+      unsafeAct: 25,
+      unsafeCondition: 15,
+      nearMiss: 5,
+      firstAid: 3,
+      minorInjury: 1,
+      seriousInjury: 1,
+    },
+  });
+
   console.log("Seed complete.");
   console.log(`Default password for credential users: ${SEED_DEFAULT_PASSWORD}`);
   console.log("Credential users by role:");
+  console.log("- N0: admin.n0@ma-hse.local");
   console.log("- N1: corporate@ma-hse.local");
   console.log("- N2: manager.pl01@ma-hse.local, manager.pl02@ma-hse.local");
   console.log("- N3: safety.pl01@ma-hse.local, safety.pl02@ma-hse.local");

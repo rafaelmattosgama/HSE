@@ -16,9 +16,9 @@ export async function PATCH(
   context: { params: Promise<{ plantCode: string; userId: string }> },
 ) {
   const { plantCode, userId } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
-  const actorRole = "role" in auth ? auth.role : RoleCode.N1_CORPORATE;
+  const actorRole = "role" in auth ? auth.role : RoleCode.N0_ADMIN;
 
   const parsed = await parseBody(request, updateUserStatusInput);
   if ("error" in parsed) return parsed.error;

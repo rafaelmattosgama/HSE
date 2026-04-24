@@ -1,0 +1,67 @@
+
+> ma-hse@0.1.0 dev:all
+> node scripts/dev-all.mjs
+
+[dev:all] Using app port 3000
+[dev:all] APP_URL=http://localhost:3000
+
+> ma-hse@0.1.0 scheduler:dev
+> tsx jobs/scheduler.ts
+
+Schedulers upserted successfully
+
+> ma-hse@0.1.0 worker:dev
+> tsx jobs/worker.ts
+
+
+> ma-hse@0.1.0 dev
+> next dev --port 3000
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://172.23.208.1:3000
+- Environments: .env
+
+✓ Starting...
+Creating turbopack project { dir: 'C:\\HSE\\ma-hse', testMode: true }
+✓ Ready in 1035ms
+○ Compiling /app/[plant]/dashboards ...
+[14:59:00.765] [32mINFO[39m: [36mBullMQ workers started[39m
+ GET /app/pl01/dashboards 200 in 5.0s (compile: 4.5s, render: 491ms)
+ GET /api/auth/session 200 in 1930ms (compile: 1858ms, render: 72ms)
+ GET /api/health/live 200 in 407ms (compile: 388ms, render: 19ms)
+ GET /app/pl01/monthly-inputs 307 in 1891ms (compile: 1790ms, render: 101ms)
+ GET /api/auth/session 200 in 65ms (compile: 21ms, render: 44ms)
+[15:00:00.117] [32mINFO[39m: [36mprocessing job[39m
+    [35mjobId[39m: "repeat:alerts-3b36479f-c874-47d5-8548-08feb0b79779:1774623600000"
+    [35mqueueName[39m: "alerts-repetitive"
+[15:00:00.146] [32mINFO[39m: [36mjob done[39m
+    [35mjobId[39m: "repeat:alerts-3b36479f-c874-47d5-8548-08feb0b79779:1774623600000"
+    [35mqueueName[39m: "alerts-repetitive"
+ GET /api/auth/session 200 in 161ms (compile: 64ms, render: 97ms)
+ GET /api/auth/session 200 in 43ms (compile: 22ms, render: 21ms)
+ GET /api/auth/session 200 in 50ms (compile: 20ms, render: 30ms)
+ GET /app/pl01/monthly-inputs 200 in 113ms (compile: 31ms, render: 82ms)
+ GET /api/plants/pl01/monthly-inputs?year=2026 200 in 1823ms (compile: 1760ms, render: 63ms)
+ GET /api/auth/session 200 in 65ms (compile: 33ms, render: 33ms)
+ GET /api/auth/session 200 in 58ms (compile: 24ms, render: 34ms)
+ GET /api/auth/session 200 in 47ms (compile: 26ms, render: 21ms)
+ GET /api/auth/session 200 in 63ms (compile: 30ms, render: 33ms)
+ GET /api/auth/session 200 in 61ms (compile: 22ms, render: 39ms)
+ GET /api/auth/session 200 in 50ms (compile: 19ms, render: 31ms)
+✓ Compiled in 115ms
+ GET /app/pl01/monthly-inputs 200 in 450ms (compile: 226ms, render: 225ms)
+ GET /api/auth/csrf 200 in 43ms (compile: 18ms, render: 26ms)
+ POST /api/auth/signout 200 in 30ms (compile: 4ms, render: 26ms)
+ GET /login 200 in 1102ms (compile: 913ms, render: 189ms)
+ GET /api/auth/session 200 in 50ms (compile: 37ms, render: 13ms)
+ GET /api/auth/providers 200 in 26ms (compile: 3ms, render: 23ms)
+ GET /api/auth/csrf 200 in 27ms (compile: 3ms, render: 25ms)
+ POST /api/auth/callback/credentials 200 in 350ms (compile: 3ms, render: 347ms)
+ GET /api/auth/session 200 in 62ms (compile: 21ms, render: 41ms)
+ GET /api/auth/session 200 in 28ms (compile: 3ms, render: 25ms)
+ GET /app/corporate 200 in 1299ms (compile: 1045ms, render: 254ms)
+ GET /api/auth/session 200 in 95ms (compile: 24ms, render: 71ms)
+ GET /api/auth/session 200 in 35ms (compile: 6ms, render: 29ms)
+ GET /app/pl03/dashboards 200 in 124ms (compile: 22ms, render: 102ms)
+ GET /app/pl03/admin 200 in 1940ms (compile: 1837ms, render: 103ms)

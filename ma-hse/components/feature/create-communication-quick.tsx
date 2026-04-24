@@ -10,35 +10,38 @@ import { Button } from "@/components/ui/button";
 type Option = {
   id: string;
   name: string;
+  employeeNo?: string;
 };
 
 export function CreateCommunicationQuick({
-  riskThemeId,
   areas,
   workstations,
   actionOwners,
   employees,
   bodyParts,
   injuryTypes,
+  canLinkAction,
 }: {
-  riskThemeId?: string;
   areas: Option[];
   workstations: Option[];
   actionOwners: Option[];
   employees: Option[];
   bodyParts: Option[];
   injuryTypes: Option[];
+  canLinkAction: boolean;
 }) {
   const pathname = usePathname();
   const [type, setType] = useState<CommunicationType>("UNSAFE_CONDITION");
   const [eventDatetime, setEventDatetime] = useState("");
-  const [reporterName, setReporterName] = useState("");
+  const [reporterEmployeeId, setReporterEmployeeId] = useState("");
   const [areaId, setAreaId] = useState("");
   const [workstationId, setWorkstationId] = useState("");
-  const [targetText, setTargetText] = useState("");
   const [targetEmployeeId, setTargetEmployeeId] = useState("");
   const [bodyPartId, setBodyPartId] = useState("");
   const [injuryTypeId, setInjuryTypeId] = useState("");
+  const [initialLostDays, setInitialLostDays] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+  const [isFatal, setIsFatal] = useState(false);
   const [actionTitle, setActionTitle] = useState("");
   const [actionDescription, setActionDescription] = useState("");
   const [actionOwnerUserId, setActionOwnerUserId] = useState("");
@@ -46,12 +49,15 @@ export function CreateCommunicationQuick({
   const [actionDueDate, setActionDueDate] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [description, setDescription] = useState("");
+  const [suggestedAction, setSuggestedAction] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const needsTargetWorker = type === "UNSAFE_ACT";
+  const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
   const needsClinicalFields = type === "FIRST_AID" || type === "ACCIDENT";
-  const shouldCreateAction = actionTitle.trim().length > 0 || actionDescription.trim().length > 0;
+  const shouldCreateAction = canLinkAction && (actionTitle.trim().length > 0 || actionDescription.trim().length > 0);
+  const reporterEmployee = employees.find((employee) => employee.id === reporterEmployeeId) ?? null;
+  const targetEmployee = employees.find((employee) => employee.id === targetEmployeeId) ?? null;
 
   async function uploadPhotos(plant: string) {
     const uploaded = [];
@@ -110,15 +116,20 @@ export function CreateCommunicationQuick({
         body: JSON.stringify({
           type,
           eventDatetime,
-          reporterName,
+          reporterName: reporterEmployee?.name ?? "",
+          reporterEmployeeNo: reporterEmployee?.employeeNo || undefined,
           areaId: areaId || undefined,
           workstationId: workstationId || undefined,
-          targetText: needsTargetWorker ? targetText : undefined,
-          targetEmployeeId: needsClinicalFields ? targetEmployeeId || undefined : undefined,
-          riskThemeId,
+          targetText: needsInvolvedWorker ? targetEmployee?.name || undefined : undefined,
+          targetEmployeeId: needsInvolvedWorker || needsClinicalFields ? targetEmployeeId || undefined : undefined,
           description,
+          suggestedAction: suggestedAction || undefined,
           bodyPartId: needsClinicalFields ? bodyPartId || undefined : undefined,
           injuryTypeId: needsClinicalFields ? injuryTypeId || undefined : undefined,
+          initialLostDays: type === "ACCIDENT" && initialLostDays ? Number(initialLostDays) : undefined,
+          hasLeave: type === "ACCIDENT" ? Boolean(initialLostDays || returnDate) : false,
+          returnDate: type === "ACCIDENT" && returnDate ? returnDate : undefined,
+          isFatal: type === "ACCIDENT" ? isFatal : false,
           attachments,
           quickAction: shouldCreateAction
             ? {
@@ -138,14 +149,17 @@ export function CreateCommunicationQuick({
       if (json.ok) {
         setType("UNSAFE_CONDITION");
         setDescription("");
-        setReporterName("");
+        setSuggestedAction("");
+        setReporterEmployeeId("");
         setEventDatetime("");
         setAreaId("");
         setWorkstationId("");
-        setTargetText("");
         setTargetEmployeeId("");
         setBodyPartId("");
         setInjuryTypeId("");
+        setInitialLostDays("");
+        setReturnDate("");
+        setIsFatal(false);
         setActionTitle("");
         setActionDescription("");
         setActionOwnerUserId("");
@@ -163,11 +177,7 @@ export function CreateCommunicationQuick({
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-slate-900">Quick communication</h3>
-      <select
-        value={type}
-        onChange={(event) => setType(event.target.value as CommunicationType)}
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-      >
+      <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
         {(["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS", "FIRST_AID", "ACCIDENT"] as CommunicationType[]).map((option) => (
           <option key={option} value={option}>
             {formatCommunicationType(option)}
@@ -175,151 +185,95 @@ export function CreateCommunicationQuick({
         ))}
       </select>
       <div className="grid gap-3 md:grid-cols-2">
-        <select
-          value={areaId}
-          onChange={(event) => setAreaId(event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">Department (Area)</option>
+        <select value={areaId} onChange={(event) => setAreaId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+          <option value="">Department</option>
           {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name}
-            </option>
+            <option key={area.id} value={area.id}>{area.name}</option>
           ))}
         </select>
-        <select
-          value={workstationId}
-          onChange={(event) => setWorkstationId(event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">Location (Workstation)</option>
+        <select value={workstationId} onChange={(event) => setWorkstationId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+          <option value="">Location</option>
           {workstations.map((workstation) => (
-            <option key={workstation.id} value={workstation.id}>
-              {workstation.name}
-            </option>
+            <option key={workstation.id} value={workstation.id}>{workstation.name}</option>
           ))}
         </select>
       </div>
-      <input
-        type="datetime-local"
-        value={eventDatetime}
-        onChange={(event) => setEventDatetime(event.target.value)}
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        required
-      />
-      <input
-        value={reporterName}
-        onChange={(event) => setReporterName(event.target.value)}
-        placeholder="Reporter name"
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        required
-      />
-      {needsTargetWorker ? (
-        <input
-          value={targetText}
-          onChange={(event) => setTargetText(event.target.value)}
-          placeholder="Involved worker"
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          required
-        />
+      <input type="datetime-local" value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+      <div className="grid gap-3 md:grid-cols-2">
+        <select value={reporterEmployeeId} onChange={(event) => setReporterEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+          <option value="">Reporter from plant workers</option>
+          {employees.map((employee) => (
+            <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
+          ))}
+        </select>
+        <input value={reporterEmployee?.employeeNo ?? ""} placeholder="Reporter number" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-slate-50" readOnly />
+      </div>
+      {needsInvolvedWorker ? (
+        <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+          <option value="">Involved worker from plant workers</option>
+          {employees.map((employee) => (
+            <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
+          ))}
+        </select>
       ) : null}
       {needsClinicalFields ? (
         <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <p className="text-sm font-semibold text-slate-900">Clinical details</p>
           <div className="grid gap-3 md:grid-cols-2">
-            <select
-              value={targetEmployeeId}
-              onChange={(event) => setTargetEmployeeId(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              required
-            >
+            <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
               <option value="">Involved worker</option>
               {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
+                <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
               ))}
             </select>
-            <select
-              value={injuryTypeId}
-              onChange={(event) => setInjuryTypeId(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              required
-            >
+            <select value={injuryTypeId} onChange={(event) => setInjuryTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
               <option value="">Injury type</option>
               {injuryTypes.map((injuryType) => (
-                <option key={injuryType.id} value={injuryType.id}>
-                  {injuryType.name}
-                </option>
+                <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>
               ))}
             </select>
           </div>
           <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} />
+          {type === "ACCIDENT" ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder="Lost days" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <input type="date" value={returnDate} onChange={(event) => setReturnDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={isFatal} onChange={(event) => setIsFatal(event.target.checked)} />
+                Fatal injury
+              </label>
+            </div>
+          ) : null}
         </div>
       ) : null}
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={(event) => setPhotos(Array.from(event.target.files ?? []))}
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-      />
-      <textarea
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-        placeholder="Description"
-        rows={3}
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        required
-      />
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <h4 className="text-sm font-semibold text-slate-900">Linked action (optional)</h4>
-        <div className="mt-3 space-y-3">
-          <input
-            value={actionTitle}
-            onChange={(event) => setActionTitle(event.target.value)}
-            placeholder="Action title"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <textarea
-            value={actionDescription}
-            onChange={(event) => setActionDescription(event.target.value)}
-            placeholder="Action description"
-            rows={3}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <div className="grid gap-3 md:grid-cols-3">
-            <select
-              value={actionOwnerUserId}
-              onChange={(event) => setActionOwnerUserId(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              required={shouldCreateAction}
-            >
-              <option value="">Action owner</option>
-              {actionOwners.map((owner) => (
-                <option key={owner.id} value={owner.id}>
-                  {owner.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={actionPriority}
-              onChange={(event) => setActionPriority(event.target.value as ActionPriority)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-            </select>
-            <input
-              type="date"
-              value={actionDueDate}
-              onChange={(event) => setActionDueDate(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+      <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+      <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+      <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} placeholder="Suggested action" rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+      {canLinkAction ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <h4 className="text-sm font-semibold text-slate-900">Linked action</h4>
+          <div className="mt-3 space-y-3">
+            <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} placeholder="Action title" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            <textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} placeholder="Action description" rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            <div className="grid gap-3 md:grid-cols-3">
+              <select value={actionOwnerUserId} onChange={(event) => setActionOwnerUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required={shouldCreateAction}>
+                <option value="">Action owner</option>
+                {actionOwners.map((owner) => (
+                  <option key={owner.id} value={owner.id}>{owner.name}</option>
+                ))}
+              </select>
+              <select value={actionPriority} onChange={(event) => setActionPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+              </select>
+              <input type="date" value={actionDueDate} onChange={(event) => setActionDueDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
       <Button type="submit" size="sm" disabled={loading}>
         {loading ? "Saving..." : "Create"}
       </Button>

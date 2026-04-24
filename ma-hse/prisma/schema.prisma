@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum RoleCode {
+  N0_ADMIN
   N1_CORPORATE
   N2_PLANT_MANAGER
   N3_SAFETY
@@ -47,8 +48,9 @@ enum SeverityPotential {
 }
 
 enum LeaveClassification {
-  LE_30
-  GT_30
+  MINOR
+  SERIOUS
+  FATAL
 }
 
 enum CommunicationSource {
@@ -86,6 +88,7 @@ enum SEWOStatus {
   IN_APPROVAL
   APPROVED
   REJECTED
+  CLOSED
 }
 
 enum SEWOAttachmentType {
@@ -116,6 +119,48 @@ enum ReportScope {
   CORPORATE
 }
 
+enum ExternalCompanyApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ExternalCompanyDocumentType {
+  ANEXO_D
+  RISK_ASSESSMENT
+  WORK_ACCIDENT_INSURANCE
+  CIVIL_LIABILITY_INSURANCE
+  SOCIAL_SECURITY_CLEARANCE
+  TAX_AUTHORITY_CLEARANCE
+}
+
+enum ExternalWorkerDocumentType {
+  MEDICAL_FITNESS
+  PPE_DELIVERY
+  TRAINING
+}
+
+enum MapSourceFileType {
+  PDF
+  DWG
+  IMAGE
+  OTHER
+}
+
+enum MapLayerSourceType {
+  DWG_IMPORTED
+  AUTO
+  MANUAL
+}
+
+enum MapFeatureType {
+  AREA
+  WORKSTATION
+  ICON
+  INCIDENT
+}
+
 model Plant {
   id               String               @id @default(uuid())
   code             String               @unique
@@ -126,6 +171,7 @@ model Plant {
   updatedAt        DateTime             @updatedAt
   users            UserPlantRole[]
   accessTokens     PlantAccessToken[]
+  monthlyInputs    PlantMonthlyInput[]
   areas            Area[]
   lines            Line[]
   workstations     Workstation[]
@@ -148,6 +194,12 @@ model Plant {
   systemParameters SystemParameter[]
   reportRuns       ReportRun[]
   auditLogs        AuditLog[]
+  externalCompanies ExternalCompany[]
+  externalInvitations ExternalCompanyInvitation[]
+  mapDocuments     MapDocument[]
+  mapLayers        MapLayer[]
+  mapFeatures      MapFeature[]
+  smatAudits       SmatAudit[]
 }
 
 model User {
@@ -180,6 +232,12 @@ model User {
   communicationAtt     CommunicationAttachment[]
   actionEvidenceAtt    ActionEvidenceAttachment[]
   sewoAttachment       SEWOAttachment[]
+  smatAttachment       SmatAuditAttachment[]
+  smatAuditsCreated    SmatAudit[]                   @relation("SMATAuditorUser")
+  contractorCompanies  ExternalCompany[]            @relation("ExternalContractorOwner")
+  contractorInvitationsSent ExternalCompanyInvitation[] @relation("ExternalInvitationSponsor")
+  reviewedExternalCompanyDocuments ExternalCompanyDocument[] @relation("ExternalCompanyDocumentReviewer")
+  reviewedExternalWorkerDocuments ExternalWorkerDocument[] @relation("ExternalWorkerDocumentReviewer")
 }
 
 model Role {
@@ -229,6 +287,7 @@ model Area {
   plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
   sewoRecords     SEWO[]
+  mapFeatures     MapFeature[]
 
   @@unique([plantId, code])
 }
@@ -254,6 +313,7 @@ model Workstation {
   isActive  Boolean  @default(true)
   plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
+  mapFeatures    MapFeature[]
 
   @@unique([plantId, code])
 }
@@ -278,6 +338,7 @@ model Shift {
   isActive  Boolean  @default(true)
   plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   employees EmployeeDirectory[]
+  communications Communication[]
   sewoRecords SEWO[]
 
   @@unique([plantId, code])
@@ -368,6 +429,7 @@ model EmployeeDirectory {
   plant      Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   shift      Shift?   @relation(fields: [shiftId], references: [id])
   targetCommunications Communication[] @relation("TargetEmployee")
+  contractorCompanyAssignments ExternalCompany[] @relation("ExternalContractorSponsor")
 
   @@unique([plantId, employeeNo])
   @@index([plantId, name])
@@ -387,6 +449,7 @@ model Communication {
   targetText            String?
   targetEmployeeNo      String?
   targetEmployeeId      String?
+  shiftId               String?
   areaId                String?
   lineId                String?
   workstationId         String?
@@ -396,10 +459,13 @@ model Communication {
   unsafeConditionTypeId String?
   nearMissTypeId        String?
   description           String
+  suggestedAction       String?
   severityPotential     SeverityPotential?
   isContractor          Boolean?            @default(false)
   bodyPartId            String?
   injuryTypeId          String?
+  isFatal               Boolean?            @default(false)
+  initialLostDays       Int?
   hasLeave              Boolean?            @default(false)
   returnDate            DateTime?
   lostDays              Int?
@@ -416,6 +482,7 @@ model Communication {
   plant                 Plant               @relation(fields: [plantId], references: [id], onDelete: Cascade)
   reporterUser          User?               @relation("ReporterUser", fields: [reporterUserId], references: [id])
   targetEmployee        EmployeeDirectory?  @relation("TargetEmployee", fields: [targetEmployeeId], references: [id])
+  shift                 Shift?              @relation(fields: [shiftId], references: [id])
   area                  Area?               @relation(fields: [areaId], references: [id])
   line                  Line?               @relation(fields: [lineId], references: [id])
   workstation           Workstation?        @relation(fields: [workstationId], references: [id])
@@ -432,9 +499,12 @@ model Communication {
   actions               Action[]
   alertEvents           AlertEvent[]
   sewoRecords           SEWO[]
+  mapFeatures           MapFeature[]
+  smatAudits            SmatAudit[]
 
   @@index([plantId, status, eventDatetime])
   @@index([riskThemeId, eventDatetime])
+  @@index([shiftId])
 }
 
 model CommunicationAttachment {
@@ -454,6 +524,7 @@ model CommunicationAttachment {
 model Action {
   id               String          @id @default(uuid())
   plantId          String
+  sequenceNumber   Int?
   sourceType       ActionSourceType
   communicationId  String?
   sewoId           String?
@@ -481,8 +552,254 @@ model Action {
   coOwners         ActionCoOwner[]
   evidenceAttachments ActionEvidenceAttachment[]
   sewoLinks        SEWOActionLink[]
+  smatLinks        SmatAuditActionLink[]
 
   @@index([plantId, status, dueDate])
+  @@unique([plantId, sequenceNumber])
+}
+
+model SmatAudit {
+  id                        String   @id @default(uuid())
+  plantId                   String
+  auditorUserId             String?
+  communicationId           String?
+  auditorName               String
+  auditDate                 DateTime
+  startTimeText             String?
+  endTimeText               String?
+  areaExamined              String?
+  locationExamined          String?
+  peopleObservedCount       Int      @default(0)
+  peopleInvolvedCount       Int      @default(0)
+  peopleSafeCount           Int      @default(0)
+  peopleUnsafeCount         Int      @default(0)
+  workConditionsSafeCount   Int      @default(0)
+  workConditionsUnsafeCount Int      @default(0)
+  reactionsPositiveCount    Int      @default(0)
+  reactionsNegativeCount    Int      @default(0)
+  safeActs                  Json
+  safeConditions            Json
+  unsafeActs                Json
+  unsafeConditions          Json
+  answer1                   String?
+  answer2                   String?
+  answer3                   String?
+  answer4                   String?
+  answer5                   String?
+  answer6                   String?
+  notes                     String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  plant                     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  auditorUser               User?    @relation("SMATAuditorUser", fields: [auditorUserId], references: [id])
+  communication             Communication? @relation(fields: [communicationId], references: [id])
+  attachments               SmatAuditAttachment[]
+  actionLinks               SmatAuditActionLink[]
+
+  @@index([plantId, auditDate])
+  @@index([auditorUserId, createdAt])
+  @@index([communicationId])
+}
+
+model SmatAuditAttachment {
+  id           String    @id @default(uuid())
+  smatAuditId  String
+  fileKey      String
+  fileName     String
+  contentType  String
+  uploadedAt   DateTime  @default(now())
+  uploadedById String?
+  smatAudit    SmatAudit @relation(fields: [smatAuditId], references: [id], onDelete: Cascade)
+  uploadedBy   User?     @relation(fields: [uploadedById], references: [id])
+
+  @@index([smatAuditId])
+}
+
+model SmatAuditActionLink {
+  id         String    @id @default(uuid())
+  smatAuditId String
+  actionId   String
+  createdAt  DateTime  @default(now())
+  smatAudit  SmatAudit @relation(fields: [smatAuditId], references: [id], onDelete: Cascade)
+  action     Action    @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@unique([smatAuditId, actionId])
+  @@index([actionId])
+}
+
+model ExternalCompany {
+  id                String                         @id @default(uuid())
+  plantId           String
+  sponsorUserId     String?
+  sponsorEmployeeId String?
+  email             String                         @unique
+  passwordHash      String
+  companyName       String
+  address           String
+  phone             String
+  taxId             String
+  socialSecurityId  String
+  contactName       String
+  isActive          Boolean                        @default(true)
+  approvalStatus    ExternalCompanyApprovalStatus  @default(PENDING)
+  approvedUntil     DateTime?
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+  plant             Plant                          @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  sponsorUser       User?                          @relation("ExternalContractorOwner", fields: [sponsorUserId], references: [id])
+  sponsorEmployee   EmployeeDirectory?             @relation("ExternalContractorSponsor", fields: [sponsorEmployeeId], references: [id])
+  documents         ExternalCompanyDocument[]
+  workers           ExternalWorker[]
+  invitations       ExternalCompanyInvitation[]
+  sessions          ExternalCompanySession[]
+}
+
+model ExternalCompanyInvitation {
+  id          String    @id @default(uuid())
+  plantId     String
+  sponsorUserId String
+  email       String
+  tokenHash    String   @unique
+  requiredDocuments Json
+  sentAt      DateTime  @default(now())
+  acceptedAt  DateTime?
+  companyId   String?
+  plant       Plant     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  sponsorUser User      @relation("ExternalInvitationSponsor", fields: [sponsorUserId], references: [id], onDelete: Cascade)
+  company     ExternalCompany? @relation(fields: [companyId], references: [id])
+
+  @@index([plantId, email])
+}
+
+model ExternalCompanySession {
+  id          String   @id @default(uuid())
+  companyId    String
+  sessionToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  company      ExternalCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, expiresAt])
+}
+
+model ExternalCompanyDocument {
+  id              String                         @id @default(uuid())
+  companyId       String
+  type            ExternalCompanyDocumentType
+  fileKey         String
+  fileName        String
+  contentType     String
+  validUntil      DateTime?
+  approvalStatus  ExternalCompanyApprovalStatus @default(PENDING)
+  approvalComment String?
+  reviewedByUserId String?
+  reviewedAt      DateTime?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  company         ExternalCompany                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reviewedByUser  User?                          @relation("ExternalCompanyDocumentReviewer", fields: [reviewedByUserId], references: [id])
+
+  @@unique([companyId, type])
+}
+
+model ExternalWorker {
+  id              String                         @id @default(uuid())
+  companyId       String
+  name            String
+  birthDate       DateTime
+  isActive        Boolean                        @default(true)
+  approvalStatus  ExternalCompanyApprovalStatus  @default(PENDING)
+  approvedUntil   DateTime?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  company         ExternalCompany                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documents       ExternalWorkerDocument[]
+
+  @@index([companyId, isActive])
+}
+
+model ExternalWorkerDocument {
+  id              String                         @id @default(uuid())
+  workerId        String
+  type            ExternalWorkerDocumentType
+  fileKey         String
+  fileName        String
+  contentType     String
+  validUntil      DateTime?
+  approvalStatus  ExternalCompanyApprovalStatus @default(PENDING)
+  approvalComment String?
+  reviewedByUserId String?
+  reviewedAt      DateTime?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  worker          ExternalWorker                 @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  reviewedByUser  User?                          @relation("ExternalWorkerDocumentReviewer", fields: [reviewedByUserId], references: [id])
+
+  @@unique([workerId, type])
+}
+
+model MapDocument {
+  id                 String            @id @default(uuid())
+  plantId            String
+  title              String
+  fileKey            String
+  fileName           String
+  contentType        String
+  fileType           MapSourceFileType
+  importedLayerNames Json?
+  selectedLayerNames Json?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  plant              Plant             @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  layers             MapLayer[]
+
+  @@index([plantId, createdAt])
+}
+
+model MapLayer {
+  id               String             @id @default(uuid())
+  plantId          String
+  documentId       String?
+  name             String
+  description      String?
+  color            String             @default("#0f766e")
+  icon             String?
+  sourceType       MapLayerSourceType @default(MANUAL)
+  isVisibleDefault Boolean            @default(true)
+  sortOrder        Int                @default(0)
+  metadataJson     Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  plant            Plant              @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  document         MapDocument?       @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  features         MapFeature[]
+
+  @@index([plantId, sortOrder])
+}
+
+model MapFeature {
+  id              String         @id @default(uuid())
+  plantId         String
+  layerId         String?
+  featureType     MapFeatureType
+  label           String
+  icon            String?
+  color           String?
+  positionX       Float
+  positionY       Float
+  areaId          String?
+  workstationId   String?
+  communicationId String?
+  metadataJson    Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  plant           Plant          @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  layer           MapLayer?      @relation(fields: [layerId], references: [id], onDelete: SetNull)
+  area            Area?          @relation(fields: [areaId], references: [id])
+  workstation     Workstation?   @relation(fields: [workstationId], references: [id])
+  communication   Communication? @relation(fields: [communicationId], references: [id], onDelete: SetNull)
+
+  @@index([plantId, layerId])
 }
 
 model ActionCoOwner {
@@ -519,6 +836,44 @@ model SafetyKpiMonthlyInput {
   plant       Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@unique([plantId, year, month])
+}
+
+model PlantMonthlyInput {
+  id                        String   @id @default(uuid())
+  plantId                   String
+  year                      Int
+  month                     Int
+  workerCount               Int?
+  hoursWorked               Decimal? @db.Decimal(12, 2)
+  standardHours             Decimal? @db.Decimal(12, 2)
+  spillsNumber              Int?
+  energyConsumedMwh         Decimal? @db.Decimal(12, 2)
+  electricityFromGridMwh    Decimal? @db.Decimal(12, 2)
+  selfProducedEnergyMwh     Decimal? @db.Decimal(12, 2)
+  heatingM3                 Decimal? @db.Decimal(12, 2)
+  waterConsumedNetworkM3    Decimal? @db.Decimal(12, 2)
+  waterConsumedCapturedM3   Decimal? @db.Decimal(12, 2)
+  compressedAirConsumedM3   Decimal? @db.Decimal(12, 2)
+  compressedAirConsumedMwh  Decimal? @db.Decimal(12, 2)
+  nonHazardousWasteTons     Decimal? @db.Decimal(12, 2)
+  ewc150101PaperCardboardPackagingTons Decimal? @db.Decimal(12, 2)
+  ewc150102PlasticPackagingTons Decimal? @db.Decimal(12, 2)
+  ewc150103WoodTons          Decimal? @db.Decimal(12, 2)
+  ewc160117FerrousMetalsTons Decimal? @db.Decimal(12, 2)
+  ewc160118NonFerrousMetalsCopperTons Decimal? @db.Decimal(12, 2)
+  ewc170117ConstructionWasteTons Decimal? @db.Decimal(12, 2)
+  ewc200111Tons              Decimal? @db.Decimal(12, 2)
+  ewc200136ElectricalElectronicEquipmentTons Decimal? @db.Decimal(12, 2)
+  ewc200139PlasticTons       Decimal? @db.Decimal(12, 2)
+  ewc200301UnsortedUrbanWasteTons Decimal? @db.Decimal(12, 2)
+  hazardousWasteTons        Decimal? @db.Decimal(12, 2)
+  recycledWasteTons         Decimal? @db.Decimal(12, 2)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  plant                     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@unique([plantId, year, month])
+  @@index([plantId, year])
 }
 
 model ReportRecipientList {
@@ -602,6 +957,8 @@ model SEWO {
   whichText                     String?
   howText                       String
   immediateCorrectiveActionText String
+  templateData                  Json?
+  isAutoCreated                 Boolean      @default(false)
   status                        SEWOStatus  @default(DRAFT)
   approvedByUserId              String?
   approvedAt                    DateTime?

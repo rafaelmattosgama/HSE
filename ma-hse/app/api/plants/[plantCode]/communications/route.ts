@@ -60,11 +60,13 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
+  const actorRole = "role" in auth ? auth.role : undefined;
 
   const communication = await CommunicationService.create({
     plantId: plant.id,
     payload: parsed.data,
     reporterUserId: auth.session.user.id,
+    actorRole,
   });
 
   if (parsed.data.quickAction) {

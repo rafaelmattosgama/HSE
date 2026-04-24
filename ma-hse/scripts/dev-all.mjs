@@ -115,6 +115,12 @@ async function main() {
     console.warn(
       `[dev:all] Detected Next.js dev lock at ${nextDevLockPath}. If app exits immediately, stop other "next dev" processes first.`,
     );
+    console.warn(
+      "[dev:all] Skipping Prisma client regeneration because an existing Next.js dev process may be locking the Prisma engine.",
+    );
+  } else {
+    console.log("[dev:all] Regenerating Prisma client");
+    await runNpmOnce(["run", "db:generate"], env);
   }
 
   await runNpmOnce(["run", "scheduler:dev"], env);

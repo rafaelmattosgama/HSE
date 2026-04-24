@@ -1,4 +1,4 @@
-import { S3Client, HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "@/lib/env";
 
@@ -37,5 +37,48 @@ export const StorageService = {
       key: input.key,
       uploadUrl: url,
     };
+  },
+  async uploadObject(input: {
+    key: string;
+    contentType: string;
+    body: Buffer;
+  }) {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: input.key,
+        ContentType: input.contentType,
+        Body: input.body,
+      }),
+    );
+
+    return {
+      bucket: env.S3_BUCKET,
+      key: input.key,
+    };
+  },
+  async getPresignedDownloadUrl(input: {
+    key: string;
+    expiresInSec?: number;
+  }) {
+    const command = new GetObjectCommand({
+      Bucket: env.S3_BUCKET,
+      Key: input.key,
+    });
+
+    return getSignedUrl(s3, command, {
+      expiresIn: input.expiresInSec ?? 600,
+    });
+  },
+  async getObjectBuffer(input: { key: string }) {
+    const response = await s3.send(
+      new GetObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: input.key,
+      }),
+    );
+
+    const bytes = await response.Body?.transformToByteArray();
+    return bytes ? Buffer.from(bytes) : Buffer.alloc(0);
   },
 };

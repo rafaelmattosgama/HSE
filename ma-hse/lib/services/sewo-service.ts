@@ -1,4 +1,4 @@
-import { SEWOStatus } from "@prisma/client";
+import { Prisma, SEWOStatus } from "@prisma/client";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import type { ApproveSEWOInput, CreateSEWOInput } from "@/lib/validation/dtos";
@@ -26,16 +26,31 @@ export const SewaService = {
         whichText: input.payload.whichText,
         howText: input.payload.howText,
         immediateCorrectiveActionText: input.payload.immediateCorrectiveActionText,
+        templateData: input.payload.templateData as Prisma.InputJsonValue | undefined,
         status: input.payload.status ?? SEWOStatus.DRAFT,
         causeCatalogVersionId: input.payload.causeCatalogVersionId,
-        causeSelections: {
-          createMany: {
-            data: input.payload.causeSelections,
-          },
-        },
+        causeSelections: input.payload.causeSelections.length
+          ? {
+              createMany: {
+                data: input.payload.causeSelections,
+              },
+            }
+          : undefined,
+        attachments: input.payload.attachments?.length
+          ? {
+              createMany: {
+                data: input.payload.attachments.map((attachment) => ({
+                  ...attachment,
+                  type: "EVENT_EVIDENCE",
+                  uploadedById: input.actorUserId,
+                })),
+              },
+            }
+          : undefined,
       },
       include: {
         causeSelections: true,
+        attachments: true,
       },
     });
 
@@ -110,6 +125,82 @@ export const SewaService = {
       data: {
         sewoId,
         actionId,
+      },
+    });
+  },
+
+  async createProvisionalFromCommunication(input: {
+    communicationId: string;
+    actorUserId: string;
+  }) {
+    const existing = await prisma.sEWO.findFirst({
+      where: {
+        communicationId: input.communicationId,
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const [communication, catalog] = await prisma.$transaction([
+      prisma.communication.findUniqueOrThrow({
+        where: { id: input.communicationId },
+        include: {
+          plant: true,
+          area: true,
+          line: true,
+          shift: true,
+          workstation: true,
+          targetEmployee: true,
+          bodyPart: true,
+          injuryType: true,
+        },
+      }),
+      prisma.sEWOCauseCatalogVersion.findFirst({
+        where: { isActive: true },
+        orderBy: { version: "desc" },
+      }),
+    ]);
+
+    if (!catalog) {
+      throw new Error("No active S-EWO cause catalog found");
+    }
+
+    return prisma.sEWO.create({
+      data: {
+        plantId: communication.plantId,
+        communicationId: communication.id,
+        eventClassification: `${communication.plant.code.toUpperCase()} ${communication.type}`,
+        areaId: communication.areaId,
+        lineId: communication.lineId,
+        shiftId: communication.shiftId,
+        analysisDate: new Date(),
+        performedByUserId: input.actorUserId,
+        whatText: communication.injuryType?.name ?? communication.description,
+        whereText: communication.workstation?.name ?? communication.area?.name ?? "",
+        whoText: communication.targetEmployee?.name ?? communication.reporterName,
+        usualWorkYesNo: true,
+        whichText: communication.type,
+        howText: communication.description,
+        immediateCorrectiveActionText: communication.suggestedAction ?? "",
+        causeCatalogVersionId: catalog.id,
+        status: SEWOStatus.DRAFT,
+        isAutoCreated: true,
+        templateData: {
+          plantCode: communication.plant.code.toUpperCase(),
+          eventType: communication.type,
+          classification: communication.classification,
+          lostDays: communication.lostDays,
+          initialLostDays: communication.initialLostDays,
+          eventDatetime: communication.eventDatetime.toISOString(),
+          reporterName: communication.reporterName,
+          injuredPerson: communication.targetEmployee?.name ?? communication.targetText ?? null,
+          workplace: communication.workstation?.name ?? null,
+          area: communication.area?.name ?? null,
+          line: communication.line?.name ?? null,
+          bodyPart: communication.bodyPart?.name ?? null,
+        },
       },
     });
   },
