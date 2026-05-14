@@ -2,57 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { RoleCode } from "@prisma/client";
 import { buttonVariants } from "@/components/ui/button";
 import { CommunicationPyramid } from "@/components/feature/communication-pyramid";
+import { DashboardVisualizationStudio } from "@/components/feature/dashboard-visualization-studio";
+import type { PlantSummary, RankingEntry, RankingGroup, RankingSeriesSnapshot } from "@/lib/dashboard-visualization";
+import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 
-export type PlantSummary = {
-  id: string;
-  code: string;
-  name: string;
-  timezone: string;
-  defaultLanguage: string;
-  validatedEvents: number;
-  openActions: number;
-  closedActions: number;
-  actionsToClose: number;
-  closedActionsPercent: number;
-  actionsToClosePercent: number;
-  nearMissCount: number;
-  injuryCount: number;
-  frequencyIndex: number;
-  severityIndex: number;
-  communicationPyramid: {
-    unsafeAct: number;
-    unsafeCondition: number;
-    nearMiss: number;
-    firstAid: number;
-    minorInjury: number;
-    seriousInjury: number;
-    fatal: number;
-  };
-  leaders: Array<{
-    role: RoleCode;
-    email: string | null;
-    name: string;
-  }>;
-};
-
-type RankingEntry = {
-  plantCode: string;
-  plantName: string;
-  value: number;
-};
-
-export type RankingGroup = {
-  id: string;
-  title: string;
-  variant: "count" | "percent" | "index";
-  higherLabel?: string;
-  lowerLabel?: string;
-  higher: RankingEntry[];
-  lower: RankingEntry[];
-};
+export type { PlantSummary, RankingGroup } from "@/lib/dashboard-visualization";
 
 type RankingPanel = {
   id: string;
@@ -72,6 +28,7 @@ type CorporatePlantManagerProps = {
   totalActionsToClosePercent: number;
   totalNearMisses: number;
   totalInjuries: number;
+  totalRootCauses: number;
   totalFrequencyIndex: number;
   totalSeverityIndex: number;
   totalCommunicationPyramid: {
@@ -84,6 +41,7 @@ type CorporatePlantManagerProps = {
     fatal: number;
   };
   rankings: RankingGroup[];
+  rankingMonthlySeries?: Record<string, RankingSeriesSnapshot[]>;
   title?: string;
   description?: string;
   plantListTitle?: string;
@@ -97,6 +55,8 @@ type CorporatePlantManagerProps = {
   hideRankings?: boolean;
   hidePyramid?: boolean;
   showCreatePlantLink?: boolean;
+  rootCauseMetricLabel?: string;
+  labels?: DashboardUiDictionary;
 };
 
 type MetricId =
@@ -109,6 +69,7 @@ type MetricId =
   | "actionsToClosePercent"
   | "nearMisses"
   | "injuries"
+  | "rootCauses"
   | "frequencyRate"
   | "gravityRate";
 
@@ -222,24 +183,29 @@ export function CorporatePlantManager({
   totalActionsToClosePercent,
   totalNearMisses,
   totalInjuries,
+  totalRootCauses,
   totalFrequencyIndex,
   totalSeverityIndex,
   totalCommunicationPyramid,
   rankings,
-  title = "Corporate Indicators",
-  description = "Global values are shown by default. Hover a plant to preview its indicators.",
-  plantListTitle = "Corporate Plants",
-  plantListDescription = "Hover a plant to preview its indicators right beside it.",
-  favoriteMetricsDescription = "Choose the cards that should appear by default on the corporate dashboard.",
-  favoriteRankingsDescription = "Compact Top 5 comparisons for the selected favorite rankings.",
-  pyramidDescription = "Global communication totals are shown by default. Hover a plant to preview the same pyramid for that plant.",
+  rankingMonthlySeries = {},
+  title,
+  plantListTitle,
+  pyramidDescription,
   storageKeyBase = "ma-hse-corporate",
   initialActivePlantCode = null,
   hidePlantList = false,
   hideRankings = false,
   hidePyramid = false,
   showCreatePlantLink = true,
+  rootCauseMetricLabel,
+  labels = getUiDictionary("en").dashboard,
 }: CorporatePlantManagerProps) {
+  const text = labels;
+  const titleLabel = title ?? text.corporateIndicators;
+  const plantListTitleLabel = plantListTitle ?? text.corporatePlants;
+  const pyramidDescriptionLabel = pyramidDescription ?? text.corporatePyramidDescription;
+  const rootCauseLabel = rootCauseMetricLabel ?? text.sewoRootCauses;
   const favoriteMetricsStorageKey = `${storageKeyBase}-favorite-metrics`;
   const favoriteRankingsStorageKey = `${storageKeyBase}-favorite-rankings`;
   const [activePlantCode, setActivePlantCode] = useState<string | null>(initialActivePlantCode);
@@ -288,12 +254,12 @@ export function CorporatePlantManager({
     window.localStorage.setItem(favoriteRankingsStorageKey, JSON.stringify(favoriteRankingIds));
   }, [favoriteRankingIds, favoriteRankingsStorageKey]);
 
-  const scopeLabel = activePlant ? `${activePlant.name} (${activePlant.code.toUpperCase()})` : "Global";
+  const scopeLabel = activePlant ? `${activePlant.name} (${activePlant.code.toUpperCase()})` : text.globalScope;
   const allMetrics = useMemo<MetricDefinition[]>(
     () => [
       {
         id: "plants",
-        label: "Plants",
+        label: text.plants,
         variant: "count",
         tone: "default",
         globalValue: totalPlants,
@@ -302,7 +268,7 @@ export function CorporatePlantManager({
       },
       {
         id: "validatedEvents",
-        label: "Validated events",
+        label: text.validatedEvents,
         variant: "count",
         tone: "default",
         globalValue: totalValidatedEvents,
@@ -311,7 +277,7 @@ export function CorporatePlantManager({
       },
       {
         id: "openActions",
-        label: "Open actions",
+        label: text.openActions,
         variant: "count",
         tone: "default",
         globalValue: totalOpenActions,
@@ -320,7 +286,7 @@ export function CorporatePlantManager({
       },
       {
         id: "closedActions",
-        label: "Closed actions",
+        label: text.closedActions,
         variant: "count",
         tone: "success",
         globalValue: totalClosedActions,
@@ -329,7 +295,7 @@ export function CorporatePlantManager({
       },
       {
         id: "actionsToClose",
-        label: "Actions to close",
+        label: text.actionsToClose,
         variant: "count",
         tone: "danger",
         globalValue: totalActionsToClose,
@@ -338,7 +304,7 @@ export function CorporatePlantManager({
       },
       {
         id: "closedActionsPercent",
-        label: "% closed actions",
+        label: text.closedActionsPercent,
         variant: "percent",
         tone: "default",
         globalValue: totalClosedActionsPercent,
@@ -347,7 +313,7 @@ export function CorporatePlantManager({
       },
       {
         id: "actionsToClosePercent",
-        label: "% actions to close",
+        label: text.actionsToClosePercent,
         variant: "percent",
         tone: "default",
         globalValue: totalActionsToClosePercent,
@@ -356,7 +322,7 @@ export function CorporatePlantManager({
       },
       {
         id: "nearMisses",
-        label: "Near misses",
+        label: text.nearMisses,
         variant: "count",
         tone: "default",
         globalValue: totalNearMisses,
@@ -365,7 +331,7 @@ export function CorporatePlantManager({
       },
       {
         id: "injuries",
-        label: "Injuries",
+        label: text.injuries,
         variant: "count",
         tone: "default",
         globalValue: totalInjuries,
@@ -373,8 +339,17 @@ export function CorporatePlantManager({
         showInGlobal: true,
       },
       {
+        id: "rootCauses",
+        label: rootCauseLabel,
+        variant: "count",
+        tone: "default",
+        globalValue: totalRootCauses,
+        plantValue: activePlant?.rootCauseCount ?? 0,
+        showInGlobal: true,
+      },
+      {
         id: "frequencyRate",
-        label: "Frequency rate",
+        label: text.frequencyRate,
         variant: "index",
         tone: "default",
         globalValue: totalFrequencyIndex,
@@ -383,7 +358,7 @@ export function CorporatePlantManager({
       },
       {
         id: "gravityRate",
-        label: "Gravity rate",
+        label: text.gravityRate,
         variant: "index",
         tone: "default",
         globalValue: totalSeverityIndex,
@@ -402,6 +377,9 @@ export function CorporatePlantManager({
       totalNearMisses,
       totalOpenActions,
       totalPlants,
+      text,
+      rootCauseLabel,
+      totalRootCauses,
       totalSeverityIndex,
       totalValidatedEvents,
     ],
@@ -499,11 +477,10 @@ export function CorporatePlantManager({
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <header>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
-            <p className="mt-1 text-xs text-slate-600">{description}</p>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{titleLabel}</h2>
           </header>
           <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-            Scope: {scopeLabel}
+            {text.scope}: {scopeLabel}
           </div>
         </div>
 
@@ -515,15 +492,14 @@ export function CorporatePlantManager({
             >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{plantListTitle}</h3>
-                <p className="mt-1 text-sm text-slate-700">{plantListDescription}</p>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{plantListTitleLabel}</h3>
               </div>
               {showCreatePlantLink ? (
                 <Link
                   href="/app/corporate/plants/new"
                   className={`${buttonVariants({ size: "sm" })} min-w-[110px] px-4 leading-none !text-white`}
                 >
-                  Create plant
+                  {text.createPlant}
                 </Link>
               ) : null}
             </div>
@@ -542,31 +518,29 @@ export function CorporatePlantManager({
                   onFocus={() => setActivePlantCode(plant.code)}
                   onBlur={() => setActivePlantCode(null)}
                 >
-                  <article>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{plant.name}</p>
-                        <p className="text-[11px] text-slate-500">
-                          {plant.code.toUpperCase()} - {plant.timezone}
-                        </p>
-                      </div>
-                      <span className={buttonVariants({ variant: "secondary", size: "sm" })}>Open</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{plant.name}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {plant.code.toUpperCase()} - {plant.timezone}
+                      </p>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-md bg-slate-50 px-2 py-2">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">NM</p>
-                        <p className="text-sm font-semibold text-slate-900">{plant.nearMissCount}</p>
-                      </div>
-                      <div className="rounded-md bg-slate-50 px-2 py-2">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Inj</p>
-                        <p className="text-sm font-semibold text-slate-900">{plant.injuryCount}</p>
-                      </div>
-                      <div className="rounded-md bg-slate-50 px-2 py-2">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Open</p>
-                        <p className="text-sm font-semibold text-slate-900">{plant.actionsToClose}</p>
-                      </div>
+                    <span className={buttonVariants({ variant: "secondary", size: "sm" })}>{text.open}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-md bg-slate-50 px-2 py-2">
+                      <p className="text-[10px] uppercase leading-tight tracking-wide text-slate-500">{text.nearMisses}</p>
+                      <p className="text-sm font-semibold text-slate-900">{plant.nearMissCount}</p>
                     </div>
-                  </article>
+                    <div className="rounded-md bg-slate-50 px-2 py-2">
+                      <p className="text-[10px] uppercase leading-tight tracking-wide text-slate-500">{text.injuries}</p>
+                      <p className="text-sm font-semibold text-slate-900">{plant.injuryCount}</p>
+                    </div>
+                    <div className="rounded-md bg-slate-50 px-2 py-2">
+                      <p className="text-[10px] uppercase leading-tight tracking-wide text-slate-500">{text.openActions}</p>
+                      <p className="text-sm font-semibold text-slate-900">{plant.actionsToClose}</p>
+                    </div>
+                  </div>
                 </Link>
               ))}
             </div>
@@ -577,8 +551,7 @@ export function CorporatePlantManager({
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Favorite indicators</p>
-                  <p className="mt-1 text-sm text-slate-700">{favoriteMetricsDescription}</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">{text.favoriteIndicators}</p>
                 </div>
                 {extraMetrics.length > 0 ? (
                   <button
@@ -586,7 +559,7 @@ export function CorporatePlantManager({
                     className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
                     onClick={() => setShowAllMetrics((current) => !current)}
                   >
-                    {showAllMetrics ? "Show less" : "Show more"}
+                    {showAllMetrics ? text.showLess : text.showMore}
                   </button>
                 ) : null}
               </div>
@@ -628,8 +601,7 @@ export function CorporatePlantManager({
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Plant rankings</p>
-                  <p className="mt-1 text-sm text-slate-700">{favoriteRankingsDescription}</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">{text.topRankings}</p>
                 </div>
                 {extraRankings.length > 0 ? (
                   <button
@@ -637,7 +609,7 @@ export function CorporatePlantManager({
                     className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
                     onClick={() => setShowAllRankings((current) => !current)}
                   >
-                    {showAllRankings ? "Show less" : "Show more"}
+                    {showAllRankings ? text.showLess : text.showMore}
                   </button>
                 ) : null}
               </div>
@@ -679,11 +651,21 @@ export function CorporatePlantManager({
 
             {hidePyramid ? null : (
               <CommunicationPyramid
-                title="Communication Pyramid"
-                description={pyramidDescription}
+                title={text.communicationPyramid}
+                description={pyramidDescriptionLabel}
                 counts={activePlant ? activePlant.communicationPyramid : totalCommunicationPyramid}
               />
             )}
+
+            <DashboardVisualizationStudio
+              plants={initialPlants}
+              rankings={rankings}
+              rankingMonthlySeries={rankingMonthlySeries}
+              activePlantCode={activePlantCode}
+              storageKeyBase={storageKeyBase}
+              rootCauseMetricLabel={rootCauseLabel}
+              labels={text}
+            />
           </div>
         </div>
       </section>

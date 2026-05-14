@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+coverage
+test-results
+playwright-report
+*.log
+*.tsbuildinfo
+tmp_transfer_*.json
+.env
+.env.*
+Dockerfile
+docker-compose*.yml
