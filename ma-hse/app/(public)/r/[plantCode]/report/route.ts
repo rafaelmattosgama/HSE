@@ -1,22 +1,58 @@
-import { CommunicationSource, PlantAccessTokenType } from "@prisma/client";
+import { PlantAccessTokenType, CommunicationSource } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { fail, ok } from "@/lib/api";
 import { buildRateLimitKey } from "@/lib/helpers";
 import { parseBody } from "@/lib/http";
 import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
+import { prisma } from "@/lib/prisma";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { verifyPlantToken } from "@/lib/auth/plant-token";
+import {
+  dedupeCatalogRows,
+  getLocalizedBodyPartName,
+  getLocalizedInjuryTypeName,
+  getLocalizedShiftName,
+  getPublicReportText,
+} from "@/lib/public-report";
 import { createCommunicationInput } from "@/lib/validation/dtos";
 import { CommunicationService } from "@/lib/services/communication-service";
 
-function renderHtml(plantCode: string, token: string) {
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function optionMarkup(rows: Array<{ id: string; name: string; employeeNo?: string | null }>) {
+  return rows
+    .map((row) => `<option value="${escapeHtml(row.id)}">${escapeHtml(`${row.employeeNo ? `${row.employeeNo} - ` : ""}${row.name}`)}</option>`)
+    .join("");
+}
+
+function renderHtml(
+  plantCode: string,
+  token: string,
+  language: string,
+  options: {
+    areas: Array<{ id: string; name: string }>;
+    workstations: Array<{ id: string; name: string }>;
+    shifts: Array<{ id: string; name: string }>;
+    employees: Array<{ id: string; name: string; employeeNo?: string | null }>;
+    bodyParts: Array<{ id: string; name: string }>;
+    injuryTypes: Array<{ id: string; name: string }>;
+  },
+) {
+  const { locale, text } = getPublicReportText(language);
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(locale)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Safety Report</title>
+    <title>${escapeHtml(text.title)}</title>
     <style>
       body { font-family: sans-serif; margin: 0; background: #f6faf9; color: #0f172a; }
       .wrap { max-width: 760px; margin: 0 auto; padding: 24px; }
@@ -32,35 +68,75 @@ function renderHtml(plantCode: string, token: string) {
   <body>
     <main class="wrap">
       <div class="panel">
-        <h1>Plant Safety Report</h1>
-        <p>Submit Unsafe Act / Unsafe Condition / Near Miss via QR token access.</p>
+        <h1>${escapeHtml(text.title)}</h1>
+        <p>${escapeHtml(text.intro)}</p>
         <form id="report-form">
-          <label>Type</label>
-          <select name="type" required>
-            <option value="UNSAFE_ACT">UNSAFE_ACT</option>
-            <option value="UNSAFE_CONDITION" selected>UNSAFE_CONDITION</option>
-            <option value="NEAR_MISS">NEAR_MISS</option>
+          <label>${escapeHtml(text.type)}</label>
+          <select name="type" id="type" required>
+            <option value="UNSAFE_ACT">${escapeHtml(text.typeUnsafeAct)}</option>
+            <option value="UNSAFE_CONDITION" selected>${escapeHtml(text.typeUnsafeCondition)}</option>
+            <option value="NEAR_MISS">${escapeHtml(text.typeNearMiss)}</option>
+            <option value="FIRST_AID">${escapeHtml(text.typeFirstAid)}</option>
           </select>
 
-          <label>Event Datetime</label>
+          <label>${escapeHtml(text.dateTime)}</label>
           <input name="eventDatetime" type="datetime-local" required />
 
-          <label>Reporter Name</label>
+          <label>${escapeHtml(text.reporterName)}</label>
           <input name="reporterName" required />
 
-          <label>Reporter Employee No</label>
-          <input name="reporterEmployeeNo" />
+          <label>${escapeHtml(text.reporterNumber)}</label>
+          <input name="reporterEmployeeNo" required />
 
-          <label>Target Worker (Unsafe Act)</label>
-          <input name="targetText" />
+          <label>${escapeHtml(text.department)}</label>
+          <select name="areaId" required>
+            <option value="">${escapeHtml(text.selectDepartment)}</option>
+            ${optionMarkup(options.areas)}
+          </select>
 
-          <label>Risk Theme ID (UUID)</label>
-          <input name="riskThemeId" required />
+          <label>${escapeHtml(text.location)}</label>
+          <select name="workstationId" required>
+            <option value="">${escapeHtml(text.selectLocation)}</option>
+            ${optionMarkup(options.workstations)}
+          </select>
 
-          <label>Description</label>
+          <div id="shift-wrap"${options.shifts.length ? "" : ' style="display:none"'}>
+            <label>${escapeHtml(text.shift)}</label>
+            <select name="shiftId"${options.shifts.length ? " required" : ""}>
+              <option value="">${escapeHtml(text.selectShift)}</option>
+              ${optionMarkup(options.shifts)}
+            </select>
+          </div>
+
+          <div id="worker-wrap">
+            <label>${escapeHtml(text.involvedWorker)}</label>
+            <select name="targetEmployeeId">
+              <option value="">${escapeHtml(text.selectInvolvedWorker)}</option>
+              ${optionMarkup(options.employees)}
+            </select>
+          </div>
+
+          <div id="clinical-wrap" style="display:none">
+            <label>${escapeHtml(text.natureOfInjury)}</label>
+            <select name="injuryTypeId">
+              <option value="">${escapeHtml(text.selectNature)}</option>
+              ${optionMarkup(options.injuryTypes)}
+            </select>
+
+            <label>${escapeHtml(text.bodyPartAffected)}</label>
+            <select name="bodyPartId">
+              <option value="">${escapeHtml(text.selectBodyPart)}</option>
+              ${optionMarkup(options.bodyParts)}
+            </select>
+          </div>
+
+          <label>${escapeHtml(text.description)}</label>
           <textarea name="description" rows="4" required></textarea>
 
-          <button type="submit">Submit communication</button>
+          <label>${escapeHtml(text.suggestedAction)}</label>
+          <textarea name="suggestedAction" rows="3"></textarea>
+
+          <button type="submit">${escapeHtml(text.submit)}</button>
           <p id="msg"></p>
         </form>
       </div>
@@ -69,6 +145,20 @@ function renderHtml(plantCode: string, token: string) {
     <script>
       const form = document.getElementById('report-form');
       const msg = document.getElementById('msg');
+      const typeSelect = document.getElementById('type');
+      const workerWrap = document.getElementById('worker-wrap');
+      const clinicalWrap = document.getElementById('clinical-wrap');
+
+      function syncWorkerVisibility() {
+        const visible = typeSelect.value === 'UNSAFE_ACT' || typeSelect.value === 'NEAR_MISS' || typeSelect.value === 'FIRST_AID';
+        const clinicalVisible = typeSelect.value === 'FIRST_AID';
+        workerWrap.style.display = visible ? 'block' : 'none';
+        clinicalWrap.style.display = clinicalVisible ? 'block' : 'none';
+      }
+
+      syncWorkerVisibility();
+      typeSelect.addEventListener('change', syncWorkerVisibility);
+
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
@@ -77,10 +167,15 @@ function renderHtml(plantCode: string, token: string) {
           type: formData.get('type'),
           eventDatetime: formData.get('eventDatetime'),
           reporterName: formData.get('reporterName'),
-          reporterEmployeeNo: formData.get('reporterEmployeeNo') || undefined,
-          targetText: formData.get('targetText') || undefined,
-          riskThemeId: formData.get('riskThemeId'),
+          reporterEmployeeNo: formData.get('reporterEmployeeNo'),
+          shiftId: formData.get('shiftId') || undefined,
+          areaId: formData.get('areaId'),
+          workstationId: formData.get('workstationId'),
+          targetEmployeeId: formData.get('targetEmployeeId') || undefined,
+          injuryTypeId: formData.get('injuryTypeId') || undefined,
+          bodyPartId: formData.get('bodyPartId') || undefined,
           description: formData.get('description'),
+          suggestedAction: formData.get('suggestedAction') || undefined,
         };
 
         const response = await fetch('/r/${plantCode}/report?t=${token}', {
@@ -92,13 +187,14 @@ function renderHtml(plantCode: string, token: string) {
         const json = await response.json();
         if (json.ok) {
           msg.className = 'ok';
-          msg.textContent = 'Communication submitted successfully.';
+          msg.textContent = ${JSON.stringify(text.submitSuccess)};
           form.reset();
+          syncWorkerVisibility();
           return;
         }
 
         msg.className = 'err';
-        msg.textContent = json.message || 'Submission failed';
+        msg.textContent = json.message || ${JSON.stringify(text.submitFailed)};
       });
     </script>
   </body>
@@ -130,9 +226,26 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     return fail("INVALID_TOKEN", "Token invalid or revoked", 401);
   }
 
-  logger.info({ plantCode, route: "report", access: "granted" }, "public report access");
+  const [areas, workstations, shifts, employees, bodyPartsRaw, injuryTypesRaw] = await prisma.$transaction([
+    prisma.area.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.workstation.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.shift.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    prisma.employeeDirectory.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, employeeNo: true } }),
+    prisma.bodyPart.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
+    prisma.injuryType.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }], select: { id: true, code: true, name: true } }),
+  ]);
 
-  return new NextResponse(renderHtml(plantCode, token), {
+  const shiftsLocalized = shifts.map((shift) => ({ id: shift.id, name: getLocalizedShiftName(shift, plant.defaultLanguage) }));
+  const bodyParts = dedupeCatalogRows(bodyPartsRaw, (row) => getLocalizedBodyPartName(row, plant.defaultLanguage)).map((row) => ({
+    id: row.id,
+    name: getLocalizedBodyPartName(row, plant.defaultLanguage),
+  }));
+  const injuryTypes = dedupeCatalogRows(injuryTypesRaw, (row) => getLocalizedInjuryTypeName(row, plant.defaultLanguage)).map((row) => ({
+    id: row.id,
+    name: getLocalizedInjuryTypeName(row, plant.defaultLanguage),
+  }));
+
+  return new NextResponse(renderHtml(plantCode, token, plant.defaultLanguage, { areas, workstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes }), {
     status: 200,
     headers: {
       "content-type": "text/html; charset=utf-8",
@@ -170,7 +283,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
   if ("error" in parsed) return parsed.error;
 
   if (!CommunicationService.isN6AllowedType(parsed.data.type)) {
-    return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act/Condition/Near Miss", 403);
+    return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
   }
 
   const communication = await CommunicationService.create({

@@ -1,12 +1,14 @@
 import { RoleCode } from "@prisma/client";
 import { ok } from "@/lib/api";
+import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { createMasterDataItemInput } from "@/lib/validation/dtos";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
@@ -39,4 +41,59 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
     bodyParts,
     injuryTypes,
   });
+}
+
+export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
+  const { plantCode } = await context.params;
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  if ("error" in auth) return auth.error;
+
+  const parsed = await parseBody(request, createMasterDataItemInput);
+  if ("error" in parsed) return parsed.error;
+
+  const plant = await getPlantByCode(plantCode);
+  const code = parsed.data.code.trim();
+  const name = parsed.data.name.trim();
+
+  if (parsed.data.type === "area") {
+    const area = await prisma.area.upsert({
+      where: {
+        plantId_code: {
+          plantId: plant.id,
+          code,
+        },
+      },
+      update: {
+        name,
+        isActive: true,
+      },
+      create: {
+        plantId: plant.id,
+        code,
+        name,
+      },
+    });
+
+    return ok({ item: area }, { status: 201 });
+  }
+
+  const workstation = await prisma.workstation.upsert({
+    where: {
+      plantId_code: {
+        plantId: plant.id,
+        code,
+      },
+    },
+    update: {
+      name,
+      isActive: true,
+    },
+    create: {
+      plantId: plant.id,
+      code,
+      name,
+    },
+  });
+
+  return ok({ item: workstation }, { status: 201 });
 }

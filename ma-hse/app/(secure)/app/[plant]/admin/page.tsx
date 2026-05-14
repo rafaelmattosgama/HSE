@@ -4,8 +4,11 @@ import { authOptions } from "@/lib/auth/options";
 import { getCreatableRoles } from "@/lib/rbac/user-management";
 import { UserManager } from "@/components/feature/user-manager";
 import { QrTokenManager } from "@/components/feature/qr-token-manager";
+import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { SlaEditor } from "@/components/feature/sla-editor";
+import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { prisma } from "@/lib/prisma";
+import { getPlantRepeatabilityAlertConfig } from "@/lib/services/parameter-service";
 
 export default async function AdminPage({
   params,
@@ -16,14 +19,17 @@ export default async function AdminPage({
   const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
 
-  const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
-    ? RoleCode.N1_CORPORATE
+  const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN)
+    ? RoleCode.N0_ADMIN
+    : session?.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
+      ? RoleCode.N1_CORPORATE
     : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
 
-  const canManageUsers = actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
+  const canManageUsers =
+    actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
 
-  const [sla, recipients, rules] = await prisma.$transaction([
+  const [sla, recipients, rules, areas, workstations, workers, repeatabilityConfig] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
         plantId_key: {
@@ -48,6 +54,19 @@ export default async function AdminPage({
         repetitionRule: true,
       },
     }),
+    prisma.area.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: { name: "asc" },
+    }),
+    prisma.workstation.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: { name: "asc" },
+    }),
+    prisma.employeeDirectory.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: { name: "asc" },
+    }),
+    getPlantRepeatabilityAlertConfig(plantRow.id),
   ]);
 
   const userPlantRoles = canManageUsers
@@ -101,6 +120,21 @@ export default async function AdminPage({
         />
         <QrTokenManager />
       </section>
+
+      <RepeatabilityAlertEditor
+        endpoint={`/api/plants/${plant}/admin/repeatability-alerts`}
+        title="Repeatability alerts"
+        description="Configure weekly alerts for repeated unsafe acts, first aid, near miss by worker, plus repeated near miss by workstation. These settings apply to this plant and can override the global defaults."
+        initial={repeatabilityConfig}
+      />
+
+      <MasterDataManager
+        key={plant}
+        plantCode={plant}
+        initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+        initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+        initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+      />
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Recipient lists</h2>

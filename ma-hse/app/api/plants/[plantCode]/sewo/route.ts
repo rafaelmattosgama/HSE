@@ -1,9 +1,10 @@
-import { RoleCode } from "@prisma/client";
+import { ActionSourceType, RoleCode } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { ActionService } from "@/lib/services/action-service";
 import { SewaService } from "@/lib/services/sewo-service";
 import { createSEWOInput } from "@/lib/validation/dtos";
 
@@ -47,6 +48,23 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     actorUserId: auth.session.user.id,
     payload: parsed.data,
   });
+
+  for (const actionPlan of parsed.data.actionPlans) {
+    await ActionService.create({
+      plantId: plant.id,
+      actorUserId: auth.session.user.id,
+      payload: {
+        sourceType: ActionSourceType.SEWO,
+        sewoId: sewo.id,
+        category: actionPlan.category,
+        priority: actionPlan.priority,
+        title: actionPlan.title,
+        description: actionPlan.description,
+        ownerUserId: actionPlan.ownerUserId,
+        dueDate: actionPlan.dueDate,
+      },
+    });
+  }
 
   return ok(sewo, { status: 201 });
 }

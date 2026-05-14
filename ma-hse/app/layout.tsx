@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Sora, IBM_Plex_Mono } from "next/font/google";
 import { getLocale, getMessages } from "next-intl/server";
 import { Providers } from "@/components/layout/providers";
@@ -29,8 +30,18 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
-      <body className={`${sora.variable} ${plexMono.variable} min-h-screen bg-[radial-gradient(circle_at_top_right,_#d7f8f1,_#f6faf9_42%,_#ffffff_70%)] text-slate-900 antialiased`}>
+    <html lang={locale} data-theme="normal" suppressHydrationWarning>
+      <body className={`${sora.variable} ${plexMono.variable} min-h-screen antialiased`}>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`
+            try {
+              var storedTheme = window.localStorage.getItem("ma-hse-theme");
+              if (storedTheme === "black" || storedTheme === "normal") {
+                document.documentElement.setAttribute("data-theme", storedTheme);
+              }
+            } catch (error) {}
+          `}
+        </Script>
         <Providers locale={locale} messages={messages}>
           {children}
         </Providers>

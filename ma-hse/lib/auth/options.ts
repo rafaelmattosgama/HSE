@@ -4,6 +4,7 @@ import { RoleCode } from "@prisma/client";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
+import { ensureDefaultAdminUser } from "@/lib/auth/ensure-default-admin";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
@@ -28,6 +29,8 @@ export const authOptions: NextAuthOptions = {
         }
 
         const normalizedEmail = credentials.email.trim().toLowerCase();
+        await ensureDefaultAdminUser(normalizedEmail);
+
         const user = await prisma.user.findUnique({
           where: { email: normalizedEmail },
         });
@@ -102,6 +105,7 @@ export const authOptions: NextAuthOptions = {
           plantCode: entry.plant.code,
           role: entry.role.code,
           canSeeClinical:
+            entry.role.code === RoleCode.N0_ADMIN ||
             entry.role.code === RoleCode.N1_CORPORATE ||
             entry.role.code === RoleCode.N2_PLANT_MANAGER ||
             entry.role.code === RoleCode.N3_SAFETY ||

@@ -20,6 +20,7 @@ type ManagedUser = {
 type UserManagerProps = {
   users: ManagedUser[];
   allowedCreateRoles: RoleCode[];
+  plantCode?: string;
 };
 
 type FeedbackPopup = {
@@ -68,9 +69,9 @@ function formatDate(value: string | Date) {
   return new Date(value).toISOString().slice(0, 16).replace("T", " ");
 }
 
-export function UserManager({ users, allowedCreateRoles }: UserManagerProps) {
+export function UserManager({ users, allowedCreateRoles, plantCode }: UserManagerProps) {
   const pathname = usePathname();
-  const plant = pathname.split("/")[2];
+  const plant = plantCode ?? pathname.split("/")[2];
 
   const [rows, setRows] = useState<ManagedUser[]>(users);
   const [email, setEmail] = useState("");

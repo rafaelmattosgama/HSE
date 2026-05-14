@@ -11,7 +11,7 @@ export function hasPlantAccess(input: {
   roles: PlantRoleEntry[];
   allowedRoles: RoleCode[];
 }) {
-  if (input.roles.some((entry) => entry.role === RoleCode.N1_CORPORATE)) {
+  if (input.roles.some((entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE)) {
     return true;
   }
 

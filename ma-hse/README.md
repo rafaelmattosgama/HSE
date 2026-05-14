@@ -5,7 +5,7 @@ Stack: Next.js App Router + TypeScript, Prisma + PostgreSQL, NextAuth, BullMQ + 
 
 ## Principais capacidades entregues
 
-- Comunicacoes: Unsafe Act, Unsafe Condition, Near Miss, First Aid, Accident.
+- Comunicacoes: Unsafe Act, Unsafe Condition, Near Miss, First Aid, Injury.
 - Validacao N3 para entrada em KPI.
 - Plano de Acoes (CAPA) com SLA por prioridade e evidencia obrigatoria para fechamento.
 - Dashboards por data do evento considerando apenas comunicacoes validadas.

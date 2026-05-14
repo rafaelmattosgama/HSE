@@ -12,31 +12,31 @@ async function upsertPlantJobs() {
     select: { id: true, timezone: true },
   });
 
+  await digestWeeklyQueue.upsertJobScheduler(`weekly-corporate`, {
+    pattern: "0 8 * * 1",
+    tz: "UTC",
+  }, {
+    name: "weekly-digest",
+    data: { scope: "CORPORATE" },
+  });
+
+  await reportMonthlyQueue.upsertJobScheduler(`monthly-corporate`, {
+    pattern: "0 7 1 * *",
+    tz: "UTC",
+  }, {
+    name: "monthly-report",
+    data: { scope: "CORPORATE" },
+  });
+
+  await reportAnnualQueue.upsertJobScheduler(`annual-corporate`, {
+    pattern: "0 7 2 1 *",
+    tz: "UTC",
+  }, {
+    name: "annual-report",
+    data: { scope: "CORPORATE" },
+  });
+
   for (const plant of plants) {
-    await digestWeeklyQueue.upsertJobScheduler(`weekly-${plant.id}`, {
-      pattern: "0 8 * * 1",
-      tz: plant.timezone,
-    }, {
-      name: "weekly-digest",
-      data: { plantId: plant.id },
-    });
-
-    await reportMonthlyQueue.upsertJobScheduler(`monthly-${plant.id}`, {
-      pattern: "0 7 1 * *",
-      tz: plant.timezone,
-    }, {
-      name: "monthly-report",
-      data: { plantId: plant.id },
-    });
-
-    await reportAnnualQueue.upsertJobScheduler(`annual-${plant.id}`, {
-      pattern: "0 7 2 1 *",
-      tz: plant.timezone,
-    }, {
-      name: "annual-report",
-      data: { plantId: plant.id },
-    });
-
     await actionsOverdueQueue.upsertJobScheduler(`overdue-${plant.id}`, {
       pattern: "0 8 * * *",
       tz: plant.timezone,

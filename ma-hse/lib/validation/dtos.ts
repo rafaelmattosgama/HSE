@@ -1,10 +1,9 @@
-import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationType, RoleCode, SEWOStatus } from "@prisma/client";
+import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, RoleCode, SEWOStatus } from "@prisma/client";
 import { z } from "zod";
 
 const optionalUuid = z.string().uuid().optional().nullable();
 
-export const createCommunicationInput = z
-  .object({
+const communicationInputShape = z.object({
     type: z.nativeEnum(CommunicationType),
     eventDatetime: z.coerce.date(),
     reporterName: z.string().min(2),
@@ -12,24 +11,48 @@ export const createCommunicationInput = z
     targetText: z.string().optional(),
     targetEmployeeNo: z.string().optional(),
     targetEmployeeId: optionalUuid,
+    shiftId: optionalUuid,
     areaId: optionalUuid,
     lineId: optionalUuid,
     workstationId: optionalUuid,
     equipmentId: optionalUuid,
-    riskThemeId: z.string().uuid(),
+    riskThemeId: z.string().uuid().optional(),
     unsafeActTypeId: optionalUuid,
     unsafeConditionTypeId: optionalUuid,
     nearMissTypeId: optionalUuid,
     description: z.string().min(5),
+    suggestedAction: z.string().optional(),
     severityPotential: z.enum(["LOW", "MED", "HIGH"]).optional(),
     isContractor: z.boolean().optional(),
     bodyPartId: optionalUuid,
     injuryTypeId: optionalUuid,
+    isFatal: z.boolean().optional(),
+    initialLostDays: z.number().int().min(0).optional(),
     hasLeave: z.boolean().optional(),
     returnDate: z.coerce.date().optional(),
-  })
+    attachments: z
+      .array(
+        z.object({
+          fileKey: z.string().min(3),
+          fileName: z.string().min(1),
+          contentType: z.string().min(3),
+        }),
+      )
+      .optional(),
+    quickAction: z
+      .object({
+        title: z.string().min(3),
+        description: z.string().min(5),
+        ownerUserId: z.string().uuid(),
+        priority: z.nativeEnum(ActionPriority),
+        dueDate: z.coerce.date().optional(),
+      })
+      .optional(),
+  });
+
+export const createCommunicationInput = communicationInputShape
   .superRefine((value, ctx) => {
-    const baseRequired = ["eventDatetime", "reporterName", "riskThemeId", "description"] as const;
+    const baseRequired = ["eventDatetime", "reporterName", "description"] as const;
     baseRequired.forEach((field) => {
       if (!value[field]) {
         ctx.addIssue({
@@ -40,30 +63,94 @@ export const createCommunicationInput = z
       }
     });
 
-    if (
-      value.type === CommunicationType.UNSAFE_ACT &&
-      !value.targetText &&
-      !value.targetEmployeeId &&
-      !value.targetEmployeeNo
-    ) {
+    const requiresInvolvedWorker = value.type === CommunicationType.UNSAFE_ACT || value.type === CommunicationType.NEAR_MISS;
+
+    if (requiresInvolvedWorker && !value.targetText && !value.targetEmployeeId && !value.targetEmployeeNo) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Unsafe Act requires target worker information",
+        message: "This communication requires involved worker information",
         path: ["targetText"],
       });
     }
 
-    if (
-      (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) &&
-      !value.severityPotential
-    ) {
+    if (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) {
+      if (!value.targetEmployeeId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Involved worker is required",
+          path: ["targetEmployeeId"],
+        });
+      }
+
+      if (!value.bodyPartId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Body part affected is required",
+          path: ["bodyPartId"],
+        });
+      }
+
+      if (value.isFatal && value.returnDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Fatal injuries cannot have a return date",
+          path: ["returnDate"],
+        });
+      }
+    }
+  });
+
+export const updateCommunicationInput = communicationInputShape.omit({
+  attachments: true,
+  quickAction: true,
+}).superRefine((value, ctx) => {
+  const baseRequired = ["eventDatetime", "reporterName", "description"] as const;
+  baseRequired.forEach((field) => {
+    if (!value[field]) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Severity potential is required",
-        path: ["severityPotential"],
+        message: `${field} is required`,
+        path: [field],
       });
     }
   });
+
+  const requiresInvolvedWorker = value.type === CommunicationType.UNSAFE_ACT || value.type === CommunicationType.NEAR_MISS;
+
+  if (requiresInvolvedWorker && !value.targetText && !value.targetEmployeeId && !value.targetEmployeeNo) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "This communication requires involved worker information",
+      path: ["targetText"],
+    });
+  }
+
+  if (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) {
+    if (!value.targetEmployeeId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Involved worker is required",
+        path: ["targetEmployeeId"],
+      });
+    }
+
+    if (!value.bodyPartId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Body part affected is required",
+        path: ["bodyPartId"],
+      });
+    }
+
+    if (value.isFatal && value.returnDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Fatal injuries cannot have a return date",
+        path: ["returnDate"],
+      });
+    }
+  }
+});
 
 export const validateCommunicationInput = z.object({
   isValid: z.boolean(),
@@ -92,6 +179,69 @@ export const createActionInput = z.object({
   dueDate: z.coerce.date().optional(),
 });
 
+export const updateActionInput = z.object({
+  title: z.string().min(3),
+  description: z.string().min(5),
+  ownerUserId: z.string().uuid(),
+  priority: z.nativeEnum(ActionPriority),
+  category: z.nativeEnum(ActionCategory),
+  dueDate: z.coerce.date().optional(),
+});
+
+const smatObservationInput = z.object({
+  category: z.enum(["A", "B", "C", "D", "E", "F"]),
+  description: z.string().min(2),
+});
+
+export const createSMATAuditInput = z.object({
+  communicationId: z.string().uuid().optional().nullable(),
+  auditorName: z.string().min(2),
+  auditDate: z.coerce.date(),
+  startTimeText: z.string().max(10).optional(),
+  endTimeText: z.string().max(10).optional(),
+  areaExamined: z.string().max(200).optional(),
+  locationExamined: z.string().max(200).optional(),
+  peopleObservedCount: z.number().int().min(0).default(0),
+  peopleInvolvedCount: z.number().int().min(0).default(0),
+  peopleSafeCount: z.number().int().min(0).default(0),
+  peopleUnsafeCount: z.number().int().min(0).default(0),
+  workConditionsSafeCount: z.number().int().min(0).default(0),
+  workConditionsUnsafeCount: z.number().int().min(0).default(0),
+  reactionsPositiveCount: z.number().int().min(0).default(0),
+  reactionsNegativeCount: z.number().int().min(0).default(0),
+  safeActs: z.array(smatObservationInput).default([]),
+  safeConditions: z.array(smatObservationInput).default([]),
+  unsafeActs: z.array(smatObservationInput).default([]),
+  unsafeConditions: z.array(smatObservationInput).default([]),
+  answer1: z.string().optional(),
+  answer2: z.string().optional(),
+  answer3: z.string().optional(),
+  answer4: z.string().optional(),
+  answer5: z.string().optional(),
+  answer6: z.string().optional(),
+  notes: z.string().optional(),
+  attachments: z
+    .array(
+      z.object({
+        fileKey: z.string().min(3),
+        fileName: z.string().min(1),
+        contentType: z.string().min(3),
+      }),
+    )
+    .default([]),
+  actionPlans: z
+    .array(
+      z.object({
+        title: z.string().min(3),
+        description: z.string().min(5),
+        ownerUserId: z.string().uuid(),
+        priority: z.nativeEnum(ActionPriority),
+        dueDate: z.coerce.date().optional(),
+      }),
+    )
+    .default([]),
+});
+
 export const closeActionInput = z.object({
   closureComment: z.string().min(5),
   evidence: z
@@ -102,7 +252,21 @@ export const closeActionInput = z.object({
         contentType: z.string().min(3),
       }),
     )
-    .min(1),
+    .default([]),
+});
+
+export const bulkCloseActionInput = z.object({
+  actionIds: z.array(z.string().uuid()).min(1),
+  closureComment: z.string().min(5),
+  evidence: z
+    .array(
+      z.object({
+        fileKey: z.string().min(3),
+        fileName: z.string().min(1),
+        contentType: z.string().min(3),
+      }),
+    )
+    .default([]),
 });
 
 export const createSEWOInput = z.object({
@@ -119,6 +283,28 @@ export const createSEWOInput = z.object({
   whichText: z.string().optional(),
   howText: z.string().min(2),
   immediateCorrectiveActionText: z.string().min(2),
+  templateData: z.record(z.string(), z.unknown()).optional(),
+  attachments: z
+    .array(
+      z.object({
+        fileKey: z.string().min(3),
+        fileName: z.string().min(1),
+        contentType: z.string().min(3),
+      }),
+    )
+    .optional(),
+  actionPlans: z
+    .array(
+      z.object({
+        category: z.nativeEnum(ActionCategory),
+        priority: z.nativeEnum(ActionPriority),
+        title: z.string().min(3),
+        description: z.string().min(5),
+        ownerUserId: z.string().uuid(),
+        dueDate: z.coerce.date().optional(),
+      }),
+    )
+    .default([]),
   causeCatalogVersionId: z.string().uuid(),
   causeSelections: z
     .array(
@@ -129,7 +315,8 @@ export const createSEWOInput = z.object({
         comment: z.string().optional(),
       }),
     )
-    .min(1),
+    .optional()
+    .default([]),
   status: z.nativeEnum(SEWOStatus).optional(),
 });
 
@@ -151,11 +338,20 @@ export const updateAlertRuleInput = z.object({
   sameWorker: z.boolean().default(false),
 });
 
+export const updateRepeatabilityAlertConfigInput = z.object({
+  workerWeeklyLevel1Enabled: z.boolean().default(true),
+  workerWeeklyLevel1Threshold: z.number().int().positive(),
+  workerWeeklyLevel2Enabled: z.boolean().default(true),
+  workerWeeklyLevel2Threshold: z.number().int().positive(),
+  workstationNearMissWeeklyEnabled: z.boolean().default(true),
+  workstationNearMissWeeklyThreshold: z.number().int().positive(),
+});
+
 export const issuePresignedUploadInput = z.object({
   plantCode: z.string().min(2),
   fileName: z.string().min(1),
   contentType: z.string().min(3),
-  folder: z.enum(["communications", "actions", "sewo"]),
+  folder: z.enum(["communications", "actions", "sewo", "maps", "smat"]),
 });
 
 export const createPlantUserInput = z.object({
@@ -168,6 +364,172 @@ export const createPlantUserInput = z.object({
     z.string().min(8, "Password must be at least 8 characters").optional(),
   ),
   isActive: z.boolean().default(true),
+});
+
+export const contractorRegisterInput = z.object({
+  invitationToken: z.string().min(10),
+  contactName: z.string().min(2),
+  password: z.string().min(8),
+  email: z.string().email(),
+  companyName: z.string().min(2),
+  address: z.string().min(3),
+  phone: z.string().min(3),
+  taxId: z.string().min(3),
+  socialSecurityId: z.string().min(3),
+});
+
+export const contractorLoginInput = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+export const contractorInvitationInput = z.object({
+  email: z.string().email(),
+  requiredDocuments: z.array(z.nativeEnum(ExternalCompanyDocumentType)).default([
+    ExternalCompanyDocumentType.ANEXO_D,
+    ExternalCompanyDocumentType.RISK_ASSESSMENT,
+    ExternalCompanyDocumentType.WORK_ACCIDENT_INSURANCE,
+    ExternalCompanyDocumentType.CIVIL_LIABILITY_INSURANCE,
+    ExternalCompanyDocumentType.SOCIAL_SECURITY_CLEARANCE,
+    ExternalCompanyDocumentType.TAX_AUTHORITY_CLEARANCE,
+  ]),
+});
+
+export const contractorCompanyDocumentInput = z.object({
+  type: z.nativeEnum(ExternalCompanyDocumentType),
+  fileKey: z.string().min(3),
+  fileName: z.string().min(1),
+  contentType: z.string().min(3),
+  validUntil: z.coerce.date().optional(),
+});
+
+export const contractorWorkerInput = z.object({
+  name: z.string().min(2),
+  birthDate: z.coerce.date(),
+});
+
+export const contractorWorkerDocumentInput = z.object({
+  workerId: z.string().uuid(),
+  type: z.nativeEnum(ExternalWorkerDocumentType),
+  fileKey: z.string().min(3),
+  fileName: z.string().min(1),
+  contentType: z.string().min(3),
+  validUntil: z.coerce.date().optional(),
+});
+
+export const contractorApprovalInput = z.object({
+  approvalStatus: z.nativeEnum(ExternalCompanyApprovalStatus),
+  approvalComment: z.string().optional(),
+});
+
+export const contractorToggleActiveInput = z.object({
+  isActive: z.boolean(),
+});
+
+export const contractorCompanyUpdateInput = z
+  .object({
+    isActive: z.boolean().optional(),
+    sponsorUserId: z.string().uuid().nullable().optional(),
+  })
+  .refine((value) => value.isActive !== undefined || value.sponsorUserId !== undefined, {
+    message: "At least one field must be provided",
+  });
+
+export const createMapDocumentInput = z.object({
+  title: z.string().min(2),
+  fileKey: z.string().min(3),
+  fileName: z.string().min(1),
+  contentType: z.string().min(3),
+  fileType: z.nativeEnum(MapSourceFileType),
+  importedLayerNames: z.array(z.string().min(1)).optional(),
+  selectedLayerNames: z.array(z.string().min(1)).optional(),
+});
+
+export const createMapLayerInput = z.object({
+  documentId: z.string().uuid().optional().nullable(),
+  name: z.string().min(2),
+  description: z.string().optional(),
+  color: z.string().regex(/^#([0-9a-fA-F]{6})$/, "Use a 6-digit hex color"),
+  icon: z.string().max(8).optional(),
+  sourceType: z.nativeEnum(MapLayerSourceType).default(MapLayerSourceType.MANUAL),
+  isVisibleDefault: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).default(0),
+  metadataJson: z.record(z.string(), z.any()).optional(),
+});
+
+export const createMapFeatureInput = z.object({
+  layerId: z.string().uuid().optional().nullable(),
+  featureType: z.nativeEnum(MapFeatureType),
+  label: z.string().min(1),
+  icon: z.string().max(8).optional(),
+  color: z.string().regex(/^#([0-9a-fA-F]{6})$/, "Use a 6-digit hex color").optional(),
+  positionX: z.number().min(0).max(100),
+  positionY: z.number().min(0).max(100),
+  areaId: z.string().uuid().optional().nullable(),
+  workstationId: z.string().uuid().optional().nullable(),
+  communicationId: z.string().uuid().optional().nullable(),
+  metadataJson: z.record(z.string(), z.any()).optional(),
+});
+
+export const updateMapFeatureInput = z.object({
+  label: z.string().min(1).optional(),
+  icon: z.string().max(8).optional().nullable(),
+  color: z.string().regex(/^#([0-9a-fA-F]{6})$/, "Use a 6-digit hex color").optional().nullable(),
+  positionX: z.number().min(0).max(100).optional(),
+  positionY: z.number().min(0).max(100).optional(),
+  layerId: z.string().uuid().optional().nullable(),
+  metadataJson: z.record(z.string(), z.any()).optional(),
+});
+
+export const createMasterDataItemInput = z.object({
+  type: z.enum(["area", "workstation"]),
+  code: z.string().min(1),
+  name: z.string().min(2),
+});
+
+export const createWorkerInput = z.object({
+  employeeNo: z.string().min(1),
+  name: z.string().min(2),
+  dept: z.string().optional(),
+});
+
+export const upsertOccupationalHealthWorkerInput = z.object({
+  employeeNo: z.string().min(1),
+  name: z.string().min(2),
+  birthDate: z.coerce.date(),
+  workstationId: z.string().uuid().optional().nullable(),
+  gender: z.enum(["MALE", "FEMALE"]),
+  hireDate: z.coerce.date(),
+  roleStartDate: z.coerce.date(),
+  roleName: z.string().optional(),
+  nationality: z.string().optional(),
+  examDate: z.coerce.date(),
+  validUntil: z.coerce.date().optional().nullable(),
+  status: z.enum(["VALID", "EXPIRED", "DUE_SOON", "PENDING"]).default("VALID"),
+  observation: z.string().optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const createCorporatePlantInput = z.object({
+  code: z.string().min(2),
+  name: z.string().min(2),
+  timezone: z.string().min(2),
+  defaultLanguage: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+  n1: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
+  }),
+  n2: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
+  }),
+  n3: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
+  }),
 });
 
 export const changePasswordInput = z
@@ -194,15 +556,114 @@ export const changePasswordInput = z
     }
   });
 
+const nullableMonthlyNumber = z
+  .union([z.number().nonnegative(), z.null()])
+  .optional()
+  .transform((value) => (typeof value === "number" ? value : null));
+
+export const updatePlantMonthlyInputsInput = z.object({
+  year: z.number().int().min(2000).max(2100),
+  months: z
+    .array(
+      z.object({
+        month: z.number().int().min(1).max(12),
+        workerCount: z.union([z.number().int().nonnegative(), z.null()]).optional().transform((value) => (typeof value === "number" ? value : null)),
+        hoursWorked: nullableMonthlyNumber,
+        standardHours: nullableMonthlyNumber,
+        spillsNumber: z.union([z.number().int().nonnegative(), z.null()]).optional().transform((value) => (typeof value === "number" ? value : null)),
+        electricityFromGridMwh: nullableMonthlyNumber,
+        selfProducedEnergyMwh: nullableMonthlyNumber,
+        heatingM3: nullableMonthlyNumber,
+        waterConsumedNetworkM3: nullableMonthlyNumber,
+        waterConsumedCapturedM3: nullableMonthlyNumber,
+        compressedAirConsumedM3: nullableMonthlyNumber,
+        compressedAirConsumedMwh: nullableMonthlyNumber,
+        ewc150101PaperCardboardPackagingTons: nullableMonthlyNumber,
+        ewc150102PlasticPackagingTons: nullableMonthlyNumber,
+        ewc150103WoodTons: nullableMonthlyNumber,
+        ewc160117FerrousMetalsTons: nullableMonthlyNumber,
+        ewc160118NonFerrousMetalsCopperTons: nullableMonthlyNumber,
+        ewc170117ConstructionWasteTons: nullableMonthlyNumber,
+        ewc200111Tons: nullableMonthlyNumber,
+        ewc200136ElectricalElectronicEquipmentTons: nullableMonthlyNumber,
+        ewc200139PlasticTons: nullableMonthlyNumber,
+        ewc200301UnsortedUrbanWasteTons: nullableMonthlyNumber,
+        hazardousWasteTons: nullableMonthlyNumber,
+        recycledWasteTons: nullableMonthlyNumber,
+      }),
+    )
+    .length(12),
+  indicatorConfig: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        section: z.string().min(1),
+        subsection: z.string().nullable().optional(),
+        label: z.string().min(1),
+        legacyKey: z.string().nullable().optional(),
+        enabled: z.boolean(),
+        col2Label: z.string().nullable().optional(),
+        col2Value: z.string().nullable().optional(),
+        col2Options: z.array(z.string()).default([]),
+        col3Unit: z.string().nullable().optional(),
+        col3Options: z.array(z.string()).default([]),
+        distanceKm: z.string().nullable().optional(),
+        valueMode: z.enum(["manual", "computed"]).default("manual"),
+      }),
+    )
+    .default([]),
+  customRows: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        section: z.string().min(1),
+        subsection: z.string().nullable().optional(),
+        label: z.string().min(1),
+        enabled: z.boolean(),
+        col2Label: z.string().nullable().optional(),
+        col2Value: z.string().nullable().optional(),
+        col2Options: z.array(z.string()).default([]),
+        col3Unit: z.string().nullable().optional(),
+        col3Options: z.array(z.string()).default([]),
+        distanceKm: z.string().nullable().optional(),
+        valueMode: z.enum(["manual", "computed"]).default("manual"),
+        months: z.array(nullableMonthlyNumber).length(12),
+      }),
+    )
+    .default([]),
+});
+
 export type CreateCommunicationInput = z.infer<typeof createCommunicationInput>;
+export type UpdateCommunicationInput = z.infer<typeof updateCommunicationInput>;
 export type ValidateCommunicationInput = z.infer<typeof validateCommunicationInput>;
 export type ManualCloseCommunicationInput = z.infer<typeof manualCloseCommunicationInput>;
 export type CreateActionInput = z.infer<typeof createActionInput>;
+export type CreateSMATAuditInput = z.infer<typeof createSMATAuditInput>;
 export type CloseActionInput = z.infer<typeof closeActionInput>;
+export type BulkCloseActionInput = z.infer<typeof bulkCloseActionInput>;
 export type ReopenActionInput = z.infer<typeof reopenEntityInput>;
 export type CreateSEWOInput = z.infer<typeof createSEWOInput>;
 export type ApproveSEWOInput = z.infer<typeof approveSEWOInput>;
+export type UpdateActionInput = z.infer<typeof updateActionInput>;
 export type UpdateAlertRuleInput = z.infer<typeof updateAlertRuleInput>;
+export type UpdateRepeatabilityAlertConfigInput = z.infer<typeof updateRepeatabilityAlertConfigInput>;
 export type IssuePresignedUploadInput = z.infer<typeof issuePresignedUploadInput>;
+export type ContractorRegisterInput = z.infer<typeof contractorRegisterInput>;
+export type ContractorLoginInput = z.infer<typeof contractorLoginInput>;
+export type ContractorInvitationInput = z.infer<typeof contractorInvitationInput>;
+export type ContractorCompanyDocumentInput = z.infer<typeof contractorCompanyDocumentInput>;
+export type ContractorWorkerInput = z.infer<typeof contractorWorkerInput>;
+export type ContractorWorkerDocumentInput = z.infer<typeof contractorWorkerDocumentInput>;
+export type ContractorApprovalInput = z.infer<typeof contractorApprovalInput>;
+export type ContractorToggleActiveInput = z.infer<typeof contractorToggleActiveInput>;
+export type CreateMapDocumentInput = z.infer<typeof createMapDocumentInput>;
+export type CreateMapLayerInput = z.infer<typeof createMapLayerInput>;
+export type CreateMapFeatureInput = z.infer<typeof createMapFeatureInput>;
+export type UpdateMapFeatureInput = z.infer<typeof updateMapFeatureInput>;
 export type CreatePlantUserInput = z.infer<typeof createPlantUserInput>;
+export type CreateMasterDataItemInput = z.infer<typeof createMasterDataItemInput>;
+export type CreateWorkerInput = z.infer<typeof createWorkerInput>;
+export type UpsertOccupationalHealthWorkerInput = z.infer<typeof upsertOccupationalHealthWorkerInput>;
+export type CreateCorporatePlantInput = z.infer<typeof createCorporatePlantInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
+export type UpdatePlantMonthlyInputsInput = z.infer<typeof updatePlantMonthlyInputsInput>;

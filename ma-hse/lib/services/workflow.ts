@@ -1,23 +1,34 @@
-import { CommunicationStatus, LeaveClassification } from "@prisma/client";
+import { CommunicationStatus, LeaveClassification, RoleCode } from "@prisma/client";
 import { daysBetween } from "@/lib/utils";
 
 export function calculateLeaveFields(input: {
   eventDatetime: Date;
+  lostDays?: number | null;
   hasLeave?: boolean | null;
   returnDate?: Date | null;
+  isFatal?: boolean | null;
 }) {
-  if (!input.hasLeave || !input.returnDate) {
+  if (input.isFatal) {
+    return {
+      lostDays: input.lostDays ?? null,
+      classification: LeaveClassification.FATAL,
+    };
+  }
+
+  const explicitLostDays = typeof input.lostDays === "number" ? Math.max(0, input.lostDays) : null;
+  const calculatedLostDays = input.hasLeave && input.returnDate ? daysBetween(input.eventDatetime, input.returnDate) : null;
+  const lostDays = explicitLostDays ?? calculatedLostDays;
+
+  if (lostDays === null) {
     return {
       lostDays: null,
       classification: null,
     };
   }
 
-  const lostDays = daysBetween(input.eventDatetime, input.returnDate);
-
   return {
     lostDays,
-    classification: lostDays <= 30 ? LeaveClassification.LE_30 : LeaveClassification.GT_30,
+    classification: lostDays < 30 ? LeaveClassification.MINOR : LeaveClassification.SERIOUS,
   };
 }
 
@@ -34,6 +45,14 @@ export function nextStatusAfterValidation(input: {
     : CommunicationStatus.REJECTED;
 }
 
+export function initialStatusForCommunicationCreation(actorRole?: RoleCode | null) {
+  if (actorRole === RoleCode.N3_SAFETY) {
+    return CommunicationStatus.VALID_OPEN;
+  }
+
+  return CommunicationStatus.SUBMITTED;
+}
+
 export function isKpiEligibleStatus(status: CommunicationStatus) {
   const eligible: CommunicationStatus[] = [
     CommunicationStatus.VALID_OPEN,
@@ -47,5 +66,5 @@ export function canCloseAction(input: {
   closureComment?: string | null;
   evidenceCount: number;
 }) {
-  return Boolean(input.closureComment?.trim().length) && input.evidenceCount > 0;
+  return Boolean(input.closureComment?.trim().length);
 }

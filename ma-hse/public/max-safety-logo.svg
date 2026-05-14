@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 96" role="img" aria-labelledby="title desc">
+  <title id="title">MAx Safety Logo</title>
+  <desc id="desc">Outlined MA logo in Pantone 281-inspired blue.</desc>
+  <g fill="none" stroke="#002663" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 22c33-18 175-18 208 0v52C183 92 41 92 8 74Z" stroke-width="7"/>
+    <path d="M76 65V34l18 23 18-23v31" stroke-width="8"/>
+    <path d="m126 65 13-31 13 31" stroke-width="8"/>
+    <path d="M132 53h14" stroke-width="8"/>
+  </g>
+</svg>

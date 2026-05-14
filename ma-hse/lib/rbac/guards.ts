@@ -33,13 +33,18 @@ export async function requirePlantAccess(plantCode: string, allowedRoles: RoleCo
     };
   }
 
+  const hasAdmin = userRoles.some((entry) => entry.role === RoleCode.N0_ADMIN);
+  if (hasAdmin) {
+    return { session, role: RoleCode.N0_ADMIN };
+  }
+
   const hasCorporate = userRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
   if (hasCorporate) {
     return { session, role: RoleCode.N1_CORPORATE };
   }
 
   const roleEntry = userRoles.find((entry) => entry.plantCode === plantCode && allowedRoles.includes(entry.role));
-  if (!roleEntry) return { session, role: RoleCode.N1_CORPORATE };
+  if (!roleEntry) return { session, role: RoleCode.N0_ADMIN };
 
   return {
     session,

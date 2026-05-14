@@ -3,24 +3,55 @@ import { env } from "@/lib/env";
 
 const memoryStore = new Map<string, { count: number; resetAt: number }>();
 
-let redis: Redis | null = null;
-try {
-  redis = new Redis(env.REDIS_URL, {
-    lazyConnect: true,
-    maxRetriesPerRequest: 1,
-  });
-  redis.connect().catch(() => {
+let redis: Redis | null | undefined;
+
+function createRedisClient() {
+  if (redis !== undefined) {
+    return redis;
+  }
+
+  try {
+    redis = new Redis(env.REDIS_URL, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+    redis.on("error", () => {
+      // Readiness checks and rate limits fall back gracefully when Redis is unavailable.
+    });
+  } catch {
     redis = null;
-  });
-} catch {
-  redis = null;
+  }
+
+  return redis;
+}
+
+async function getConnectedRedisClient() {
+  const client = createRedisClient();
+  if (!client) {
+    return null;
+  }
+
+  if (client.status === "ready") {
+    return client;
+  }
+
+  try {
+    await client.connect();
+    return client;
+  } catch {
+    redis = null;
+    return null;
+  }
 }
 
 export async function consumeRateLimit(key: string, points = env.RATE_LIMIT_POINTS, windowSec = env.RATE_LIMIT_WINDOW_SEC) {
-  if (redis) {
+  const redisClient = await getConnectedRedisClient();
+
+  if (redisClient) {
     const now = Date.now();
     const redisKey = `rl:${key}`;
-    const tx = redis.multi();
+    const tx = redisClient.multi();
     tx.incr(redisKey);
     tx.pttl(redisKey);
     const [incrResult, ttlResult] = (await tx.exec()) ?? [];
@@ -29,7 +60,7 @@ export async function consumeRateLimit(key: string, points = env.RATE_LIMIT_POIN
     let ttl = Number(ttlResult?.[1] ?? -1);
 
     if (ttl < 0) {
-      await redis.pexpire(redisKey, windowSec * 1000);
+      await redisClient.pexpire(redisKey, windowSec * 1000);
       ttl = windowSec * 1000;
     }
 
@@ -66,5 +97,5 @@ export async function consumeRateLimit(key: string, points = env.RATE_LIMIT_POIN
 }
 
 export function getRedisClient() {
-  return redis;
+  return createRedisClient();
 }

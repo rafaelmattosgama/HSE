@@ -10,9 +10,9 @@ import { handleRepetitiveAlerts } from "@/jobs/handlers/repetitive-alerts";
 const connection = getQueueConnection();
 
 const workerMap: [string, (data: unknown) => Promise<void>][] = [
-  [QUEUE_NAMES.DIGEST_WEEKLY, (data) => handleWeeklyDigest(data as { plantId: string })],
-  [QUEUE_NAMES.REPORT_MONTHLY, (data) => handleMonthlyReport(data as { plantId: string })],
-  [QUEUE_NAMES.REPORT_ANNUAL, (data) => handleAnnualReport(data as { plantId: string })],
+  [QUEUE_NAMES.DIGEST_WEEKLY, () => handleWeeklyDigest()],
+  [QUEUE_NAMES.REPORT_MONTHLY, () => handleMonthlyReport()],
+  [QUEUE_NAMES.REPORT_ANNUAL, () => handleAnnualReport()],
   [QUEUE_NAMES.ACTIONS_OVERDUE, () => handleOverdueActions()],
   [QUEUE_NAMES.ALERTS_REPETITIVE, (data) => handleRepetitiveAlerts(data as { plantId: string })],
 ];
