@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { getLocale } from "next-intl/server";
 import { RoleCode } from "@prisma/client";
 import { authOptions } from "@/lib/auth/options";
 import {
@@ -9,9 +7,10 @@ import {
   GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
   MODULE_TOGGLES_PARAMETER_KEY,
 } from "@/lib/modules";
+import { PlantNav } from "@/components/layout/plant-nav";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { prisma } from "@/lib/prisma";
-import { getUiDictionary } from "@/lib/ui-language";
+import { getServerUiDictionary } from "@/lib/server-ui-language";
 
 const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?: boolean }> = [
   {
@@ -21,7 +20,7 @@ const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?:
     spotlight: true,
   },
   { href: "environment-dashboard", label: "environmentDashboard", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
-  { href: "validation", label: "validation", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY] },
+  { href: "validation", label: "validation", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
   { href: "communications", label: "communications", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
   { href: "actions", label: "actions", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
   { href: "sewo", label: "S-EWO", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
@@ -54,8 +53,6 @@ export default async function PlantLayout({
   params: Promise<{ plant: string }>;
 }) {
   const session = await getServerSession(authOptions);
-  const locale = await getLocale();
-  const ui = getUiDictionary(locale);
   if (!session?.user) redirect("/login");
 
   const { plant } = await params;
@@ -90,12 +87,14 @@ export default async function PlantLayout({
       },
     }),
   ]);
-  const unreadRepeatabilityAlerts = plantRecord
+  const unreadAlerts = plantRecord
     ? await prisma.notification.findMany({
         where: {
           userId: session.user.id,
           plantId: plantRecord.id,
-          channel: "REPEATABILITY_ALERT",
+          channel: {
+            in: ["REPEATABILITY_ALERT"],
+          },
           status: "UNREAD",
         },
         orderBy: {
@@ -109,45 +108,45 @@ export default async function PlantLayout({
     ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
     ...((plantRecord?.systemParameters[0]?.valueJson as Record<string, boolean> | null) ?? {}),
   };
+  const ui = await getServerUiDictionary({
+    userLanguage: session.user.language,
+    plantLanguage: plantRecord?.defaultLanguage,
+  });
+  const visibleItems = items
+    .filter((item) => (plantRole ? item.roles.includes(plantRole) : false))
+    .filter((item) => {
+      const moduleKey = MODULE_BY_ITEM[item.href];
+      return moduleKey ? Boolean(moduleToggles[moduleKey]) : true;
+    })
+    .map((item) => ({
+      href: `/app/${plant}/${item.href}`,
+      label: ui.modules[item.label as keyof typeof ui.modules] ?? item.label,
+      spotlight: item.spotlight,
+    }));
+  const utilityItems =
+    plantRole && CORPORATE_ROLES.includes(plantRole)
+      ? [
+          {
+            href: "/app/corporate",
+            label: ui.modules.corporate,
+          },
+          ...(plantRole === RoleCode.N0_ADMIN
+            ? [
+                {
+                  href: "/app/settings",
+                  label: ui.modules.settings,
+                },
+              ]
+            : []),
+        ]
+      : [];
 
   return (
     <>
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[240px_1fr]">
         <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Plant {plant.toUpperCase()}</p>
-          <nav className="space-y-2">
-            {items
-              .filter((item) => (plantRole ? item.roles.includes(plantRole) : false))
-              .filter((item) => {
-                const moduleKey = MODULE_BY_ITEM[item.href];
-                return moduleKey ? Boolean(moduleToggles[moduleKey]) : true;
-              })
-              .map((item) => (
-                <Link
-                  key={item.href}
-                  href={`/app/${plant}/${item.href}`}
-                  className={`block rounded-md px-3 py-2 text-sm ${
-                    item.spotlight
-                      ? "border border-amber-200 bg-amber-50 font-semibold text-amber-900 hover:bg-amber-100"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {ui.modules[item.label as keyof typeof ui.modules] ?? item.label}
-                </Link>
-              ))}
-            {plantRole && CORPORATE_ROLES.includes(plantRole) ? (
-              <>
-                <Link href="/app/corporate" className="block rounded-md px-3 py-2 text-sm text-teal-700 hover:bg-teal-50">
-                  {ui.modules.corporate}
-                </Link>
-                {plantRole === RoleCode.N0_ADMIN ? (
-                  <Link href="/app/settings" className="block rounded-md px-3 py-2 text-sm text-teal-700 hover:bg-teal-50">
-                    {ui.modules.settings}
-                  </Link>
-                ) : null}
-              </>
-            ) : null}
-          </nav>
+          <PlantNav items={visibleItems} utilityItems={utilityItems} />
         </aside>
 
         <section className="space-y-5">{children}</section>
@@ -155,7 +154,8 @@ export default async function PlantLayout({
 
       <RepeatabilityAlertModal
         plantCode={plant}
-        alerts={unreadRepeatabilityAlerts.map((alert) => ({
+        title="Alerts"
+        alerts={unreadAlerts.map((alert) => ({
           id: alert.id,
           title: alert.title,
           body: alert.body,

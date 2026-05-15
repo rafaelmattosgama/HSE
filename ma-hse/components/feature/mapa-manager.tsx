@@ -449,10 +449,9 @@ export function MapaManager({
           <section className="grid gap-6 xl:grid-cols-[1fr_300px]">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Interactive map board</h2>
-                  <p className="mt-1 text-sm text-slate-600">Select a layer and place or drag markers to reflect the different realities of the factory.</p>
-                </div>
+                  <div>
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Interactive map board</h2>
+                  </div>
                 <Button size="sm" type="button" onClick={() => setIsPlacing(true)}>
                   {isPlacing ? "Click on the board..." : "Place marker"}
                 </Button>

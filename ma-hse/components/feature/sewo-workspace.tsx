@@ -1,24 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CreateSewoQuick } from "@/components/feature/create-sewo-quick";
 import { Button } from "@/components/ui/button";
-
-type SewoRow = {
-  id: string;
-  date: string;
-  local: string;
-  typeLabel: string;
-  status: string;
-  communicationId: string;
-  performedByName: string;
-  description: string;
-};
+import type { RootCauseGroup, SewoUi } from "@/lib/sewo-ui";
 
 type Option = {
   id: string;
   name: string;
+  code?: string;
 };
 
 type WorkerOption = {
@@ -61,6 +52,40 @@ type CommunicationOption = {
   openActions: CommunicationActionOption[];
 };
 
+type SewoFormData = {
+  id: string;
+  communicationId: string | null;
+  eventClassification: string;
+  areaId: string | null;
+  workstationId: string | null;
+  shiftId: string | null;
+  analysisDate: string;
+  whatText: string;
+  whereText: string;
+  whoText: string;
+  usualWorkYesNo: boolean;
+  whichText: string | null;
+  howText: string;
+  immediateCorrectiveActionText: string;
+  templateData: Record<string, unknown>;
+  causeCatalogVersionId: string;
+  status: string;
+  linkedActions: CommunicationActionOption[];
+};
+
+type SewoRow = {
+  id: string;
+  date: string;
+  local: string;
+  typeLabel: string;
+  status: string;
+  statusLabel: string;
+  communicationId: string | null;
+  performedByName: string;
+  description: string;
+  formData: SewoFormData;
+};
+
 export function SewoWorkspace({
   plant,
   causeCatalogVersionId,
@@ -73,6 +98,8 @@ export function SewoWorkspace({
   bodyParts,
   injuryTypes,
   actionOwners,
+  ui,
+  rootCauseGroups,
 }: {
   plant: string;
   causeCatalogVersionId?: string;
@@ -85,35 +112,46 @@ export function SewoWorkspace({
   bodyParts: Option[];
   injuryTypes: Option[];
   actionOwners: Option[];
+  ui: SewoUi;
+  rootCauseGroups: RootCauseGroup[];
 }) {
   const [creating, setCreating] = useState(false);
   const [selectedSewoId, setSelectedSewoId] = useState<string | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const openSewos = useMemo(() => sewoRows.filter((row) => row.status === "DRAFT" || row.status === "IN_APPROVAL"), [sewoRows]);
   const selectedSewo = sewoRows.find((row) => row.id === selectedSewoId) ?? null;
 
+  useEffect(() => {
+    if (!selectedSewoId) return;
+
+    editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selectedSewoId]);
+
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl bg-white p-6 shadow-sm">
+      <section className="app-hero rounded-2xl p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">S-EWO</h1>
-            <p className="mt-1 text-sm text-slate-600">List of investigations over time and a dedicated entry point to create a new S-EWO investigation.</p>
+            <h1 className="text-2xl font-bold text-slate-900">{ui.pageTitle}</h1>
           </div>
-          <Button type="button" onClick={() => setCreating((current) => !current)}>
-            {creating ? "Hide creation" : "Create S-EWO"}
+          <Button type="button" onClick={() => {
+            setSelectedSewoId(null);
+            setCreating((current) => !current);
+          }}>
+            {creating ? ui.hideCreationButton : ui.createButton}
           </Button>
         </div>
       </section>
 
-      <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="app-panel overflow-x-auto rounded-xl">
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">Data</th>
-              <th className="px-4 py-3">Local</th>
-              <th className="px-4 py-3">Tipo de S-EWO</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Editar</th>
+              <th className="px-4 py-3">{ui.tableDate}</th>
+              <th className="px-4 py-3">{ui.tableLocation}</th>
+              <th className="px-4 py-3">{ui.tableType}</th>
+              <th className="px-4 py-3">{ui.tableStatus}</th>
+              <th className="px-4 py-3">{ui.tableEdit}</th>
             </tr>
           </thead>
           <tbody>
@@ -123,18 +161,21 @@ export function SewoWorkspace({
                 <td className="px-4 py-3">{row.local}</td>
                 <td className="px-4 py-3">{row.typeLabel}</td>
                 <td className="px-4 py-3">
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.status}</span>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.statusLabel}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedSewoId(row.id)}>
-                    Editar
+                  <Button type="button" size="sm" variant="ghost" onClick={() => {
+                    setCreating(false);
+                    setSelectedSewoId(row.id);
+                  }}>
+                    {ui.editButton}
                   </Button>
                 </td>
               </tr>
             ))}
             {sewoRows.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">No S-EWO records found.</td>
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
               </tr>
             ) : null}
           </tbody>
@@ -142,44 +183,58 @@ export function SewoWorkspace({
       </section>
 
       {selectedSewo ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">S-EWO selected</h2>
-              <p className="mt-1 text-sm text-slate-600">{selectedSewo.date} | {selectedSewo.typeLabel} | {selectedSewo.local}</p>
+        <section ref={editorRef} className="space-y-3">
+          <div className="app-panel rounded-2xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">{ui.editSewoTitle}</h2>
+                <p className="mt-1 text-sm text-slate-600">{selectedSewo.date} | {selectedSewo.typeLabel} | {selectedSewo.local}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?format=pdf`} className="app-toolbar">
+                  {ui.exportPdf}
+                </Link>
+                <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?format=xlsx`} className="app-toolbar">
+                  {ui.exportExcel}
+                </Link>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedSewoId(null)}>
+                  {ui.close}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?format=pdf`} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                Export PDF
-              </Link>
-              <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?format=xlsx`} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                Export Excel
-              </Link>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedSewoId(null)}>
-                Close
-              </Button>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p><span className="font-semibold text-slate-900">{ui.summaryStatus}:</span> {selectedSewo.statusLabel}</p>
+                <p className="mt-1"><span className="font-semibold text-slate-900">{ui.summaryPerformedBy}:</span> {selectedSewo.performedByName}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 md:col-span-2">
+                <p className="font-semibold text-slate-900">{ui.summaryTitle}</p>
+                <p className="mt-1">{selectedSewo.description}</p>
+              </div>
             </div>
           </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              <p><span className="font-semibold text-slate-900">Status:</span> {selectedSewo.status}</p>
-              <p className="mt-1"><span className="font-semibold text-slate-900">Performed by:</span> {selectedSewo.performedByName}</p>
-              <p className="mt-1"><span className="font-semibold text-slate-900">Communication:</span> {selectedSewo.communicationId}</p>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Summary</p>
-              <p className="mt-1">{selectedSewo.description}</p>
-            </div>
-          </div>
+          <CreateSewoQuick
+            initialSewo={selectedSewo.formData}
+            causeCatalogVersionId={causeCatalogVersionId}
+            communications={communications}
+            areas={areas}
+            workstations={workstations}
+            shifts={shifts}
+            workers={workers}
+            bodyParts={bodyParts}
+            injuryTypes={injuryTypes}
+            actionOwners={actionOwners}
+            ui={ui}
+            rootCauseGroups={rootCauseGroups}
+          />
         </section>
       ) : null}
 
       {creating ? (
         <>
-          <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="app-panel space-y-3 rounded-2xl p-5">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Open S-EWO</h2>
-              <p className="mt-1 text-sm text-slate-600">Existing investigations already opened, shown here before a new one is created.</p>
+              <h2 className="text-lg font-semibold text-slate-900">{ui.openSewoTitle}</h2>
             </div>
             <div className="space-y-3">
               {openSewos.length ? openSewos.map((row) => (
@@ -189,10 +244,10 @@ export function SewoWorkspace({
                       <p className="text-sm font-semibold text-slate-900">{row.date} | {row.typeLabel} | {row.local}</p>
                       <p className="mt-1 text-sm text-slate-600">{row.description}</p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.status}</span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.statusLabel}</span>
                   </div>
                 </div>
-              )) : <p className="text-sm text-slate-500">No open S-EWO records.</p>}
+              )) : <p className="text-sm text-slate-500">{ui.noOpenSewo}</p>}
             </div>
           </section>
 
@@ -206,6 +261,8 @@ export function SewoWorkspace({
             bodyParts={bodyParts}
             injuryTypes={injuryTypes}
             actionOwners={actionOwners}
+            ui={ui}
+            rootCauseGroups={rootCauseGroups}
           />
         </>
       ) : null}

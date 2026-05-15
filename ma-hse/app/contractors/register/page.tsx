@@ -37,7 +37,6 @@ export default function ContractorRegisterPage() {
     <main className="mx-auto max-w-2xl px-6 py-10">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">External Company Registration</h1>
-        <p className="mt-1 text-sm text-slate-600">Create the company account to upload company and worker documentation.</p>
         <form onSubmit={submit} className="mt-6 grid gap-3 md:grid-cols-2">
           {Object.entries(form).map(([key, value]) => (
             <input

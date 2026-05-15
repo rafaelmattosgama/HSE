@@ -2,20 +2,21 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { MODULE_OPTIONS, type ModuleToggleMap } from "@/lib/modules";
+import { MODULE_OPTIONS, type ModuleToggleKey, type ModuleToggleMap } from "@/lib/modules";
 
 export function ModuleToggleManager({
   endpoint,
   title,
-  description,
   saveLabel,
   initialModules,
+  moduleLabels,
 }: {
   endpoint: string;
   title: string;
   description: string;
   saveLabel: string;
   initialModules: ModuleToggleMap;
+  moduleLabels?: Partial<Record<ModuleToggleKey, string>>;
 }) {
   const [modules, setModules] = useState<ModuleToggleMap>(initialModules);
   const [message, setMessage] = useState("");
@@ -50,7 +51,6 @@ export function ModuleToggleManager({
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <header>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
-        <p className="mt-1 text-xs text-slate-600">{description}</p>
       </header>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -64,7 +64,7 @@ export function ModuleToggleManager({
                 active ? "border-teal-300 bg-teal-50 text-slate-900" : "border-slate-200 bg-slate-50 text-slate-600"
               }`}
             >
-              <span className="font-medium">{module.label}</span>
+              <span className="font-medium">{moduleLabels?.[module.key] ?? module.label}</span>
               <input
                 type="checkbox"
                 checked={Boolean(active)}

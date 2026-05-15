@@ -1,13 +1,21 @@
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
 import { ActionsTable } from "@/components/feature/actions-table";
+import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { getServerUiLocale } from "@/lib/server-ui-language";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
-import { getLocale } from "next-intl/server";
+import { getUiDictionary } from "@/lib/ui-language";
+import { getServerSession } from "next-auth";
 
 export default async function ActionsPage({ params }: { params: Promise<{ plant: string }> }) {
   const { plant } = await params;
-  const locale = await getLocale();
+  const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const uiLocale = await getServerUiLocale({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
+  const ui = getUiDictionary(uiLocale);
 
   const [actions, owners, communications] = await prisma.$transaction([
     prisma.action.findMany({
@@ -63,15 +71,12 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
       take: 100,
     }),
   ]);
-  const translatedTitles = await translateForViewer(locale, actions.map((action) => action.title));
+  const translatedTitles = await translateForViewer(uiLocale, actions.map((action) => action.title));
 
   return (
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Action Plan (CAPA)</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Create manual actions or link them to a communication. Open each row to close actions with comment and optional evidence.
-        </p>
+        <h1 className="text-2xl font-bold text-slate-900">{ui.modules.actions}</h1>
       </header>
 
       <CreateActionQuick

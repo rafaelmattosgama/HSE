@@ -62,7 +62,6 @@ export default async function CorporateReportsPage({
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Corporate Reports</h1>
-            <p className="mt-1 text-sm text-slate-600">History of automatic corporate reports generated across all plants.</p>
           </div>
           <Link href="/app/corporate" className="text-sm font-semibold text-teal-700 hover:underline">
             Back to corporate dashboard
@@ -85,9 +84,6 @@ export default async function CorporateReportsPage({
       <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Generate Corporate Report</h2>
-          <p className="text-sm text-slate-600">
-            Generate the corporate report manually from this page. The generated files are shared automatically with N2 and N3.
-          </p>
         </div>
 
         <form action={generateCorporateReportAction} className="mt-4 grid gap-3 md:grid-cols-4">

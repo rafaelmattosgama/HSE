@@ -2,6 +2,19 @@ import { ActionPriority, CommunicationSource, CommunicationStatus, Communication
 import { addDays } from "date-fns";
 import { writeAuditLog, buildDiff } from "@/lib/audit";
 import type { CreateCommunicationInput, ManualCloseCommunicationInput, ReopenActionInput, UpdateCommunicationInput, ValidateCommunicationInput } from "@/lib/validation/dtos";
+import {
+  canManageCommunicationClassification,
+  getMissingCommunicationClassificationFields,
+  requiresNearMissType,
+  requiresProfessionalRisk,
+  requiresUnsafeConditionType,
+  shouldDeferPublicReportNearMissType,
+  shouldDeferPublicReportProfessionalRisk,
+  shouldDeferPublicReportUnsafeActType,
+  shouldDeferPublicReportUnsafeConditionType,
+  supportsUnsafeActType,
+} from "@/lib/communication-classification";
+import { DEFAULT_NEAR_MISS_TYPE_CODES } from "@/lib/defaults/near-miss-types";
 import { prisma } from "@/lib/prisma";
 import { calculateLeaveFields, initialStatusForCommunicationCreation, nextStatusAfterValidation } from "@/lib/services/workflow";
 import { NotificationService } from "@/lib/services/notification-service";
@@ -13,6 +26,227 @@ const ALERT_TYPES: CommunicationType[] = [
   CommunicationType.FIRST_AID,
   CommunicationType.ACCIDENT,
 ];
+
+const REPORTER_REVIEW_REQUIRED_MESSAGE = "Open the communication and select a valid reporter before validating.";
+const CLASSIFICATION_REQUIRED_MESSAGE = "Complete the required classification fields before validating.";
+
+export class CommunicationValidationError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status = 409,
+  ) {
+    super(message);
+    this.name = "CommunicationValidationError";
+  }
+}
+
+function resolveReporterName(input: {
+  submittedName: string;
+  employeeName?: string | null;
+  fallback: string;
+}) {
+  return input.employeeName?.trim() || input.submittedName.trim() || input.fallback;
+}
+
+async function resolveReporterForApproval(input: {
+  plantId: string;
+  reporterEmployeeNo: string | null;
+}) {
+  const reporterEmployeeNo = input.reporterEmployeeNo?.trim();
+
+  if (!reporterEmployeeNo) {
+    throw new CommunicationValidationError("REPORTER_REVIEW_REQUIRED", REPORTER_REVIEW_REQUIRED_MESSAGE);
+  }
+
+  const reporterEmployee = await prisma.employeeDirectory.findFirst({
+    where: {
+      plantId: input.plantId,
+      employeeNo: reporterEmployeeNo,
+      isActive: true,
+    },
+    select: { employeeNo: true, name: true },
+  });
+
+  if (!reporterEmployee) {
+    throw new CommunicationValidationError("REPORTER_REVIEW_REQUIRED", REPORTER_REVIEW_REQUIRED_MESSAGE);
+  }
+
+  return reporterEmployee;
+}
+
+async function resolveRiskThemeId(input: {
+  plantId: string;
+  riskThemeId?: string | null;
+}) {
+  if (!input.riskThemeId) {
+    throw new CommunicationValidationError("PROFESSIONAL_RISK_REQUIRED", "Select a valid professional risk", 400);
+  }
+
+  const riskTheme = await prisma.riskTheme.findFirst({
+    where: {
+      id: input.riskThemeId,
+      plantId: input.plantId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!riskTheme) {
+    throw new CommunicationValidationError("INVALID_PROFESSIONAL_RISK", "Select a valid professional risk for this plant", 400);
+  }
+
+  return riskTheme.id;
+}
+
+async function resolveUnsafeActTypeId(input: {
+  plantId: string;
+  unsafeActTypeId?: string | null;
+}) {
+  if (!input.unsafeActTypeId) {
+    throw new CommunicationValidationError("UNSAFE_ACT_TYPE_REQUIRED", "Select a valid unsafe act type", 400);
+  }
+
+  const unsafeActType = await prisma.unsafeActType.findFirst({
+    where: {
+      id: input.unsafeActTypeId,
+      plantId: input.plantId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!unsafeActType) {
+    throw new CommunicationValidationError("INVALID_UNSAFE_ACT_TYPE", "Select a valid unsafe act type for this plant", 400);
+  }
+
+  return unsafeActType.id;
+}
+
+async function resolveUnsafeConditionTypeId(input: {
+  plantId: string;
+  unsafeConditionTypeId?: string | null;
+}) {
+  if (!input.unsafeConditionTypeId) {
+    throw new CommunicationValidationError("UNSAFE_CONDITION_TYPE_REQUIRED", "Select a valid unsafe condition type", 400);
+  }
+
+  const unsafeConditionType = await prisma.unsafeConditionType.findFirst({
+    where: {
+      id: input.unsafeConditionTypeId,
+      plantId: input.plantId,
+      isActive: true,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!unsafeConditionType) {
+    throw new CommunicationValidationError("INVALID_UNSAFE_CONDITION_TYPE", "Select a valid unsafe condition type for this plant", 400);
+  }
+
+  return unsafeConditionType.id;
+}
+
+async function resolveNearMissTypeId(input: {
+  plantId: string;
+  nearMissTypeId?: string | null;
+}) {
+  if (!input.nearMissTypeId) {
+    throw new CommunicationValidationError("NEAR_MISS_TYPE_REQUIRED", "Select a valid near miss type", 400);
+  }
+
+  const nearMissType = await prisma.nearMissType.findFirst({
+    where: {
+      id: input.nearMissTypeId,
+      plantId: input.plantId,
+      isActive: true,
+      code: {
+        in: DEFAULT_NEAR_MISS_TYPE_CODES,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!nearMissType) {
+    throw new CommunicationValidationError("INVALID_NEAR_MISS_TYPE", "Select a valid near miss type for this plant", 400);
+  }
+
+  return nearMissType.id;
+}
+
+function canResolveDeferredClassification(input: {
+  actorRole?: RoleCode | null;
+  source?: CommunicationSource;
+}) {
+  return input.source !== CommunicationSource.TOKEN_REPORT && canManageCommunicationClassification(input.actorRole);
+}
+
+async function resolveCommunicationClassification(input: {
+  plantId: string;
+  type: CommunicationType;
+  riskThemeId?: string | null;
+  unsafeActTypeId?: string | null;
+  unsafeConditionTypeId?: string | null;
+  nearMissTypeId?: string | null;
+  actorRole?: RoleCode | null;
+  source?: CommunicationSource;
+}) {
+  const canClassifyDeferredFields = canResolveDeferredClassification({
+    actorRole: input.actorRole,
+    source: input.source,
+  });
+
+  const riskThemeId =
+    requiresProfessionalRisk(input.type) &&
+    (!shouldDeferPublicReportProfessionalRisk(input.type) || canClassifyDeferredFields)
+      ? await resolveRiskThemeId({
+          plantId: input.plantId,
+          riskThemeId: input.riskThemeId,
+        })
+      : null;
+
+  const unsafeActTypeId =
+    supportsUnsafeActType(input.type) &&
+    (!shouldDeferPublicReportUnsafeActType(input.type) || canClassifyDeferredFields)
+      ? await resolveUnsafeActTypeId({
+          plantId: input.plantId,
+          unsafeActTypeId: input.unsafeActTypeId,
+        })
+      : null;
+
+  const nearMissTypeId =
+    requiresNearMissType(input.type) &&
+    (!shouldDeferPublicReportNearMissType(input.type) || canClassifyDeferredFields)
+      ? await resolveNearMissTypeId({
+          plantId: input.plantId,
+          nearMissTypeId: input.nearMissTypeId,
+        })
+      : null;
+
+  const unsafeConditionTypeId =
+    requiresUnsafeConditionType(input.type) &&
+    (!shouldDeferPublicReportUnsafeConditionType(input.type) || canClassifyDeferredFields)
+      ? await resolveUnsafeConditionTypeId({
+          plantId: input.plantId,
+          unsafeConditionTypeId: input.unsafeConditionTypeId,
+        })
+      : null;
+
+  return {
+    riskThemeId,
+    unsafeActTypeId,
+    unsafeConditionTypeId,
+    nearMissTypeId,
+  };
+}
 
 export const CommunicationService = {
   async create(input: {
@@ -54,17 +288,25 @@ export const CommunicationService = {
           : Promise.resolve(null),
     ]);
 
-    const reporterName = input.payload.reporterName.trim() || reporterEmployee?.name || "Unknown reporter";
+    const reporterName = resolveReporterName({
+      submittedName: input.payload.reporterName,
+      employeeName: reporterEmployee?.name,
+      fallback: "Unknown reporter",
+    });
     const resolvedTargetEmployeeId = input.payload.targetEmployeeId ?? targetEmployee?.id ?? null;
     const resolvedTargetEmployeeNo = targetEmployee?.employeeNo ?? targetEmployeeNo ?? null;
     const resolvedTargetText = input.payload.targetText?.trim() || targetEmployee?.name || undefined;
 
-    const defaultRiskTheme = input.payload.riskThemeId
-      ? null
-      : await prisma.riskTheme.findFirst({
-          where: { plantId: input.plantId, isActive: true },
-          orderBy: { code: "asc" },
-        });
+    const { riskThemeId, unsafeActTypeId, unsafeConditionTypeId, nearMissTypeId } = await resolveCommunicationClassification({
+      plantId: input.plantId,
+      type: input.payload.type,
+      riskThemeId: input.payload.riskThemeId,
+      unsafeActTypeId: input.payload.unsafeActTypeId,
+      unsafeConditionTypeId: input.payload.unsafeConditionTypeId,
+      nearMissTypeId: input.payload.nearMissTypeId,
+      actorRole: input.actorRole,
+      source: input.source,
+    });
 
     const leave = calculateLeaveFields({
       eventDatetime: input.payload.eventDatetime,
@@ -92,10 +334,10 @@ export const CommunicationService = {
         lineId: input.payload.lineId,
         workstationId: input.payload.workstationId,
         equipmentId: input.payload.equipmentId,
-        riskThemeId: input.payload.riskThemeId ?? defaultRiskTheme?.id ?? "",
-        unsafeActTypeId: input.payload.unsafeActTypeId,
-        unsafeConditionTypeId: input.payload.unsafeConditionTypeId,
-        nearMissTypeId: input.payload.nearMissTypeId,
+        riskThemeId,
+        unsafeActTypeId,
+        unsafeConditionTypeId,
+        nearMissTypeId,
         description: input.payload.description,
         suggestedAction: input.payload.suggestedAction,
         severityPotential: input.payload.severityPotential,
@@ -189,22 +431,49 @@ export const CommunicationService = {
       preferredStatus: input.payload.status,
     });
 
+    if (!input.payload.isValid) {
+      return this.deleteCommunication({
+        communicationId: input.communicationId,
+        actorUserId: input.actorUserId,
+        action: nextStatus === CommunicationStatus.INVALID ? "INVALIDATE_DELETE" : "REJECT_DELETE",
+        reason: input.payload.notes,
+      });
+    }
+
+    const missingClassificationFields = getMissingCommunicationClassificationFields(before);
+    if (missingClassificationFields.length > 0) {
+      throw new CommunicationValidationError("CLASSIFICATION_REQUIRED", CLASSIFICATION_REQUIRED_MESSAGE, 400);
+    }
+
+    const validatedReporter = input.payload.isValid
+      ? await resolveReporterForApproval({
+          plantId: before.plantId,
+          reporterEmployeeNo: before.reporterEmployeeNo,
+        })
+      : null;
+    const validationData: Prisma.CommunicationUncheckedUpdateInput = {
+      status: nextStatus,
+      validatedAt: new Date(),
+      validatedBy: input.actorUserId,
+      validationNotes: input.payload.notes,
+      invalidationReason: input.payload.isValid ? null : input.payload.notes,
+    };
+
+    if (validatedReporter) {
+      validationData.reporterName = validatedReporter.name;
+      validationData.reporterEmployeeNo = validatedReporter.employeeNo;
+    }
+
     const updated = await prisma.communication.update({
       where: { id: input.communicationId },
-      data: {
-        status: nextStatus,
-        validatedAt: new Date(),
-        validatedBy: input.actorUserId,
-        validationNotes: input.payload.notes,
-        invalidationReason: input.payload.isValid ? null : input.payload.notes,
-      },
+      data: validationData,
     });
 
     if (input.payload.isValid && ALERT_TYPES.includes(updated.type)) {
       await NotificationService.notifyPlantRoles({
         plantId: updated.plantId,
         roles: [RoleCode.N1_CORPORATE],
-        title: `${updated.type} validated by N3`,
+        title: `${updated.type} validated`,
         body: `Communication ${updated.id} was validated and is ready for corporate follow-up.`,
       });
 
@@ -224,6 +493,127 @@ export const CommunicationService = {
     });
 
     return updated;
+  },
+
+  async deleteCommunication(input: {
+    communicationId: string;
+    actorUserId: string;
+    action?: "DELETE" | "REJECT_DELETE" | "INVALIDATE_DELETE";
+    reason?: string | null;
+  }) {
+    const before = await prisma.communication.findUniqueOrThrow({
+      where: { id: input.communicationId },
+      include: {
+        actions: {
+          select: {
+            id: true,
+          },
+        },
+        alertEvents: {
+          select: {
+            id: true,
+          },
+        },
+        mapFeatures: {
+          select: {
+            id: true,
+          },
+        },
+        sewoRecords: {
+          select: {
+            id: true,
+          },
+        },
+        smatAudits: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+    const actionIds = before.actions.map((action) => action.id);
+
+    return prisma.$transaction(async (tx) => {
+      if (actionIds.length > 0) {
+        await tx.actionEvidenceAttachment.deleteMany({
+          where: {
+            actionId: {
+              in: actionIds,
+            },
+          },
+        });
+        await tx.actionCoOwner.deleteMany({
+          where: {
+            actionId: {
+              in: actionIds,
+            },
+          },
+        });
+        await tx.sEWOActionLink.deleteMany({
+          where: {
+            actionId: {
+              in: actionIds,
+            },
+          },
+        });
+        await tx.smatAuditActionLink.deleteMany({
+          where: {
+            actionId: {
+              in: actionIds,
+            },
+          },
+        });
+        await tx.action.deleteMany({
+          where: {
+            id: {
+              in: actionIds,
+            },
+          },
+        });
+      }
+
+      await tx.alertEvent.deleteMany({ where: { communicationId: input.communicationId } });
+      await tx.mapFeature.updateMany({
+        where: { communicationId: input.communicationId },
+        data: { communicationId: null },
+      });
+      await tx.sEWO.updateMany({
+        where: { communicationId: input.communicationId },
+        data: { communicationId: null },
+      });
+      await tx.smatAudit.updateMany({
+        where: { communicationId: input.communicationId },
+        data: { communicationId: null },
+      });
+      await tx.communicationAttachment.deleteMany({ where: { communicationId: input.communicationId } });
+      await tx.communication.delete({ where: { id: input.communicationId } });
+
+      await tx.auditLog.create({
+        data: {
+          entityType: "Communication",
+          entityId: input.communicationId,
+          action: input.action ?? "DELETE",
+          actorUserId: input.actorUserId,
+          plantId: before.plantId,
+          diffJson: {
+            before,
+            after: null,
+            reason: input.reason ?? null,
+            fieldsChanged: Object.keys(before),
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      return {
+        id: input.communicationId,
+        plantId: before.plantId,
+        deletedLinkedActions: actionIds.length,
+        deletedAlertEvents: before.alertEvents.length,
+        unlinkedMapFeatures: before.mapFeatures.length,
+        unlinkedSewoRecords: before.sewoRecords.length,
+        unlinkedSmatAudits: before.smatAudits.length,
+      };
+    });
   },
 
   async manualClose(input: {
@@ -355,6 +745,7 @@ export const CommunicationService = {
   async update(input: {
     communicationId: string;
     actorUserId: string;
+    actorRole?: RoleCode | null;
     payload: UpdateCommunicationInput;
   }) {
     const before = await prisma.communication.findUniqueOrThrow({ where: { id: input.communicationId } });
@@ -399,19 +790,26 @@ export const CommunicationService = {
           : Promise.resolve(null),
     ]);
 
-    const reporterName = input.payload.reporterName.trim() || reporterEmployee?.name || before.reporterName;
+    const reporterName = resolveReporterName({
+      submittedName: input.payload.reporterName,
+      employeeName: reporterEmployee?.name,
+      fallback: before.reporterName,
+    });
     const resolvedTargetEmployeeId = requiresTarget ? input.payload.targetEmployeeId ?? targetEmployee?.id ?? null : null;
     const resolvedTargetEmployeeNo = requiresTarget ? targetEmployee?.employeeNo ?? targetEmployeeNo ?? null : null;
     const resolvedTargetText = requiresTarget
       ? input.payload.targetText?.trim() || targetEmployee?.name || null
       : null;
 
-    const defaultRiskTheme = input.payload.riskThemeId
-      ? null
-      : await prisma.riskTheme.findFirst({
-          where: { plantId: before.plantId, isActive: true },
-          orderBy: { code: "asc" },
-        });
+    const { riskThemeId, unsafeActTypeId, unsafeConditionTypeId, nearMissTypeId } = await resolveCommunicationClassification({
+      plantId: before.plantId,
+      type: input.payload.type,
+      riskThemeId: input.payload.riskThemeId,
+      unsafeActTypeId: input.payload.unsafeActTypeId,
+      unsafeConditionTypeId: input.payload.unsafeConditionTypeId,
+      nearMissTypeId: input.payload.nearMissTypeId,
+      actorRole: input.actorRole,
+    });
 
     const leave = calculateLeaveFields({
       eventDatetime: input.payload.eventDatetime,
@@ -435,11 +833,10 @@ export const CommunicationService = {
         lineId: input.payload.lineId ?? null,
         workstationId: input.payload.workstationId ?? null,
         equipmentId: input.payload.equipmentId ?? null,
-        riskThemeId: input.payload.riskThemeId ?? defaultRiskTheme?.id ?? before.riskThemeId,
-        unsafeActTypeId: input.payload.type === CommunicationType.UNSAFE_ACT ? input.payload.unsafeActTypeId ?? null : null,
-        unsafeConditionTypeId:
-          input.payload.type === CommunicationType.UNSAFE_CONDITION ? input.payload.unsafeConditionTypeId ?? null : null,
-        nearMissTypeId: input.payload.type === CommunicationType.NEAR_MISS ? input.payload.nearMissTypeId ?? null : null,
+        riskThemeId,
+        unsafeActTypeId,
+        unsafeConditionTypeId,
+        nearMissTypeId,
         description: input.payload.description,
         suggestedAction: input.payload.suggestedAction?.trim() || null,
         severityPotential: input.payload.severityPotential ?? null,

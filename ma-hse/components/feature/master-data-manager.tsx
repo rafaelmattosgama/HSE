@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,11 @@ type EditingState = {
   areaCode: string | null;
   workstationCode: string | null;
   employeeNo: string | null;
+};
+
+type DeletingState = {
+  type: "area" | "workstation" | "worker";
+  id: string;
 };
 
 function sortItems(items: Item[]) {
@@ -62,6 +68,7 @@ export function MasterDataManager({
     workstationCode: null,
     employeeNo: null,
   });
+  const [deleting, setDeleting] = useState<DeletingState | null>(null);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [injuryTypesLoading, setInjuryTypesLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -83,6 +90,7 @@ export function MasterDataManager({
       workstationCode: null,
       employeeNo: null,
     });
+    setDeleting(null);
     setMessage("");
   }, [initialAreas, initialWorkstations, initialWorkers, plant]);
 
@@ -110,6 +118,75 @@ export function MasterDataManager({
     const json = await response.json();
     if (!json.ok) throw new Error(json.message ?? "Failed to save worker");
     return json.data.worker as Worker;
+  }
+
+  function isDeleting(type: DeletingState["type"], id: string) {
+    return deleting?.type === type && deleting.id === id;
+  }
+
+  async function deleteMasterData(type: "area" | "workstation", item: Item) {
+    const label = type === "area" ? "departamento" : "posto de trabalho";
+    if (!window.confirm(`Eliminar ${label} ${item.code}? Esta acao remove-o das listas ativas.`)) {
+      return;
+    }
+
+    setDeleting({ type, id: item.id });
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type, id: item.id }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.ok) {
+        throw new Error(json.message ?? `Failed to delete ${label}`);
+      }
+
+      if (type === "area") {
+        setAreas((current) => current.filter((entry) => entry.id !== item.id));
+        if (editing.areaCode === item.code) cancelAreaEdit();
+        setMessage("Departamento eliminado.");
+      } else {
+        setWorkstations((current) => current.filter((entry) => entry.id !== item.id));
+        if (editing.workstationCode === item.code) cancelWorkstationEdit();
+        setMessage("Posto de trabalho eliminado.");
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : `Failed to delete ${label}`);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function deleteWorker(item: Worker) {
+    if (!window.confirm(`Eliminar trabalhador ${item.employeeNo}? Esta acao remove-o das listas ativas.`)) {
+      return;
+    }
+
+    setDeleting({ type: "worker", id: item.id });
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/workers`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: item.id }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.ok) {
+        throw new Error(json.message ?? "Failed to delete worker");
+      }
+
+      setWorkers((current) => current.filter((entry) => entry.id !== item.id));
+      if (editing.employeeNo === item.employeeNo) cancelWorkerEdit();
+      setMessage("Trabalhador eliminado.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to delete worker");
+    } finally {
+      setDeleting(null);
+    }
   }
 
   async function submitArea(event: React.FormEvent) {
@@ -285,13 +362,10 @@ export function MasterDataManager({
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="app-panel space-y-4 rounded-xl p-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Plant Master Data</h2>
-          <p className="mt-1 text-xs text-slate-600">
-            Criar, editar e importar departamentos, workstations e trabalhadores da planta {plant.toUpperCase()}.
-          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input
@@ -308,6 +382,9 @@ export function MasterDataManager({
           <Button type="button" size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={importLoading}>
             {importLoading ? "Importing Excel..." : "Import Excel"}
           </Button>
+          <Link href={`/api/plants/${plant}/admin/master-data/template`} className="app-toolbar">
+            Download template
+          </Link>
           <Button type="button" size="sm" variant="secondary" onClick={syncDefaultInjuryTypes} disabled={injuryTypesLoading}>
             {injuryTypesLoading ? "Syncing injury types..." : "Sync injury types"}
           </Button>
@@ -348,10 +425,15 @@ export function MasterDataManager({
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
             {areas.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
-                <p>{item.code} - {item.name}</p>
-                <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => startAreaEdit(item)}>
-                  Editar
-                </button>
+                <p className="min-w-0 truncate">{item.code} - {item.name}</p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startAreaEdit(item)} disabled={Boolean(deleting)}>
+                    Editar
+                  </button>
+                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteMasterData("area", item)} disabled={Boolean(deleting)}>
+                    {isDeleting("area", item.id) ? "A eliminar..." : "Eliminar"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -385,10 +467,15 @@ export function MasterDataManager({
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
             {workstations.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
-                <p>{item.code} - {item.name}</p>
-                <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => startWorkstationEdit(item)}>
-                  Editar
-                </button>
+                <p className="min-w-0 truncate">{item.code} - {item.name}</p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startWorkstationEdit(item)} disabled={Boolean(deleting)}>
+                    Editar
+                  </button>
+                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteMasterData("workstation", item)} disabled={Boolean(deleting)}>
+                    {isDeleting("workstation", item.id) ? "A eliminar..." : "Eliminar"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -428,10 +515,15 @@ export function MasterDataManager({
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
             {workers.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
-                <p>{item.employeeNo} - {item.name}{item.dept ? ` (${item.dept})` : ""}</p>
-                <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => startWorkerEdit(item)}>
-                  Editar
-                </button>
+                <p className="min-w-0 truncate">{item.employeeNo} - {item.name}{item.dept ? ` (${item.dept})` : ""}</p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startWorkerEdit(item)} disabled={Boolean(deleting)}>
+                    Editar
+                  </button>
+                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteWorker(item)} disabled={Boolean(deleting)}>
+                    {isDeleting("worker", item.id) ? "A eliminar..." : "Eliminar"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

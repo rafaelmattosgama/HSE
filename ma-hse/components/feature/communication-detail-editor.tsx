@@ -1,18 +1,22 @@
 "use client";
 
 import { CommunicationType } from "@prisma/client";
-import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
+import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-select";
+import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
+import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
-import { formatCommunicationType } from "@/lib/helpers";
+import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
+import type { BodyZonePickerLabels } from "@/lib/sewo-ui";
 
 type Option = {
   id: string;
   name: string;
   employeeNo?: string;
   code?: string;
+  category?: string;
 };
 
 type ActionOwnerOption = {
@@ -33,7 +37,7 @@ type CommunicationRecord = {
   areaId: string | null;
   workstationId: string | null;
   equipmentId: string | null;
-  riskThemeId: string;
+  riskThemeId: string | null;
   unsafeActTypeId: string | null;
   unsafeConditionTypeId: string | null;
   nearMissTypeId: string | null;
@@ -50,8 +54,10 @@ type CommunicationRecord = {
 };
 
 export function CommunicationDetailEditor({
+  plant,
   communication,
   canEdit,
+  canManageClassification,
   areas,
   workstations,
   equipments,
@@ -63,9 +69,16 @@ export function CommunicationDetailEditor({
   bodyParts,
   injuryTypes,
   actionOwners,
+  typeLabels,
+  statusLabel,
+  labels,
+  createActionLabels,
+  bodyZonePickerLabels,
 }: {
+  plant: string;
   communication: CommunicationRecord;
   canEdit: boolean;
+  canManageClassification: boolean;
   areas: Option[];
   workstations: Option[];
   equipments: Option[];
@@ -77,9 +90,13 @@ export function CommunicationDetailEditor({
   bodyParts: Option[];
   injuryTypes: Option[];
   actionOwners: ActionOwnerOption[];
+  typeLabels: CommunicationUi["communicationTypeLabels"];
+  statusLabel: string;
+  labels?: CommunicationUi["detailEditor"];
+  createActionLabels?: CommunicationUi["createActionQuick"];
+  bodyZonePickerLabels?: BodyZonePickerLabels;
 }) {
-  const pathname = usePathname();
-  const plant = pathname.split("/")[2];
+  const text = labels ?? BASE_COMMUNICATION_UI.detailEditor;
   const [type, setType] = useState<CommunicationType>(communication.type);
   const [eventDatetime, setEventDatetime] = useState(communication.eventDatetime.slice(0, 16));
   const [reporterEmployeeNo, setReporterEmployeeNo] = useState(communication.reporterEmployeeNo ?? "");
@@ -88,7 +105,7 @@ export function CommunicationDetailEditor({
   const [areaId, setAreaId] = useState(communication.areaId ?? "");
   const [workstationId, setWorkstationId] = useState(communication.workstationId ?? "");
   const [equipmentId, setEquipmentId] = useState(communication.equipmentId ?? "");
-  const [riskThemeId, setRiskThemeId] = useState(communication.riskThemeId);
+  const [riskThemeId, setRiskThemeId] = useState(communication.riskThemeId ?? "");
   const [unsafeActTypeId, setUnsafeActTypeId] = useState(communication.unsafeActTypeId ?? "");
   const [unsafeConditionTypeId, setUnsafeConditionTypeId] = useState(communication.unsafeConditionTypeId ?? "");
   const [nearMissTypeId, setNearMissTypeId] = useState(communication.nearMissTypeId ?? "");
@@ -105,10 +122,15 @@ export function CommunicationDetailEditor({
   const [saving, setSaving] = useState(false);
 
   const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
+  const needsRestrictedProfessionalRisk = type === "NEAR_MISS" || type === "FIRST_AID";
+  const needsProfessionalRisk = type === "ACCIDENT" || (needsRestrictedProfessionalRisk && canManageClassification);
+  const needsUnsafeActType = type === "UNSAFE_ACT" || (type === "FIRST_AID" && canManageClassification);
+  const needsUnsafeConditionType = type === "UNSAFE_CONDITION" && canManageClassification;
+  const needsNearMissType = type === "NEAR_MISS" && canManageClassification;
   const needsClinicalFields = type === "FIRST_AID" || type === "ACCIDENT";
   const selectedReporter = employees.find((employee) => employee.employeeNo === reporterEmployeeNo) ?? null;
   const selectedTarget = employees.find((employee) => employee.id === targetEmployeeId) ?? null;
-  const communicationLabel = `${communication.id} | ${formatCommunicationType(communication.type)} | ${communication.status}`;
+  const communicationLabel = `${communication.id} | ${typeLabels[communication.type] ?? communication.type} | ${statusLabel}`;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -130,10 +152,10 @@ export function CommunicationDetailEditor({
           areaId: areaId || undefined,
           workstationId: workstationId || undefined,
           equipmentId: equipmentId || undefined,
-          riskThemeId,
-          unsafeActTypeId: type === "UNSAFE_ACT" ? unsafeActTypeId || undefined : undefined,
-          unsafeConditionTypeId: type === "UNSAFE_CONDITION" ? unsafeConditionTypeId || undefined : undefined,
-          nearMissTypeId: type === "NEAR_MISS" ? nearMissTypeId || undefined : undefined,
+          riskThemeId: needsProfessionalRisk ? riskThemeId || undefined : undefined,
+          unsafeActTypeId: needsUnsafeActType ? unsafeActTypeId || undefined : undefined,
+          unsafeConditionTypeId: needsUnsafeConditionType ? unsafeConditionTypeId || undefined : undefined,
+          nearMissTypeId: needsNearMissType ? nearMissTypeId || undefined : undefined,
           description,
           suggestedAction: suggestedAction || undefined,
           severityPotential: severityPotential || undefined,
@@ -149,13 +171,13 @@ export function CommunicationDetailEditor({
 
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to update communication");
+        throw new Error(text.updateFailed);
       }
 
-      setMessage("Communication updated successfully.");
+      setMessage(text.updatedSuccessfully);
       window.location.reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to update communication");
+    } catch {
+      setMessage(text.updateFailed);
     } finally {
       setSaving(false);
     }
@@ -166,20 +188,17 @@ export function CommunicationDetailEditor({
       <form onSubmit={submit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Communication record</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {canEdit ? "N1 and N3 can edit this communication from this screen, including before N3 validation when needed." : "Read-only detail for this communication."}
-            </p>
+            <h2 className="text-lg font-semibold text-slate-900">{text.communicationRecord}</h2>
           </div>
           <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            {communication.status}
+            {statusLabel}
           </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
             {(["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS", "FIRST_AID", "ACCIDENT"] as CommunicationType[]).map((option) => (
-              <option key={option} value={option}>{formatCommunicationType(option)}</option>
+              <option key={option} value={option}>{typeLabels[option] ?? option}</option>
             ))}
           </select>
           <input type="datetime-local" value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required />
@@ -191,7 +210,7 @@ export function CommunicationDetailEditor({
             const employee = employees.find((entry) => entry.employeeNo === event.target.value);
             if (employee) setReporterName(employee.name);
           }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Reporter from plant workers</option>
+            <option value="">{text.reporterFromPlantWorkers}</option>
             {employees.map((employee) => (
               <option key={employee.id} value={employee.employeeNo}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
             ))}
@@ -201,19 +220,19 @@ export function CommunicationDetailEditor({
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <select value={areaId} onChange={(event) => setAreaId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Department</option>
+            <option value="">{text.department}</option>
             {areas.map((area) => (
               <option key={area.id} value={area.id}>{area.name}</option>
             ))}
           </select>
           <select value={workstationId} onChange={(event) => setWorkstationId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Location</option>
+            <option value="">{text.location}</option>
             {workstations.map((workstation) => (
               <option key={workstation.id} value={workstation.id}>{workstation.name}</option>
             ))}
           </select>
           <select value={equipmentId} onChange={(event) => setEquipmentId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
-            <option value="">Equipment</option>
+            <option value="">{text.equipment}</option>
             {equipments.map((equipment) => (
               <option key={equipment.id} value={equipment.id}>{equipment.name}</option>
             ))}
@@ -221,40 +240,52 @@ export function CommunicationDetailEditor({
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <select value={riskThemeId} onChange={(event) => setRiskThemeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            {riskThemes.map((theme) => (
-              <option key={theme.id} value={theme.id}>{theme.code ? `${theme.code} - ${theme.name}` : theme.name}</option>
-            ))}
-          </select>
+          {needsProfessionalRisk ? (
+            <ProfessionalRiskSelect
+              value={riskThemeId}
+              onChange={setRiskThemeId}
+              risks={riskThemes}
+              placeholder="Professional risk"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={!canEdit}
+              required
+            />
+          ) : null}
           <select value={severityPotential} onChange={(event) => setSeverityPotential(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
-            <option value="">Severity potential</option>
-            <option value="LOW">Low</option>
-            <option value="MED">Medium</option>
-            <option value="HIGH">High</option>
+            <option value="">{text.severityPotential}</option>
+            <option value="LOW">{text.low}</option>
+            <option value="MED">{text.medium}</option>
+            <option value="HIGH">{text.high}</option>
           </select>
         </div>
 
-        {type === "UNSAFE_ACT" ? (
-          <select value={unsafeActTypeId} onChange={(event) => setUnsafeActTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Unsafe act type</option>
-            {unsafeActTypes.map((entry) => (
-              <option key={entry.id} value={entry.id}>{entry.name}</option>
-            ))}
-          </select>
+        {needsUnsafeActType ? (
+          <UnsafeActTypeSelect
+            value={unsafeActTypeId}
+            onChange={setUnsafeActTypeId}
+            types={unsafeActTypes}
+            placeholder={text.unsafeActType}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            disabled={!canEdit}
+            required
+          />
         ) : null}
 
-        {type === "UNSAFE_CONDITION" ? (
-          <select value={unsafeConditionTypeId} onChange={(event) => setUnsafeConditionTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Unsafe condition type</option>
-            {unsafeConditionTypes.map((entry) => (
-              <option key={entry.id} value={entry.id}>{entry.name}</option>
-            ))}
-          </select>
+        {needsUnsafeConditionType ? (
+          <UnsafeConditionTypeSelect
+            value={unsafeConditionTypeId}
+            onChange={setUnsafeConditionTypeId}
+            types={unsafeConditionTypes}
+            placeholder={text.unsafeConditionType}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            disabled={!canEdit}
+            required
+          />
         ) : null}
 
-        {type === "NEAR_MISS" ? (
+        {needsNearMissType ? (
           <select value={nearMissTypeId} onChange={(event) => setNearMissTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Near miss type</option>
+            <option value="">{text.nearMissType}</option>
             {nearMissTypes.map((entry) => (
               <option key={entry.id} value={entry.id}>{entry.name}</option>
             ))}
@@ -263,7 +294,7 @@ export function CommunicationDetailEditor({
 
         {needsInvolvedWorker || needsClinicalFields ? (
           <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">Involved worker</option>
+            <option value="">{text.involvedWorker}</option>
             {employees.map((employee) => (
               <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
             ))}
@@ -274,26 +305,26 @@ export function CommunicationDetailEditor({
           <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="grid gap-3 md:grid-cols-2">
               <select value={injuryTypeId} onChange={(event) => setInjuryTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-                <option value="">Injury type</option>
+                <option value="">{text.injuryType}</option>
                 {injuryTypes.map((injuryType) => (
                   <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>
                 ))}
               </select>
               <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
                 <input type="checkbox" checked={isContractor} onChange={(event) => setIsContractor(event.target.checked)} disabled={!canEdit} />
-                Contractor involved
+                {text.contractorInvolved}
               </label>
             </div>
-            <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} />
+            <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} labels={bodyZonePickerLabels} />
             {type === "ACCIDENT" ? (
               <div className="space-y-3">
                 <div className="grid gap-3 md:grid-cols-2">
-                  <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder="Lost days" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} />
+                  <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder={text.lostDays} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} />
                   <input type="date" value={returnDate} onChange={(event) => setReturnDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} />
                 </div>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input type="checkbox" checked={isFatal} onChange={(event) => setIsFatal(event.target.checked)} disabled={!canEdit} />
-                  Fatal injury
+                  {text.fatalInjury}
                 </label>
               </div>
             ) : null}
@@ -303,22 +334,22 @@ export function CommunicationDetailEditor({
         {!needsClinicalFields ? (
           <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
             <input type="checkbox" checked={isContractor} onChange={(event) => setIsContractor(event.target.checked)} disabled={!canEdit} />
-            Contractor involved
+            {text.contractorInvolved}
           </label>
         ) : null}
 
         <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required />
-        <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} placeholder="Suggested action" />
+        <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} placeholder={text.suggestedAction} />
 
         {canEdit ? (
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={saving}>
-              {saving ? "Saving..." : "Save communication"}
+              {saving ? text.saving : text.saveCommunication}
             </Button>
             {message ? <p className="text-sm text-slate-600">{message}</p> : null}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">Editing is available only when the user has the required N1 or N3 permissions for the current workflow state.</p>
+          <p className="text-sm text-slate-500">{text.editingRestricted}</p>
         )}
       </form>
 
@@ -328,6 +359,7 @@ export function CommunicationDetailEditor({
           communicationOptions={[]}
           lockedCommunicationId={communication.id}
           lockedCommunicationLabel={communicationLabel}
+          labels={createActionLabels}
         />
       ) : null}
     </div>

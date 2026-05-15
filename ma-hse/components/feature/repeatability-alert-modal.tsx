@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 type RepeatabilityAlertModalProps = {
   plantCode: string;
+  title?: string;
   alerts: Array<{
     id: string;
     title: string;
@@ -14,7 +15,7 @@ type RepeatabilityAlertModalProps = {
   }>;
 };
 
-export function RepeatabilityAlertModal({ plantCode, alerts }: RepeatabilityAlertModalProps) {
+export function RepeatabilityAlertModal({ plantCode, title = "Alerts", alerts }: RepeatabilityAlertModalProps) {
   const [open, setOpen] = useState(alerts.length > 0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -58,10 +59,7 @@ export function RepeatabilityAlertModal({ plantCode, alerts }: RepeatabilityAler
               <AlertTriangle className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Repeatability alerts</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Close this window to continue using the software.
-              </p>
+              <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
             </div>
           </div>
         </div>

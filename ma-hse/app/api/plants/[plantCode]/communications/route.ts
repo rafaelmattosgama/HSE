@@ -1,13 +1,20 @@
 import { ActionCategory, ActionSourceType, RoleCode } from "@prisma/client";
 import { NextRequest } from "next/server";
-import { ok } from "@/lib/api";
+import { fail, ok } from "@/lib/api";
+import {
+  canManageCommunicationClassification,
+  shouldDeferPublicReportNearMissType,
+  shouldDeferPublicReportProfessionalRisk,
+  shouldDeferPublicReportUnsafeActType,
+  shouldDeferPublicReportUnsafeConditionType,
+} from "@/lib/communication-classification";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { createCommunicationInput } from "@/lib/validation/dtos";
 import { ActionService } from "@/lib/services/action-service";
-import { CommunicationService } from "@/lib/services/communication-service";
+import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -21,6 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     RoleCode.MEDICO,
   ]);
   if ("error" in auth) return auth.error;
+  const actorRole = "role" in auth ? auth.role : undefined;
 
   const plant = await getPlantByCode(plantCode);
   const status = request.nextUrl.searchParams.get("status") ?? undefined;
@@ -32,6 +40,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     },
     include: {
       riskTheme: true,
+      unsafeConditionType: true,
+      nearMissType: true,
       actions: true,
       reporterUser: true,
     },
@@ -40,6 +50,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     },
     take: 200,
   });
+
+  if (!canManageCommunicationClassification(actorRole)) {
+    return ok(
+      communications.map((communication) => ({
+        ...communication,
+        riskThemeId: shouldDeferPublicReportProfessionalRisk(communication.type) ? null : communication.riskThemeId,
+        riskTheme: shouldDeferPublicReportProfessionalRisk(communication.type) ? null : communication.riskTheme,
+        unsafeActTypeId: shouldDeferPublicReportUnsafeActType(communication.type) ? null : communication.unsafeActTypeId,
+        unsafeConditionTypeId: shouldDeferPublicReportUnsafeConditionType(communication.type) ? null : communication.unsafeConditionTypeId,
+        unsafeConditionType: shouldDeferPublicReportUnsafeConditionType(communication.type) ? null : communication.unsafeConditionType,
+        nearMissTypeId: shouldDeferPublicReportNearMissType(communication.type) ? null : communication.nearMissTypeId,
+        nearMissType: shouldDeferPublicReportNearMissType(communication.type) ? null : communication.nearMissType,
+      })),
+    );
+  }
 
   return ok(communications);
 }
@@ -62,12 +87,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
   const plant = await getPlantByCode(plantCode);
   const actorRole = "role" in auth ? auth.role : undefined;
 
-  const communication = await CommunicationService.create({
-    plantId: plant.id,
-    payload: parsed.data,
-    reporterUserId: auth.session.user.id,
-    actorRole,
-  });
+  const communication = await (async () => {
+    try {
+      return await CommunicationService.create({
+        plantId: plant.id,
+        payload: parsed.data,
+        reporterUserId: auth.session.user.id,
+        actorRole,
+      });
+    } catch (error) {
+      if (error instanceof CommunicationValidationError) {
+        return fail(error.code, error.message, error.status);
+      }
+      throw error;
+    }
+  })();
+  if (communication instanceof Response) return communication;
 
   if (parsed.data.quickAction) {
     await ActionService.create({

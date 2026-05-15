@@ -50,7 +50,9 @@ export const ActionService = {
 
     if (input.sewoId) {
       const sewo = await prisma.sEWO.findUniqueOrThrow({ where: { id: input.sewoId } });
-      if (sewo.status !== SEWOStatus.REJECTED) {
+      const blockedStatuses: SEWOStatus[] = [SEWOStatus.IN_APPROVAL, SEWOStatus.APPROVED, SEWOStatus.REJECTED];
+
+      if (!blockedStatuses.includes(sewo.status)) {
         const openActions = await prisma.action.count({
           where: {
             sewoId: input.sewoId,
@@ -60,7 +62,7 @@ export const ActionService = {
           },
         });
 
-        const nextStatus: SEWOStatus = openActions > 0 ? SEWOStatus.DRAFT : "CLOSED";
+        const nextStatus: SEWOStatus = openActions > 0 ? SEWOStatus.DRAFT : SEWOStatus.CLOSED;
         if (sewo.status !== nextStatus) {
           await prisma.sEWO.update({
             where: { id: input.sewoId },
@@ -141,8 +143,13 @@ export const ActionService = {
     }
 
     if (action.sewoId) {
-      await prisma.sEWO.update({
-        where: { id: action.sewoId },
+      await prisma.sEWO.updateMany({
+        where: {
+          id: action.sewoId,
+          status: {
+            notIn: [SEWOStatus.IN_APPROVAL, SEWOStatus.APPROVED, SEWOStatus.REJECTED, SEWOStatus.CLOSED],
+          },
+        },
         data: { status: SEWOStatus.DRAFT },
       });
     }

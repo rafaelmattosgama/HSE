@@ -1,6 +1,18 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
+import { isSewoRootCauseAffirmative } from "@/lib/sewo-root-causes";
+import {
+  SIF_PSIF_EXPOSURE_KEYS,
+  createEmptySifPsifDecision,
+  getSifPsifResult,
+  type SifPsifDecision,
+  type SifPsifResult,
+  type YesNoAnswer,
+} from "@/lib/sewo-sif-psif";
+import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
+import { translateForViewer } from "@/lib/services/viewer-translation-service";
+import { formatLocalizedSewoStatus, type SewoUi } from "@/lib/sewo-ui";
 
 const BRAND = "#002663";
 const INK = "#0f172a";
@@ -63,8 +75,52 @@ function drawParagraphCard(doc: InstanceType<typeof PDFDocument>, label: string,
   doc.y = startY + height + 10;
 }
 
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : "-";
+}
+
+function worksheetName(value: string) {
+  return value.replaceAll(/[\\/*?:[\]]/g, " ").trim().slice(0, 31) || "Sheet";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toYesNoAnswer(value: unknown): YesNoAnswer {
+  if (value === "YES" || value === true) return "YES";
+  if (value === "NO" || value === false) return "NO";
+  return "";
+}
+
+function getSifPsifResultLabel(result: SifPsifResult, ui: SewoUi) {
+  if (result === "SIF") return ui.sifResult;
+  if (result === "PSIF") return ui.psifResult;
+  if (result === "NO_PSIF") return ui.noPsifResult;
+  return ui.pendingResult;
+}
+
+function readSifPsifDecision(value: unknown): SifPsifDecision | null {
+  if (!isRecord(value)) return null;
+
+  const decision = createEmptySifPsifDecision();
+  const exposures = isRecord(value.exposures) ? value.exposures : {};
+
+  return {
+    actualSif: toYesNoAnswer(value.actualSif),
+    exposures: Object.fromEntries(
+      SIF_PSIF_EXPOSURE_KEYS.map((key) => [key, toYesNoAnswer(exposures[key])]),
+    ) as SifPsifDecision["exposures"],
+    repeatedSifPotential: toYesNoAnswer(value.repeatedSifPotential),
+    oneWhatIfAway: toYesNoAnswer(value.oneWhatIfAway),
+    noPsifExplanation: typeof value.noPsifExplanation === "string" ? value.noPsifExplanation : decision.noPsifExplanation,
+  };
+}
+
 export const SewoExportService = {
-  async buildExport(sewoId: string) {
+  async buildExport(sewoId: string, options: { locale?: string } = {}) {
+    const locale = options.locale ?? "en";
+    const { ui } = await getLocalizedSewoUi(locale);
     const sewo = await prisma.sEWO.findUniqueOrThrow({
       where: { id: sewoId },
       include: {
@@ -76,6 +132,11 @@ export const SewoExportService = {
         },
         performedBy: true,
         attachments: true,
+        causeSelections: {
+          include: {
+            causeItem: true,
+          },
+        },
         actionLinks: {
           include: {
             action: {
@@ -93,91 +154,142 @@ export const SewoExportService = {
 
     const templateData = (sewo.templateData as Record<string, unknown> | null) ?? {};
     const fiveWhys = Array.isArray(templateData.fiveWhys) ? (templateData.fiveWhys as Array<Record<string, unknown>>) : [];
-    const rootCauseDetails = Array.isArray(templateData.rootCauseDetails)
+    const sifPsifDecision = readSifPsifDecision(templateData.sifPsifDecision);
+    const sifPsifResult = sifPsifDecision ? getSifPsifResult(sifPsifDecision) : "PENDING";
+    const templateRootCauseDetails = Array.isArray(templateData.rootCauseDetails)
       ? (templateData.rootCauseDetails as Array<Record<string, unknown>>)
       : [];
+    const rootCauseDetails = templateRootCauseDetails.length
+      ? templateRootCauseDetails
+      : sewo.causeSelections
+          .filter((selection) => selection.selected)
+          .map((selection) => ({
+            label: selection.causeItem.label,
+            comment: selection.comment ?? "",
+            isRootCause: selection.isRootCause,
+          }));
+    const translatableTexts = [
+      sewo.eventClassification,
+      sewo.whichText ?? "",
+      sewo.howText,
+      sewo.immediateCorrectiveActionText,
+      getString(templateData.analysisText),
+      getString(templateData.previousDetectedDescription),
+      getString(sifPsifDecision?.noPsifExplanation),
+      ...fiveWhys.flatMap((entry) => [getString(entry.why), getString(entry.answer)]),
+      ...rootCauseDetails.flatMap((entry) => [getString(entry.label), getString(entry.comment)]),
+      ...sewo.actionLinks.flatMap((entry) => [entry.action.title, entry.action.description]),
+    ];
+    const translatedTexts = await translateForViewer(locale, translatableTexts);
+    const translationByText = new Map(translatableTexts.map((text, index) => [text, translatedTexts[index] ?? text]));
+    const translated = (text: unknown) => translationByText.get(getString(text)) ?? getString(text);
+    const yesNo = (value: unknown) => (value === "" || value === null || value === undefined ? "-" : isSewoRootCauseAffirmative(value) ? ui.yes : ui.no);
+    const localizedStatus = formatLocalizedSewoStatus(sewo.status, ui);
 
     const pdf = await (async () => {
       const doc = new PDFDocument({ margin: 40, size: "A4" });
 
       doc.roundedRect(40, 36, 515, 86, 18).fill(BRAND);
-      doc.fillColor("#ffffff").fontSize(24).text("S-EWO Investigation Report", 58, 58);
+      doc.fillColor("#ffffff").fontSize(24).text(ui.reportTitle, 58, 58);
       doc.fontSize(10).text(`${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`, 58, 90);
-      doc.text(`Generated on ${formatDate(new Date())}`, 58, 106);
+      doc.text(`${ui.generatedOn} ${formatDate(new Date())}`, 58, 106);
       doc.y = 142;
       doc.fillColor(INK);
 
       drawFieldGrid(
         doc,
         [
-          ["Status", sewo.status],
-          ["Analysis date", formatDate(sewo.analysisDate)],
-          ["Investigator", sewo.performedBy.name],
-          ["Communication", sewo.communication.id],
+          [ui.summaryStatus, localizedStatus],
+          [ui.tableDate, formatDate(sewo.analysisDate)],
+          [ui.summaryPerformedBy, sewo.performedBy.name],
+          [ui.summaryCommunication, sewo.communication?.id ?? "-"],
         ],
         2,
       );
 
-      drawSectionTitle(doc, "Event Summary");
+      drawSectionTitle(doc, ui.summaryTitle);
       drawFieldGrid(
         doc,
         [
-          ["Classification", sewo.eventClassification],
-          ["Area", sewo.area?.name ?? "-"],
-          ["Workstation / Line", sewo.whereText || sewo.line?.name || "-"],
-          ["Shift", sewo.shift?.name ?? "-"],
-          ["Involved person", sewo.whoText],
-          ["Nature", sewo.whatText],
-          ["Usual job", sewo.usualWorkYesNo ? "Yes" : "No"],
-          ["Which operation", sewo.whichText ?? "-"],
+          [ui.eventClassification, translated(sewo.eventClassification)],
+          [ui.area, sewo.area?.name ?? "-"],
+          [ui.workstation, sewo.whereText || sewo.line?.name || "-"],
+          [ui.shift, sewo.shift?.name ?? "-"],
+          [ui.involvedPerson, sewo.whoText],
+          [ui.nature, sewo.whatText],
+          [ui.usualJob, sewo.usualWorkYesNo ? ui.yes : ui.no],
+          [ui.whichOperation, translated(sewo.whichText)],
         ],
         2,
       );
 
-      drawSectionTitle(doc, "Description");
-      drawParagraphCard(doc, "How did the event happen?", sewo.howText || "-");
+      drawSectionTitle(doc, ui.description);
+      drawParagraphCard(doc, ui.howDidTheAccidentHappen, translated(sewo.howText));
 
-      drawSectionTitle(doc, "Immediate Corrective Action");
-      drawParagraphCard(doc, "Immediate action plan", sewo.immediateCorrectiveActionText || "-");
+      drawSectionTitle(doc, ui.immediateCorrectiveActionPlan);
+      drawParagraphCard(doc, ui.immediateCorrectiveActionPlan, translated(sewo.immediateCorrectiveActionText));
 
-      drawSectionTitle(doc, "Analysis");
-      drawParagraphCard(doc, "Analysis text", String(templateData.analysisText ?? "-"));
+      drawSectionTitle(doc, ui.analysis);
+      drawParagraphCard(doc, ui.analysisText, translated(templateData.analysisText));
 
-      drawSectionTitle(doc, "5 Why");
+      drawSectionTitle(doc, ui.fiveWhy);
       if (fiveWhys.length === 0) {
-        drawParagraphCard(doc, "5 Why", "No 5 Why analysis registered.");
+        drawParagraphCard(doc, ui.fiveWhy, ui.noFiveWhyAnalysis);
       } else {
         fiveWhys.forEach((entry, index) => {
           drawParagraphCard(
             doc,
-            `Why ${index + 1}`,
-            `Question: ${String(entry.why ?? "-")}\n\nAnswer: ${String(entry.answer ?? "-")}`,
+            `${ui.whyLabel} ${index + 1}`,
+            `${ui.question}: ${translated(entry.why)}\n\n${ui.answerLabel}: ${translated(entry.answer)}`,
           );
         });
       }
 
-      drawSectionTitle(doc, "Root Cause Analysis");
+      drawSectionTitle(doc, ui.sifPsifDecisionTree);
+      if (!sifPsifDecision) {
+        drawParagraphCard(doc, ui.sifPsifDecisionTree, ui.pendingResult);
+      } else {
+        drawFieldGrid(
+          doc,
+          [
+            [ui.actualSifQuestion, yesNo(sifPsifDecision.actualSif)],
+            [ui.sifPsifResult, getSifPsifResultLabel(sifPsifResult, ui)],
+            ...SIF_PSIF_EXPOSURE_KEYS.map((key): [string, string] => [
+              ui.sifPsifExposureQuestions[key],
+              yesNo(sifPsifDecision.exposures[key]),
+            ]),
+            [ui.repeatedSifPotentialQuestion, yesNo(sifPsifDecision.repeatedSifPotential)],
+            [ui.oneWhatIfAwayQuestion, yesNo(sifPsifDecision.oneWhatIfAway)],
+          ],
+          1,
+        );
+        if (sifPsifDecision.noPsifExplanation.trim()) {
+          drawParagraphCard(doc, ui.noPsifExplanation, translated(sifPsifDecision.noPsifExplanation));
+        }
+      }
+
+      drawSectionTitle(doc, ui.rootCauseAnalysis);
       if (rootCauseDetails.length === 0) {
-        drawParagraphCard(doc, "Root Cause", "No root cause details registered.");
+        drawParagraphCard(doc, ui.rootCause, ui.noRootCauseDetails);
       } else {
         rootCauseDetails.forEach((entry) => {
           drawParagraphCard(
             doc,
-            `${String(entry.label ?? "-")} | Root cause: ${entry.isRootCause ? "Yes" : "No"}`,
-            String(entry.comment ?? "-"),
+            `${translated(entry.label)} | ${ui.rootCause}: ${yesNo(entry.isRootCause)}`,
+            translated(entry.comment),
           );
         });
       }
 
-      drawSectionTitle(doc, "Action Plan");
+      drawSectionTitle(doc, ui.actionPlan);
       if (sewo.actionLinks.length === 0) {
-        drawParagraphCard(doc, "Action plan", "No linked actions.");
+        drawParagraphCard(doc, ui.actionPlan, ui.noLinkedActions);
       } else {
         sewo.actionLinks.forEach((entry) => {
           drawParagraphCard(
             doc,
-            `${entry.action.title} | ${entry.action.status}`,
-            `Owner: ${entry.action.ownerUser.name}\nDue date: ${formatDate(entry.action.dueDate)}\n\n${entry.action.description}`,
+            `${translated(entry.action.title)} | ${entry.action.status}`,
+            `${ui.owner}: ${entry.action.ownerUser.name}\n${ui.dueDate}: ${formatDate(entry.action.dueDate)}\n\n${translated(entry.action.description)}`,
           );
         });
       }
@@ -188,86 +300,109 @@ export const SewoExportService = {
     const workbook = new ExcelJS.Workbook();
     const summary = workbook.addWorksheet("S-EWO");
     summary.columns = [
-      { header: "Field", key: "field", width: 32 },
-      { header: "Value", key: "value", width: 80 },
+      { header: ui.field, key: "field", width: 32 },
+      { header: ui.value, key: "value", width: 80 },
     ];
     summary.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     summary.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
 
     [
-      ["Plant", `${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`],
-      ["Status", sewo.status],
-      ["Analysis date", formatDate(sewo.analysisDate)],
-      ["Investigator", sewo.performedBy.name],
-      ["Communication", sewo.communication.id],
-      ["Classification", sewo.eventClassification],
-      ["Area", sewo.area?.name ?? "-"],
-      ["Workstation / Line", sewo.whereText || sewo.line?.name || "-"],
-      ["Shift", sewo.shift?.name ?? "-"],
-      ["Involved person", sewo.whoText],
-      ["Nature", sewo.whatText],
-      ["Usual job", sewo.usualWorkYesNo ? "Yes" : "No"],
-      ["Which operation", sewo.whichText ?? "-"],
-      ["Description", sewo.howText],
-      ["Immediate corrective action", sewo.immediateCorrectiveActionText],
-      ["Analysis", String(templateData.analysisText ?? "-")],
-      ["Previous UA/UC detected", String(templateData.previousDetected ?? "-")],
-      ["Previous UA/UC description", String(templateData.previousDetectedDescription ?? "-")],
+      [ui.plant, `${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`],
+      [ui.summaryStatus, localizedStatus],
+      [ui.tableDate, formatDate(sewo.analysisDate)],
+      [ui.summaryPerformedBy, sewo.performedBy.name],
+      [ui.summaryCommunication, sewo.communication?.id ?? "-"],
+      [ui.eventClassification, translated(sewo.eventClassification)],
+      [ui.area, sewo.area?.name ?? "-"],
+      [ui.workstation, sewo.whereText || sewo.line?.name || "-"],
+      [ui.shift, sewo.shift?.name ?? "-"],
+      [ui.involvedPerson, sewo.whoText],
+      [ui.nature, sewo.whatText],
+      [ui.usualJob, sewo.usualWorkYesNo ? ui.yes : ui.no],
+      [ui.whichOperation, translated(sewo.whichText)],
+      [ui.description, translated(sewo.howText)],
+      [ui.immediateCorrectiveActionPlan, translated(sewo.immediateCorrectiveActionText)],
+      [ui.analysis, translated(templateData.analysisText)],
+      [ui.previousDetected, String(templateData.previousDetected ?? "-")],
+      [ui.previousDetectedDescription, translated(templateData.previousDetectedDescription)],
     ].forEach(([field, value]) => summary.addRow({ field, value }));
 
-    const whySheet = workbook.addWorksheet("5 Why");
+    const whySheet = workbook.addWorksheet(worksheetName(ui.fiveWhy));
     whySheet.columns = [
-      { header: "Why", key: "why", width: 40 },
-      { header: "Answer", key: "answer", width: 80 },
+      { header: ui.whyLabel, key: "why", width: 40 },
+      { header: ui.answerLabel, key: "answer", width: 80 },
     ];
     whySheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     whySheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
     if (fiveWhys.length === 0) {
-      whySheet.addRow({ why: "No records", answer: "-" });
+      whySheet.addRow({ why: ui.noRecordsShort, answer: "-" });
     } else {
       fiveWhys.forEach((entry, index) => {
         whySheet.addRow({
-          why: `Why ${index + 1}: ${String(entry.why ?? "-")}`,
-          answer: String(entry.answer ?? "-"),
+          why: `${ui.whyLabel} ${index + 1}: ${translated(entry.why)}`,
+          answer: translated(entry.answer),
         });
       });
     }
 
-    const rootCauseSheet = workbook.addWorksheet("Root Causes");
+    const sifPsifSheet = workbook.addWorksheet(worksheetName(ui.sifPsifDecisionTree));
+    sifPsifSheet.columns = [
+      { header: ui.field, key: "field", width: 72 },
+      { header: ui.value, key: "value", width: 28 },
+    ];
+    sifPsifSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sifPsifSheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    if (!sifPsifDecision) {
+      sifPsifSheet.addRow({ field: ui.sifPsifDecisionTree, value: ui.pendingResult });
+    } else {
+      [
+        [ui.actualSifQuestion, yesNo(sifPsifDecision.actualSif)],
+        [ui.sifPsifResult, getSifPsifResultLabel(sifPsifResult, ui)],
+        ...SIF_PSIF_EXPOSURE_KEYS.map((key): [string, string] => [
+          ui.sifPsifExposureQuestions[key],
+          yesNo(sifPsifDecision.exposures[key]),
+        ]),
+        [ui.repeatedSifPotentialQuestion, yesNo(sifPsifDecision.repeatedSifPotential)],
+        [ui.oneWhatIfAwayQuestion, yesNo(sifPsifDecision.oneWhatIfAway)],
+        [ui.noPsifExplanation, translated(sifPsifDecision.noPsifExplanation)],
+      ].forEach(([field, value]) => sifPsifSheet.addRow({ field, value }));
+    }
+
+    const rootCauseSheet = workbook.addWorksheet(worksheetName(ui.rootCauses));
     rootCauseSheet.columns = [
-      { header: "Cause", key: "cause", width: 50 },
-      { header: "Comment", key: "comment", width: 80 },
-      { header: "Root Cause", key: "root", width: 16 },
+      { header: ui.cause, key: "cause", width: 50 },
+      { header: ui.comment, key: "comment", width: 80 },
+      { header: ui.rootCause, key: "root", width: 16 },
     ];
     rootCauseSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     rootCauseSheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
     if (rootCauseDetails.length === 0) {
-      rootCauseSheet.addRow({ cause: "No records", comment: "-", root: "-" });
+      rootCauseSheet.addRow({ cause: ui.noRecordsShort, comment: "-", root: "-" });
     } else {
       rootCauseDetails.forEach((entry) => {
         rootCauseSheet.addRow({
-          cause: String(entry.label ?? "-"),
-          comment: String(entry.comment ?? "-"),
-          root: entry.isRootCause ? "Yes" : "No",
+          cause: translated(entry.label),
+          comment: translated(entry.comment),
+          root: yesNo(entry.isRootCause),
         });
       });
     }
 
-    const actionsSheet = workbook.addWorksheet("Actions");
+    const actionsSheet = workbook.addWorksheet(worksheetName(ui.actionPlan));
     actionsSheet.columns = [
-      { header: "Title", key: "title", width: 40 },
-      { header: "Status", key: "status", width: 16 },
-      { header: "Owner", key: "owner", width: 24 },
-      { header: "Due Date", key: "dueDate", width: 16 },
+      { header: ui.title, key: "title", width: 40 },
+      { header: ui.tableStatus, key: "status", width: 16 },
+      { header: ui.owner, key: "owner", width: 24 },
+      { header: ui.dueDate, key: "dueDate", width: 16 },
     ];
     actionsSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     actionsSheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
     if (sewo.actionLinks.length === 0) {
-      actionsSheet.addRow({ title: "No linked actions", status: "-", owner: "-", dueDate: "-" });
+      actionsSheet.addRow({ title: ui.noLinkedActions, status: "-", owner: "-", dueDate: "-" });
     } else {
       sewo.actionLinks.forEach((entry) => {
         actionsSheet.addRow({
-          title: entry.action.title,
+          title: translated(entry.action.title),
           status: entry.action.status,
           owner: entry.action.ownerUser.name,
           dueDate: formatDate(entry.action.dueDate),
@@ -275,7 +410,7 @@ export const SewoExportService = {
       });
     }
 
-    [summary, whySheet, rootCauseSheet, actionsSheet].forEach((sheet) => {
+    [summary, whySheet, sifPsifSheet, rootCauseSheet, actionsSheet].forEach((sheet) => {
       sheet.eachRow((row, rowNumber) => {
         row.alignment = { vertical: "top", wrapText: true };
         if (rowNumber > 1 && rowNumber % 2 === 0) {

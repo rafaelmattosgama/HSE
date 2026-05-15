@@ -57,11 +57,10 @@ export function ReportLayoutManager({
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Report Layout</h2>
-          <p className="mt-1 text-xs text-slate-600">Maintain reusable report layout sections for the selected plant.</p>
-        </div>
+        <header className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Report Layout</h2>
+          </div>
         <Button type="button" size="sm" variant="secondary" onClick={() => setLayouts((current) => [...current, createEmptyLayout()])}>
           Add layout
         </Button>

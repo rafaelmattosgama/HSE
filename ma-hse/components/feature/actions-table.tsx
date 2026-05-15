@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment } from "react";
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
 
@@ -27,6 +26,8 @@ type ActionRow = {
   evidence: EvidenceRow[];
 };
 
+type DateSortDirection = "asc" | "desc";
+
 export function ActionsTable({
   plant,
   actions,
@@ -42,11 +43,56 @@ export function ActionsTable({
   const [rowFiles, setRowFiles] = useState<Record<string, File[]>>({});
   const [message, setMessage] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [localFilter, setLocalFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
+  const [dateSortDirection, setDateSortDirection] = useState<DateSortDirection>("asc");
 
-  const openActions = useMemo(
-    () => actions.filter((action) => action.status === "OPEN" || action.status === "ONGOING"),
+  const localOptions = useMemo(
+    () => Array.from(new Set(actions.map((action) => action.local).filter((value) => value && value !== "-"))).sort((a, b) => a.localeCompare(b)),
     [actions],
   );
+  const statusOptions = useMemo(
+    () => Array.from(new Set(actions.map((action) => action.status))).sort((a, b) => a.localeCompare(b)),
+    [actions],
+  );
+  const ownerOptions = useMemo(
+    () => Array.from(new Set(actions.map((action) => action.ownerName).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [actions],
+  );
+
+  const filteredActions = useMemo(
+    () =>
+      actions
+        .filter((action) => {
+          if (localFilter !== "all" && action.local !== localFilter) return false;
+          if (statusFilter !== "all" && action.status !== statusFilter) return false;
+          if (ownerFilter !== "all" && action.ownerName !== ownerFilter) return false;
+          if (dateFromFilter && action.dueDate < dateFromFilter) return false;
+          if (dateToFilter && action.dueDate > dateToFilter) return false;
+          return true;
+        })
+        .toSorted((left, right) => {
+          const direction = dateSortDirection === "asc" ? 1 : -1;
+          const dateComparison = left.dueDate.localeCompare(right.dueDate) * direction;
+
+          if (dateComparison !== 0) return dateComparison;
+          return left.title.localeCompare(right.title);
+        }),
+    [actions, dateFromFilter, dateSortDirection, dateToFilter, localFilter, ownerFilter, statusFilter],
+  );
+
+  const openActions = useMemo(
+    () => filteredActions.filter((action) => action.status === "OPEN" || action.status === "ONGOING"),
+    [filteredActions],
+  );
+
+  useEffect(() => {
+    const visibleActionIds = new Set(filteredActions.map((action) => action.id));
+    setSelectedIds((current) => current.filter((actionId) => visibleActionIds.has(actionId)));
+  }, [filteredActions]);
 
   async function uploadFiles(files: File[]) {
     const uploaded: Array<{ fileKey: string; fileName: string; contentType: string }> = [];
@@ -157,6 +203,53 @@ export function ActionsTable({
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Local</span>
+            <select value={localFilter} onChange={(event) => setLocalFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="all">All locations</option>
+              {localOptions.map((local) => (
+                <option key={local} value={local}>{local}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="all">All statuses</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Owner</span>
+            <select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="all">All owners</option>
+              {ownerOptions.map((owner) => (
+                <option key={owner} value={owner}>{owner}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Due from</span>
+            <input type="date" value={dateFromFilter} onChange={(event) => setDateFromFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          </label>
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Due to</span>
+            <input type="date" value={dateToFilter} onChange={(event) => setDateToFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          </label>
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Date order</span>
+            <select value={dateSortDirection} onChange={(event) => setDateSortDirection(event.target.value as DateSortDirection)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="asc">Due date ascending</option>
+              <option value="desc">Due date descending</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           <div className="flex-1">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bulk closure comment</label>
@@ -189,7 +282,7 @@ export function ActionsTable({
             </tr>
           </thead>
           <tbody>
-            {actions.map((row) => {
+            {filteredActions.map((row) => {
               const isOpen = row.status === "OPEN" || row.status === "ONGOING";
               const isExpanded = expandedId === row.id;
               return (
@@ -284,10 +377,10 @@ export function ActionsTable({
                 </Fragment>
               );
             })}
-            {actions.length === 0 ? (
+            {filteredActions.length === 0 ? (
               <tr className="border-t border-slate-200">
                 <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
-                  No actions were found.
+                  No actions were found for the selected filters.
                 </td>
               </tr>
             ) : null}
@@ -296,7 +389,7 @@ export function ActionsTable({
       </section>
 
       <div className="text-sm text-slate-600">
-        <p>{openActions.length} open action(s).</p>
+        <p>{filteredActions.length} action(s) shown. {openActions.length} open action(s).</p>
         {message ? <p className="mt-1 text-rose-700">{message}</p> : null}
       </div>
     </div>

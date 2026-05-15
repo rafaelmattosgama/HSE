@@ -7,6 +7,7 @@ import { CommunicationPyramid } from "@/components/feature/communication-pyramid
 import { DashboardVisualizationStudio } from "@/components/feature/dashboard-visualization-studio";
 import type { PlantSummary, RankingEntry, RankingGroup, RankingSeriesSnapshot } from "@/lib/dashboard-visualization";
 import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
+import { AppCard, AppKpiCard, AppSectionHeader } from "@/components/ui/app-surface";
 
 export type { PlantSummary, RankingGroup } from "@/lib/dashboard-visualization";
 
@@ -121,15 +122,7 @@ function MetricCard({
   value: string;
   tone?: "default" | "danger" | "success";
 }) {
-  const valueClassName =
-    tone === "danger" ? "text-red-700" : tone === "success" ? "text-emerald-700" : "text-slate-900";
-
-  return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-1.5 text-xl font-bold ${valueClassName}`}>{value}</p>
-    </article>
-  );
+  return <AppKpiCard label={label} value={value} tone={tone === "danger" ? "danger" : tone === "success" ? "success" : "brand"} />;
 }
 
 function RankingCard({
@@ -144,8 +137,8 @@ function RankingCard({
   variant: "count" | "percent" | "index";
 }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+    <AppCard>
+      <h3 className="app-section-eyebrow">{title}</h3>
       <ol className="mt-3 space-y-1.5 text-sm">
         {entries.map((entry, index) => {
           const isActive = activePlantCode === entry.plantCode;
@@ -168,7 +161,7 @@ function RankingCard({
           );
         })}
       </ol>
-    </article>
+    </AppCard>
   );
 }
 
@@ -474,11 +467,9 @@ export function CorporatePlantManager({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="app-panel rounded-2xl p-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <header>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{titleLabel}</h2>
-          </header>
+          <AppSectionHeader eyebrow={titleLabel} />
           <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
             {text.scope}: {scopeLabel}
           </div>
@@ -487,7 +478,7 @@ export function CorporatePlantManager({
         <div className={`mt-4 grid gap-4 ${hidePlantList ? "" : "xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start"}`}>
           {hidePlantList ? null : (
             <section
-              className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-7rem)] xl:overflow-hidden xl:hover:overflow-y-auto"
+              className="app-card-muted space-y-3 p-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-7rem)] xl:overflow-hidden xl:hover:overflow-y-auto"
               onMouseLeave={() => setActivePlantCode(initialActivePlantCode)}
             >
             <div className="flex items-start justify-between gap-3">
@@ -548,7 +539,7 @@ export function CorporatePlantManager({
           )}
 
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="app-card-muted p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-slate-500">{text.favoriteIndicators}</p>
@@ -556,7 +547,7 @@ export function CorporatePlantManager({
                 {extraMetrics.length > 0 ? (
                   <button
                     type="button"
-                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                    className="app-toolbar min-h-10"
                     onClick={() => setShowAllMetrics((current) => !current)}
                   >
                     {showAllMetrics ? text.showLess : text.showMore}
@@ -572,11 +563,7 @@ export function CorporatePlantManager({
                     <button
                       key={metric.id}
                       type="button"
-                      className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                        isFavorite
-                          ? "border-teal-300 bg-teal-100 text-teal-900"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-100"
-                      }`}
+                      className={`app-chip ${isFavorite ? "app-chip--active" : ""}`}
                       onClick={() => toggleFavoriteMetric(metric.id)}
                     >
                       {metric.label}
@@ -598,7 +585,7 @@ export function CorporatePlantManager({
             </div>
 
             {hideRankings ? null : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="app-card-muted p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-wide text-slate-500">{text.topRankings}</p>
@@ -606,7 +593,7 @@ export function CorporatePlantManager({
                 {extraRankings.length > 0 ? (
                   <button
                     type="button"
-                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                    className="app-toolbar min-h-10"
                     onClick={() => setShowAllRankings((current) => !current)}
                   >
                     {showAllRankings ? text.showLess : text.showMore}
@@ -622,11 +609,7 @@ export function CorporatePlantManager({
                     <button
                       key={panel.id}
                       type="button"
-                      className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                        isFavorite
-                          ? "border-teal-300 bg-teal-100 text-teal-900"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-100"
-                      }`}
+                      className={`app-chip ${isFavorite ? "app-chip--active" : ""}`}
                       onClick={() => toggleFavoriteRanking(panel.id)}
                     >
                       {panel.title}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 
 type RepeatabilityAlertEditorProps = {
   endpoint: string;
@@ -15,6 +16,7 @@ type RepeatabilityAlertEditorProps = {
     workstationNearMissWeeklyEnabled: boolean;
     workstationNearMissWeeklyThreshold: number;
   };
+  labels?: DashboardUiDictionary;
 };
 
 export function RepeatabilityAlertEditor({
@@ -22,7 +24,9 @@ export function RepeatabilityAlertEditor({
   title,
   description,
   initial,
+  labels = getUiDictionary("en").dashboard,
 }: RepeatabilityAlertEditorProps) {
+  const text = labels;
   const [workerWeeklyLevel1Enabled, setWorkerWeeklyLevel1Enabled] = useState(initial.workerWeeklyLevel1Enabled);
   const [workerWeeklyLevel1Threshold, setWorkerWeeklyLevel1Threshold] = useState(initial.workerWeeklyLevel1Threshold);
   const [workerWeeklyLevel2Enabled, setWorkerWeeklyLevel2Enabled] = useState(initial.workerWeeklyLevel2Enabled);
@@ -46,7 +50,7 @@ export function RepeatabilityAlertEditor({
     });
 
     const json = await response.json();
-    setMessage(json.ok ? "Repeatability alerts saved" : json.message ?? "Error saving repeatability alerts");
+    setMessage(json.ok ? text.repeatabilityAlertsSaved : json.message ?? text.errorSavingRepeatabilityAlerts);
   }
 
   return (
@@ -58,37 +62,37 @@ export function RepeatabilityAlertEditor({
 
       <div className="grid gap-4 md:grid-cols-3">
         <label className="rounded-lg border border-slate-200 p-3 text-sm">
-          <span className="font-semibold text-slate-900">Worker alert level 1</span>
-          <span className="mt-1 block text-slate-600">Trigger when a worker is identified more than this number in the same week.</span>
+          <span className="font-semibold text-slate-900">{text.workerWeeklyRecurrenceLevel1}</span>
+          <span className="mt-1 block text-slate-600">{text.workerWeeklyRecurrenceLevel1Description}</span>
           <input type="number" min="1" value={workerWeeklyLevel1Threshold} onChange={(event) => setWorkerWeeklyLevel1Threshold(Number(event.target.value))} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2" />
           <label className="mt-3 flex items-center gap-2 text-slate-700">
             <input type="checkbox" checked={workerWeeklyLevel1Enabled} onChange={(event) => setWorkerWeeklyLevel1Enabled(event.target.checked)} />
-            Enabled
+            {text.enabled}
           </label>
         </label>
 
         <label className="rounded-lg border border-slate-200 p-3 text-sm">
-          <span className="font-semibold text-slate-900">Worker alert level 2</span>
-          <span className="mt-1 block text-slate-600">Trigger when a worker is identified more than this number in the same week.</span>
+          <span className="font-semibold text-slate-900">{text.workerWeeklyRecurrenceLevel2}</span>
+          <span className="mt-1 block text-slate-600">{text.workerWeeklyRecurrenceLevel2Description}</span>
           <input type="number" min="1" value={workerWeeklyLevel2Threshold} onChange={(event) => setWorkerWeeklyLevel2Threshold(Number(event.target.value))} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2" />
           <label className="mt-3 flex items-center gap-2 text-slate-700">
             <input type="checkbox" checked={workerWeeklyLevel2Enabled} onChange={(event) => setWorkerWeeklyLevel2Enabled(event.target.checked)} />
-            Enabled
+            {text.enabled}
           </label>
         </label>
 
         <label className="rounded-lg border border-slate-200 p-3 text-sm">
-          <span className="font-semibold text-slate-900">Near miss workstation alert</span>
-          <span className="mt-1 block text-slate-600">Trigger when the same workstation appears more than this number in near miss records during the same week.</span>
+          <span className="font-semibold text-slate-900">{text.workstationNearMissRecurrence}</span>
+          <span className="mt-1 block text-slate-600">{text.workstationNearMissRecurrenceDescription}</span>
           <input type="number" min="1" value={workstationNearMissWeeklyThreshold} onChange={(event) => setWorkstationNearMissWeeklyThreshold(Number(event.target.value))} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2" />
           <label className="mt-3 flex items-center gap-2 text-slate-700">
             <input type="checkbox" checked={workstationNearMissWeeklyEnabled} onChange={(event) => setWorkstationNearMissWeeklyEnabled(event.target.checked)} />
-            Enabled
+            {text.enabled}
           </label>
         </label>
       </div>
 
-      <Button size="sm" type="button" onClick={save}>Save repeatability alerts</Button>
+      <Button size="sm" type="button" onClick={save}>{text.saveRepeatabilityAlerts}</Button>
       {message ? <p className="text-xs text-slate-700">{message}</p> : null}
     </section>
   );

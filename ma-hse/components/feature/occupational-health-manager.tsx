@@ -4,6 +4,8 @@ import { Pencil, Plus, UserX, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { COUNTRY_OPTIONS_PT } from "@/lib/constants/countries-pt";
+import { calculateOccupationalHealthExamValidUntilInput } from "@/lib/occupational-health-validity";
 
 type WorkstationOption = {
   id: string;
@@ -65,6 +67,14 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 };
 
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function calculateAge(birthDate: string) {
   if (!birthDate) return 0;
   const date = new Date(birthDate);
@@ -83,10 +93,12 @@ function statusClasses(status: string) {
 
 export function OccupationalHealthManager({
   plant,
+  title,
   initialWorkers,
   workstations,
 }: {
   plant: string;
+  title: string;
   initialWorkers: WorkerRow[];
   workstations: WorkstationOption[];
 }) {
@@ -101,6 +113,15 @@ export function OccupationalHealthManager({
 
   const selectedCount = selectedIds.length;
   const age = useMemo(() => calculateAge(form.birthDate), [form.birthDate]);
+  const validUntil = useMemo(
+    () => calculateOccupationalHealthExamValidUntilInput(form.birthDate, form.examDate),
+    [form.birthDate, form.examDate],
+  );
+
+  const normalizedCountryMap = useMemo(
+    () => new Map(COUNTRY_OPTIONS_PT.map((country) => [normalizeText(country), country])),
+    [],
+  );
 
   function openCreateModal() {
     setEditing(false);
@@ -135,6 +156,15 @@ export function OccupationalHealthManager({
     setSaving(true);
     setMessage("");
     try {
+      const normalizedNationality = normalizeText(form.nationality);
+      const nationalityValue = form.nationality
+        ? normalizedCountryMap.get(normalizedNationality)
+        : undefined;
+
+      if (form.nationality && !nationalityValue) {
+        throw new Error("Select a nationality from the searchable list.");
+      }
+
       const endpoint = form.id
         ? `/api/plants/${plant}/occupational-health/workers/${form.id}`
         : `/api/plants/${plant}/occupational-health/workers`;
@@ -150,9 +180,8 @@ export function OccupationalHealthManager({
           hireDate: form.hireDate,
           roleStartDate: form.roleStartDate,
           roleName: form.roleName || undefined,
-          nationality: form.nationality || undefined,
+          nationality: nationalityValue,
           examDate: form.examDate,
-          validUntil: form.validUntil || undefined,
           status: form.status,
           observation: form.observation || undefined,
           isActive: form.isActive,
@@ -222,13 +251,12 @@ export function OccupationalHealthManager({
 
   return (
     <div className="space-y-4">
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
+      <header className="app-hero rounded-2xl p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Medicina do Trabalho</h1>
-            <p className="mt-1 text-sm text-slate-600">Follow-up of occupational medical exams and worker validity by plant.</p>
+            <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -243,10 +271,13 @@ export function OccupationalHealthManager({
             <Button type="button" size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
               Import Excel
             </Button>
-            <Link href={`/api/plants/${plant}/occupational-health/export?format=xlsx`} className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <Link href={`/api/plants/${plant}/occupational-health/template`} className="app-toolbar">
+              Download template
+            </Link>
+            <Link href={`/api/plants/${plant}/occupational-health/export?format=xlsx`} className="app-toolbar">
               Export Excel
             </Link>
-            <Link href={`/api/plants/${plant}/occupational-health/export?format=pdf`} className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <Link href={`/api/plants/${plant}/occupational-health/export?format=pdf`} className="app-toolbar">
               Export PDF
             </Link>
             <Button type="button" size="sm" variant="secondary" onClick={inactivateSelected}>
@@ -261,7 +292,7 @@ export function OccupationalHealthManager({
         </div>
       </header>
 
-      <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="app-panel overflow-x-auto rounded-xl">
         <table className="w-full min-w-[1100px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
@@ -297,7 +328,7 @@ export function OccupationalHealthManager({
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <button type="button" onClick={() => openEditModal(worker)} className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-50">
+                  <button type="button" onClick={() => openEditModal(worker)} className="app-icon-button">
                     <Pencil className="h-4 w-4" />
                   </button>
                 </td>
@@ -318,20 +349,19 @@ export function OccupationalHealthManager({
 
       {modalOpen ? (
         <div className="fixed inset-0 z-[90] flex items-start justify-center bg-slate-950/40 px-4 py-10 backdrop-blur-[2px]">
-          <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className="app-panel w-full max-w-4xl rounded-2xl shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">{editing ? "Worker data" : "Create worker"}</h2>
-                <p className="mt-1 text-sm text-slate-600">This floating window keeps the table in the background and the data can always be edited.</p>
+                  <h2 className="text-lg font-semibold text-slate-900">{editing ? "Worker data" : "Create worker"}</h2>
               </div>
-              <button type="button" onClick={() => setModalOpen(false)} className="rounded-md border border-slate-300 p-2 text-slate-700 hover:bg-slate-50">
+              <button type="button" onClick={() => setModalOpen(false)} className="app-icon-button">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <form onSubmit={saveWorker} className="space-y-4 px-6 py-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-500">Age is calculated automatically from birth date.</p>
+                <p className="text-sm text-slate-500">Age and exam validity are calculated automatically.</p>
                 {editing ? (
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">Editable</span>
                 ) : null}
@@ -363,7 +393,13 @@ export function OccupationalHealthManager({
                 </label>
                 <label className="text-sm">
                   <span className="mb-1 block font-medium text-slate-700">Nationality</span>
-                  <input value={form.nationality} onChange={(event) => setForm((current) => ({ ...current, nationality: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
+                  <input
+                    list="nationality-options"
+                    value={form.nationality}
+                    onChange={(event) => setForm((current) => ({ ...current, nationality: event.target.value }))}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2"
+                    placeholder="Search nationality"
+                  />
                 </label>
                 <label className="text-sm">
                   <span className="mb-1 block font-medium text-slate-700">Hire date</span>
@@ -392,7 +428,7 @@ export function OccupationalHealthManager({
                 </label>
                 <label className="text-sm">
                   <span className="mb-1 block font-medium text-slate-700">Valid until</span>
-                  <input type="date" value={form.validUntil} onChange={(event) => setForm((current) => ({ ...current, validUntil: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
+                  <input type="date" value={validUntil || form.validUntil} className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2" readOnly />
                 </label>
                 <label className="text-sm">
                   <span className="mb-1 block font-medium text-slate-700">Status</span>
@@ -415,6 +451,11 @@ export function OccupationalHealthManager({
                 <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Create worker"}</Button>
               </div>
             </form>
+            <datalist id="nationality-options">
+              {COUNTRY_OPTIONS_PT.map((country) => (
+                <option key={country} value={country} />
+              ))}
+            </datalist>
           </div>
         </div>
       ) : null}

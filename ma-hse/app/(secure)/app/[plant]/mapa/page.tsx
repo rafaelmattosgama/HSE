@@ -105,9 +105,6 @@ export default async function MapaPage({
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">MAPA</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Upload the factory plan, import or create layers, position areas and workstations, and visualize incidents and risks by layer.
-        </p>
       </header>
 
       <MapaManager

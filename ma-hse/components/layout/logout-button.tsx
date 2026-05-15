@@ -1,5 +1,6 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export function LogoutButton({ label = "Logout" }: LogoutButtonProps) {
 
   return (
     <Button type="button" variant="secondary" size="sm" onClick={onLogout} disabled={loading}>
+      <LogOut className="h-4 w-4" />
       {loading ? "Logging out..." : label}
     </Button>
   );

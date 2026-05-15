@@ -2,11 +2,16 @@ import crypto from "node:crypto";
 import { hash } from "bcryptjs";
 import { RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
+import { DEFAULT_SHIFT_MASTER_DATA } from "@/lib/defaults/shifts";
 import { DEFAULT_INJURY_TYPES } from "@/lib/defaults/injury-types";
+import { DEFAULT_NEAR_MISS_TYPES } from "@/lib/defaults/near-miss-types";
+import { DEFAULT_PROFESSIONAL_RISKS } from "@/lib/defaults/professional-risks";
+import { DEFAULT_UNSAFE_ACT_TYPES } from "@/lib/defaults/unsafe-act-types";
+import { DEFAULT_UNSAFE_CONDITION_TYPES } from "@/lib/defaults/unsafe-condition-types";
 import { parseBody } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac/guards";
-import { createCorporatePlantInput } from "@/lib/validation/dtos";
+import { createCorporatePlantInput, updateCorporatePlantLanguageInput } from "@/lib/validation/dtos";
 
 const DEFAULT_MASTER_DATA = {
   areas: [
@@ -24,21 +29,11 @@ const DEFAULT_MASTER_DATA = {
   equipments: [
     { code: "EQ1", name: "Equipment 1" },
   ],
-  shifts: [
-    { code: "S1", name: "Shift A" },
-  ],
-  riskThemes: [
-    { code: "RT1", name: "General Safety" },
-  ],
-  unsafeActTypes: [
-    { code: "UA1", name: "Procedure bypass" },
-  ],
-  unsafeConditionTypes: [
-    { code: "UC1", name: "Housekeeping issue" },
-  ],
-  nearMissTypes: [
-    { code: "NM1", name: "Near collision" },
-  ],
+  shifts: DEFAULT_SHIFT_MASTER_DATA,
+  riskThemes: DEFAULT_PROFESSIONAL_RISKS,
+  unsafeActTypes: DEFAULT_UNSAFE_ACT_TYPES,
+  unsafeConditionTypes: DEFAULT_UNSAFE_CONDITION_TYPES,
+  nearMissTypes: DEFAULT_NEAR_MISS_TYPES,
   bodyParts: [
     { code: "BP01", name: "Head" },
     { code: "BP02", name: "Left Eye" },
@@ -131,7 +126,7 @@ async function ensurePlantDefaults(plantId: string) {
     for (const row of DEFAULT_MASTER_DATA.riskThemes) {
       await tx.riskTheme.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { name: row.name, isActive: true },
+        update: { category: row.category, name: row.name, isActive: true },
         create: { plantId, ...row },
       });
     }
@@ -139,7 +134,7 @@ async function ensurePlantDefaults(plantId: string) {
     for (const row of DEFAULT_MASTER_DATA.unsafeActTypes) {
       await tx.unsafeActType.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { name: row.name, isActive: true },
+        update: { category: row.category, name: row.name, isActive: true },
         create: { plantId, ...row },
       });
     }
@@ -147,7 +142,7 @@ async function ensurePlantDefaults(plantId: string) {
     for (const row of DEFAULT_MASTER_DATA.unsafeConditionTypes) {
       await tx.unsafeConditionType.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { name: row.name, isActive: true },
+        update: { category: row.category, name: row.name, isActive: true },
         create: { plantId, ...row },
       });
     }
@@ -241,9 +236,11 @@ export async function POST(request: Request) {
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const isCorporate = auth.session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
-  if (!isCorporate) {
-    return fail("FORBIDDEN", "Corporate role required", 403);
+  const canManagePlants = auth.session.user.plantRoles.some(
+    (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
+  );
+  if (!canManagePlants) {
+    return fail("FORBIDDEN", "Corporate or admin role required", 403);
   }
 
   const parsed = await parseBody(request, createCorporatePlantInput);
@@ -256,12 +253,14 @@ export async function POST(request: Request) {
       name: parsed.data.name.trim(),
       timezone: parsed.data.timezone.trim(),
       defaultLanguage: parsed.data.defaultLanguage,
+      isActive: true,
     },
     create: {
       code,
       name: parsed.data.name.trim(),
       timezone: parsed.data.timezone.trim(),
       defaultLanguage: parsed.data.defaultLanguage,
+      isActive: true,
     },
   });
 
@@ -303,4 +302,26 @@ export async function POST(request: Request) {
     },
     { status: 201 },
   );
+}
+
+export async function PATCH(request: Request) {
+  const auth = await requireAuth();
+  if ("error" in auth) return auth.error;
+
+  const isAdmin = auth.session.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN);
+  if (!isAdmin) {
+    return fail("FORBIDDEN", "Admin role required", 403);
+  }
+
+  const parsed = await parseBody(request, updateCorporatePlantLanguageInput);
+  if ("error" in parsed) return parsed.error;
+
+  const plant = await prisma.plant.update({
+    where: { id: parsed.data.plantId },
+    data: {
+      defaultLanguage: parsed.data.defaultLanguage,
+    },
+  });
+
+  return ok({ plant });
 }

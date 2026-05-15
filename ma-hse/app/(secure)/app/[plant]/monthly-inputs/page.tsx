@@ -5,8 +5,10 @@ import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
 import { PlantMonthlyInputsForm } from "@/components/feature/plant-monthly-inputs-form";
 import { SYSTEM_PARAMETER_KEYS } from "@/lib/constants";
+import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { resolveMonthlyInputLayout } from "@/lib/services/monthly-input-layout";
 import { buildMonthlyInputRows } from "@/lib/services/monthly-inputs";
+import { AppHero } from "@/components/ui/app-surface";
 
 export default async function PlantMonthlyInputsPage({
   params,
@@ -35,6 +37,10 @@ export default async function PlantMonthlyInputsPage({
 
   const plantRow = await prisma.plant.findUniqueOrThrow({
     where: { code: plant },
+  });
+  const ui = await getServerUiDictionary({
+    userLanguage: session.user.language,
+    plantLanguage: plantRow.defaultLanguage,
   });
 
   const year = new Date().getUTCFullYear();
@@ -83,12 +89,11 @@ export default async function PlantMonthlyInputsPage({
 
   return (
     <>
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Monthly Inputs</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Monthly manual inputs for workforce, working hours, energy, water, compressed air and waste.
-        </p>
-      </header>
+      <AppHero
+        eyebrow={plantRow.name}
+        title={ui.modules.monthlyInputs}
+        description="Monthly operational, safety and environmental inputs with the same visual system used by the dashboards."
+      />
 
       <PlantMonthlyInputsForm
         plantCode={plant}

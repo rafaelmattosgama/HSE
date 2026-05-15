@@ -65,11 +65,10 @@ export function CorporateActionPlans({ actions }: CorporateActionPlansProps) {
   );
 
   return (
-    <section className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-5 py-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Corporate Action Plans</h2>
-        <p className="mt-1 text-sm text-slate-600">Merged view of all action plans across every plant.</p>
-      </div>
+      <section className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Corporate Action Plans</h2>
+        </div>
 
       <div className="grid gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 md:grid-cols-4">
         <label className="space-y-1">

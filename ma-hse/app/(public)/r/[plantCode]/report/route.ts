@@ -15,8 +15,10 @@ import {
   getLocalizedShiftName,
   getPublicReportText,
 } from "@/lib/public-report";
-import { createCommunicationInput } from "@/lib/validation/dtos";
-import { CommunicationService } from "@/lib/services/communication-service";
+import { createPublicReportCommunicationInput } from "@/lib/validation/dtos";
+import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
+import { ensureDefaultShifts } from "@/lib/services/shift-service";
+import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 
 function escapeHtml(value: string) {
   return value
@@ -33,6 +35,27 @@ function optionMarkup(rows: Array<{ id: string; name: string; employeeNo?: strin
     .join("");
 }
 
+function groupedOptionMarkup(rows: Array<{ id: string; code: string; category: string; name: string }>) {
+  const groups = new Map<string, Array<{ id: string; code: string; name: string }>>();
+
+  for (const row of rows) {
+    const entries = groups.get(row.category) ?? [];
+    entries.push(row);
+    groups.set(row.category, entries);
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, entries]) => {
+      const options = entries
+        .sort((left, right) => left.name.localeCompare(right.name) || left.code.localeCompare(right.code))
+        .map((row) => `<option value="${escapeHtml(row.id)}">${escapeHtml(`${row.code} - ${row.name}`)}</option>`)
+        .join("");
+      return `<optgroup label="${escapeHtml(category)}">${options}</optgroup>`;
+    })
+    .join("");
+}
+
 function renderHtml(
   plantCode: string,
   token: string,
@@ -44,6 +67,7 @@ function renderHtml(
     employees: Array<{ id: string; name: string; employeeNo?: string | null }>;
     bodyParts: Array<{ id: string; name: string }>;
     injuryTypes: Array<{ id: string; name: string }>;
+    unsafeActTypes: Array<{ id: string; code: string; category: string; name: string }>;
   },
 ) {
   const { locale, text } = getPublicReportText(language);
@@ -57,7 +81,7 @@ function renderHtml(
       body { font-family: sans-serif; margin: 0; background: #f6faf9; color: #0f172a; }
       .wrap { max-width: 760px; margin: 0 auto; padding: 24px; }
       .panel { background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px; box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06); }
-      h1 { margin: 0 0 8px 0; }
+      h1 { margin: 0 0 16px 0; }
       label { font-size: 13px; font-weight: 600; display: block; margin: 12px 0 6px; }
       input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
       button { margin-top: 14px; background: #0f766e; color: white; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; }
@@ -69,7 +93,6 @@ function renderHtml(
     <main class="wrap">
       <div class="panel">
         <h1>${escapeHtml(text.title)}</h1>
-        <p>${escapeHtml(text.intro)}</p>
         <form id="report-form">
           <label>${escapeHtml(text.type)}</label>
           <select name="type" id="type" required>
@@ -83,7 +106,7 @@ function renderHtml(
           <input name="eventDatetime" type="datetime-local" required />
 
           <label>${escapeHtml(text.reporterName)}</label>
-          <input name="reporterName" required />
+          <input name="reporterName" required pattern="[^0-9]+" title="${escapeHtml(text.reporterNameNoNumbers)}" />
 
           <label>${escapeHtml(text.reporterNumber)}</label>
           <input name="reporterEmployeeNo" required />
@@ -99,6 +122,14 @@ function renderHtml(
             <option value="">${escapeHtml(text.selectLocation)}</option>
             ${optionMarkup(options.workstations)}
           </select>
+
+          <div id="unsafe-act-type-wrap" style="display:none">
+            <label>${escapeHtml(text.unsafeActType)}</label>
+            <select name="unsafeActTypeId">
+              <option value="">${escapeHtml(text.selectUnsafeActType)}</option>
+              ${groupedOptionMarkup(options.unsafeActTypes)}
+            </select>
+          </div>
 
           <div id="shift-wrap"${options.shifts.length ? "" : ' style="display:none"'}>
             <label>${escapeHtml(text.shift)}</label>
@@ -146,12 +177,18 @@ function renderHtml(
       const form = document.getElementById('report-form');
       const msg = document.getElementById('msg');
       const typeSelect = document.getElementById('type');
+      const unsafeActTypeWrap = document.getElementById('unsafe-act-type-wrap');
+      const unsafeActTypeSelect = form.elements.unsafeActTypeId;
       const workerWrap = document.getElementById('worker-wrap');
       const clinicalWrap = document.getElementById('clinical-wrap');
 
       function syncWorkerVisibility() {
         const visible = typeSelect.value === 'UNSAFE_ACT' || typeSelect.value === 'NEAR_MISS' || typeSelect.value === 'FIRST_AID';
         const clinicalVisible = typeSelect.value === 'FIRST_AID';
+        const unsafeActVisible = typeSelect.value === 'UNSAFE_ACT';
+        unsafeActTypeWrap.style.display = unsafeActVisible ? 'block' : 'none';
+        unsafeActTypeSelect.required = unsafeActVisible;
+        if (!unsafeActVisible) unsafeActTypeSelect.value = '';
         workerWrap.style.display = visible ? 'block' : 'none';
         clinicalWrap.style.display = clinicalVisible ? 'block' : 'none';
       }
@@ -161,6 +198,7 @@ function renderHtml(
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (!form.reportValidity()) return;
 
         const formData = new FormData(form);
         const payload = {
@@ -171,6 +209,9 @@ function renderHtml(
           shiftId: formData.get('shiftId') || undefined,
           areaId: formData.get('areaId'),
           workstationId: formData.get('workstationId'),
+          riskThemeId: undefined,
+          unsafeActTypeId: formData.get('type') === 'UNSAFE_ACT' ? formData.get('unsafeActTypeId') || undefined : undefined,
+          nearMissTypeId: undefined,
           targetEmployeeId: formData.get('targetEmployeeId') || undefined,
           injuryTypeId: formData.get('injuryTypeId') || undefined,
           bodyPartId: formData.get('bodyPartId') || undefined,
@@ -226,13 +267,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     return fail("INVALID_TOKEN", "Token invalid or revoked", 401);
   }
 
-  const [areas, workstations, shifts, employees, bodyPartsRaw, injuryTypesRaw] = await prisma.$transaction([
+  await ensureDefaultShifts(plant.id);
+  await ensureDefaultUnsafeActTypes(plant.id);
+
+  const [areas, workstations, shifts, employees, bodyPartsRaw, injuryTypesRaw, unsafeActTypes] = await prisma.$transaction([
     prisma.area.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.workstation.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.shift.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.employeeDirectory.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, employeeNo: true } }),
     prisma.bodyPart.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.injuryType.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }], select: { id: true, code: true, name: true } }),
+    prisma.unsafeActType.findMany({
+      where: { plantId: plant.id, isActive: true },
+      orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
+      select: { id: true, code: true, category: true, name: true },
+    }),
   ]);
 
   const shiftsLocalized = shifts.map((shift) => ({ id: shift.id, name: getLocalizedShiftName(shift, plant.defaultLanguage) }));
@@ -245,7 +294,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     name: getLocalizedInjuryTypeName(row, plant.defaultLanguage),
   }));
 
-  return new NextResponse(renderHtml(plantCode, token, plant.defaultLanguage, { areas, workstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes }), {
+  return new NextResponse(renderHtml(plantCode, token, plant.defaultLanguage, { areas, workstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes, unsafeActTypes }), {
     status: 200,
     headers: {
       "content-type": "text/html; charset=utf-8",
@@ -279,18 +328,34 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     return fail("INVALID_TOKEN", "Token invalid or revoked", 401);
   }
 
-  const parsed = await parseBody(request, createCommunicationInput);
+  const parsed = await parseBody(request, createPublicReportCommunicationInput);
   if ("error" in parsed) return parsed.error;
 
   if (!CommunicationService.isN6AllowedType(parsed.data.type)) {
     return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
   }
 
-  const communication = await CommunicationService.create({
-    plantId: plant.id,
-    payload: parsed.data,
-    source: CommunicationSource.TOKEN_REPORT,
-  });
+  const communication = await (async () => {
+    try {
+      return await CommunicationService.create({
+        plantId: plant.id,
+        payload: {
+          ...parsed.data,
+          riskThemeId: undefined,
+          unsafeActTypeId: parsed.data.type === "UNSAFE_ACT" ? parsed.data.unsafeActTypeId : undefined,
+          unsafeConditionTypeId: undefined,
+          nearMissTypeId: undefined,
+        },
+        source: CommunicationSource.TOKEN_REPORT,
+      });
+    } catch (error) {
+      if (error instanceof CommunicationValidationError) {
+        return fail(error.code, error.message, error.status);
+      }
+      throw error;
+    }
+  })();
+  if (communication instanceof Response) return communication;
 
   logger.info({ plantCode, route: "report-submit", communicationId: communication.id }, "public report created");
 

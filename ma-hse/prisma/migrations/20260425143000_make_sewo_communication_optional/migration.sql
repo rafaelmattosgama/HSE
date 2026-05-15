@@ -1,0 +1,10 @@
+ALTER TABLE "SEWO" DROP CONSTRAINT "SEWO_communicationId_fkey";
+
+ALTER TABLE "SEWO"
+ALTER COLUMN "communicationId" DROP NOT NULL;
+
+ALTER TABLE "SEWO"
+ADD CONSTRAINT "SEWO_communicationId_fkey"
+FOREIGN KEY ("communicationId") REFERENCES "Communication"("id")
+ON DELETE SET NULL
+ON UPDATE CASCADE;

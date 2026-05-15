@@ -25,20 +25,20 @@ type OwnerOption = {
 
 const CATEGORY_OPTIONS: Array<{ code: ObservationRow["category"]; label: string }> = [
   { code: "A", label: "A - Local de trabalho" },
-  { code: "B", label: "B - Posicao das pessoas" },
+  { code: "B", label: "B - Posição das pessoas" },
   { code: "C", label: "C - Comportamento perigoso" },
   { code: "D", label: "D - EPI" },
   { code: "E", label: "E - Ferramentas & equipamentos" },
-  { code: "F", label: "F - Reacoes das pessoas" },
+  { code: "F", label: "F - Reações das pessoas" },
 ];
 
 const QUESTIONS = [
-  "1) Qual e a tarefa mais perigosa que voce tem que fazer e quais sao os principais riscos envolvidos?",
-  "2) Onde estao as regras, procedimentos para o seu trabalho e onde voce pode encontrar as informacoes?",
+  "1) Qual é a tarefa mais perigosa que tem de fazer e quais são os principais riscos envolvidos?",
+  "2) Onde estão as regras e procedimentos para o seu trabalho e onde pode encontrar as informações?",
   "3) Com quem fala se encontrar novos riscos no seu local de trabalho ou se tiver ideias de melhoria?",
-  "4) Quando foi a ultima vez que falou sobre seguranca e que informacoes recebeu?",
-  "5) Porque e que a seguranca e importante para si e para nossa empresa?",
-  "6) Como e que voce envolve seus colegas para a prevencao de riscos?",
+  "4) Quando foi a última vez que falou sobre segurança e que informações recebeu?",
+  "5) Porque é que a segurança é importante para si e para a nossa empresa?",
+  "6) Como envolve os seus colegas na prevenção de riscos?",
 ] as const;
 
 const ANSWER_KEYS = ["answer1", "answer2", "answer3", "answer4", "answer5", "answer6"] as const;
@@ -142,7 +142,7 @@ export function CreateSmatAudit({
 
       const presignJson = await presignResponse.json();
       if (!presignResponse.ok || !presignJson.ok) {
-        throw new Error(presignJson.message ?? "Failed to prepare SMAT image upload");
+        throw new Error(presignJson.message ?? "Não foi possível preparar o carregamento da imagem SMAT.");
       }
 
       const putResponse = await fetch(presignJson.data.uploadUrl, {
@@ -152,7 +152,7 @@ export function CreateSmatAudit({
       });
 
       if (!putResponse.ok) {
-        throw new Error(`Failed to upload ${photo.name}`);
+        throw new Error(`Não foi possível carregar ${photo.name}`);
       }
 
       uploaded.push({
@@ -202,12 +202,12 @@ export function CreateSmatAudit({
 
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Nao foi possivel gravar a auditoria SMAT.");
+        throw new Error(json.message ?? "Não foi possível gravar a auditoria SMAT.");
       }
 
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel gravar a auditoria SMAT.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível gravar a auditoria SMAT.");
       setBusy(false);
       return;
     }
@@ -220,7 +220,6 @@ export function CreateSmatAudit({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Nova auditoria SMAT</h2>
-          <p className="mt-1 text-sm text-slate-600">Checklist operacional com anexos, exportacao e criacao direta de acoes para o modulo Actions.</p>
         </div>
         <Button type="submit" disabled={busy}>{busy ? "A gravar..." : "Gravar auditoria"}</Button>
       </div>
@@ -235,11 +234,11 @@ export function CreateSmatAudit({
           <input type="date" value={form.auditDate} onChange={(event) => setForm((current) => ({ ...current, auditDate: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" required />
         </label>
         <label className="text-sm text-slate-700">
-          <span className="mb-1 block font-medium">Hora inicio</span>
+          <span className="mb-1 block font-medium">Hora de início</span>
           <input type="time" value={form.startTimeText} onChange={(event) => setForm((current) => ({ ...current, startTimeText: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
         </label>
         <label className="text-sm text-slate-700">
-          <span className="mb-1 block font-medium">Hora fim</span>
+          <span className="mb-1 block font-medium">Hora de fim</span>
           <input type="time" value={form.endTimeText} onChange={(event) => setForm((current) => ({ ...current, endTimeText: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
         </label>
         <label className="text-sm text-slate-700">
@@ -247,7 +246,7 @@ export function CreateSmatAudit({
           <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
         </label>
         <label className="text-sm text-slate-700 md:col-span-2">
-          <span className="mb-1 block font-medium">Area examinada</span>
+          <span className="mb-1 block font-medium">Área examinada</span>
           <input value={form.areaExamined} onChange={(event) => setForm((current) => ({ ...current, areaExamined: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
         </label>
         <label className="text-sm text-slate-700 md:col-span-2">
@@ -262,43 +261,43 @@ export function CreateSmatAudit({
           <CountInput label="Pessoas observadas" value={form.peopleObservedCount} onChange={(value) => setForm((current) => ({ ...current, peopleObservedCount: value }))} />
           <CountInput label="Pessoas envolvidas" value={form.peopleInvolvedCount} onChange={(value) => setForm((current) => ({ ...current, peopleInvolvedCount: value }))} />
           <CountInput label="Pessoas seguras" value={form.peopleSafeCount} onChange={(value) => setForm((current) => ({ ...current, peopleSafeCount: value }))} />
-          <CountInput label="Pessoas nao seguras" value={form.peopleUnsafeCount} onChange={(value) => setForm((current) => ({ ...current, peopleUnsafeCount: value }))} />
-          <CountInput label="Condicoes seguras" value={form.workConditionsSafeCount} onChange={(value) => setForm((current) => ({ ...current, workConditionsSafeCount: value }))} />
-          <CountInput label="Condicoes nao seguras" value={form.workConditionsUnsafeCount} onChange={(value) => setForm((current) => ({ ...current, workConditionsUnsafeCount: value }))} />
-          <CountInput label="Reacoes positivas" value={form.reactionsPositiveCount} onChange={(value) => setForm((current) => ({ ...current, reactionsPositiveCount: value }))} />
-          <CountInput label="Reacoes negativas" value={form.reactionsNegativeCount} onChange={(value) => setForm((current) => ({ ...current, reactionsNegativeCount: value }))} />
+          <CountInput label="Pessoas não seguras" value={form.peopleUnsafeCount} onChange={(value) => setForm((current) => ({ ...current, peopleUnsafeCount: value }))} />
+          <CountInput label="Condições seguras" value={form.workConditionsSafeCount} onChange={(value) => setForm((current) => ({ ...current, workConditionsSafeCount: value }))} />
+          <CountInput label="Condições não seguras" value={form.workConditionsUnsafeCount} onChange={(value) => setForm((current) => ({ ...current, workConditionsUnsafeCount: value }))} />
+          <CountInput label="Reações positivas" value={form.reactionsPositiveCount} onChange={(value) => setForm((current) => ({ ...current, reactionsPositiveCount: value }))} />
+          <CountInput label="Reações negativas" value={form.reactionsNegativeCount} onChange={(value) => setForm((current) => ({ ...current, reactionsNegativeCount: value }))} />
         </div>
       </section>
 
-      <ObservationSection title='AS "ATOS SEGUROS" (acao positiva observada)' rows={safeActs} onAdd={() => addObservation(setSafeActs, "A")} onChange={(index, patch) => updateObservation(setSafeActs, index, patch)} onRemove={(index) => removeObservation(setSafeActs, index)} />
-      <ObservationSection title='CS "CONDICAO SEGURA" (condicoes positivas observadas)' rows={safeConditions} onAdd={() => addObservation(setSafeConditions, "A")} onChange={(index, patch) => updateObservation(setSafeConditions, index, patch)} onRemove={(index) => removeObservation(setSafeConditions, index)} />
-      <ObservationSection title='AI "ATO INSEGURO" (acao negativa observada)' rows={unsafeActs} onAdd={() => addObservation(setUnsafeActs, "C")} onChange={(index, patch) => updateObservation(setUnsafeActs, index, patch)} onRemove={(index) => removeObservation(setUnsafeActs, index)} />
-      <ObservationSection title='CI "CONDICAO INSEGURA" (condicoes negativas observadas)' rows={unsafeConditions} onAdd={() => addObservation(setUnsafeConditions, "A")} onChange={(index, patch) => updateObservation(setUnsafeConditions, index, patch)} onRemove={(index) => removeObservation(setUnsafeConditions, index)} />
+      <ObservationSection title='AS "ATOS SEGUROS" (ação positiva observada)' rows={safeActs} onAdd={() => addObservation(setSafeActs, "A")} onChange={(index, patch) => updateObservation(setSafeActs, index, patch)} onRemove={(index) => removeObservation(setSafeActs, index)} />
+      <ObservationSection title='CS "CONDIÇÃO SEGURA" (condições positivas observadas)' rows={safeConditions} onAdd={() => addObservation(setSafeConditions, "A")} onChange={(index, patch) => updateObservation(setSafeConditions, index, patch)} onRemove={(index) => removeObservation(setSafeConditions, index)} />
+      <ObservationSection title='AI "ATO INSEGURO" (ação negativa observada)' rows={unsafeActs} onAdd={() => addObservation(setUnsafeActs, "C")} onChange={(index, patch) => updateObservation(setUnsafeActs, index, patch)} onRemove={(index) => removeObservation(setUnsafeActs, index)} />
+      <ObservationSection title='CI "CONDIÇÃO INSEGURA" (condições negativas observadas)' rows={unsafeConditions} onAdd={() => addObservation(setUnsafeConditions, "A")} onChange={(index, patch) => updateObservation(setUnsafeConditions, index, patch)} onRemove={(index) => removeObservation(setUnsafeConditions, index)} />
 
       <section className="space-y-3 rounded-xl border border-slate-200 p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Acoes</h3>
-            <p className="mt-1 text-sm text-slate-500">As acoes criadas aqui entram automaticamente no modulo Actions e ficam rastreadas no SMAT.</p>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Ações</h3>
+            <p className="mt-1 text-sm text-slate-500">As ações criadas aqui entram automaticamente no módulo Actions e ficam rastreadas no SMAT.</p>
           </div>
-          <Button type="button" variant="secondary" size="sm" onClick={() => setActionPlans((current) => [...current, emptyActionPlan()])}>Adicionar acao</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setActionPlans((current) => [...current, emptyActionPlan()])}>Adicionar ação</Button>
         </div>
 
         <div className="space-y-3">
           {actionPlans.map((row, index) => (
             <div key={index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-2">
-              <input value={row.title} onChange={(event) => updateActionPlan(index, { title: event.target.value })} placeholder="Titulo da acao" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              <input value={row.title} onChange={(event) => updateActionPlan(index, { title: event.target.value })} placeholder="Título da ação" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
               <select value={row.ownerUserId} onChange={(event) => updateActionPlan(index, { ownerUserId: event.target.value })} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Responsavel</option>
+                <option value="">Responsável</option>
                 {owners.map((owner) => (
                   <option key={owner.id} value={owner.id}>{owner.name}</option>
                 ))}
               </select>
-              <textarea value={row.description} onChange={(event) => updateActionPlan(index, { description: event.target.value })} rows={3} placeholder="Descricao da acao" className="md:col-span-2 rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              <textarea value={row.description} onChange={(event) => updateActionPlan(index, { description: event.target.value })} rows={3} placeholder="Descrição da ação" className="md:col-span-2 rounded-md border border-slate-300 px-3 py-2 text-sm" />
               <select value={row.priority} onChange={(event) => updateActionPlan(index, { priority: event.target.value as ActionPriority })} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value={ActionPriority.LOW}>Low</option>
-                <option value={ActionPriority.MEDIUM}>Medium</option>
-                <option value={ActionPriority.HIGH}>High</option>
+                <option value={ActionPriority.LOW}>Baixa</option>
+                <option value={ActionPriority.MEDIUM}>Média</option>
+                <option value={ActionPriority.HIGH}>Alta</option>
               </select>
               <div className="flex gap-2">
                 <input type="date" value={row.dueDate} onChange={(event) => updateActionPlan(index, { dueDate: event.target.value })} className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm" />
@@ -306,7 +305,7 @@ export function CreateSmatAudit({
               </div>
             </div>
           ))}
-          {actionPlans.length === 0 ? <p className="text-sm text-slate-500">Sem acoes a criar.</p> : null}
+          {actionPlans.length === 0 ? <p className="text-sm text-slate-500">Sem ações a criar.</p> : null}
         </div>
       </section>
 
@@ -330,11 +329,11 @@ export function CreateSmatAudit({
         <textarea rows={5} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
       </label>
 
-      {photos.length > 0 ? <p className="text-sm text-slate-500">{photos.length} ficheiro(s) pronto(s) para upload.</p> : null}
+      {photos.length > 0 ? <p className="text-sm text-slate-500">{photos.length} ficheiro(s) pronto(s) para carregamento.</p> : null}
       {message ? <p className="text-sm text-rose-700">{message}</p> : null}
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        Lembre-se de agradecer aos operadores pelo tempo que dedicaram e certifique-se de que as suas sugestoes sao avaliadas.
+        Lembre-se de agradecer aos operadores pelo tempo que dedicaram e certifique-se de que as suas sugestões são avaliadas.
       </div>
 
       <div className="flex justify-end">
@@ -381,7 +380,7 @@ function ObservationSection({
                 <option key={option.code} value={option.code}>{option.label}</option>
               ))}
             </select>
-            <textarea rows={2} value={row.description} onChange={(event) => onChange(index, { description: event.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Descreva a observacao" />
+            <textarea rows={2} value={row.description} onChange={(event) => onChange(index, { description: event.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Descreva a observação" />
             <Button type="button" variant="ghost" size="sm" onClick={() => onRemove(index)}>Remover</Button>
           </div>
         ))}
