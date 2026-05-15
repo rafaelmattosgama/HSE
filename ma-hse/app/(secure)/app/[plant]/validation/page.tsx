@@ -1,7 +1,16 @@
+import { RoleCode } from "@prisma/client";
 import { ValidationQueue } from "@/components/feature/validation-queue";
+import { SewoValidationQueue } from "@/components/feature/sewo-validation-queue";
+import { AppHero, AppSectionHeader } from "@/components/ui/app-surface";
+import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { getServerUiLocale } from "@/lib/server-ui-language";
+import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
+import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
+import { getPendingSewoValidationRows } from "@/lib/services/sewo-validation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
-import { getLocale } from "next-intl/server";
+import { getUiDictionary } from "@/lib/ui-language";
+import { getServerSession } from "next-auth";
 
 export default async function ValidationPage({
   params,
@@ -9,8 +18,16 @@ export default async function ValidationPage({
   params: Promise<{ plant: string }>;
 }) {
   const { plant } = await params;
-  const locale = await getLocale();
+  const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const uiLocale = await getServerUiLocale({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
+  const ui = getUiDictionary(uiLocale);
+  const canUseSewoValidation = session?.user.plantRoles.some(
+    (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
+  ) ?? false;
 
   const pending = await prisma.communication.findMany({
     where: {
@@ -29,27 +46,51 @@ export default async function ValidationPage({
     ],
     take: 100,
   });
-  const translatedDescriptions = await translateForViewer(locale, pending.map((row) => row.description));
+  const [translatedDescriptions, communicationUi, sewoUiResult, pendingSewoRows] = await Promise.all([
+    translateForViewer(uiLocale, pending.map((row) => row.description)),
+    getLocalizedCommunicationUi(uiLocale),
+    getLocalizedSewoUi(uiLocale),
+    canUseSewoValidation && session?.user.id
+      ? getPendingSewoValidationRows({
+          userId: session.user.id,
+          plantCode: plant,
+        })
+      : Promise.resolve([]),
+  ]);
 
   return (
     <>
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Validation Queue</h1>
-        <p className="mt-1 text-sm text-slate-600">Validate or reject communications directly from the queue, with the key context visible on each card.</p>
-      </header>
-
-      <ValidationQueue
-        plant={plant}
-        rows={pending.map((row, index) => ({
-          id: row.id,
-          type: row.type,
-          reporterName: row.reporterName,
-          eventDatetime: row.eventDatetime.toISOString(),
-          department: row.area?.name ?? "-",
-          location: row.workstation?.name ?? "-",
-          description: translatedDescriptions[index] ?? row.description,
-        }))}
+      <AppHero
+        eyebrow={ui.modules.validation}
+        title={ui.modules.validation}
+        description={canUseSewoValidation ? sewoUiResult.ui.n1ValidationSubtitle : undefined}
       />
+
+      {canUseSewoValidation ? (
+        <section className="space-y-4">
+          <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
+          <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={false} />
+        </section>
+      ) : null}
+
+      <section className="space-y-4">
+        <AppSectionHeader title={sewoUiResult.ui.n1ValidationCommunicationSection} />
+        <ValidationQueue
+          plant={plant}
+          rows={pending.map((row, index) => ({
+            id: row.id,
+            type: row.type,
+            typeLabel: communicationUi.communicationTypeLabels[row.type] ?? row.type,
+            reporterName: row.reporterName,
+            eventDatetime: row.eventDatetime.toISOString(),
+            department: row.area?.name ?? "-",
+            location: row.workstation?.name ?? "-",
+            description: translatedDescriptions[index] ?? row.description,
+          }))}
+          labels={communicationUi.validationQueue}
+          actionLabels={communicationUi.validationActions}
+        />
+      </section>
     </>
   );
 }

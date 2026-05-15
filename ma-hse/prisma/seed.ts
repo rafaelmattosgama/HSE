@@ -18,6 +18,10 @@ import {
   SEWOStatus,
   SeverityPotential,
 } from "@prisma/client";
+import { DEFAULT_NEAR_MISS_TYPES } from "../lib/defaults/near-miss-types";
+import { DEFAULT_PROFESSIONAL_RISKS } from "../lib/defaults/professional-risks";
+import { DEFAULT_UNSAFE_ACT_TYPES } from "../lib/defaults/unsafe-act-types";
+import { DEFAULT_UNSAFE_CONDITION_TYPES, LEGACY_DEFAULT_UNSAFE_CONDITION_TYPES } from "../lib/defaults/unsafe-condition-types";
 
 const prisma = new PrismaClient();
 
@@ -365,7 +369,7 @@ async function upsertMasterData(plantId: string) {
       | "nearMissType"
       | "bodyPart"
       | "injuryType",
-    rows: { code: string; name: string }[],
+    rows: { code: string; name: string; category?: string }[],
   ) => {
     for (const row of rows) {
       switch (type) {
@@ -408,21 +412,21 @@ async function upsertMasterData(plantId: string) {
           await prisma.riskTheme.upsert({
             where: { plantId_code: { plantId, code: row.code } },
             update: row,
-            create: { plantId, ...row },
+            create: { plantId, category: row.category ?? "General", ...row },
           });
           break;
         case "unsafeActType":
           await prisma.unsafeActType.upsert({
             where: { plantId_code: { plantId, code: row.code } },
-            update: row,
-            create: { plantId, ...row },
+            update: { category: row.category ?? "General", name: row.name, isActive: true },
+            create: { plantId, category: row.category ?? "General", ...row },
           });
           break;
         case "unsafeConditionType":
           await prisma.unsafeConditionType.upsert({
             where: { plantId_code: { plantId, code: row.code } },
-            update: row,
-            create: { plantId, ...row },
+            update: { category: row.category ?? "General", name: row.name, isActive: true },
+            create: { plantId, category: row.category ?? "General", ...row },
           });
           break;
         case "nearMissType":
@@ -481,21 +485,27 @@ async function upsertMasterData(plantId: string) {
     { code: "S4", name: "Central"}
   ]);
   await upsertRows("riskTheme", [
-    { code: "RT01", name: "PPE Non-compliance" },
-    { code: "RT02", name: "Slip/Trip/Fall" },
+    { code: "RT01", category: "General", name: "PPE Non-compliance" },
+    { code: "RT02", category: "General", name: "Slip/Trip/Fall" },
+    ...DEFAULT_PROFESSIONAL_RISKS,
   ]);
   await upsertRows("unsafeActType", [
-    { code: "UA01", name: "Bypassing Safety" },
-    { code: "UA02", name: "Improper Lifting" },
+    ...DEFAULT_UNSAFE_ACT_TYPES,
   ]);
-  await upsertRows("unsafeConditionType", [
-    { code: "UC01", name: "Oil Leak" },
-    { code: "UC02", name: "Blocked Exit" },
-  ]);
-  await upsertRows("nearMissType", [
-    { code: "NM01", name: "Dropped Object" },
-    { code: "NM02", name: "Near Collision" },
-  ]);
+  await upsertRows("unsafeConditionType", [...DEFAULT_UNSAFE_CONDITION_TYPES]);
+  await prisma.unsafeConditionType.updateMany({
+    where: {
+      plantId,
+      OR: LEGACY_DEFAULT_UNSAFE_CONDITION_TYPES.map((row) => ({
+        code: row.code,
+        name: row.name,
+      })),
+    },
+    data: {
+      isActive: false,
+    },
+  });
+  await upsertRows("nearMissType", [...DEFAULT_NEAR_MISS_TYPES]);
   await upsertRows("bodyPart", [
     { code: "BP01", name: "Head" },
     { code: "BP02", name: "Left Eye" },

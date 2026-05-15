@@ -6,6 +6,8 @@ import { authOptions } from "@/lib/auth/options";
 import { CorporatePlantForm } from "@/components/feature/corporate-plant-form";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { ModuleToggleManager } from "@/components/feature/module-toggle-manager";
+import { PlantLanguageSettings } from "@/components/feature/plant-language-settings";
+import { ProfessionalRisksManager } from "@/components/feature/professional-risks-manager";
 import { ReportLayoutManager } from "@/components/feature/report-layout-manager";
 import { UserManager } from "@/components/feature/user-manager";
 import {
@@ -15,6 +17,8 @@ import {
 } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
 import { getCreatableRoles } from "@/lib/rbac/user-management";
+import { getServerUiDictionary } from "@/lib/server-ui-language";
+import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 
 export default async function SettingsPage({
   searchParams,
@@ -35,6 +39,14 @@ export default async function SettingsPage({
     orderBy: {
       name: "asc",
     },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      timezone: true,
+      defaultLanguage: true,
+      isActive: true,
+    },
   });
   const globalModuleParameter = await prisma.systemParameter.findFirst({
     where: {
@@ -45,6 +57,10 @@ export default async function SettingsPage({
 
   const currentSearchParams = await searchParams;
   const selectedPlantCode = currentSearchParams.plant ?? allPlants[0]?.code;
+  const selectedPlantId = allPlants.find((plant) => plant.code === selectedPlantCode)?.id;
+  if (selectedPlantId) {
+    await ensureDefaultProfessionalRisks(selectedPlantId);
+  }
   const selectedPlant = selectedPlantCode
     ? await prisma.plant.findUnique({
         where: { code: selectedPlantCode },
@@ -57,6 +73,9 @@ export default async function SettingsPage({
           },
           employees: {
             orderBy: { name: "asc" },
+          },
+          riskThemes: {
+            orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
           },
           users: {
             include: {
@@ -71,6 +90,21 @@ export default async function SettingsPage({
 
   const moduleParameter = selectedPlant?.systemParameters.find((entry) => entry.key === MODULE_TOGGLES_PARAMETER_KEY);
   const reportLayoutParameter = selectedPlant?.systemParameters.find((entry) => entry.key === "REPORT_LAYOUT");
+  const ui = await getServerUiDictionary({
+    userLanguage: session.user.language,
+    plantLanguage: selectedPlant?.defaultLanguage,
+  });
+  const moduleLabels = {
+    MAPA: ui.modules.mapa,
+    VALIDATIONS: ui.modules.validation,
+    ACTIONS: ui.modules.actions,
+    SEWO: ui.modules.sewo,
+    SMAT: ui.modules.smat,
+    CONTRACTORS: ui.modules.contractors,
+    COMMUNICATIONS: ui.modules.communications,
+    MONTHLY_INPUTS: ui.modules.monthlyInputs,
+    OCCUPATIONAL_HEALTH: ui.modules.occupationalHealth,
+  };
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-6 py-6">
@@ -78,8 +112,7 @@ export default async function SettingsPage({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">N0 Admin</p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-900">Software Settings</h1>
-            <p className="mt-2 text-sm text-slate-600">Central area for plants, workstations, areas, workers, users, report layouts and module activation.</p>
+            <h1 className="mt-2 text-3xl font-bold text-slate-900">{ui.modules.settings}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
             {allPlants.map((plant) => (
@@ -99,19 +132,27 @@ export default async function SettingsPage({
         </div>
       </section>
 
-      <CorporatePlantForm />
+      <CorporatePlantForm
+        plants={allPlants.map((plant) => ({
+          id: plant.id,
+          code: plant.code,
+          name: plant.name,
+          timezone: plant.timezone,
+          defaultLanguage: plant.defaultLanguage as "pt" | "it" | "en" | "pl" | "de" | "ro" | "fr",
+          isActive: plant.isActive,
+        }))}
+        selectedPlantId={selectedPlant?.id ?? null}
+      />
 
       {selectedPlant ? (
         <>
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Selected plant</h2>
-            <p className="mt-2 text-lg font-semibold text-slate-900">
-              {selectedPlant.name} ({selectedPlant.code.toUpperCase()})
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              {selectedPlant.timezone} · default language {selectedPlant.defaultLanguage.toUpperCase()}
-            </p>
-          </section>
+          <PlantLanguageSettings
+            plantId={selectedPlant.id}
+            plantName={selectedPlant.name}
+            plantCode={selectedPlant.code}
+            timezone={selectedPlant.timezone}
+            defaultLanguage={selectedPlant.defaultLanguage}
+          />
 
           <div className="grid gap-6 xl:grid-cols-2">
             <ModuleToggleManager
@@ -119,6 +160,7 @@ export default async function SettingsPage({
               title="Plant Modules"
               description="Activate or deactivate modules globally for all plants. Plant-specific settings can still override these defaults."
               saveLabel="Save global modules"
+              moduleLabels={moduleLabels}
               initialModules={{
                 ...DEFAULT_MODULE_TOGGLES,
                 ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
@@ -130,6 +172,7 @@ export default async function SettingsPage({
               title={`Plant Modules: ${selectedPlant.name}`}
               description="Activate or deactivate modules only for the selected plant."
               saveLabel="Save plant modules"
+              moduleLabels={moduleLabels}
               initialModules={{
                 ...DEFAULT_MODULE_TOGGLES,
                 ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
@@ -144,6 +187,17 @@ export default async function SettingsPage({
             initialAreas={selectedPlant.areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
             initialWorkstations={selectedPlant.workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
             initialWorkers={selectedPlant.employees.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          />
+
+          <ProfessionalRisksManager
+            plantCode={selectedPlant.code}
+            initialRisks={selectedPlant.riskThemes.map((risk) => ({
+              id: risk.id,
+              code: risk.code,
+              category: risk.category,
+              name: risk.name,
+              isActive: risk.isActive,
+            }))}
           />
 
           <UserManager

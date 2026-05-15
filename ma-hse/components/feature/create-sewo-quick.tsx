@@ -1,15 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ActionCategory, ActionPriority } from "@prisma/client";
+import { ActionCategory, ActionPriority, SEWOStatus } from "@prisma/client";
+import { ArrowRightCircle, Link2Off } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { Button } from "@/components/ui/button";
+import {
+  SIF_PSIF_EXPOSURE_KEYS,
+  createEmptySifPsifDecision,
+  getActivePsifExposureKey,
+  getSifPsifResult,
+  getVisibleSifPsifExposureKeys,
+  type SifPsifDecision,
+  type SifPsifExposureKey,
+  type SifPsifResult,
+  type YesNoAnswer,
+} from "@/lib/sewo-sif-psif";
+import type { RootCauseGroup, SewoUi } from "@/lib/sewo-ui";
 
 type Option = {
   id: string;
   name: string;
+  code?: string;
 };
 
 type WorkerOption = {
@@ -79,25 +93,26 @@ type EditableCommunicationAction = CommunicationActionOption & {
   dirty?: boolean;
 };
 
-const ROOT_CAUSE_GROUPS = [
-  {
-    heading: "Unsafe Action",
-    columns: [
-      { title: "1 Competence / Knowledge", items: ["1.1 Inadequate training", "1.2 Limited experience with the specific task"] },
-      { title: "2 Attitude / Behavior", items: ["2.1 Lack of concentration", "2.2 Incorrect use of protective items", "2.3 Breaking rules for safety", "2.4 Failure to respect work cycles and procedure", "2.5 Doubtful circumstances", "2.6 Failure to use PPE"] },
-      { title: "3 Management", items: ["3.1 PPE inadequate", "3.2 Unfitness for the job", "3.3 Maintenance cycles not performed", "3.4 Cleaning cycles not performed", "3.5 Pressure", "3.6 Other"] },
-      { title: "4 Precaution / Attention", items: ["4.1 Excess self-confidence", "4.2 Execution of operations outside of his/her competence", "4.3 Lack of communication"] },
-    ],
-  },
-  {
-    heading: "Unsafe Condition",
-    columns: [
-      { title: "5 Personal Condition", items: ["5.1 Physical problems / Physical fatigue", "5.2 Sudden illness", "5.3 Personal / family problems", "5.4 Health problems"] },
-      { title: "6 Facilities / Equipment", items: ["6.1 Equipment facilities inadequate", "6.2 Lack of maintenance", "6.3 Weakness in design", "6.4 Anomalous functioning of equipment / facilities", "6.5 Failure / breakage", "6.6 Poor lighting", "6.7 Lack of cleaning cycles", "6.8 Erroneous manufacturing / installation"] },
-      { title: "7 Procedure / Systems", items: ["7.1 Lack of standard procedure and/or safety rules", "7.2 Procedure inadequate", "7.3 Protective items not suitable", "7.4 Complex work methods", "7.5 Others"] },
-    ],
-  },
-] as const;
+type SewoInitialData = {
+  id: string;
+  communicationId: string | null;
+  eventClassification: string;
+  areaId: string | null;
+  workstationId: string | null;
+  shiftId: string | null;
+  analysisDate: string;
+  whatText: string;
+  whereText: string;
+  whoText: string;
+  usualWorkYesNo: boolean;
+  whichText: string | null;
+  howText: string;
+  immediateCorrectiveActionText: string;
+  templateData: Record<string, unknown>;
+  causeCatalogVersionId: string;
+  status: string;
+  linkedActions: CommunicationActionOption[];
+};
 
 function createFiveWhyRow(index: number): FiveWhyRow {
   return {
@@ -123,7 +138,159 @@ function slugifyLabel(label: string) {
   return label.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "");
 }
 
+function formatUiMessage(template: string, replacements: Record<string, string>) {
+  return Object.entries(replacements).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, value),
+    template,
+  );
+}
+
+function getStringValue(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function getTemplateString(templateData: Record<string, unknown> | undefined, key: string) {
+  return getStringValue(templateData?.[key]);
+}
+
+function getYesNoValue(value: unknown, fallback: YesNoAnswer): YesNoAnswer {
+  return value === "YES" || value === "NO" ? value : fallback;
+}
+
+function normalizeFiveWhys(value: unknown) {
+  if (!Array.isArray(value)) return [createFiveWhyRow(1)];
+
+  const rows = value
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const row = entry as Record<string, unknown>;
+
+      return {
+        id: getStringValue(row.id) || `why-${index + 1}-${crypto.randomUUID()}`,
+        why: getStringValue(row.why),
+        answer: getStringValue(row.answer),
+      };
+    })
+    .filter((entry): entry is FiveWhyRow => Boolean(entry));
+
+  return rows.length ? rows : [createFiveWhyRow(1)];
+}
+
+function normalizeRootCauseDetails(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const detail = entry as Record<string, unknown>;
+      const label = getStringValue(detail.label);
+
+      if (!label) return null;
+
+      return {
+        id: getStringValue(detail.id) || slugifyLabel(label),
+        label,
+        comment: getStringValue(detail.comment),
+        isRootCause: detail.isRootCause === true,
+      };
+    })
+    .filter((entry): entry is RootCauseDetail => Boolean(entry));
+}
+
+function normalizeSifPsifDecision(value: unknown) {
+  const fallback = createEmptySifPsifDecision();
+  if (!value || typeof value !== "object") return fallback;
+
+  const source = value as Record<string, unknown>;
+  const exposures = source.exposures && typeof source.exposures === "object" ? source.exposures as Record<string, unknown> : {};
+
+  return {
+    actualSif: getYesNoValue(source.actualSif, fallback.actualSif),
+    exposures: SIF_PSIF_EXPOSURE_KEYS.reduce((result, key) => {
+      result[key] = getYesNoValue(exposures[key], fallback.exposures[key]);
+      return result;
+    }, { ...fallback.exposures }),
+    repeatedSifPotential: getYesNoValue(source.repeatedSifPotential, fallback.repeatedSifPotential),
+    oneWhatIfAway: getYesNoValue(source.oneWhatIfAway, fallback.oneWhatIfAway),
+    noPsifExplanation: getStringValue(source.noPsifExplanation),
+  };
+}
+
+function normalizeActionPlans(value: unknown) {
+  if (!Array.isArray(value)) return [createActionPlanRow()];
+
+  const rows = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const row = entry as Record<string, unknown>;
+      const priority = Object.values(ActionPriority).includes(row.priority as ActionPriority)
+        ? row.priority as ActionPriority
+        : ActionPriority.MEDIUM;
+      const category = Object.values(ActionCategory).includes(row.category as ActionCategory)
+        ? row.category as ActionCategory
+        : ActionCategory.CORRECTIVE;
+
+      return {
+        id: getStringValue(row.id) || crypto.randomUUID(),
+        title: getStringValue(row.title),
+        description: getStringValue(row.description),
+        ownerUserId: getStringValue(row.ownerUserId),
+        priority,
+        category,
+        dueDate: getStringValue(row.dueDate),
+      };
+    })
+    .filter((entry): entry is ActionPlanRow => Boolean(entry));
+
+  return rows.length ? rows : [createActionPlanRow()];
+}
+
+function getSifPsifResultLabel(result: SifPsifResult, ui: SewoUi) {
+  if (result === "SIF") return ui.sifResult;
+  if (result === "PSIF") return ui.psifResult;
+  if (result === "NO_PSIF") return ui.noPsifResult;
+  return ui.pendingResult;
+}
+
+function getSifPsifResultClassName(result: SifPsifResult) {
+  if (result === "SIF") return "border-red-200 bg-red-600 text-white";
+  if (result === "PSIF") return "border-amber-200 bg-amber-400 text-amber-950";
+  if (result === "NO_PSIF") return "border-slate-200 bg-slate-100 text-slate-700";
+  return "border-slate-200 bg-white text-slate-500";
+}
+
+function YesNoToggle({
+  value,
+  onChange,
+  ui,
+}: {
+  value: YesNoAnswer;
+  onChange: (value: "YES" | "NO") => void;
+  ui: SewoUi;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+      {(["YES", "NO"] as const).map((option) => {
+        const selected = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={`min-w-16 rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+              selected ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            {option === "YES" ? ui.yes : ui.no}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CreateSewoQuick({
+  initialSewo,
   causeCatalogVersionId,
   communications,
   areas,
@@ -133,7 +300,10 @@ export function CreateSewoQuick({
   bodyParts,
   injuryTypes,
   actionOwners,
+  ui,
+  rootCauseGroups,
 }: {
+  initialSewo?: SewoInitialData;
   causeCatalogVersionId?: string;
   communications: CommunicationOption[];
   areas: Option[];
@@ -143,46 +313,127 @@ export function CreateSewoQuick({
   bodyParts: Option[];
   injuryTypes: Option[];
   actionOwners: Option[];
+  ui: SewoUi;
+  rootCauseGroups: RootCauseGroup[];
 }) {
   const pathname = usePathname();
   const plant = pathname.split("/")[2];
+  const isEditing = Boolean(initialSewo);
   const monthKeys = useMemo(() => Array.from(new Set(communications.map((communication) => communication.monthKey))), [communications]);
-  const [expandedMonths, setExpandedMonths] = useState<string[]>(monthKeys.slice(0, 1));
-  const [communicationId, setCommunicationId] = useState("");
-  const [eventClassification, setEventClassification] = useState("");
-  const [areaId, setAreaId] = useState("");
-  const [workstationId, setWorkstationId] = useState("");
-  const [shiftId, setShiftId] = useState("");
-  const [involvedWorkerId, setInvolvedWorkerId] = useState("");
-  const [natureId, setNatureId] = useState("");
-  const [bodyPartId, setBodyPartId] = useState("");
-  const [usualWork, setUsualWork] = useState<"YES" | "NO">("YES");
-  const [whichText, setWhichText] = useState("");
-  const [howText, setHowText] = useState("");
-  const [analysisText, setAnalysisText] = useState("");
-  const [fiveWhys, setFiveWhys] = useState<FiveWhyRow[]>([createFiveWhyRow(1)]);
-  const [immediateAction, setImmediateAction] = useState("");
-  const [previousDetected, setPreviousDetected] = useState<"YES" | "NO">("NO");
-  const [previousDetectedDescription, setPreviousDetectedDescription] = useState("");
-  const [rootCauseDetails, setRootCauseDetails] = useState<RootCauseDetail[]>([]);
-  const [actionPlans, setActionPlans] = useState<ActionPlanRow[]>([createActionPlanRow()]);
+  const [selectedMonthKey, setSelectedMonthKey] = useState(monthKeys[0] ?? "");
+  const [communicationId, setCommunicationId] = useState(initialSewo?.communicationId ?? "");
+  const [skipCommunicationSelection, setSkipCommunicationSelection] = useState(Boolean(initialSewo && !initialSewo.communicationId));
+  const [eventClassification, setEventClassification] = useState(initialSewo?.eventClassification ?? "");
+  const [analysisDate, setAnalysisDate] = useState(initialSewo?.analysisDate.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+  const [areaId, setAreaId] = useState(initialSewo?.areaId ?? "");
+  const [workstationId, setWorkstationId] = useState(getTemplateString(initialSewo?.templateData, "workstationId") || initialSewo?.workstationId || "");
+  const [shiftId, setShiftId] = useState(initialSewo?.shiftId ?? "");
+  const [involvedWorkerId, setInvolvedWorkerId] = useState(getTemplateString(initialSewo?.templateData, "involvedWorkerId"));
+  const [natureId, setNatureId] = useState(getTemplateString(initialSewo?.templateData, "natureId"));
+  const [bodyPartId, setBodyPartId] = useState(getTemplateString(initialSewo?.templateData, "bodyPartId"));
+  const [usualWork, setUsualWork] = useState<"YES" | "NO">(initialSewo?.usualWorkYesNo === false ? "NO" : "YES");
+  const [whichText, setWhichText] = useState(initialSewo?.whichText ?? "");
+  const [howText, setHowText] = useState(initialSewo?.howText ?? "");
+  const [analysisText, setAnalysisText] = useState(getTemplateString(initialSewo?.templateData, "analysisText"));
+  const [fiveWhys, setFiveWhys] = useState<FiveWhyRow[]>(() => normalizeFiveWhys(initialSewo?.templateData.fiveWhys));
+  const [sifPsifDecision, setSifPsifDecision] = useState<SifPsifDecision>(() => normalizeSifPsifDecision(initialSewo?.templateData.sifPsifDecision));
+  const [immediateAction, setImmediateAction] = useState(initialSewo?.immediateCorrectiveActionText ?? "");
+  const [previousDetected, setPreviousDetected] = useState<"YES" | "NO">(
+    getYesNoValue(initialSewo?.templateData.previousDetected, "NO") === "YES" ? "YES" : "NO",
+  );
+  const [previousDetectedDescription, setPreviousDetectedDescription] = useState(getTemplateString(initialSewo?.templateData, "previousDetectedDescription"));
+  const [rootCauseDetails, setRootCauseDetails] = useState<RootCauseDetail[]>(() => normalizeRootCauseDetails(initialSewo?.templateData.rootCauseDetails));
+  const [actionPlans, setActionPlans] = useState<ActionPlanRow[]>(() => normalizeActionPlans(initialSewo?.templateData.actionPlans));
   const [photos, setPhotos] = useState<File[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionsMessage, setActionsMessage] = useState("");
   const [savingActionId, setSavingActionId] = useState<string | null>(null);
-  const [editableCommunicationActions, setEditableCommunicationActions] = useState<EditableCommunicationAction[]>([]);
+  const [editableCommunicationActions, setEditableCommunicationActions] = useState<EditableCommunicationAction[]>(
+    () => initialSewo?.linkedActions.map((action) => ({ ...action, dirty: false })) ?? [],
+  );
 
   const selectedCommunication = useMemo(
     () => communications.find((communication) => communication.id === communicationId) ?? null,
     [communicationId, communications],
   );
+  const visibleCommunications = useMemo(
+    () => communications.filter((communication) => !selectedMonthKey || communication.monthKey === selectedMonthKey),
+    [communications, selectedMonthKey],
+  );
   const selectedWorker = useMemo(
     () => workers.find((worker) => worker.id === involvedWorkerId) ?? null,
     [involvedWorkerId, workers],
   );
+  const selectedArea = useMemo(
+    () => areas.find((area) => area.id === areaId) ?? null,
+    [areaId, areas],
+  );
+  const selectedWorkstation = useMemo(
+    () => workstations.find((workstation) => workstation.id === workstationId) ?? null,
+    [workstationId, workstations],
+  );
+  const selectedNature = useMemo(
+    () => injuryTypes.find((injuryType) => injuryType.id === natureId) ?? null,
+    [injuryTypes, natureId],
+  );
+  const sifPsifResult = useMemo(() => getSifPsifResult(sifPsifDecision), [sifPsifDecision]);
+  const visibleSifPsifExposureKeys = useMemo(() => getVisibleSifPsifExposureKeys(sifPsifDecision), [sifPsifDecision]);
+  const activePsifExposureKey = useMemo(() => getActivePsifExposureKey(sifPsifDecision), [sifPsifDecision]);
+  const showPsifReasonability = Boolean(activePsifExposureKey);
+  const requiresBodyPart = selectedCommunication?.type === "FIRST_AID" || selectedCommunication?.type === "ACCIDENT";
+  const isSubmittedSewo = Boolean(initialSewo?.status && initialSewo.status !== SEWOStatus.DRAFT);
 
   useEffect(() => {
+    if (!monthKeys.length) {
+      if (selectedMonthKey) {
+        setSelectedMonthKey("");
+      }
+      return;
+    }
+
+    if (!selectedMonthKey || !monthKeys.includes(selectedMonthKey)) {
+      setSelectedMonthKey(monthKeys[0]);
+    }
+  }, [monthKeys, selectedMonthKey]);
+
+  useEffect(() => {
+    if (!initialSewo) return;
+
+    const linkedCommunication = communications.find((communication) => communication.id === initialSewo.communicationId);
+    const initialNatureId = getTemplateString(initialSewo.templateData, "natureId") || (injuryTypes.some((injuryType) => injuryType.id === initialSewo.whatText) ? initialSewo.whatText : "");
+
+    setSelectedMonthKey(linkedCommunication?.monthKey ?? monthKeys[0] ?? "");
+    setCommunicationId(initialSewo.communicationId ?? "");
+    setSkipCommunicationSelection(!initialSewo.communicationId);
+    setEventClassification(initialSewo.eventClassification);
+    setAnalysisDate(initialSewo.analysisDate.slice(0, 10));
+    setAreaId(initialSewo.areaId ?? "");
+    setWorkstationId(getTemplateString(initialSewo.templateData, "workstationId") || initialSewo.workstationId || "");
+    setShiftId(initialSewo.shiftId ?? "");
+    setInvolvedWorkerId(getTemplateString(initialSewo.templateData, "involvedWorkerId"));
+    setNatureId(initialNatureId);
+    setBodyPartId(getTemplateString(initialSewo.templateData, "bodyPartId"));
+    setUsualWork(initialSewo.usualWorkYesNo ? "YES" : "NO");
+    setWhichText(initialSewo.whichText ?? "");
+    setHowText(initialSewo.howText);
+    setAnalysisText(getTemplateString(initialSewo.templateData, "analysisText"));
+    setFiveWhys(normalizeFiveWhys(initialSewo.templateData.fiveWhys));
+    setSifPsifDecision(normalizeSifPsifDecision(initialSewo.templateData.sifPsifDecision));
+    setImmediateAction(initialSewo.immediateCorrectiveActionText);
+    setPreviousDetected(getYesNoValue(initialSewo.templateData.previousDetected, "NO") === "YES" ? "YES" : "NO");
+    setPreviousDetectedDescription(getTemplateString(initialSewo.templateData, "previousDetectedDescription"));
+    setRootCauseDetails(normalizeRootCauseDetails(initialSewo.templateData.rootCauseDetails));
+    setActionPlans(normalizeActionPlans(initialSewo.templateData.actionPlans));
+    setPhotos([]);
+    setMessage("");
+    setActionsMessage("");
+    setEditableCommunicationActions(initialSewo.linkedActions.map((action) => ({ ...action, dirty: false })));
+  }, [communications, initialSewo, injuryTypes, monthKeys]);
+
+  useEffect(() => {
+    if (initialSewo) return;
+
     if (!selectedCommunication) {
       setEditableCommunicationActions([]);
       return;
@@ -200,11 +451,9 @@ export function CreateSewoQuick({
     setImmediateAction(selectedCommunication.suggestedAction ?? "");
     setEditableCommunicationActions(selectedCommunication.openActions.map((action) => ({ ...action, dirty: false })));
     setActionsMessage("");
-  }, [selectedCommunication]);
+  }, [initialSewo, selectedCommunication]);
 
-  function toggleMonth(monthKey: string) {
-    setExpandedMonths((current) => (current.includes(monthKey) ? current.filter((entry) => entry !== monthKey) : [...current, monthKey]));
-  }
+  const canContinue = Boolean(selectedCommunication || skipCommunicationSelection || isEditing);
 
   function updateRootCauseSelection(label: string, checked: boolean) {
     setRootCauseDetails((current) => {
@@ -217,6 +466,30 @@ export function CreateSewoQuick({
 
   function addFiveWhy() {
     setFiveWhys((current) => [...current, createFiveWhyRow(current.length + 1)]);
+  }
+
+  function updateSifPsifExposure(key: SifPsifExposureKey, value: "YES" | "NO") {
+    setSifPsifDecision((current) => {
+      if (current.exposures[key] === value) return current;
+
+      const changedIndex = SIF_PSIF_EXPOSURE_KEYS.indexOf(key);
+      const exposures = {
+        ...current.exposures,
+        [key]: value,
+      };
+
+      SIF_PSIF_EXPOSURE_KEYS.slice(changedIndex + 1).forEach((nextKey) => {
+        exposures[nextKey] = "";
+      });
+
+      return {
+        ...current,
+        exposures,
+        repeatedSifPotential: "",
+        oneWhatIfAway: "",
+        noPsifExplanation: "",
+      };
+    });
   }
 
   function updateExistingAction(actionId: string, patch: Partial<EditableCommunicationAction>) {
@@ -247,15 +520,15 @@ export function CreateSewoQuick({
 
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to update action");
+        throw new Error(json.message ?? ui.updateActionError);
       }
 
       setEditableCommunicationActions((current) =>
         current.map((entry) => (entry.id === actionId ? { ...entry, dirty: false, ownerName: actionOwners.find((owner) => owner.id === entry.ownerUserId)?.name ?? entry.ownerName } : entry)),
       );
-      setActionsMessage("Communication actions updated.");
+      setActionsMessage(ui.updateActionSuccess);
     } catch (error) {
-      setActionsMessage(error instanceof Error ? error.message : "Failed to update action");
+      setActionsMessage(error instanceof Error ? error.message : ui.updateActionError);
     } finally {
       setSavingActionId(null);
     }
@@ -278,7 +551,7 @@ export function CreateSewoQuick({
 
       const presignJson = await presignResponse.json();
       if (!presignResponse.ok || !presignJson.ok) {
-        throw new Error(presignJson.message ?? "Failed to prepare photo upload");
+        throw new Error(presignJson.message ?? ui.preparePhotoUploadError);
       }
 
       const putResponse = await fetch(presignJson.data.uploadUrl, {
@@ -290,7 +563,7 @@ export function CreateSewoQuick({
       });
 
       if (!putResponse.ok) {
-        throw new Error(`Failed to upload ${photo.name}`);
+        throw new Error(formatUiMessage(ui.uploadPhotoError, { name: photo.name }));
       }
 
       uploaded.push({
@@ -303,14 +576,15 @@ export function CreateSewoQuick({
     return uploaded;
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!causeCatalogVersionId) {
-      setMessage("No cause catalog available");
+  async function saveSewo(mode: "draft" | "submit") {
+    const resolvedCauseCatalogVersionId = initialSewo?.causeCatalogVersionId ?? causeCatalogVersionId;
+
+    if (!resolvedCauseCatalogVersionId) {
+      setMessage(ui.noCauseCatalog);
       return;
     }
-    if (!selectedCommunication) {
-      setMessage("Select a communication first.");
+    if (!canContinue) {
+      setMessage(ui.selectCommunicationOrContinue);
       return;
     }
 
@@ -319,131 +593,249 @@ export function CreateSewoQuick({
 
     try {
       const attachments = photos.length ? await uploadPhotos() : [];
-      const response = await fetch(`/api/plants/${plant}/sewo`, {
-        method: "POST",
+      const isDraft = mode === "draft";
+      const resolvedEventClassification = eventClassification.trim()
+        || selectedCommunication?.typeLabel
+        || initialSewo?.eventClassification
+        || ui.notSpecified;
+      const resolvedWhereText = selectedWorkstation?.name
+        ?? selectedArea?.name
+        ?? selectedCommunication?.locationLabel
+        ?? initialSewo?.whereText
+        ?? ui.notSpecified;
+      const resolvedWhoText = selectedWorker
+        ? `${selectedWorker.employeeNo} - ${selectedWorker.name}`
+        : selectedCommunication?.targetEmployeeName ?? initialSewo?.whoText ?? ui.notSpecified;
+      const resolvedHowText = howText.trim() || ui.notSpecified;
+      const resolvedImmediateAction = immediateAction.trim();
+      const completeActionPlans = actionPlans
+        .filter((action) => action.title.trim() && action.description.trim() && action.ownerUserId)
+        .map((action) => ({
+          category: action.category,
+          priority: action.priority,
+          title: action.title,
+          description: action.description,
+          ownerUserId: action.ownerUserId,
+          dueDate: action.dueDate || undefined,
+        }));
+      const nextStatus = isDraft
+        ? SEWOStatus.DRAFT
+        : initialSewo?.status && initialSewo.status !== SEWOStatus.DRAFT
+          ? initialSewo.status
+          : SEWOStatus.IN_APPROVAL;
+
+      const response = await fetch(initialSewo ? `/api/plants/${plant}/sewo/${initialSewo.id}` : `/api/plants/${plant}/sewo`, {
+        method: initialSewo ? "PUT" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          communicationId,
-          eventClassification,
+          communicationId: communicationId || undefined,
+          eventClassification: resolvedEventClassification,
           areaId: areaId || undefined,
           workstationId: workstationId || undefined,
           shiftId: shiftId || undefined,
-          analysisDate: new Date().toISOString(),
-          whatText: natureId,
-          whereText: workstationId || areaId,
-          whoText: selectedWorker ? `${selectedWorker.employeeNo} - ${selectedWorker.name}` : selectedCommunication.targetEmployeeName ?? "",
+          analysisDate: analysisDate || new Date().toISOString(),
+          whatText: natureId || selectedNature?.name || initialSewo?.whatText || resolvedEventClassification,
+          whereText: resolvedWhereText,
+          whoText: resolvedWhoText,
           usualWorkYesNo: usualWork === "YES",
           whichText,
-          howText,
-          immediateCorrectiveActionText: immediateAction,
+          howText: resolvedHowText,
+          immediateCorrectiveActionText: resolvedImmediateAction,
           attachments,
           templateData: {
             workstationId,
             involvedWorkerId,
-            involvedWorkerName: selectedWorker?.name ?? selectedCommunication.targetEmployeeName ?? "",
+            involvedWorkerName: selectedWorker?.name ?? selectedCommunication?.targetEmployeeName ?? "",
             involvedWorkerEmployeeNo: selectedWorker?.employeeNo ?? null,
             involvedWorkerDepartment: selectedWorker?.dept ?? null,
             natureId,
             bodyPartId,
+            whereText: resolvedWhereText,
             analysisText,
             fiveWhys,
+            sifPsifDecision: {
+              ...sifPsifDecision,
+              result: sifPsifResult,
+            },
             previousDetected,
             previousDetectedDescription,
             rootCauseDetails,
+            actionPlans,
           },
-          causeCatalogVersionId,
+          causeCatalogVersionId: resolvedCauseCatalogVersionId,
           causeSelections: [],
-          actionPlans: actionPlans.filter(
-            (action) => action.title.trim() && action.description.trim() && action.ownerUserId,
-          ),
+          status: nextStatus,
+          actionPlans: isDraft ? [] : completeActionPlans,
         }),
       });
 
       const json = await response.json();
-      setMessage(json.ok ? "S-EWO created" : json.message ?? "Failed to create S-EWO");
+      const successMessage = isDraft ? ui.draftSaved : initialSewo ? ui.updateSuccess : ui.createSuccess;
+      const errorMessage = isDraft ? ui.draftSaveError : initialSewo ? ui.updateError : ui.createError;
+      setMessage(json.ok ? successMessage : json.message ?? errorMessage);
       if (json.ok) {
         window.location.reload();
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to create S-EWO");
+      setMessage(error instanceof Error ? error.message : mode === "draft" ? ui.draftSaveError : initialSewo ? ui.updateError : ui.createError);
     } finally {
       setLoading(false);
     }
   }
 
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    await saveSewo("submit");
+  }
+
   return (
     <form onSubmit={submit} className="space-y-6 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-2">
-        <h3 className="text-lg font-semibold text-slate-900">S-EWO Investigation</h3>
-        <p className="text-sm text-slate-600">Select the associated communication first. The investigation form opens only after that step.</p>
+        <h3 className="text-lg font-semibold text-slate-900">{initialSewo ? ui.editSewoTitle : ui.investigationTitle}</h3>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Associated communication</h4>
-            <p className="mt-1 text-sm text-slate-600">Communications are grouped by month to keep the list compact.</p>
-          </div>
-          {selectedCommunication ? (
-            <div className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-800">
-              {selectedCommunication.eventDate} | {selectedCommunication.typeLabel} | {selectedCommunication.locationLabel}
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.associatedCommunication}</h4>
             </div>
-          ) : null}
-        </div>
+            <div className="flex items-center gap-2">
+              {selectedCommunication ? (
+                <div className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-800">
+                  {selectedCommunication.eventDate} | {selectedCommunication.typeLabel} | {selectedCommunication.locationLabel}
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={skipCommunicationSelection ? "default" : "secondary"}
+                onClick={() => {
+                  setSkipCommunicationSelection((current) => !current);
+                  setCommunicationId("");
+                  setEditableCommunicationActions([]);
+                  setActionsMessage("");
+                }}
+                title={ui.continueWithoutLinkedCommunication}
+                className="gap-2"
+              >
+                {skipCommunicationSelection ? <ArrowRightCircle className="h-4 w-4" /> : <Link2Off className="h-4 w-4" />}
+                <span>{skipCommunicationSelection ? ui.manualMode : ui.skipLink}</span>
+              </Button>
+            </div>
+          </div>
 
-        <div className="space-y-3">
-          {monthKeys.map((monthKey) => {
-            const monthCommunications = communications.filter((communication) => communication.monthKey === monthKey);
-            const expanded = expandedMonths.includes(monthKey);
-            return (
-              <div key={monthKey} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <button
-                  type="button"
-                  onClick={() => toggleMonth(monthKey)}
-                  className="flex w-full items-center justify-between px-4 py-3 text-left"
+          <div className={`space-y-3 ${skipCommunicationSelection ? "opacity-50" : ""}`}>
+            {monthKeys.length > 1 ? (
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {ui.month}
+                </label>
+                <select
+                  value={selectedMonthKey}
+                  onChange={(event) => setSelectedMonthKey(event.target.value)}
+                  className="min-w-[220px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
                 >
-                  <span className="text-sm font-semibold text-slate-900">{monthCommunications[0]?.monthLabel ?? monthKey}</span>
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{expanded ? "Hide" : "Show"} | {monthCommunications.length}</span>
-                </button>
-                {expanded ? (
-                  <div className="border-t border-slate-200">
-                    {monthCommunications.map((communication) => {
-                      const selected = communication.id === communicationId;
-                      const blocked = Boolean(communication.linkedSewoId);
-                      return (
-                        <button
-                          key={communication.id}
-                          type="button"
-                          disabled={blocked}
-                          onClick={() => setCommunicationId(communication.id)}
-                          className={`flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 ${selected ? "bg-teal-50" : "bg-white"} ${blocked ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"}`}
+                  {monthKeys.map((monthKey) => {
+                    const monthLabel = communications.find((communication) => communication.monthKey === monthKey)?.monthLabel ?? monthKey;
+                    const count = communications.filter((communication) => communication.monthKey === monthKey).length;
+                    return (
+                      <option key={monthKey} value={monthKey}>
+                        {monthLabel} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            ) : null}
+
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="grid grid-cols-[110px_minmax(0,1fr)_120px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <span>{ui.tableDate}</span>
+                <span>{ui.communication}</span>
+                <span className="text-right">{ui.tableStatus}</span>
+              </div>
+
+              <div className="max-h-[260px] overflow-y-auto">
+                {visibleCommunications.map((communication) => {
+                  const selected = communication.id === communicationId;
+                  const blocked = Boolean(communication.linkedSewoId && communication.linkedSewoId !== initialSewo?.id);
+
+                  return (
+                    <button
+                      key={communication.id}
+                      type="button"
+                      disabled={blocked || skipCommunicationSelection}
+                      onClick={() => {
+                        setSkipCommunicationSelection(false);
+                        setCommunicationId(communication.id);
+                      }}
+                      className={`grid w-full grid-cols-[110px_minmax(0,1fr)_120px] gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 ${
+                        selected ? "bg-teal-50" : "bg-white"
+                      } ${blocked ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"}`}
+                    >
+                      <span className="text-sm font-medium text-slate-700">{communication.eventDate}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-900">{communication.typeLabel}</span>
+                        <span className="block truncate text-xs text-slate-500">{communication.locationLabel}</span>
+                      </span>
+                      <span className="flex justify-end">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            blocked
+                              ? "bg-amber-100 text-amber-800"
+                              : selected
+                                ? "bg-teal-100 text-teal-800"
+                                : "bg-slate-100 text-slate-700"
+                          }`}
                         >
-                          <span className="text-sm text-slate-800">{communication.eventDate} | {communication.typeLabel} | {communication.locationLabel}</span>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${blocked ? "bg-amber-100 text-amber-800" : selected ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-700"}`}>
-                            {blocked ? "S-EWO already exists" : selected ? "Selected" : "Choose"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          {blocked ? ui.linked : selected ? ui.selected : ui.choose}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {visibleCommunications.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-sm text-slate-500">{ui.noCommunicationsForMonth}</div>
                 ) : null}
               </div>
-            );
-          })}
-        </div>
-      </section>
+            </div>
+          </div>
+        </section>
 
-      {selectedCommunication ? (
+      {canContinue ? (
         <>
-          <section className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-2">
+          <section className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-3">
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Event classification</span>
-              <input value={eventClassification} readOnly className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.tableDate}</span>
+              <input
+                type="date"
+                value={analysisDate}
+                onChange={(event) => setAnalysisDate(event.target.value)}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.eventClassification}</span>
+              <input
+                value={eventClassification}
+                onChange={(event) => setEventClassification(event.target.value)}
+                readOnly={Boolean(selectedCommunication)}
+                className={`w-full rounded-md border border-slate-300 px-3 py-2 text-sm ${selectedCommunication ? "bg-white" : "bg-white"}`}
+              />
             </label>
             <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Selected communication</p>
-              <p className="mt-1">{selectedCommunication.eventDate} | {selectedCommunication.typeLabel}</p>
-              <p>{selectedCommunication.locationLabel}</p>
+              <p className="font-semibold text-slate-900">{ui.selectedCommunication}</p>
+              {selectedCommunication ? (
+                <>
+                  <p className="mt-1">{selectedCommunication.eventDate} | {selectedCommunication.typeLabel}</p>
+                  <p>{selectedCommunication.locationLabel}</p>
+                </>
+              ) : communicationId ? (
+                <p className="mt-1">{communicationId}</p>
+              ) : (
+                <p className="mt-1">{ui.manualWithoutCommunication}</p>
+              )}
             </div>
           </section>
 
@@ -451,8 +843,7 @@ export function CreateSewoQuick({
             <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Open actions from communication</h4>
-                  <p className="mt-1 text-sm text-slate-600">These actions stay linked to the communication and can be edited here before finishing the S-EWO.</p>
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.openActionsFromCommunication}</h4>
                 </div>
                 {actionsMessage ? <p className="text-sm text-slate-700">{actionsMessage}</p> : null}
               </div>
@@ -462,25 +853,25 @@ export function CreateSewoQuick({
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{action.title}</p>
-                        <p className="text-xs text-slate-500">{action.status}</p>
+                        <p className="text-xs text-slate-500">{ui.actionStatusLabels[action.status] ?? action.status}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Link href={`/app/${plant}/actions/${action.id}`} className="text-sm font-medium text-teal-700 hover:underline">
-                          Open action
+                          {ui.openAction}
                         </Link>
                         <Button type="button" size="sm" onClick={() => saveExistingAction(action.id)} disabled={savingActionId === action.id || !action.dirty}>
-                          {savingActionId === action.id ? "Saving..." : "Save action"}
+                          {savingActionId === action.id ? ui.savingAction : ui.saveAction}
                         </Button>
                       </div>
                     </div>
 
                     <div className="grid gap-3 lg:grid-cols-2">
                       <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Title</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
                         <input value={action.title} onChange={(event) => updateExistingAction(action.id, { title: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
                       </label>
                       <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
                         <select value={action.ownerUserId} onChange={(event) => updateExistingAction(action.id, { ownerUserId: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
                           {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
                         </select>
@@ -488,29 +879,29 @@ export function CreateSewoQuick({
                     </div>
 
                     <label className="mt-3 block space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
                       <textarea value={action.description} onChange={(event) => updateExistingAction(action.id, { description: event.target.value })} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
                     </label>
 
                     <div className="mt-3 grid gap-3 lg:grid-cols-3">
                       <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
                         <select value={action.priority} onChange={(event) => updateExistingAction(action.id, { priority: event.target.value as ActionPriority })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                          <option value={ActionPriority.LOW}>Low</option>
-                          <option value={ActionPriority.MEDIUM}>Medium</option>
-                          <option value={ActionPriority.HIGH}>High</option>
+                          <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
+                          <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
+                          <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
                         </select>
                       </label>
                       <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
                         <select value={action.category} onChange={(event) => updateExistingAction(action.id, { category: event.target.value as ActionCategory })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                          <option value={ActionCategory.CORRECTIVE}>Corrective</option>
-                          <option value={ActionCategory.PREVENTIVE}>Preventive</option>
-                          <option value={ActionCategory.IMPROVEMENT}>Improvement</option>
+                          <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
+                          <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
+                          <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
                         </select>
                       </label>
                       <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
                         <input type="date" value={action.dueDate} onChange={(event) => updateExistingAction(action.id, { dueDate: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
                       </label>
                     </div>
@@ -522,23 +913,23 @@ export function CreateSewoQuick({
 
           <section className="grid gap-4 lg:grid-cols-3">
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Area</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.area}</span>
               <select value={areaId} onChange={(event) => setAreaId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Select area</option>
+                <option value="">{ui.selectArea}</option>
                 {areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
               </select>
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Workstation</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.workstation}</span>
               <select value={workstationId} onChange={(event) => setWorkstationId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Select workstation</option>
+                <option value="">{ui.selectWorkstation}</option>
                 {workstations.map((workstation) => <option key={workstation.id} value={workstation.id}>{workstation.name}</option>)}
               </select>
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Shift</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.shift}</span>
               <select value={shiftId} onChange={(event) => setShiftId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Select shift</option>
+                <option value="">{ui.selectShift}</option>
                 {shifts.map((shift) => <option key={shift.id} value={shift.id}>{shift.name}</option>)}
               </select>
             </label>
@@ -548,9 +939,9 @@ export function CreateSewoQuick({
             <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Involved person</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.involvedPerson}</span>
                   <select value={involvedWorkerId} onChange={(event) => setInvolvedWorkerId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                    <option value="">Select worker</option>
+                    <option value="">{ui.selectWorker}</option>
                     {workers.map((worker) => (
                       <option key={worker.id} value={worker.id}>
                         {worker.employeeNo} - {worker.name}
@@ -559,9 +950,9 @@ export function CreateSewoQuick({
                   </select>
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nature</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.nature}</span>
                   <select value={natureId} onChange={(event) => setNatureId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                    <option value="">Select nature of injury</option>
+                    <option value="">{ui.selectNature}</option>
                     {injuryTypes.map((injuryType) => <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>)}
                   </select>
                 </label>
@@ -571,72 +962,71 @@ export function CreateSewoQuick({
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">{selectedWorker.name}</p>
                   <p>{selectedWorker.employeeNo}</p>
-                  <p>{selectedWorker.dept ?? "Department not defined"}</p>
+                  <p>{selectedWorker.dept ?? ui.departmentNotDefined}</p>
                 </div>
               ) : null}
 
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Who usual job?</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.usualJob}</span>
                   <select value={usualWork} onChange={(event) => setUsualWork(event.target.value as "YES" | "NO")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                    <option value="YES">Yes</option>
-                    <option value="NO">No</option>
+                    <option value="YES">{ui.yes}</option>
+                    <option value="NO">{ui.no}</option>
                   </select>
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Which operation</span>
-                  <input value={whichText} onChange={(event) => setWhichText(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Type of operation" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.whichOperation}</span>
+                  <input value={whichText} onChange={(event) => setWhichText(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={ui.whichOperationPlaceholder} />
                 </label>
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Anatomical model</p>
-              <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} />
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.anatomicalModel}</p>
+              <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} labels={ui.bodyZonePicker} required={requiresBodyPart} />
             </div>
           </section>
 
           <section className="rounded-2xl border border-dashed border-teal-300 bg-teal-50 p-4">
             <div className="flex flex-col gap-1">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-teal-900">Evidence / Photo Upload</h4>
-              <p className="text-sm text-slate-700">Add photos or files before starting the analysis section.</p>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-teal-900">{ui.evidenceUpload}</h4>
+              <p className="text-sm text-slate-700">{ui.evidenceUploadDescription}</p>
             </div>
             <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="mt-4 w-full rounded-md border border-teal-300 bg-white px-3 py-3 text-sm" />
-            {photos.length > 0 ? <p className="mt-2 text-sm text-slate-700">{photos.length} file(s) ready for upload.</p> : null}
+            {photos.length > 0 ? <p className="mt-2 text-sm text-slate-700">{photos.length} {ui.filesReadySuffix}</p> : null}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">How did the accident happen?</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.howDidTheAccidentHappen}</span>
               <textarea value={howText} onChange={(event) => setHowText(event.target.value)} rows={4} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Immediate corrective action plan</span>
-              <textarea value={immediateAction} onChange={(event) => setImmediateAction(event.target.value)} rows={4} className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-slate-800" required />
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.immediateCorrectiveActionPlan}</span>
+              <textarea value={immediateAction} onChange={(event) => setImmediateAction(event.target.value)} rows={4} className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-slate-800" />
             </label>
           </section>
 
           <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <div>
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Analyse</h4>
-              <p className="mt-1 text-sm text-slate-600">Use both the free-text analysis and the 5 Why sequence.</p>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.analysis}</h4>
             </div>
 
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Analysis text</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.analysisText}</span>
               <textarea value={analysisText} onChange={(event) => setAnalysisText(event.target.value)} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
             </label>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">5 Why</p>
-                <Button type="button" size="sm" variant="secondary" onClick={addFiveWhy}>Add Why</Button>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.fiveWhy}</p>
+                <Button type="button" size="sm" variant="secondary" onClick={addFiveWhy}>{ui.addWhy}</Button>
               </div>
               <div className="space-y-3">
                 {fiveWhys.map((row, index) => (
                   <div key={row.id} className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-2">
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Why {index + 1}</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.whyLabel} {index + 1}</span>
                       <textarea
                         value={row.why}
                         onChange={(event) =>
@@ -647,7 +1037,7 @@ export function CreateSewoQuick({
                       />
                     </label>
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Answer {index + 1}</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.answerLabel} {index + 1}</span>
                       <textarea
                         value={row.answer}
                         onChange={(event) =>
@@ -665,11 +1055,10 @@ export function CreateSewoQuick({
 
           <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <div>
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Root Cause Analysis</h4>
-              <p className="mt-1 text-sm text-slate-600">Select causes below. Each selected item opens its own note box and root-cause toggle.</p>
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.rootCauseAnalysis}</h4>
             </div>
 
-            {ROOT_CAUSE_GROUPS.map((group) => (
+            {rootCauseGroups.map((group) => (
               <div key={group.heading} className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{group.heading}</p>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -715,7 +1104,7 @@ export function CreateSewoQuick({
                       />
                     </label>
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Root cause</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.rootCause}</span>
                       <select
                         value={detail.isRootCause ? "YES" : "NO"}
                         onChange={(event) =>
@@ -725,8 +1114,8 @@ export function CreateSewoQuick({
                         }
                         className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                       >
-                        <option value="NO">No</option>
-                        <option value="YES">Yes</option>
+                        <option value="NO">{ui.no}</option>
+                        <option value="YES">{ui.yes}</option>
                       </select>
                     </label>
                   </div>
@@ -735,16 +1124,98 @@ export function CreateSewoQuick({
             ) : null}
           </section>
 
+          <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.sifPsifDecisionTree}</h4>
+              </div>
+              <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${getSifPsifResultClassName(sifPsifResult)}`}>
+                {ui.sifPsifResult}: {getSifPsifResultLabel(sifPsifResult, ui)}
+              </span>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)_160px] lg:items-center">
+              <div className="rounded-lg border border-[var(--brand-200)] bg-[var(--brand-50)] px-4 py-3 text-center text-sm font-bold text-[var(--brand-700)]">
+                {ui.eventReported}
+              </div>
+              <div className="rounded-lg border-2 border-[var(--brand-700)] bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                {ui.actualSifQuestion}
+              </div>
+              <YesNoToggle
+                value={sifPsifDecision.actualSif}
+                onChange={(value) => setSifPsifDecision((current) => ({ ...current, actualSif: value }))}
+                ui={ui}
+              />
+            </div>
+
+            {sifPsifDecision.actualSif === "YES" ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+                {ui.sifPsifResult}: {ui.sifResult}
+              </div>
+            ) : null}
+
+            {sifPsifDecision.actualSif === "NO" ? (
+              <div className="space-y-3">
+                {visibleSifPsifExposureKeys.map((key) => (
+                  <div key={key} className="space-y-3">
+                    <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[48px_minmax(0,1fr)_160px] lg:items-center">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-bold text-slate-500 shadow-sm">
+                        {SIF_PSIF_EXPOSURE_KEYS.indexOf(key) + 1}
+                      </span>
+                      <p className="text-sm font-semibold text-slate-900">{ui.sifPsifExposureQuestions[key]}</p>
+                      <YesNoToggle value={sifPsifDecision.exposures[key]} onChange={(value) => updateSifPsifExposure(key, value)} ui={ui} />
+                    </div>
+
+                    {activePsifExposureKey === key ? (
+                      <div className="space-y-3 rounded-2xl border border-[var(--brand-300)] bg-[var(--brand-50)] p-4">
+                        <h5 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">{ui.sifPsifReasonabilityCheck}</h5>
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px] lg:items-center">
+                          <p className="text-sm font-semibold text-slate-900">{ui.repeatedSifPotentialQuestion}</p>
+                          <YesNoToggle
+                            value={sifPsifDecision.repeatedSifPotential}
+                            onChange={(value) => setSifPsifDecision((current) => ({ ...current, repeatedSifPotential: value }))}
+                            ui={ui}
+                          />
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px] lg:items-center">
+                          <p className="text-sm font-semibold text-slate-900">{ui.oneWhatIfAwayQuestion}</p>
+                          <YesNoToggle
+                            value={sifPsifDecision.oneWhatIfAway}
+                            onChange={(value) => setSifPsifDecision((current) => ({ ...current, oneWhatIfAway: value }))}
+                            ui={ui}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {sifPsifResult === "NO_PSIF" && showPsifReasonability ? (
+              <label className="block space-y-1 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.noPsifExplanation}</span>
+                <textarea
+                  value={sifPsifDecision.noPsifExplanation}
+                  onChange={(event) => setSifPsifDecision((current) => ({ ...current, noPsifExplanation: event.target.value }))}
+                  rows={3}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  placeholder={ui.noPsifExplanationPlaceholder}
+                />
+              </label>
+            ) : null}
+          </section>
+
           <section className="grid gap-4 lg:grid-cols-2">
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Have previous UA / UC been detected?</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.previousDetected}</span>
               <select value={previousDetected} onChange={(event) => setPreviousDetected(event.target.value as "YES" | "NO")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="NO">No</option>
-                <option value="YES">Yes</option>
+                <option value="NO">{ui.no}</option>
+                <option value="YES">{ui.yes}</option>
               </select>
             </label>
             <label className="space-y-1 text-sm">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Describe previous detection</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.previousDetectedDescription}</span>
               <textarea value={previousDetectedDescription} onChange={(event) => setPreviousDetectedDescription(event.target.value)} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
             </label>
           </section>
@@ -752,11 +1223,10 @@ export function CreateSewoQuick({
           <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Action Plan</h4>
-                <p className="mt-1 text-sm text-slate-600">Create as many actions as needed from this investigation.</p>
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.actionPlan}</h4>
               </div>
               <Button type="button" size="sm" variant="secondary" onClick={() => setActionPlans((current) => [...current, createActionPlanRow()])}>
-                Add action
+                {ui.addAction}
               </Button>
             </div>
 
@@ -764,55 +1234,55 @@ export function CreateSewoQuick({
               {actionPlans.map((action) => (
                 <div key={action.id} className="grid gap-3 rounded-xl border border-slate-200 bg-amber-50 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-slate-900">Action</p>
+                    <p className="text-sm font-semibold text-slate-900">{ui.action}</p>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => setActionPlans((current) => (current.length === 1 ? current : current.filter((item) => item.id !== action.id)))}
                     >
-                      Remove
+                      {ui.remove}
                     </Button>
                   </div>
 
                   <div className="grid gap-3 lg:grid-cols-2">
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Title</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
                       <input value={action.title} onChange={(event) => setActionPlans((current) => current.map((item) => (item.id === action.id ? { ...item, title: event.target.value } : item)))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
                     </label>
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
                       <select value={action.category} onChange={(event) => setActionPlans((current) => current.map((item) => (item.id === action.id ? { ...item, category: event.target.value as ActionCategory } : item)))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                        <option value={ActionCategory.CORRECTIVE}>Corrective</option>
-                        <option value={ActionCategory.PREVENTIVE}>Preventive</option>
-                        <option value={ActionCategory.IMPROVEMENT}>Improvement</option>
+                        <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
+                        <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
+                        <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
                       </select>
                     </label>
                   </div>
 
                   <label className="space-y-1 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
                     <textarea value={action.description} onChange={(event) => setActionPlans((current) => current.map((item) => (item.id === action.id ? { ...item, description: event.target.value } : item)))} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
                   </label>
 
                   <div className="grid gap-3 lg:grid-cols-3">
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
                       <select value={action.ownerUserId} onChange={(event) => setActionPlans((current) => current.map((item) => (item.id === action.id ? { ...item, ownerUserId: event.target.value } : item)))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                        <option value="">Select owner</option>
+                        <option value="">{ui.selectOwner}</option>
                         {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
                       </select>
                     </label>
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Priority</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
                       <select value={action.priority} onChange={(event) => setActionPlans((current) => current.map((item) => (item.id === action.id ? { ...item, priority: event.target.value as ActionPriority } : item)))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                        <option value={ActionPriority.LOW}>Low</option>
-                        <option value={ActionPriority.MEDIUM}>Medium</option>
-                        <option value={ActionPriority.HIGH}>High</option>
+                        <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
+                        <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
+                        <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
                       </select>
                     </label>
                     <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due date</span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
                       <input type="date" value={action.dueDate} onChange={(event) => setActionPlans((current) => current.map((item) => (item.id === action.id ? { ...item, dueDate: event.target.value } : item)))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
                     </label>
                   </div>
@@ -821,8 +1291,13 @@ export function CreateSewoQuick({
             </div>
           </section>
 
-          <div className="flex items-center gap-3">
-            <Button size="sm" type="submit" disabled={loading}>{loading ? "Saving..." : "Create S-EWO"}</Button>
+          <div className="flex flex-wrap items-center gap-3">
+            {!isSubmittedSewo ? (
+              <Button size="sm" type="button" variant="secondary" disabled={loading} onClick={() => void saveSewo("draft")}>
+                {loading ? ui.savingAction : ui.saveDraft}
+              </Button>
+            ) : null}
+            <Button size="sm" type="submit" disabled={loading}>{loading ? ui.savingAction : isSubmittedSewo ? ui.updateSewo : ui.createSewo}</Button>
             {message ? <p className="text-sm text-slate-700">{message}</p> : null}
           </div>
         </>

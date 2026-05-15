@@ -3,6 +3,10 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  calculateAgeOnDate,
+  calculateOccupationalHealthExamValidUntil,
+} from "@/lib/occupational-health-validity";
 import type { UpsertOccupationalHealthWorkerInput } from "@/lib/validation/dtos";
 
 type OccupationalHealthWorkerRow = {
@@ -49,16 +53,6 @@ export type OccupationalHealthWorkerView = {
   updatedAt: string;
 };
 
-function calculateAge(birthDate: Date) {
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age -= 1;
-  }
-  return age;
-}
-
 function pdfBufferFromDocument(doc: InstanceType<typeof PDFDocument>) {
   return new Promise<Buffer>((resolve) => {
     const chunks: Buffer[] = [];
@@ -72,8 +66,14 @@ function normalizeHeader(value: unknown) {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function getNormalizedRowValues(row: ExcelJS.Row) {
+  return Array.from(row.values as unknown[]).map(normalizeHeader);
 }
 
 function getHeaderIndex(headerMap: Map<string, number>, ...keys: string[]) {
@@ -109,13 +109,44 @@ function parseStatus(value: unknown): "VALID" | "EXPIRED" | "DUE_SOON" | "PENDIN
   return "VALID";
 }
 
+function buildFixedColumnHeaderMap() {
+  return new Map<string, number>([
+    ["n interno", 1],
+    ["nome", 2],
+    ["data de nascimento", 3],
+    ["idade", 4],
+    ["categoria profissional", 5],
+    ["funcao", 6],
+    ["posto trabalho", 7],
+    ["genero", 8],
+    ["nacionalidade", 9],
+    ["data de admissao", 10],
+    ["data de admissao a funcao", 11],
+    ["data ultimo exame", 12],
+    ["data de validade", 13],
+    ["estado", 14],
+    ["observacoes", 15],
+  ]);
+}
+
+function looksLikeLegacyExport(sheet: ExcelJS.Worksheet) {
+  const firstRowValues = getNormalizedRowValues(sheet.getRow(1)).filter(Boolean);
+  if (!firstRowValues.length) return false;
+  return firstRowValues.every((value) => value.includes("dados medicina do trabalho"));
+}
+
 function mapWorker(row: OccupationalHealthWorkerRow): OccupationalHealthWorkerView {
+  const validUntil = calculateOccupationalHealthExamValidUntil({
+    birthDate: row.birthDate,
+    examDate: row.examDate,
+  });
+
   return {
     id: row.id,
     employeeNo: row.employeeNo,
     name: row.name,
     birthDate: row.birthDate.toISOString(),
-    age: calculateAge(row.birthDate),
+    age: calculateAgeOnDate(row.birthDate),
     workstationId: row.workstationId,
     workstationName: row.workstationName,
     gender: row.gender === "FEMALE" ? "FEMALE" : "MALE",
@@ -124,7 +155,7 @@ function mapWorker(row: OccupationalHealthWorkerRow): OccupationalHealthWorkerVi
     roleName: row.roleName,
     nationality: row.nationality,
     examDate: row.examDate.toISOString(),
-    validUntil: row.validUntil?.toISOString() ?? null,
+    validUntil: validUntil.toISOString(),
     status: row.status,
     observation: row.observation,
     isActive: row.isActive,
@@ -191,6 +222,10 @@ export const OccupationalHealthService = {
       : [];
 
     const id = existing[0]?.id ?? workerId ?? randomUUID();
+    const validUntil = calculateOccupationalHealthExamValidUntil({
+      birthDate: input.birthDate,
+      examDate: input.examDate,
+    });
 
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "OccupationalHealthWorker" (
@@ -202,7 +237,7 @@ export const OccupationalHealthService = {
         ${id}, ${plantId}, ${input.employeeNo.trim()}, ${input.name.trim()}, ${input.birthDate},
         ${input.workstationId ?? null}, ${input.gender}, ${input.hireDate}, ${input.roleStartDate},
         ${input.roleName?.trim() || null}, ${input.nationality?.trim() || null}, ${input.examDate},
-        ${input.validUntil ?? null}, ${input.status}, ${input.observation?.trim() || null}, ${input.isActive},
+        ${validUntil}, ${input.status}, ${input.observation?.trim() || null}, ${input.isActive},
         NOW(), NOW()
       )
       ON CONFLICT ("id") DO UPDATE SET
@@ -271,25 +306,33 @@ export const OccupationalHealthService = {
 
     let headerRowNumber = 0;
     let headerMap = new Map<string, number>();
+    let dataStartRow = 0;
 
-    for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 10); rowNumber += 1) {
-      const values = (sheet.getRow(rowNumber).values as unknown[]).map(normalizeHeader);
+    for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 12); rowNumber += 1) {
+      const values = getNormalizedRowValues(sheet.getRow(rowNumber));
       if (values.includes("nome") && values.includes("data de nascimento")) {
         headerRowNumber = rowNumber;
         headerMap = new Map(values.map((value, index) => [value, index]));
+        dataStartRow = rowNumber + 1;
         break;
       }
     }
 
     if (!headerRowNumber) {
-      throw new Error("Could not find a valid header row in the Excel file");
+      if (!looksLikeLegacyExport(sheet)) {
+        throw new Error("Could not find a valid header row in the Excel file");
+      }
+
+      headerMap = buildFixedColumnHeaderMap();
+      dataStartRow = 3;
     }
 
     let imported = 0;
-    for (let rowNumber = headerRowNumber + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
+    let skipped = 0;
+    for (let rowNumber = dataStartRow; rowNumber <= sheet.rowCount; rowNumber += 1) {
       const row = sheet.getRow(rowNumber);
-      const employeeNo = row.getCell(getHeaderIndex(headerMap, "N.º Interno", "N.o Interno", "Nº Interno") ?? 1).value;
-      const name = row.getCell(getHeaderIndex(headerMap, "Nome") ?? 2).value;
+      const employeeNo = row.getCell(getHeaderIndex(headerMap, "n interno", "numero interno") ?? 1).value;
+      const name = row.getCell(getHeaderIndex(headerMap, "nome") ?? 2).value;
 
       if (!employeeNo || !name) continue;
 
@@ -297,21 +340,37 @@ export const OccupationalHealthService = {
       const nameText = String(name).trim();
       if (!employeeNoText || !nameText || normalizeHeader(employeeNoText).includes("interno")) continue;
 
-      const birthDate = parseExcelDate(row.getCell(getHeaderIndex(headerMap, "Data de Nascimento") ?? 3).value);
+      const normalizedEmployeeNo = normalizeHeader(employeeNoText);
+      const normalizedName = normalizeHeader(nameText);
+      if (
+        normalizedEmployeeNo === "required" ||
+        normalizedEmployeeNo === "auto" ||
+        normalizedName === "required" ||
+        normalizedName === "auto" ||
+        normalizedEmployeeNo.includes("use datas") ||
+        normalizedEmployeeNo.includes("preencha os dados")
+      ) {
+        continue;
+      }
+
+      const birthDate = parseExcelDate(row.getCell(getHeaderIndex(headerMap, "data de nascimento") ?? 3).value);
       const hireDate = parseExcelDate(
-        row.getCell(getHeaderIndex(headerMap, "Data de Admissão", "Data de Admissao") ?? 10).value,
+        row.getCell(getHeaderIndex(headerMap, "data de admissao") ?? 10).value,
       );
       const parsedRoleStartDate = parseExcelDate(
-        row.getCell(getHeaderIndex(headerMap, "Data de Admisão à função", "Data de Admissao à função", "Data de Admissao a funcao") ?? 11).value,
+        row.getCell(getHeaderIndex(headerMap, "data de admissao a funcao") ?? 11).value,
       );
       const examDate = parseExcelDate(
-        row.getCell(getHeaderIndex(headerMap, "Data Ultimo exame", "Data Ultimo exame ") ?? 12).value,
+        row.getCell(getHeaderIndex(headerMap, "data ultimo exame") ?? 12).value,
       );
 
-      if (!birthDate || !hireDate || !examDate) continue;
+      if (!birthDate || !hireDate || !examDate) {
+        skipped += 1;
+        continue;
+      }
 
       const roleStartDate = parsedRoleStartDate ?? hireDate;
-      const workstationName = String(row.getCell(getHeaderIndex(headerMap, "Posto trabalho", "Posto de trabalho") ?? 7).value ?? "").trim();
+      const workstationName = String(row.getCell(getHeaderIndex(headerMap, "posto trabalho", "posto de trabalho") ?? 7).value ?? "").trim();
       const workstationId = await findWorkstationId(plantId, workstationName);
 
       await this.upsert(plantId, {
@@ -319,22 +378,22 @@ export const OccupationalHealthService = {
         name: nameText,
         birthDate,
         workstationId,
-        gender: parseGender(row.getCell(getHeaderIndex(headerMap, "Género", "Genero") ?? 8).value),
+        gender: parseGender(row.getCell(getHeaderIndex(headerMap, "genero") ?? 8).value),
         hireDate,
         roleStartDate,
-        roleName: String(row.getCell(getHeaderIndex(headerMap, "Função", "Funcao", "Categoria profissional") ?? 6).value ?? "").trim() || undefined,
-        nationality: String(row.getCell(getHeaderIndex(headerMap, "Nacionalidade") ?? 9).value ?? "").trim() || undefined,
+        roleName: String(row.getCell(getHeaderIndex(headerMap, "funcao", "categoria profissional") ?? 6).value ?? "").trim() || undefined,
+        nationality: String(row.getCell(getHeaderIndex(headerMap, "nacionalidade") ?? 9).value ?? "").trim() || undefined,
         examDate,
-        validUntil: parseExcelDate(row.getCell(getHeaderIndex(headerMap, "Data de Validade", "Proximo exame") ?? 13).value) ?? undefined,
-        status: parseStatus(row.getCell(getHeaderIndex(headerMap, "Estado") ?? 14).value),
-        observation: String(row.getCell(getHeaderIndex(headerMap, "Observações", "Observacoes") ?? 15).value ?? "").trim() || undefined,
+        validUntil: undefined,
+        status: parseStatus(row.getCell(getHeaderIndex(headerMap, "estado") ?? 14).value),
+        observation: String(row.getCell(getHeaderIndex(headerMap, "observacoes") ?? 15).value ?? "").trim() || undefined,
         isActive: true,
       });
 
       imported += 1;
     }
 
-    return { imported };
+    return { imported, skipped };
   },
 
   async buildExport(plantId: string, plantCode: string) {
@@ -348,24 +407,42 @@ export const OccupationalHealthService = {
     sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
     sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
     sheet.columns = [
-      { header: "N.º Interno", key: "employeeNo", width: 18 },
-      { header: "Nome", key: "name", width: 30 },
-      { header: "Data de Nascimento", key: "birthDate", width: 18 },
-      { header: "Idade", key: "age", width: 10 },
-      { header: "Categoria profissional ", key: "professionalCategory", width: 24 },
-      { header: "Função", key: "roleName", width: 24 },
-      { header: "Posto trabalho", key: "workstationName", width: 24 },
-      { header: "Género", key: "gender", width: 14 },
-      { header: "Nacionalidade", key: "nationality", width: 18 },
-      { header: "Data de Admissão", key: "hireDate", width: 18 },
-      { header: "Data de Admisão à função", key: "roleStartDate", width: 20 },
-      { header: "Data Ultimo exame ", key: "examDate", width: 22 },
-      { header: "Data de Validade", key: "validUntil", width: 18 },
-      { header: "Estado", key: "status", width: 14 },
-      { header: "Observações", key: "observation", width: 40 },
+      { key: "employeeNo", width: 18 },
+      { key: "name", width: 30 },
+      { key: "birthDate", width: 18 },
+      { key: "age", width: 10 },
+      { key: "professionalCategory", width: 24 },
+      { key: "roleName", width: 24 },
+      { key: "workstationName", width: 24 },
+      { key: "gender", width: 14 },
+      { key: "nationality", width: 18 },
+      { key: "hireDate", width: 18 },
+      { key: "roleStartDate", width: 20 },
+      { key: "examDate", width: 22 },
+      { key: "validUntil", width: 18 },
+      { key: "status", width: 14 },
+      { key: "observation", width: 40 },
+    ];
+    sheet.getRow(2).values = [
+      "N.º Interno",
+      "Nome",
+      "Data de Nascimento",
+      "Idade",
+      "Categoria profissional",
+      "Função",
+      "Posto trabalho",
+      "Género",
+      "Nacionalidade",
+      "Data de Admissão",
+      "Data de Admissão à função",
+      "Data Ultimo exame",
+      "Data de Validade",
+      "Estado",
+      "Observações",
     ];
     sheet.getRow(2).font = { bold: true, color: { argb: "FFFFFFFF" } };
     sheet.getRow(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    sheet.views = [{ state: "frozen", ySplit: 2 }];
 
     workers.forEach((worker) => {
       sheet.addRow({
@@ -421,5 +498,116 @@ export const OccupationalHealthService = {
       pdf,
       xlsx: Buffer.from(xlsxBuffer as ArrayBuffer),
     };
+  },
+
+  async buildImportTemplate(plantId: string, plantCode: string) {
+    const workbook = new ExcelJS.Workbook();
+
+    const sheet = workbook.addWorksheet("Medicina do Trabalho");
+    sheet.mergeCells("A1:O1");
+    sheet.getCell("A1").value = `Template Medicina do Trabalho - ${plantCode.toUpperCase()}`;
+    sheet.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+    sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+    sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    sheet.columns = [
+      { width: 18 },
+      { width: 30 },
+      { width: 18 },
+      { width: 10 },
+      { width: 24 },
+      { width: 24 },
+      { width: 24 },
+      { width: 14 },
+      { width: 18 },
+      { width: 18 },
+      { width: 20 },
+      { width: 22 },
+      { width: 18 },
+      { width: 14 },
+      { width: 40 },
+    ];
+    sheet.getCell("A2").value = "Preencha os dados nas linhas abaixo. Mantenha esta folha como a primeira do ficheiro.";
+    sheet.mergeCells("A2:O2");
+    sheet.getCell("A2").font = { italic: true, color: { argb: "FF475569" } };
+    sheet.getRow(4).values = [
+      "N.º Interno",
+      "Nome",
+      "Data de Nascimento",
+      "Idade",
+      "Categoria profissional",
+      "Função",
+      "Posto trabalho",
+      "Género",
+      "Nacionalidade",
+      "Data de Admissão",
+      "Data de Admissão à função",
+      "Data Ultimo exame",
+      "Data de Validade",
+      "Estado",
+      "Observações",
+    ];
+    sheet.getRow(4).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sheet.getRow(4).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    sheet.getRow(5).values = [
+      "",
+      "Required",
+      "Required",
+      "Auto",
+      "Optional",
+      "Optional",
+      "Optional",
+      "Required",
+      "Optional",
+      "Required",
+      "Optional",
+      "Required",
+      "Auto",
+      "Optional",
+      "Optional",
+    ];
+    sheet.getRow(5).font = { italic: true, color: { argb: "FF475569" } };
+    sheet.getRow(5).alignment = { vertical: "top", wrapText: true };
+    sheet.getCell("A6").value = "Use datas no formato YYYY-MM-DD. Os campos Idade e Data de Validade sao calculados automaticamente.";
+    sheet.mergeCells("A6:O6");
+    sheet.getCell("A6").font = { italic: true, color: { argb: "FF475569" } };
+    sheet.addRows([
+      ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ]);
+    sheet.views = [{ state: "frozen", ySplit: 6 }];
+
+    const referenceSheet = workbook.addWorksheet("Reference");
+    referenceSheet.columns = [
+      { header: "Field", key: "field", width: 22 },
+      { header: "Accepted values / notes", key: "value", width: 50 },
+    ];
+    referenceSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    referenceSheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    referenceSheet.addRows([
+      { field: "Género", value: "Masculino or Feminino" },
+      { field: "Data de Validade", value: "Automatically calculated from current age: over 50 = 1 year; up to 50 = 2 years" },
+      { field: "Estado", value: "VALID, EXPIRED, DUE_SOON or PENDING" },
+      { field: "Posto trabalho", value: "Must match an existing workstation name from the list below" },
+    ]);
+
+    const workstations = await prisma.workstation.findMany({
+      where: { plantId, isActive: true },
+      orderBy: [{ name: "asc" }],
+      select: { code: true, name: true },
+    });
+
+    referenceSheet.addRow({});
+    referenceSheet.addRow({ field: "Active workstations", value: "" });
+    const headerRow = referenceSheet.addRow({ field: "Code", value: "Name" });
+    headerRow.font = { bold: true };
+    for (const workstation of workstations) {
+      referenceSheet.addRow({ field: workstation.code, value: workstation.name });
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer as ArrayBuffer);
   },
 };

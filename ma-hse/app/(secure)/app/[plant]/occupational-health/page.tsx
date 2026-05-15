@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
+import { getServerSession } from "next-auth";
 import { OccupationalHealthManager } from "@/components/feature/occupational-health-manager";
+import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { OccupationalHealthService, type OccupationalHealthWorkerView } from "@/lib/services/occupational-health-service";
 
 export default async function OccupationalHealthPage({
@@ -9,8 +12,13 @@ export default async function OccupationalHealthPage({
   params: Promise<{ plant: string }>;
 }) {
   const { plant } = await params;
+  const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUnique({ where: { code: plant } });
   if (!plantRow) notFound();
+  const ui = await getServerUiDictionary({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
 
   const [workers, workstations] = await Promise.all([
     OccupationalHealthService.list(plantRow.id),
@@ -24,6 +32,7 @@ export default async function OccupationalHealthPage({
   return (
     <OccupationalHealthManager
       plant={plant}
+      title={ui.modules.occupationalHealth}
       initialWorkers={workers as OccupationalHealthWorkerView[]}
       workstations={workstations}
     />

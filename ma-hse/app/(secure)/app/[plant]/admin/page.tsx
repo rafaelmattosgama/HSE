@@ -5,10 +5,16 @@ import { getCreatableRoles } from "@/lib/rbac/user-management";
 import { UserManager } from "@/components/feature/user-manager";
 import { QrTokenManager } from "@/components/feature/qr-token-manager";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
+import { SafetyDaysAdminEditor } from "@/components/feature/safety-days-admin-editor";
 import { SlaEditor } from "@/components/feature/sla-editor";
+import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
+import { UnsafeActTypeManager } from "@/components/feature/unsafe-act-type-manager";
 import { prisma } from "@/lib/prisma";
-import { getPlantRepeatabilityAlertConfig } from "@/lib/services/parameter-service";
+import { getServerUiLocale } from "@/lib/server-ui-language";
+import { getUiDictionary } from "@/lib/ui-language";
+import { getPlantRepeatabilityAlertConfig, getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
+import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 
 export default async function AdminPage({
   params,
@@ -18,6 +24,12 @@ export default async function AdminPage({
   const { plant } = await params;
   const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  await ensureDefaultUnsafeActTypes(plantRow.id);
+  const uiLocale = await getServerUiLocale({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
+  const ui = getUiDictionary(uiLocale);
 
   const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN)
     ? RoleCode.N0_ADMIN
@@ -29,7 +41,7 @@ export default async function AdminPage({
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
 
-  const [sla, recipients, rules, areas, workstations, workers, repeatabilityConfig] = await Promise.all([
+  const [sla, recipients, rules, areas, workstations, workers, unsafeActTypes, repeatabilityConfig, safetyDaysConfig] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
         plantId_key: {
@@ -55,18 +67,23 @@ export default async function AdminPage({
       },
     }),
     prisma.area.findMany({
-      where: { plantId: plantRow.id },
+      where: { plantId: plantRow.id, isActive: true },
       orderBy: { name: "asc" },
     }),
     prisma.workstation.findMany({
-      where: { plantId: plantRow.id },
+      where: { plantId: plantRow.id, isActive: true },
       orderBy: { name: "asc" },
     }),
     prisma.employeeDirectory.findMany({
-      where: { plantId: plantRow.id },
+      where: { plantId: plantRow.id, isActive: true },
       orderBy: { name: "asc" },
     }),
+    prisma.unsafeActType.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
+    }),
     getPlantRepeatabilityAlertConfig(plantRow.id),
+    getPlantSafetyDaysConfig(plantRow.id),
   ]);
 
   const userPlantRoles = canManageUsers
@@ -106,9 +123,13 @@ export default async function AdminPage({
   return (
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Plant Admin (N3)</h1>
-        <p className="mt-1 text-sm text-slate-600">Master data, recipients, QR tokens, SLA and alert parameters.</p>
+        <h1 className="text-2xl font-bold text-slate-900">{ui.modules.admin}</h1>
       </header>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.modules.settings}</h2>
+        <LanguageSelector currentLocale={uiLocale} label={ui.dashboard.language} />
+      </section>
 
       <section className="grid gap-4 md:grid-cols-2">
         <SlaEditor
@@ -118,14 +139,20 @@ export default async function AdminPage({
             HIGH: Number(slaConfig.HIGH ?? 7),
           }}
         />
+        <SafetyDaysAdminEditor
+          initialManualLastAccidentDate={safetyDaysConfig.manualLastAccidentDate}
+          initialHistoricalRecordDays={safetyDaysConfig.historicalRecordDays}
+          initialHistoricalRecordStartDate={safetyDaysConfig.historicalRecordStartDate}
+        />
         <QrTokenManager />
       </section>
 
       <RepeatabilityAlertEditor
         endpoint={`/api/plants/${plant}/admin/repeatability-alerts`}
-        title="Repeatability alerts"
-        description="Configure weekly alerts for repeated unsafe acts, first aid, near miss by worker, plus repeated near miss by workstation. These settings apply to this plant and can override the global defaults."
+        title={ui.dashboard.repeatabilityAlerts}
+        description={ui.dashboard.plantRepeatabilityAlertsDescription}
         initial={repeatabilityConfig}
+        labels={ui.dashboard}
       />
 
       <MasterDataManager
@@ -136,26 +163,41 @@ export default async function AdminPage({
         initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
       />
 
+      {actorRole === RoleCode.N0_ADMIN ? (
+        <UnsafeActTypeManager
+          plantCode={plant}
+          initialTypes={unsafeActTypes.map((type) => ({
+            id: type.id,
+            code: type.code,
+            category: type.category,
+            name: type.name,
+          }))}
+        />
+      ) : null}
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Recipient lists</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.recipientLists}</h2>
         <div className="mt-3 space-y-3">
           {recipients.map((list) => (
             <article key={list.id} className="rounded-md border border-slate-200 p-3">
               <p className="text-sm font-semibold text-slate-900">{list.name} ({list.scope})</p>
-              <p className="text-xs text-slate-600">{list.recipients.length} recipients</p>
+              <p className="text-xs text-slate-600">
+                {list.recipients.length} {ui.dashboard.recipients}
+              </p>
             </article>
           ))}
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Alert rules</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.alertRules}</h2>
         <div className="mt-3 space-y-3">
           {rules.map((rule) => (
             <article key={rule.id} className="rounded-md border border-slate-200 p-3">
               <p className="text-sm font-semibold text-slate-900">{rule.name}</p>
               <p className="text-xs text-slate-600">
-                {rule.repetitionRule?.triggerType} - threshold {rule.repetitionRule?.thresholdCount} in {rule.repetitionRule?.windowDays} days
+                {rule.repetitionRule?.triggerType} - {ui.dashboard.threshold} {rule.repetitionRule?.thresholdCount} /{" "}
+                {rule.repetitionRule?.windowDays} {ui.dashboard.days}
               </p>
             </article>
           ))}
@@ -166,7 +208,7 @@ export default async function AdminPage({
         <UserManager users={users} allowedCreateRoles={allowedCreateRoles} />
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
-          User management is available only for N1 and N3 roles.
+          {ui.dashboard.userManagementUnavailable}
         </section>
       )}
     </>

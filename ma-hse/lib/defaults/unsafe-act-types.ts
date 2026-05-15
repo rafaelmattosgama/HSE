@@ -1,0 +1,30 @@
+export const DEFAULT_UNSAFE_ACT_TYPES = [
+  { code: "UA-COMP-01", category: "COMPETENCE / KNOWLEDGE", name: "Inadequate training" },
+  { code: "UA-COMP-02", category: "COMPETENCE / KNOWLEDGE", name: "Limited experience with the specific task" },
+  { code: "UA-ATT-01", category: "ATTITUDE / BEHAVIOR", name: "Lack of concentration" },
+  { code: "UA-ATT-02", category: "ATTITUDE / BEHAVIOR", name: "Incorrect use of protective items" },
+  { code: "UA-ATT-03", category: "ATTITUDE / BEHAVIOR", name: "Breaking safety rules" },
+  { code: "UA-ATT-04", category: "ATTITUDE / BEHAVIOR", name: "Failure to respect work cycles and procedures" },
+  { code: "UA-ATT-05", category: "ATTITUDE / BEHAVIOR", name: "Doubtful circumstances" },
+  { code: "UA-ATT-06", category: "ATTITUDE / BEHAVIOR", name: "Failure to use PPE" },
+  { code: "UA-MGT-01", category: "MANAGEMENT", name: "PPE inadequate" },
+  { code: "UA-MGT-02", category: "MANAGEMENT", name: "Unfitness for the job" },
+  { code: "UA-MGT-03", category: "MANAGEMENT", name: "Maintenance cycles not performed" },
+  { code: "UA-MGT-04", category: "MANAGEMENT", name: "Cleaning cycles not performed" },
+  { code: "UA-MGT-05", category: "MANAGEMENT", name: "Pressure" },
+  { code: "UA-MGT-06", category: "MANAGEMENT", name: "Other" },
+  { code: "UA-PREC-01", category: "PRECAUTION", name: "Excess self-confidence" },
+  { code: "UA-PREC-02", category: "PRECAUTION", name: "Execution of operations outside his/her competence" },
+  { code: "UA-PREC-03", category: "PRECAUTION", name: "Lack of communication" },
+  { code: "UA-PERS-01", category: "PERSONAL CONDITION", name: "Physical problems" },
+  { code: "UA-PERS-02", category: "PERSONAL CONDITION", name: "Physical fatigue" },
+  { code: "UA-PERS-03", category: "PERSONAL CONDITION", name: "Sudden illness" },
+  { code: "UA-PERS-04", category: "PERSONAL CONDITION", name: "Personal / family problems" },
+  { code: "UA-PERS-05", category: "PERSONAL CONDITION", name: "Health problems" },
+] as const;
+
+export const LEGACY_DEFAULT_UNSAFE_ACT_TYPES = [
+  { code: "UA1", name: "Procedure bypass" },
+  { code: "UA01", name: "Bypassing Safety" },
+  { code: "UA02", name: "Improper Lifting" },
+] as const;

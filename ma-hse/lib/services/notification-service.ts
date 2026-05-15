@@ -8,6 +8,7 @@ export const NotificationService = {
     userIds?: string[];
     title: string;
     body: string;
+    html?: string;
     channel?: string;
     emailTo?: string[];
     attachments?: Array<{
@@ -33,7 +34,7 @@ export const NotificationService = {
       await EmailService.sendMail({
         to: input.emailTo,
         subject: input.title,
-        html: `<p>${input.body}</p>`,
+        html: input.html ?? `<p>${input.body}</p>`,
         text: input.body,
         attachments: input.attachments,
       });

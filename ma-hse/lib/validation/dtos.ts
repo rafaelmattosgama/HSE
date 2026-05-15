@@ -2,11 +2,14 @@ import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationType
 import { z } from "zod";
 
 const optionalUuid = z.string().uuid().optional().nullable();
+const noDigits = /\d/;
 
 const communicationInputShape = z.object({
     type: z.nativeEnum(CommunicationType),
     eventDatetime: z.coerce.date(),
-    reporterName: z.string().min(2),
+    reporterName: z.string().trim().min(2).refine((value) => !noDigits.test(value), {
+      message: "Reporter name cannot contain numbers",
+    }),
     reporterEmployeeNo: z.string().min(1).optional(),
     targetText: z.string().optional(),
     targetEmployeeNo: z.string().optional(),
@@ -73,6 +76,14 @@ export const createCommunicationInput = communicationInputShape
       });
     }
 
+    if (value.type === CommunicationType.UNSAFE_ACT && !value.unsafeActTypeId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unsafe act type is required",
+        path: ["unsafeActTypeId"],
+      });
+    }
+
     if (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) {
       if (!value.targetEmployeeId) {
         ctx.addIssue({
@@ -100,6 +111,8 @@ export const createCommunicationInput = communicationInputShape
     }
   });
 
+export const createPublicReportCommunicationInput = createCommunicationInput;
+
 export const updateCommunicationInput = communicationInputShape.omit({
   attachments: true,
   quickAction: true,
@@ -122,6 +135,14 @@ export const updateCommunicationInput = communicationInputShape.omit({
       code: z.ZodIssueCode.custom,
       message: "This communication requires involved worker information",
       path: ["targetText"],
+    });
+  }
+
+  if (value.type === CommunicationType.UNSAFE_ACT && !value.unsafeActTypeId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Unsafe act type is required",
+      path: ["unsafeActTypeId"],
     });
   }
 
@@ -270,7 +291,7 @@ export const bulkCloseActionInput = z.object({
 });
 
 export const createSEWOInput = z.object({
-  communicationId: z.string().uuid(),
+  communicationId: z.string().uuid().optional().nullable(),
   eventClassification: z.string().min(2),
   areaId: z.string().uuid().optional(),
   lineId: z.string().uuid().optional(),
@@ -282,7 +303,7 @@ export const createSEWOInput = z.object({
   usualWorkYesNo: z.boolean(),
   whichText: z.string().optional(),
   howText: z.string().min(2),
-  immediateCorrectiveActionText: z.string().min(2),
+  immediateCorrectiveActionText: z.string().trim().optional().default(""),
   templateData: z.record(z.string(), z.unknown()).optional(),
   attachments: z
     .array(
@@ -320,6 +341,8 @@ export const createSEWOInput = z.object({
   status: z.nativeEnum(SEWOStatus).optional(),
 });
 
+export const updateSEWOInput = createSEWOInput;
+
 export const approveSEWOInput = z.object({
   approved: z.boolean(),
   approvalComment: z.string().min(3),
@@ -355,6 +378,18 @@ export const issuePresignedUploadInput = z.object({
 });
 
 export const createPlantUserInput = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).default("en"),
+  role: z.nativeEnum(RoleCode),
+  password: z.preprocess(
+    (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
+    z.string().min(8, "Password must be at least 8 characters").optional(),
+  ),
+  isActive: z.boolean().default(true),
+});
+
+export const updatePlantUserInput = z.object({
   email: z.string().email(),
   name: z.string().min(2),
   language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).default("en"),
@@ -487,10 +522,41 @@ export const createMasterDataItemInput = z.object({
   name: z.string().min(2),
 });
 
+export const deleteMasterDataItemInput = z.object({
+  type: z.enum(["area", "workstation"]),
+  id: z.string().uuid(),
+});
+
+export const upsertProfessionalRiskInput = z.object({
+  id: z.string().uuid().optional(),
+  code: z.string().trim().min(1).max(40),
+  category: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(2).max(160),
+});
+
+export const deleteProfessionalRiskInput = z.object({
+  id: z.string().uuid(),
+});
+
+export const upsertUnsafeActTypeInput = z.object({
+  id: z.string().uuid().optional(),
+  code: z.string().trim().min(1).max(40),
+  category: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(2).max(160),
+});
+
+export const deleteUnsafeActTypeInput = z.object({
+  id: z.string().uuid(),
+});
+
 export const createWorkerInput = z.object({
   employeeNo: z.string().min(1),
   name: z.string().min(2),
   dept: z.string().optional(),
+});
+
+export const deleteWorkerInput = z.object({
+  id: z.string().uuid(),
 });
 
 export const upsertOccupationalHealthWorkerInput = z.object({
@@ -530,6 +596,20 @@ export const createCorporatePlantInput = z.object({
     name: z.string().min(2),
     language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
   }),
+});
+
+export const updateCorporatePlantLanguageInput = z.object({
+  plantId: z.string().uuid(),
+  defaultLanguage: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+});
+
+export const updateCorporatePlantInput = z.object({
+  plantId: z.string().uuid(),
+  code: z.string().min(2),
+  name: z.string().min(2),
+  timezone: z.string().min(2),
+  defaultLanguage: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+  isActive: z.boolean().default(true),
 });
 
 export const changePasswordInput = z
@@ -643,6 +723,7 @@ export type CloseActionInput = z.infer<typeof closeActionInput>;
 export type BulkCloseActionInput = z.infer<typeof bulkCloseActionInput>;
 export type ReopenActionInput = z.infer<typeof reopenEntityInput>;
 export type CreateSEWOInput = z.infer<typeof createSEWOInput>;
+export type UpdateSEWOInput = z.infer<typeof updateSEWOInput>;
 export type ApproveSEWOInput = z.infer<typeof approveSEWOInput>;
 export type UpdateActionInput = z.infer<typeof updateActionInput>;
 export type UpdateAlertRuleInput = z.infer<typeof updateAlertRuleInput>;
@@ -661,9 +742,14 @@ export type CreateMapLayerInput = z.infer<typeof createMapLayerInput>;
 export type CreateMapFeatureInput = z.infer<typeof createMapFeatureInput>;
 export type UpdateMapFeatureInput = z.infer<typeof updateMapFeatureInput>;
 export type CreatePlantUserInput = z.infer<typeof createPlantUserInput>;
+export type UpdatePlantUserInput = z.infer<typeof updatePlantUserInput>;
 export type CreateMasterDataItemInput = z.infer<typeof createMasterDataItemInput>;
+export type UpsertProfessionalRiskInput = z.infer<typeof upsertProfessionalRiskInput>;
+export type UpsertUnsafeActTypeInput = z.infer<typeof upsertUnsafeActTypeInput>;
 export type CreateWorkerInput = z.infer<typeof createWorkerInput>;
 export type UpsertOccupationalHealthWorkerInput = z.infer<typeof upsertOccupationalHealthWorkerInput>;
 export type CreateCorporatePlantInput = z.infer<typeof createCorporatePlantInput>;
+export type UpdateCorporatePlantLanguageInput = z.infer<typeof updateCorporatePlantLanguageInput>;
+export type UpdateCorporatePlantInput = z.infer<typeof updateCorporatePlantInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
 export type UpdatePlantMonthlyInputsInput = z.infer<typeof updatePlantMonthlyInputsInput>;

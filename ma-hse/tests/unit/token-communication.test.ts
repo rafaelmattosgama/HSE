@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CommunicationType } from "@prisma/client";
 import { CommunicationService } from "@/lib/services/communication-service";
-import { createCommunicationInput } from "@/lib/validation/dtos";
+import { createCommunicationInput, createPublicReportCommunicationInput } from "@/lib/validation/dtos";
 
 describe("token-based communication rules", () => {
   it("allows only N6 communication types", () => {
@@ -15,11 +15,71 @@ describe("token-based communication rules", () => {
     const parsed = createCommunicationInput.parse({
       type: CommunicationType.UNSAFE_CONDITION,
       eventDatetime: new Date().toISOString(),
-      reporterName: "N6 Reporter",
-      riskThemeId: "7b2e2f06-8fd2-4ec1-98f2-a60d6cdeab34",
+      reporterName: "QR Reporter",
       description: "Unsafe condition reported from QR",
     });
 
     expect(parsed.type).toBe(CommunicationType.UNSAFE_CONDITION);
+  });
+
+  it("rejects reporter names with numeric characters", () => {
+    const parsed = createCommunicationInput.safeParse({
+      type: CommunicationType.UNSAFE_CONDITION,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "Reporter 123",
+      description: "Unsafe condition reported from QR",
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((issue) => issue.path.includes("reporterName"))).toBe(true);
+    }
+  });
+
+  it("requires an unsafe act type for unsafe act communications", () => {
+    const parsed = createCommunicationInput.safeParse({
+      type: CommunicationType.UNSAFE_ACT,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      description: "Unsafe act reported from QR",
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((issue) => issue.path.includes("unsafeActTypeId"))).toBe(true);
+    }
+  });
+
+  it("does not require professional risk or near miss type for public near miss reports", () => {
+    const parsed = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.NEAR_MISS,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      targetText: "Involved Worker",
+      description: "Near miss reported from QR",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.riskThemeId).toBeUndefined();
+      expect(parsed.data.nearMissTypeId).toBeUndefined();
+    }
+  });
+
+  it("does not require professional risk or unsafe act type for public first aid reports", () => {
+    const parsed = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.FIRST_AID,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      targetEmployeeId: "11111111-1111-4111-8111-111111111111",
+      bodyPartId: "22222222-2222-4222-8222-222222222222",
+      description: "First aid reported from QR",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.riskThemeId).toBeUndefined();
+      expect(parsed.data.unsafeActTypeId).toBeUndefined();
+    }
   });
 });

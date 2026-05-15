@@ -9,9 +9,13 @@ function normalizeText(value: unknown) {
     .trim();
 }
 
+function getNormalizedRowValues(row: ExcelJS.Row) {
+  return Array.from(row.values as unknown[]).map(normalizeText);
+}
+
 function findHeaderRow(sheet: ExcelJS.Worksheet, expectedHeaders: string[]) {
   for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 10); rowNumber += 1) {
-    const values = (sheet.getRow(rowNumber).values as unknown[]).map(normalizeText);
+    const values = getNormalizedRowValues(sheet.getRow(rowNumber));
     if (expectedHeaders.every((header) => values.includes(header))) {
       return rowNumber;
     }
@@ -20,7 +24,7 @@ function findHeaderRow(sheet: ExcelJS.Worksheet, expectedHeaders: string[]) {
 }
 
 function buildHeaderMap(sheet: ExcelJS.Worksheet, rowNumber: number) {
-  const values = (sheet.getRow(rowNumber).values as unknown[]).map(normalizeText);
+  const values = getNormalizedRowValues(sheet.getRow(rowNumber));
   return new Map(values.map((value, index) => [value, index]));
 }
 
@@ -51,7 +55,7 @@ function findWorkerHeaderRow(sheet: ExcelJS.Worksheet) {
   const nameHeaders = ["name", "nome", "worker", "trabalhador"];
 
   for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 10); rowNumber += 1) {
-    const values = (sheet.getRow(rowNumber).values as unknown[]).map(normalizeText);
+    const values = getNormalizedRowValues(sheet.getRow(rowNumber));
     const hasEmployeeHeader = employeeHeaders.some((header) => values.includes(header));
     const hasNameHeader = nameHeaders.some((header) => values.includes(header));
     if (hasEmployeeHeader && hasNameHeader) {
@@ -210,5 +214,78 @@ export const MasterDataImportService = {
     }
 
     return summary;
+  },
+
+  async buildTemplate() {
+    const workbook = new ExcelJS.Workbook();
+
+    const instructions = workbook.addWorksheet("Instructions");
+    instructions.columns = [{ width: 120 }];
+    instructions.getCell("A1").value = "Master data import template";
+    instructions.getCell("A1").font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+    instructions.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    instructions.getCell("A3").value = "Fill the sheets Departments, Workstations and Workers. Leave rows blank if you do not want to import that entity.";
+    instructions.getCell("A4").value = "Departments sheet: required columns Code and Name.";
+    instructions.getCell("A5").value = "Workstations sheet: required columns Code and Name.";
+    instructions.getCell("A6").value = "Workers sheet: required columns Employee Number and Name. Department is optional.";
+    instructions.getCell("A7").value = "Imports update existing records by code or employee number and reactivate them automatically.";
+    instructions.getCell("A8").value = "Keep the worksheet names unchanged when possible to simplify imports.";
+
+    const departments = workbook.addWorksheet("Departments");
+    departments.columns = [{ width: 18 }, { width: 40 }];
+    departments.getCell("A1").value = "Departments";
+    departments.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+    departments.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    departments.mergeCells("A1:B1");
+    departments.getRow(3).values = ["Code", "Name"];
+    departments.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    departments.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    departments.addRows([
+      ["", ""],
+      ["", ""],
+      ["", ""],
+      ["", ""],
+      ["", ""],
+    ]);
+    departments.views = [{ state: "frozen", ySplit: 3 }];
+
+    const workstations = workbook.addWorksheet("Workstations");
+    workstations.columns = [{ width: 18 }, { width: 40 }];
+    workstations.getCell("A1").value = "Workstations";
+    workstations.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+    workstations.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    workstations.mergeCells("A1:B1");
+    workstations.getRow(3).values = ["Code", "Name"];
+    workstations.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    workstations.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    workstations.addRows([
+      ["", ""],
+      ["", ""],
+      ["", ""],
+      ["", ""],
+      ["", ""],
+    ]);
+    workstations.views = [{ state: "frozen", ySplit: 3 }];
+
+    const workers = workbook.addWorksheet("Workers");
+    workers.columns = [{ width: 20 }, { width: 32 }, { width: 28 }];
+    workers.getCell("A1").value = "Workers";
+    workers.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+    workers.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    workers.mergeCells("A1:C1");
+    workers.getRow(3).values = ["Employee Number", "Name", "Department"];
+    workers.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    workers.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+    workers.addRows([
+      ["", "", ""],
+      ["", "", ""],
+      ["", "", ""],
+      ["", "", ""],
+      ["", "", ""],
+    ]);
+    workers.views = [{ state: "frozen", ySplit: 3 }];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer as ArrayBuffer);
   },
 };

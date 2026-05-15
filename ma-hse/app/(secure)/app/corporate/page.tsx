@@ -1,17 +1,32 @@
-import { CommunicationStatus, RoleCode } from "@prisma/client";
+import { CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
+import { History } from "lucide-react";
 import Link from "next/link";
 import { getServerSession } from "next-auth";
-import { getLocale } from "next-intl/server";
 import { formatActionCode } from "@/lib/helpers";
 import { authOptions } from "@/lib/auth/options";
 import { resolveDashboardPeriod, type DashboardSearchParams } from "@/lib/dashboard-period";
+import {
+  buildMonthBuckets,
+  createEmptyMonthlyMetricSnapshot,
+  type MonthlyMetricSnapshot,
+  type RankingEntry,
+  type RankingGroup,
+  type RankingSeriesSnapshot,
+} from "@/lib/dashboard-visualization";
 import { prisma } from "@/lib/prisma";
-import { CorporatePlantManager, type RankingGroup } from "@/components/feature/corporate-plant-manager";
+import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
+import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { CorporateActionPlans } from "@/components/feature/corporate-action-plans";
-import { LanguageSelector } from "@/components/feature/language-selector";
+import { EnvironmentDashboardBoard } from "@/components/feature/environment-dashboard-board";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
+import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
+import { GroupSafetyDaysBoard } from "@/components/feature/safety-days-dashboard";
+import { SYSTEM_PARAMETER_KEYS } from "@/lib/constants";
+import { buildEnvironmentDashboardPlant } from "@/lib/environment-dashboard";
 import { getGlobalRepeatabilityAlertConfig } from "@/lib/services/parameter-service";
 import { getUiDictionary } from "@/lib/ui-language";
+import { getServerUiLocale } from "@/lib/server-ui-language";
+import { buildSafetyDaysSummary } from "@/lib/safety-days";
 
 const KPI_COMMUNICATION_STATUSES: CommunicationStatus[] = [
   CommunicationStatus.VALID_OPEN,
@@ -36,15 +51,71 @@ function buildTopFive(
   };
 }
 
+function toRootCauseRankingEntries(entries: ReturnType<typeof buildSewoRootCauseTopEntries>): RankingEntry[] {
+  return entries.map((entry, index) => ({
+    plantCode: `root-cause-${index}-${entry.label}`,
+    plantName: entry.label,
+    value: entry.percentage,
+  }));
+}
+
+function getMonthKey(year: number, month: number) {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function getMetricValue(snapshot: MonthlyMetricSnapshot, metricId: "nearMisses" | "injuries" | "rootCauses" | "frequencyRate" | "gravityRate" | "actionsToClose" | "closedActions") {
+  if (metricId === "nearMisses") return snapshot.nearMisses;
+  if (metricId === "injuries") return snapshot.injuries;
+  if (metricId === "rootCauses") return snapshot.rootCauses;
+  if (metricId === "frequencyRate") return snapshot.frequencyRate;
+  if (metricId === "gravityRate") return snapshot.gravityRate;
+  if (metricId === "actionsToClose") return snapshot.actionsToClose;
+  return snapshot.closedActions;
+}
+
+function getManualLastAccidentDate(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const rawDate = (value as Record<string, unknown>).manualLastAccidentDate;
+  return typeof rawDate === "string" && rawDate.trim() ? rawDate : null;
+}
+
+function getHistoricalRecordDays(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const rawDays = (value as Record<string, unknown>).historicalRecordDays;
+  return typeof rawDays === "number" && Number.isFinite(rawDays) ? Math.max(0, Math.floor(rawDays)) : null;
+}
+
+function getHistoricalRecordStartDate(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const rawDate = (value as Record<string, unknown>).historicalRecordStartDate;
+  return typeof rawDate === "string" && rawDate.trim() ? rawDate : null;
+}
+
 export default async function CorporatePage({
   searchParams,
 }: {
   searchParams: Promise<DashboardSearchParams>;
 }) {
   const session = await getServerSession(authOptions);
-  const locale = await getLocale();
-  const ui = getUiDictionary(locale);
+  const uiLocale = await getServerUiLocale({ userLanguage: session?.user.language });
+  const ui = getUiDictionary(uiLocale);
   const period = resolveDashboardPeriod(await searchParams);
+  const monthBuckets = buildMonthBuckets(period.from, period.to);
+  const monthlyInputFilter = {
+    OR: monthBuckets.map((bucket) => ({ year: bucket.year, month: bucket.month })),
+  };
+  const previousMonthlyInputFilter = {
+    OR: monthBuckets.map((bucket) => ({ year: bucket.year - 1, month: bucket.month })),
+  };
+  const clearDatesParams = new URLSearchParams();
+  clearDatesParams.set("year", String(period.year));
+  if (period.month) {
+    clearDatesParams.set("month", String(period.month));
+  }
+  const clearDatesHref = `/app/corporate?${clearDatesParams.toString()}`;
   const defaultPlantRole = session?.user.plantRoles.find(
     (entry) =>
       entry.role === RoleCode.N2_PLANT_MANAGER ||
@@ -53,7 +124,7 @@ export default async function CorporatePage({
       entry.role === RoleCode.N5_OPERATOR,
   );
 
-  const [plants, corporateActions, globalRepeatabilityConfig] = await Promise.all([
+  const [plants, corporateActions, globalRepeatabilityConfig, injuryHistoryRows, safetyDaysConfigs, previousEnvironmentRows] = await Promise.all([
     prisma.plant.findMany({
       include: {
         communications: {
@@ -69,19 +140,44 @@ export default async function CorporatePage({
             lostDays: true,
             status: true,
             classification: true,
+            eventDatetime: true,
           },
         },
         actions: {
           select: {
             id: true,
             status: true,
+            createdAt: true,
+          },
+        },
+        sewoRecords: {
+          where: {
+            analysisDate: {
+              gte: period.from,
+              lte: period.to,
+            },
+          },
+          select: {
+            analysisDate: true,
+            templateData: true,
+            causeSelections: {
+              select: {
+                selected: true,
+                isRootCause: true,
+                causeItem: {
+                  select: {
+                    label: true,
+                  },
+                },
+              },
+            },
           },
         },
         kpiInputs: {
-          where: {
-            year: period.year,
-            month: period.month ?? undefined,
-          },
+          where: monthlyInputFilter,
+        },
+        monthlyInputs: {
+          where: monthlyInputFilter,
         },
         users: {
           where: {
@@ -107,17 +203,117 @@ export default async function CorporatePage({
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
     }),
     getGlobalRepeatabilityAlertConfig(),
+    prisma.communication.findMany({
+      where: {
+        type: CommunicationType.ACCIDENT,
+        status: {
+          in: KPI_COMMUNICATION_STATUSES,
+        },
+      },
+      select: {
+        plantId: true,
+        eventDatetime: true,
+      },
+      orderBy: {
+        eventDatetime: "asc",
+      },
+    }),
+    prisma.systemParameter.findMany({
+      where: {
+        key: SYSTEM_PARAMETER_KEYS.SAFETY_DAYS,
+        plantId: {
+          not: null,
+        },
+      },
+      select: {
+        plantId: true,
+        valueJson: true,
+      },
+    }),
+    prisma.plantMonthlyInput.findMany({
+      where: previousMonthlyInputFilter,
+    }),
   ]);
   const canManageGlobalRepeatability = session?.user.plantRoles.some(
     (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
   );
 
+  const injuryDatesByPlantId = new Map<string, Date[]>();
+  for (const row of injuryHistoryRows) {
+    const entries = injuryDatesByPlantId.get(row.plantId) ?? [];
+    entries.push(row.eventDatetime);
+    injuryDatesByPlantId.set(row.plantId, entries);
+  }
+  const manualLastAccidentDateByPlantId = new Map(
+    safetyDaysConfigs
+      .filter((entry): entry is typeof entry & { plantId: string } => Boolean(entry.plantId))
+      .map((entry) => [entry.plantId, getManualLastAccidentDate(entry.valueJson)]),
+  );
+  const historicalRecordDaysByPlantId = new Map(
+    safetyDaysConfigs
+      .filter((entry): entry is typeof entry & { plantId: string } => Boolean(entry.plantId))
+      .map((entry) => [entry.plantId, getHistoricalRecordDays(entry.valueJson)]),
+  );
+  const historicalRecordStartDateByPlantId = new Map(
+    safetyDaysConfigs
+      .filter((entry): entry is typeof entry & { plantId: string } => Boolean(entry.plantId))
+      .map((entry) => [entry.plantId, getHistoricalRecordStartDate(entry.valueJson)]),
+  );
+
   const plantSummaries = plants.map((plant) => {
+    const monthlyMetricsMap = new Map(
+      monthBuckets.map((bucket) => [bucket.key, createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label)]),
+    );
     const validCommunications = plant.communications.filter((entry) => KPI_COMMUNICATION_STATUSES.includes(entry.status));
+    for (const entry of validCommunications) {
+      const key = getMonthKey(entry.eventDatetime.getUTCFullYear(), entry.eventDatetime.getUTCMonth() + 1);
+      const snapshot = monthlyMetricsMap.get(key);
+      if (!snapshot) continue;
+      snapshot.validatedEvents += 1;
+      if (entry.type === "NEAR_MISS") snapshot.nearMisses += 1;
+      if (entry.type === "ACCIDENT") snapshot.injuries += 1;
+      snapshot.lostDays += entry.lostDays ?? 0;
+    }
+
+    for (const entry of plant.actions) {
+      const key = getMonthKey(entry.createdAt.getUTCFullYear(), entry.createdAt.getUTCMonth() + 1);
+      const snapshot = monthlyMetricsMap.get(key);
+      if (!snapshot) continue;
+      if (entry.status === "OPEN") snapshot.openActions += 1;
+      if (entry.status === "CLOSED") snapshot.closedActions += 1;
+      if (entry.status === "OPEN" || entry.status === "ONGOING") snapshot.actionsToClose += 1;
+    }
+
+    for (const entry of plant.sewoRecords) {
+      const key = getMonthKey(entry.analysisDate.getUTCFullYear(), entry.analysisDate.getUTCMonth() + 1);
+      const snapshot = monthlyMetricsMap.get(key);
+      if (!snapshot) continue;
+      snapshot.rootCauses += getSewoRootCauseCount(entry);
+    }
+
+    for (const entry of plant.kpiInputs) {
+      const key = getMonthKey(entry.year, entry.month);
+      const snapshot = monthlyMetricsMap.get(key);
+      if (!snapshot) continue;
+      snapshot.hoursWorked += Number(entry.hoursWorked ?? 0);
+    }
+
+    const monthlyMetrics = [...monthlyMetricsMap.values()].map((snapshot) => {
+      const totalMonthlyActions = snapshot.openActions + snapshot.closedActions + Math.max(snapshot.actionsToClose - snapshot.openActions, 0);
+      return {
+        ...snapshot,
+        closedActionsPercent: totalMonthlyActions > 0 ? (snapshot.closedActions / totalMonthlyActions) * 100 : 0,
+        actionsToClosePercent: totalMonthlyActions > 0 ? (snapshot.actionsToClose / totalMonthlyActions) * 100 : 0,
+        frequencyRate: snapshot.hoursWorked > 0 ? (snapshot.injuries / snapshot.hoursWorked) * ONE_MILLION : 0,
+        gravityRate: snapshot.hoursWorked > 0 ? (snapshot.lostDays / snapshot.hoursWorked) * ONE_MILLION : 0,
+      };
+    });
+
     const nearMissCount = validCommunications.filter((entry) => entry.type === "NEAR_MISS").length;
     const injuryCount = validCommunications.filter((entry) => entry.type === "ACCIDENT").length;
+    const rootCauseCount = plant.sewoRecords.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
     const lostDays = validCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
-    const hoursWorked = plant.kpiInputs.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
+    const hoursWorked = monthlyMetrics.reduce((sum, entry) => sum + entry.hoursWorked, 0);
     const openActions = plant.actions.filter((entry) => entry.status === "OPEN").length;
     const closedActions = plant.actions.filter((entry) => entry.status === "CLOSED").length;
     const actionsToClose = plant.actions.filter((entry) => entry.status === "OPEN" || entry.status === "ONGOING").length;
@@ -126,6 +322,13 @@ export default async function CorporatePage({
     const actionsToClosePercent = totalActions > 0 ? (actionsToClose / totalActions) * 100 : 0;
     const frequencyIndex = hoursWorked > 0 ? (injuryCount / hoursWorked) * ONE_MILLION : 0;
     const severityIndex = hoursWorked > 0 ? (lostDays / hoursWorked) * ONE_MILLION : 0;
+    const safetyDays = buildSafetyDaysSummary({
+      plantCreatedAt: plant.createdAt,
+      injuryDates: injuryDatesByPlantId.get(plant.id) ?? [],
+      manualLastAccidentDate: manualLastAccidentDateByPlantId.get(plant.id) ?? null,
+      historicalRecordDays: historicalRecordDaysByPlantId.get(plant.id) ?? null,
+      historicalRecordStartDate: historicalRecordStartDateByPlantId.get(plant.id) ?? null,
+    });
 
     return {
       id: plant.id,
@@ -141,8 +344,10 @@ export default async function CorporatePage({
       actionsToClosePercent,
       nearMissCount,
       injuryCount,
+      rootCauseCount,
       frequencyIndex,
       severityIndex,
+      safetyDays,
       communicationPyramid: {
         unsafeAct: plant.communications.filter((entry) => entry.type === "UNSAFE_ACT").length,
         unsafeCondition: plant.communications.filter((entry) => entry.type === "UNSAFE_CONDITION").length,
@@ -159,6 +364,7 @@ export default async function CorporatePage({
           name: entry.user.name,
         }))
         .sort((a, b) => a.role.localeCompare(b.role)),
+      monthlyMetrics,
     };
   });
 
@@ -168,6 +374,9 @@ export default async function CorporatePage({
   const totalActionsToClose = plantSummaries.reduce((sum, plant) => sum + plant.actionsToClose, 0);
   const totalNearMisses = plantSummaries.reduce((sum, plant) => sum + plant.nearMissCount, 0);
   const totalInjuries = plantSummaries.reduce((sum, plant) => sum + plant.injuryCount, 0);
+  const totalRootCauses = plantSummaries.reduce((sum, plant) => sum + plant.rootCauseCount, 0);
+  const rootCauseTopEntries = buildSewoRootCauseTopEntries(plants.flatMap((plant) => plant.sewoRecords));
+  const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries);
   const totalHoursWorked = plants.reduce((sum, plant) => sum + plant.kpiInputs.reduce((innerSum, entry) => innerSum + Number(entry.hoursWorked ?? 0), 0), 0);
   const totalLostDays = plants.reduce((sum, plant) => {
     const validCommunications = plant.communications.filter((entry) => KPI_COMMUNICATION_STATUSES.includes(entry.status));
@@ -187,100 +396,316 @@ export default async function CorporatePage({
     seriousInjury: plantSummaries.reduce((sum, plant) => sum + plant.communicationPyramid.seriousInjury, 0),
     fatal: plantSummaries.reduce((sum, plant) => sum + plant.communicationPyramid.fatal, 0),
   };
+  const environmentPlants = plants.map((plant) =>
+    buildEnvironmentDashboardPlant({
+      id: plant.id,
+      code: plant.code,
+      name: plant.name,
+      rows: plant.monthlyInputs,
+    }),
+  );
+  const previousEnvironmentPlants = plants.map((plant) =>
+    buildEnvironmentDashboardPlant({
+      id: plant.id,
+      code: plant.code,
+      name: plant.name,
+      rows: previousEnvironmentRows.filter((row) => row.plantId === plant.id),
+    }),
+  );
 
   const rankings: RankingGroup[] = [
     {
+      id: "root-causes-top",
+      title: ui.dashboard.rootCauseTopFive,
+      variant: "percent",
+      higher: rootCauseRankingEntries,
+      lower: [],
+    },
+    {
       id: "nearMisses",
-      title: "Near misses",
+      title: ui.dashboard.nearMisses,
       variant: "count",
-      higherLabel: "Higher number of near misses",
-      lowerLabel: "Lower number of near misses",
+      higherLabel: ui.dashboard.higherNearMisses,
+      lowerLabel: ui.dashboard.lowerNearMisses,
       ...buildTopFive(plantSummaries.map((plant) => ({ code: plant.code, name: plant.name, value: plant.nearMissCount }))),
     },
     {
       id: "injuries",
-      title: "Injuries",
+      title: ui.dashboard.injuries,
       variant: "count",
-      higherLabel: "Higher number of injuries",
-      lowerLabel: "Lower number of injuries",
+      higherLabel: ui.dashboard.higherInjuries,
+      lowerLabel: ui.dashboard.lowerInjuries,
       ...buildTopFive(plantSummaries.map((plant) => ({ code: plant.code, name: plant.name, value: plant.injuryCount }))),
     },
     {
       id: "frequencyRate",
-      title: "Frequency rate",
+      title: ui.dashboard.frequencyRate,
       variant: "index",
-      higherLabel: "Higher frequency rate",
-      lowerLabel: "Lower frequency rate",
+      higherLabel: ui.dashboard.higherFrequencyRate,
+      lowerLabel: ui.dashboard.lowerFrequencyRate,
       ...buildTopFive(plantSummaries.map((plant) => ({ code: plant.code, name: plant.name, value: plant.frequencyIndex }))),
     },
     {
       id: "gravityRate",
-      title: "Gravity rate",
+      title: ui.dashboard.gravityRate,
       variant: "index",
-      higherLabel: "Higher gravity rate",
-      lowerLabel: "Lower gravity rate",
+      higherLabel: ui.dashboard.higherGravityRate,
+      lowerLabel: ui.dashboard.lowerGravityRate,
       ...buildTopFive(plantSummaries.map((plant) => ({ code: plant.code, name: plant.name, value: plant.severityIndex }))),
     },
     {
       id: "actions",
-      title: "Actions",
+      title: ui.dashboard.actionsRanking,
       variant: "count",
-      higherLabel: "More actions to close",
-      lowerLabel: "More closed actions",
+      higherLabel: ui.dashboard.moreActionsToClose,
+      lowerLabel: ui.dashboard.moreClosedActions,
       higher: buildTopFive(plantSummaries.map((plant) => ({ code: plant.code, name: plant.name, value: plant.actionsToClose }))).higher,
       lower: buildTopFive(plantSummaries.map((plant) => ({ code: plant.code, name: plant.name, value: plant.closedActions }))).higher,
     },
   ];
 
+  const rankingMonthlySeries: Record<string, RankingSeriesSnapshot[]> = {
+    "root-causes-top": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: toRootCauseRankingEntries(
+        buildSewoRootCauseTopEntries(
+          plants.flatMap((plant) =>
+            plant.sewoRecords.filter(
+              (entry) => getMonthKey(entry.analysisDate.getUTCFullYear(), entry.analysisDate.getUTCMonth() + 1) === bucket.key,
+            ),
+          ),
+        ),
+      ),
+    })),
+    "nearMisses-higher": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "nearMisses",
+          ),
+        })),
+      ).higher,
+    })),
+    "nearMisses-lower": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "nearMisses",
+          ),
+        })),
+      ).lower,
+    })),
+    "injuries-higher": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "injuries",
+          ),
+        })),
+      ).higher,
+    })),
+    "injuries-lower": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "injuries",
+          ),
+        })),
+      ).lower,
+    })),
+    "frequencyRate-higher": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "frequencyRate",
+          ),
+        })),
+      ).higher,
+    })),
+    "frequencyRate-lower": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "frequencyRate",
+          ),
+        })),
+      ).lower,
+    })),
+    "gravityRate-higher": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "gravityRate",
+          ),
+        })),
+      ).higher,
+    })),
+    "gravityRate-lower": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "gravityRate",
+          ),
+        })),
+      ).lower,
+    })),
+    "actions-higher": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "actionsToClose",
+          ),
+        })),
+      ).higher,
+    })),
+    "actions-lower": monthBuckets.map((bucket) => ({
+      monthKey: bucket.key,
+      monthLabel: bucket.label,
+      entries: buildTopFive(
+        plantSummaries.map((plant) => ({
+          code: plant.code,
+          name: plant.name,
+          value: getMetricValue(
+            plant.monthlyMetrics.find((snapshot) => snapshot.monthKey === bucket.key) ?? createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label),
+            "closedActions",
+          ),
+        })),
+      ).higher,
+    })),
+  };
+
   return (
     <main className="mx-auto w-full max-w-7xl px-6 py-6">
-      <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+      <div className="app-hero mb-6 rounded-2xl p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{ui.dashboard.corporateTitle}</h1>
-            <p className="mt-1 text-sm text-slate-600">{ui.dashboard.corporateDescription}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <LanguageSelector currentLocale={locale} label={ui.dashboard.language} />
+          <div className="flex flex-wrap items-center gap-3">
             {defaultPlantRole?.plantCode ? (
               <Link
                 href={`/app/${defaultPlantRole.plantCode}/dashboards`}
-                className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-100"
+                className="app-toolbar rounded-full border-teal-200 bg-teal-50 px-4 text-teal-800 hover:bg-teal-100"
               >
                 <span aria-hidden="true">↩</span>
-                <span>Back to {defaultPlantRole.plantCode.toUpperCase()}</span>
+                <span>{ui.dashboard.backToPlant.replace("{plant}", defaultPlantRole.plantCode.toUpperCase())}</span>
               </Link>
             ) : null}
-            <Link href="/app/corporate/reports" className="text-sm font-semibold text-teal-700 hover:underline">
-              Open report history
+            <Link href="/app/corporate/reports" className="app-toolbar text-teal-700">
+              <History className="h-4 w-4" />
+              {ui.dashboard.openReportHistory}
             </Link>
           </div>
         </div>
       </div>
 
-      <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <form className="grid gap-3 md:grid-cols-5">
+      <section className="app-panel mb-6 rounded-xl p-5">
+        <form className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_auto]">
           <label className="space-y-1 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.year}</span>
-            <input type="number" name="year" defaultValue={period.year} className="w-full rounded-md border border-slate-300 px-3 py-2" />
+            <input type="number" name="year" defaultValue={period.year} className="h-11 w-full rounded-[10px] border border-slate-300 px-3 py-2" />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.month}</span>
-            <input type="number" name="month" min="1" max="12" defaultValue={period.month ?? ""} className="w-full rounded-md border border-slate-300 px-3 py-2" />
+            <input type="number" name="month" min="1" max="12" defaultValue={period.month ?? ""} className="h-11 w-full rounded-[10px] border border-slate-300 px-3 py-2" />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.from}</span>
-            <input type="date" name="from" defaultValue={period.mode === "range" ? period.from.toISOString().slice(0, 10) : ""} className="w-full rounded-md border border-slate-300 px-3 py-2" />
+            <input type="date" name="from" defaultValue={period.mode === "range" ? period.from.toISOString().slice(0, 10) : ""} className="h-11 w-full rounded-[10px] border border-slate-300 px-3 py-2" />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.to}</span>
-            <input type="date" name="to" defaultValue={period.mode === "range" ? period.to.toISOString().slice(0, 10) : ""} className="w-full rounded-md border border-slate-300 px-3 py-2" />
+            <input type="date" name="to" defaultValue={period.mode === "range" ? period.to.toISOString().slice(0, 10) : ""} className="h-11 w-full rounded-[10px] border border-slate-300 px-3 py-2" />
           </label>
-          <div className="flex items-end gap-2">
-            <button type="submit" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white">{ui.dashboard.apply}</button>
-            <Link href="/app/corporate" className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">{ui.dashboard.currentYear}</Link>
+          <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+            <button
+              type="submit"
+              className="inline-flex h-11 min-w-[104px] items-center justify-center whitespace-nowrap rounded-[10px] bg-slate-900 px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(6,26,82,0.14)]"
+            >
+              {ui.dashboard.apply}
+            </button>
+            <Link href={clearDatesHref} className="app-toolbar min-w-[118px] whitespace-nowrap">
+              {ui.dashboard.clearDates}
+            </Link>
+            <Link href="/app/corporate" className="app-toolbar min-w-[104px] whitespace-nowrap">
+              {ui.dashboard.currentYear}
+            </Link>
           </div>
         </form>
+      </section>
+
+      <GroupSafetyDaysBoard plants={plantSummaries.map((plant) => ({
+        id: plant.id,
+        code: plant.code,
+        name: plant.name,
+        safetyDays: plant.safetyDays,
+      }))} />
+
+      <EnvironmentDashboardBoard
+        title="Group Environment KPIs Dashboard"
+        scopeLabel={`${plantSummaries.length} plants`}
+        periodLabel={period.label}
+        plants={environmentPlants}
+        comparisonPlants={previousEnvironmentPlants}
+        periodMonthsCount={monthBuckets.length}
+        storageKeyBase="ma-hse-environment-corporate"
+        className="mb-6"
+      />
+
+      <section className="mb-6 grid gap-4 md:grid-cols-1">
+        <RootCauseTopFiveCard
+          title={ui.dashboard.rootCauseTopFive}
+          entries={rootCauseTopEntries}
+          total={totalRootCauses}
+          noDataLabel={ui.dashboard.noRootCauses}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
       </section>
 
       <CorporatePlantManager
@@ -293,20 +718,28 @@ export default async function CorporatePage({
         totalActionsToClosePercent={totalActionsToClosePercent}
         totalNearMisses={totalNearMisses}
         totalInjuries={totalInjuries}
+        totalRootCauses={totalRootCauses}
         totalFrequencyIndex={totalFrequencyIndex}
         totalSeverityIndex={totalSeverityIndex}
         totalCommunicationPyramid={totalCommunicationPyramid}
         rankings={rankings}
+        rankingMonthlySeries={rankingMonthlySeries}
         initialPlants={plantSummaries}
+        title={ui.dashboard.corporateIndicators}
+        plantListTitle={ui.dashboard.corporatePlants}
+        pyramidDescription={ui.dashboard.corporatePyramidDescription}
+        rootCauseMetricLabel={ui.dashboard.sewoRootCauses}
+        labels={ui.dashboard}
       />
 
       {canManageGlobalRepeatability ? (
         <div className="mt-6">
           <RepeatabilityAlertEditor
             endpoint="/api/admin/repeatability-alerts"
-            title="Global repeatability alerts"
-            description="Define the default weekly alert thresholds for all plants. Plant admins can still override these values locally."
+            title={ui.dashboard.globalRepeatabilityAlerts}
+            description={ui.dashboard.globalRepeatabilityAlertsDescription}
             initial={globalRepeatabilityConfig}
+            labels={ui.dashboard}
           />
         </div>
       ) : null}

@@ -84,13 +84,13 @@ export const authOptions: NextAuthOptions = {
         return session;
       }
 
-      if (session.user) {
-        session.user.id = userId;
-        const [dbUser, roles] = await prisma.$transaction([
-          prisma.user.findUnique({
-            where: { id: userId },
-            select: { forcePasswordChange: true },
-          }),
+        if (session.user) {
+          session.user.id = userId;
+          const [dbUser, roles] = await prisma.$transaction([
+            prisma.user.findUnique({
+              where: { id: userId },
+              select: { forcePasswordChange: true, language: true },
+            }),
           prisma.userPlantRole.findMany({
             where: { userId },
             include: {
@@ -98,19 +98,22 @@ export const authOptions: NextAuthOptions = {
               plant: true,
             },
           }),
-        ]);
+          ]);
 
-        session.user.plantRoles = roles.map((entry) => ({
-          plantId: entry.plantId,
-          plantCode: entry.plant.code,
-          role: entry.role.code,
-          canSeeClinical:
-            entry.role.code === RoleCode.N0_ADMIN ||
-            entry.role.code === RoleCode.N1_CORPORATE ||
-            entry.role.code === RoleCode.N2_PLANT_MANAGER ||
-            entry.role.code === RoleCode.N3_SAFETY ||
-            entry.role.code === RoleCode.MEDICO,
-        }));
+          session.user.language = dbUser?.language ?? "en";
+          session.user.plantRoles = roles
+            .filter((entry) => entry.plant.isActive || entry.role.code === RoleCode.N0_ADMIN)
+            .map((entry) => ({
+              plantId: entry.plantId,
+              plantCode: entry.plant.code,
+              role: entry.role.code,
+              canSeeClinical:
+                entry.role.code === RoleCode.N0_ADMIN ||
+                entry.role.code === RoleCode.N1_CORPORATE ||
+                entry.role.code === RoleCode.N2_PLANT_MANAGER ||
+                entry.role.code === RoleCode.N3_SAFETY ||
+                entry.role.code === RoleCode.MEDICO,
+            }));
         session.user.mustChangePassword = Boolean(dbUser?.forcePasswordChange ?? token.mustChangePassword);
       }
 

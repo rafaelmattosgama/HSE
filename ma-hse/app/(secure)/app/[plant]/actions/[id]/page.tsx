@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
+import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { getServerUiLocale } from "@/lib/server-ui-language";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
-import { getLocale } from "next-intl/server";
 
 export default async function ActionDetailPage({
   params,
@@ -10,10 +12,14 @@ export default async function ActionDetailPage({
   params: Promise<{ plant: string; id: string }>;
 }) {
   const { plant, id } = await params;
-  const locale = await getLocale();
+  const session = await getServerSession(authOptions);
 
   const plantRow = await prisma.plant.findUnique({ where: { code: plant } });
   if (!plantRow) notFound();
+  const uiLocale = await getServerUiLocale({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
 
   const action = await prisma.action.findFirst({
     where: {
@@ -36,7 +42,7 @@ export default async function ActionDetailPage({
   });
 
   if (!action) notFound();
-  const [translatedTitle, translatedDescription, translatedClosureComment, translatedReopenReason] = await translateForViewer(locale, [
+  const [translatedTitle, translatedDescription, translatedClosureComment, translatedReopenReason] = await translateForViewer(uiLocale, [
     action.title,
     action.description,
     action.closureComment,
@@ -47,7 +53,6 @@ export default async function ActionDetailPage({
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">Action Detail</h1>
-        <p className="mt-1 text-sm text-slate-600">ID: {action.id}</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2">

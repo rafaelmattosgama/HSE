@@ -29,7 +29,9 @@ export async function POST(
       },
       userId: auth.session.user.id,
       plantId: plant.id,
-      channel: "REPEATABILITY_ALERT",
+      channel: {
+        in: ["REPEATABILITY_ALERT", "SEWO_SUBMITTED"],
+      },
       status: "UNREAD",
     },
     data: {
@@ -39,7 +41,7 @@ export async function POST(
   });
 
   if (result.count === 0) {
-    return fail("NOT_FOUND", "No matching unread repeatability alerts were found", 404);
+    return fail("NOT_FOUND", "No matching unread alerts were found", 404);
   }
 
   return ok({ updated: result.count });

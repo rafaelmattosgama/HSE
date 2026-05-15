@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { ContractorsDashboard } from "@/components/feature/contractors-dashboard";
 import { prisma } from "@/lib/prisma";
+import { getServerUiDictionary } from "@/lib/server-ui-language";
 
 export default async function ContractorsPage({
   params,
@@ -13,6 +14,10 @@ export default async function ContractorsPage({
   const session = await getServerSession(authOptions);
   const actorRole = session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const ui = await getServerUiDictionary({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
   const companies = await prisma.externalCompany.findMany({
     where: { plantId: plantRow.id },
     include: {
@@ -25,8 +30,7 @@ export default async function ContractorsPage({
   return (
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">External Companies</h1>
-        <p className="mt-1 text-sm text-slate-600">Invitation, follow-up and validation of external companies and their workers.</p>
+        <h1 className="text-2xl font-bold text-slate-900">{ui.modules.contractors}</h1>
       </header>
 
       <ContractorsDashboard

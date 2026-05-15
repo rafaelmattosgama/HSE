@@ -17,6 +17,12 @@ export type RepeatabilityAlertConfig = {
   workstationNearMissWeeklyThreshold: number;
 };
 
+export type SafetyDaysConfig = {
+  manualLastAccidentDate: string | null;
+  historicalRecordDays: number | null;
+  historicalRecordStartDate: string | null;
+};
+
 const SLA_DEFAULT: SlaConfig = {
   LOW: DEFAULT_SLA_DAYS.LOW,
   MEDIUM: DEFAULT_SLA_DAYS.MEDIUM,
@@ -192,6 +198,57 @@ export async function setPlantRepeatabilityAlertConfig(plantId: string, config: 
     create: {
       plantId,
       key: SYSTEM_PARAMETER_KEYS.REPEATABILITY_ALERT,
+      valueJson: config,
+    },
+    update: {
+      valueJson: config,
+    },
+  });
+}
+
+function normalizeSafetyDaysConfig(value?: Prisma.JsonObject | null): SafetyDaysConfig {
+  const rawDate = value?.manualLastAccidentDate;
+  const rawHistoricalRecordDays = value?.historicalRecordDays;
+  const rawHistoricalRecordStartDate = value?.historicalRecordStartDate;
+  const historicalRecordDays =
+    typeof rawHistoricalRecordDays === "number" && Number.isFinite(rawHistoricalRecordDays)
+      ? Math.max(0, Math.floor(rawHistoricalRecordDays))
+      : null;
+
+  return {
+    manualLastAccidentDate: typeof rawDate === "string" && rawDate.trim() ? rawDate : null,
+    historicalRecordDays,
+    historicalRecordStartDate:
+      typeof rawHistoricalRecordStartDate === "string" && rawHistoricalRecordStartDate.trim()
+        ? rawHistoricalRecordStartDate
+        : null,
+  };
+}
+
+export async function getPlantSafetyDaysConfig(plantId: string): Promise<SafetyDaysConfig> {
+  const parameter = await prisma.systemParameter.findUnique({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.SAFETY_DAYS,
+      },
+    },
+  });
+
+  return normalizeSafetyDaysConfig((parameter?.valueJson as Prisma.JsonObject | null) ?? null);
+}
+
+export async function setPlantSafetyDaysConfig(plantId: string, config: SafetyDaysConfig) {
+  return prisma.systemParameter.upsert({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.SAFETY_DAYS,
+      },
+    },
+    create: {
+      plantId,
+      key: SYSTEM_PARAMETER_KEYS.SAFETY_DAYS,
       valueJson: config,
     },
     update: {

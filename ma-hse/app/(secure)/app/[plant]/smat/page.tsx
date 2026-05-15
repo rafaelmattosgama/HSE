@@ -2,10 +2,10 @@ import Link from "next/link";
 import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { getLocale } from "next-intl/server";
 import { CreateSmatAudit } from "@/components/feature/create-smat-audit";
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { getServerUiLocale } from "@/lib/server-ui-language";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 
 const ALLOWED_ROLES: RoleCode[] = [
@@ -52,7 +52,6 @@ function renderObservationList(input: unknown) {
 
 export default async function SmatPage({ params }: { params: Promise<{ plant: string }> }) {
   const { plant } = await params;
-  const locale = await getLocale();
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -70,6 +69,10 @@ export default async function SmatPage({ params }: { params: Promise<{ plant: st
   }
 
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const uiLocale = await getServerUiLocale({
+    userLanguage: session.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
   const [audits, owners] = await prisma.$transaction([
     prisma.smatAudit.findMany({
       where: { plantId: plantRow.id },
@@ -115,7 +118,7 @@ export default async function SmatPage({ params }: { params: Promise<{ plant: st
     }),
   ]);
   const translatedBlocks = await translateForViewer(
-    locale,
+    uiLocale,
     audits.flatMap((audit) => {
       const observationDescriptions = [
         ...(Array.isArray(audit.safeActs) ? (audit.safeActs as StoredObservation[]).map((item) => item.description) : []),
@@ -180,9 +183,6 @@ export default async function SmatPage({ params }: { params: Promise<{ plant: st
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">SMAT</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Safety Management Audit Training com checklist operacional, fotografias, exportacao e acoes diretas para o modulo Actions.
-        </p>
       </header>
 
       <CreateSmatAudit

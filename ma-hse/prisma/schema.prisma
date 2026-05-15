@@ -167,6 +167,7 @@ model Plant {
   name             String
   timezone         String
   defaultLanguage  String
+  isActive         Boolean              @default(true)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   users            UserPlantRole[]
@@ -348,36 +349,42 @@ model RiskTheme {
   id        String   @id @default(uuid())
   plantId   String
   code      String
+  category  String   @default("General")
   name      String
   isActive  Boolean  @default(true)
   plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
 
   @@unique([plantId, code])
+  @@index([plantId, category])
 }
 
 model UnsafeActType {
   id        String   @id @default(uuid())
   plantId   String
   code      String
+  category  String   @default("General")
   name      String
   isActive  Boolean  @default(true)
   plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
 
   @@unique([plantId, code])
+  @@index([plantId, category])
 }
 
 model UnsafeConditionType {
   id        String   @id @default(uuid())
   plantId   String
   code      String
+  category  String   @default("General")
   name      String
   isActive  Boolean  @default(true)
   plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
 
   @@unique([plantId, code])
+  @@index([plantId, category])
 }
 
 model NearMissType {
@@ -454,7 +461,7 @@ model Communication {
   lineId                String?
   workstationId         String?
   equipmentId           String?
-  riskThemeId           String
+  riskThemeId           String?
   unsafeActTypeId       String?
   unsafeConditionTypeId String?
   nearMissTypeId        String?
@@ -487,7 +494,7 @@ model Communication {
   line                  Line?               @relation(fields: [lineId], references: [id])
   workstation           Workstation?        @relation(fields: [workstationId], references: [id])
   equipment             Equipment?          @relation(fields: [equipmentId], references: [id])
-  riskTheme             RiskTheme           @relation(fields: [riskThemeId], references: [id])
+  riskTheme             RiskTheme?          @relation(fields: [riskThemeId], references: [id], onDelete: SetNull)
   unsafeActType         UnsafeActType?      @relation(fields: [unsafeActTypeId], references: [id])
   unsafeConditionType   UnsafeConditionType? @relation(fields: [unsafeConditionTypeId], references: [id])
   nearMissType          NearMissType?       @relation(fields: [nearMissTypeId], references: [id])
@@ -504,6 +511,7 @@ model Communication {
 
   @@index([plantId, status, eventDatetime])
   @@index([riskThemeId, eventDatetime])
+  @@index([unsafeConditionTypeId, eventDatetime])
   @@index([shiftId])
 }
 
@@ -943,7 +951,7 @@ model AlertEvent {
 model SEWO {
   id                            String      @id @default(uuid())
   plantId                       String
-  communicationId               String
+  communicationId               String?
   eventClassification           String
   areaId                        String?
   lineId                        String?
@@ -967,7 +975,7 @@ model SEWO {
   createdAt                     DateTime    @default(now())
   updatedAt                     DateTime    @updatedAt
   plant                         Plant       @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  communication                 Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  communication                 Communication? @relation(fields: [communicationId], references: [id], onDelete: SetNull)
   area                          Area?       @relation(fields: [areaId], references: [id])
   line                          Line?       @relation(fields: [lineId], references: [id])
   shift                         Shift?      @relation(fields: [shiftId], references: [id])

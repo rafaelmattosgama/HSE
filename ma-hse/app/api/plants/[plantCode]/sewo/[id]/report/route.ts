@@ -3,6 +3,7 @@ import { fail } from "@/lib/api";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { getServerUiLocale } from "@/lib/server-ui-language";
 import { SewoExportService } from "@/lib/services/sewo-export";
 
 const ALLOWED_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY];
@@ -26,7 +27,11 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
   }
 
   const format = new URL(request.url).searchParams.get("format") ?? "pdf";
-  const exported = await SewoExportService.buildExport(id);
+  const locale = await getServerUiLocale({
+    userLanguage: auth.session.user.language,
+    plantLanguage: plant.defaultLanguage,
+  });
+  const exported = await SewoExportService.buildExport(id, { locale });
 
   if (format === "xlsx" || format === "excel") {
     return new Response(new Uint8Array(exported.xlsx), {
