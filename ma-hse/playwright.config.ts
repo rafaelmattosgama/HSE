@@ -15,7 +15,7 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      "cross-env NEXTAUTH_URL=http://127.0.0.1:3210 APP_URL=http://127.0.0.1:3210 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3210 npm run start -- --port 3210 --hostname 127.0.0.1",
+      "cross-env ALLOW_DEV_DEFAULT_ENV=true NEXTAUTH_URL=http://127.0.0.1:3210 APP_URL=http://127.0.0.1:3210 NEXT_PUBLIC_APP_URL=http://127.0.0.1:3210 npm run start -- --port 3210 --hostname 127.0.0.1",
     url: "http://127.0.0.1:3210",
     reuseExistingServer: false,
     timeout: 180_000,

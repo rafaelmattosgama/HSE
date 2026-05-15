@@ -99,3 +99,11 @@ export async function consumeRateLimit(key: string, points = env.RATE_LIMIT_POIN
 export function getRedisClient() {
   return createRedisClient();
 }
+
+export async function pingRedis() {
+  const client = await getConnectedRedisClient();
+  if (!client) return false;
+
+  await client.ping();
+  return true;
+}

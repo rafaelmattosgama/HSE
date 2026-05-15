@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
+import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 const CONTRACTOR_COOKIE = "ma_hse_contractor_session";
@@ -28,7 +29,7 @@ export async function createContractorSession(companyId: string) {
   cookieStore.set(CONTRACTOR_COOKIE, sessionToken, {
     httpOnly: true,
     sameSite: "lax",
-    secure: false,
+    secure: env.NODE_ENV === "production",
     path: "/",
     expires: expiresAt,
   });

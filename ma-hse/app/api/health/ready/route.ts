@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getRedisClient } from "@/lib/rate-limit";
+import { pingRedis } from "@/lib/rate-limit";
 import { StorageService } from "@/lib/services/storage-service";
 
 export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
-    const redis = getRedisClient();
-    if (redis) {
-      await redis.ping();
+    const redisReady = await pingRedis();
+    if (!redisReady) {
+      throw new Error("Redis is not ready");
     }
 
     await StorageService.checkBucketReady();

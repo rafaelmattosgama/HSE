@@ -44,7 +44,11 @@ export async function requirePlantAccess(plantCode: string, allowedRoles: RoleCo
   }
 
   const roleEntry = userRoles.find((entry) => entry.plantCode === plantCode && allowedRoles.includes(entry.role));
-  if (!roleEntry) return { session, role: RoleCode.N0_ADMIN };
+  if (!roleEntry) {
+    return {
+      error: fail("FORBIDDEN", "Insufficient role for plant scope", 403) as NextResponse,
+    };
+  }
 
   return {
     session,
