@@ -60,6 +60,7 @@ services:
       "
 
   app:
+    image: ma-hse-app
     build:
       context: .
       target: runner
@@ -87,6 +88,7 @@ services:
       retries: 5
 
   worker:
+    image: ma-hse-worker
     build:
       context: .
       target: runner
@@ -103,9 +105,7 @@ services:
     command: ["npm", "run", "worker"]
 
   migrate:
-    build:
-      context: .
-      target: runner
+    image: ma-hse-app
     restart: "no"
     profiles: ["tasks"]
     env_file:
@@ -116,9 +116,7 @@ services:
     command: ["sh", "-lc", "npm run db:migrate:deploy && npm run db:repair:encoding -- --apply"]
 
   scheduler:
-    build:
-      context: .
-      target: runner
+    image: ma-hse-app
     restart: "no"
     profiles: ["tasks"]
     env_file:
