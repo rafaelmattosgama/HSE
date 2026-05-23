@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CommunicationType } from "@prisma/client";
+import { shouldDeferPublicReportUnsafeActType } from "@/lib/communication-classification";
 import { CommunicationService } from "@/lib/services/communication-service";
 import { createCommunicationInput, createPublicReportCommunicationInput } from "@/lib/validation/dtos";
 
@@ -47,6 +48,36 @@ describe("token-based communication rules", () => {
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
       expect(parsed.error.issues.some((issue) => issue.path.includes("unsafeActTypeId"))).toBe(true);
+    }
+  });
+
+  it("does not require unsafe act type for public unsafe act reports", () => {
+    const parsed = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.UNSAFE_ACT,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      targetText: "Involved Worker",
+      description: "Unsafe act reported from QR",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.unsafeActTypeId).toBeUndefined();
+    }
+    expect(shouldDeferPublicReportUnsafeActType(CommunicationType.UNSAFE_ACT)).toBe(true);
+  });
+
+  it("rejects future event dates for public reports", () => {
+    const parsed = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.UNSAFE_CONDITION,
+      eventDatetime: new Date(Date.now() + 60_000).toISOString(),
+      reporterName: "QR Reporter",
+      description: "Unsafe condition reported from QR",
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((issue) => issue.path.includes("eventDatetime"))).toBe(true);
     }
   });
 

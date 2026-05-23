@@ -39,7 +39,7 @@ export function shouldDeferPublicReportNearMissType(type: CommunicationType) {
 }
 
 export function shouldDeferPublicReportUnsafeActType(type: CommunicationType) {
-  return type === CommunicationType.FIRST_AID;
+  return type === CommunicationType.UNSAFE_ACT || type === CommunicationType.FIRST_AID;
 }
 
 export function shouldDeferPublicReportUnsafeConditionType(type: CommunicationType) {
