@@ -450,6 +450,24 @@ sudo ufw allow 3004/tcp
 Se houver Nginx, publica apenas `80/443` e deixa a app restrita a
 `127.0.0.1:3004`.
 
+Muito importante: nesse cenario, `APP_URL`, `NEXT_PUBLIC_APP_URL` e
+`NEXTAUTH_URL` devem apontar para o dominio HTTPS final sem a porta interna
+`3004`. Exemplo correto:
+
+```text
+APP_URL=https://maxsafety.maportugal.com
+NEXT_PUBLIC_APP_URL=https://maxsafety.maportugal.com
+NEXTAUTH_URL=https://maxsafety.maportugal.com
+```
+
+Configuracao incorreta que quebra logout e redirects do NextAuth:
+
+```text
+APP_URL=https://maxsafety.maportugal.com:3004
+NEXT_PUBLIC_APP_URL=https://maxsafety.maportugal.com:3004
+NEXTAUTH_URL=https://maxsafety.maportugal.com:3004
+```
+
 ## Backups
 
 Backup minimo antes de atualizacoes importantes:
