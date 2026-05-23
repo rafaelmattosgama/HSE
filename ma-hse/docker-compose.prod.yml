@@ -113,7 +113,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["npm", "run", "db:migrate:deploy"]
+    command: ["sh", "-lc", "npm run db:migrate:deploy && npm run db:repair:encoding -- --apply"]
 
   scheduler:
     build:
