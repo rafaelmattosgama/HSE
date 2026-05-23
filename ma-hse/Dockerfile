@@ -1,6 +1,8 @@
 FROM node:22-alpine AS base
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 FROM base AS deps
 COPY package*.json ./
@@ -25,6 +27,7 @@ COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=node:node /app/jobs ./jobs
 COPY --from=builder --chown=node:node /app/lib ./lib
 COPY --from=builder --chown=node:node /app/messages ./messages
+COPY --from=builder --chown=node:node /app/scripts ./scripts
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 USER node
 EXPOSE 3000

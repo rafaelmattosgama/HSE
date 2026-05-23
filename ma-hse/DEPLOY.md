@@ -189,7 +189,42 @@ Espera `postgres`, `redis` e `minio` ficarem `healthy`.
 docker compose --env-file .env.production -f docker-compose.prod.yml --profile tasks run --rm migrate
 ```
 
-### 4. Preparar O Dump Para Importacao
+### 4. Validar Encoding Do Dump
+
+Antes de gerar `dump_dados_import.sql`, valida se o dump nao ja traz
+mojibake (`S├ôNIA`, `prote├º├úo`, `ÔÇÖ`).
+
+Verificacao rapida:
+
+```bash
+grep -n 'S├\|ÔÇ\|┬\|Ã' import/dump_dados_desenvolvimento.sql | head -20
+```
+
+Se este comando nao imprimir nada, segue para o passo seguinte.
+
+Se imprimir linhas, corrige primeiro o dump:
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+
+source = Path("import/dump_dados_desenvolvimento.sql")
+target = Path("import/dump_dados_desenvolvimento.fixed.sql")
+
+text = source.read_text(encoding="utf-8")
+fixed = text.encode("cp850").decode("utf-8")
+
+target.write_text(fixed, encoding="utf-8")
+print(f"written {target}")
+PY
+
+grep -n 'SÓNIA\|proteção\|não' import/dump_dados_desenvolvimento.fixed.sql | head -20
+```
+
+Se geraste `dump_dados_desenvolvimento.fixed.sql`, usa esse ficheiro nos
+proximos passos em vez do original.
+
+### 5. Preparar O Dump Para Importacao
 
 O dump recebido e um dump de dados. Ele inclui tambem dados da tabela interna
 `_prisma_migrations`. Como as migrations ja foram aplicadas no passo anterior,
@@ -198,14 +233,17 @@ esse bloco deve ser removido antes da importacao.
 Gerar uma copia filtrada:
 
 ```bash
+SOURCE_DUMP=import/dump_dados_desenvolvimento.sql
+[ -f import/dump_dados_desenvolvimento.fixed.sql ] && SOURCE_DUMP=import/dump_dados_desenvolvimento.fixed.sql
+
 awk '
   /^COPY public\._prisma_migrations / { skip=1; next }
   skip && /^\\\.$/ { skip=0; next }
   !skip { print }
-' import/dump_dados_desenvolvimento.sql > import/dump_dados_import.sql
+' "$SOURCE_DUMP" > import/dump_dados_import.sql
 ```
 
-### 5. Importar Dados
+### 6. Importar Dados
 
 Importar na base criada pelas migrations:
 
@@ -218,7 +256,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec -T pos
 Se este comando falhar, nao continues o deploy. Corrige a causa, recria a base
 ou restaura backup, e repete migrations + import.
 
-### 6. Validar Dados Importados
+### 7. Validar Dados Importados
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
@@ -244,7 +282,21 @@ SEWO: 4
 User: 19
 ```
 
-### 7. Agendar Jobs E Subir App
+Confirma tambem o encoding e locale efetivos da base:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
+    SHOW server_encoding;
+    SHOW client_encoding;
+    SHOW lc_collate;
+    SHOW lc_ctype;
+  "'
+```
+
+O esperado e `UTF8` no `server_encoding`.
+
+### 8. Agendar Jobs E Subir App
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml --profile tasks run --rm scheduler
@@ -257,6 +309,50 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d app w
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 curl -f http://localhost:${APP_PORT:-3004}/api/health/live
 curl -f http://localhost:${APP_PORT:-3004}/api/health/ready
+```
+
+Valida headers e charset HTTP:
+
+```bash
+curl -sD - http://localhost:${APP_PORT:-3004}/ -o /dev/null | grep -i content-type
+```
+
+## Reparar Uma Base Ja Corrompida
+
+Se a app ja estiver em producao e os dados na base aparecerem como
+`S├ôNIA`, faz primeiro um backup:
+
+```bash
+mkdir -p backups
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
+  sh -lc 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > backups/backup-before-encoding-fix-$(date +%Y%m%d-%H%M%S).sql
+```
+
+Executa depois um dry-run do reparador:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm app \
+  npm run db:repair:encoding -- --table EmployeeDirectory
+```
+
+Se o resultado estiver correto, aplica em toda a base:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm app \
+  npm run db:repair:encoding -- --apply
+```
+
+No fim, confirma:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
+  sh -lc "psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -P pager=off -c '
+    SELECT id, name
+    FROM \"EmployeeDirectory\"
+    WHERE name LIKE ''%├%'' OR name LIKE ''%ÔÇ%'' OR name LIKE ''%Ã%''
+    LIMIT 20;
+  '"
 ```
 
 O endpoint `/api/health/ready` deve responder:
