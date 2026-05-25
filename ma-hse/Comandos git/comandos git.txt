@@ -3,6 +3,8 @@ git status
 git add .
 git commit -m "Corrige bugs X"
 git push origin correcoesluis
+gh pr create --base main --head correcoesluis --title "Correções Luis" --body "Correções aplicadas"
+gh pr merge --auto --merge --delete-branch
 
 Executar para fazer o delpoy
 
