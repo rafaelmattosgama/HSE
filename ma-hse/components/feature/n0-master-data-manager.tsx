@@ -48,6 +48,7 @@ type WorkerForm = {
 
 type CatalogsState = Record<MasterDataType, CatalogItem[]>;
 type FormsState = Record<MasterDataType, CatalogForm>;
+type CatalogMessagesState = Record<MasterDataType, string>;
 type ErrorEnvelope = {
   errorCode?: string;
   message?: string;
@@ -65,6 +66,16 @@ const EMPTY_WORKER_FORM: WorkerForm = {
   employeeNo: "",
   name: "",
   dept: "",
+};
+
+const EMPTY_CATALOG_MESSAGES: CatalogMessagesState = {
+  area: "",
+  workstation: "",
+  equipment: "",
+  nearMissType: "",
+  unsafeActType: "",
+  unsafeConditionType: "",
+  injuryType: "",
 };
 
 function supportsCategory(type: MasterDataType) {
@@ -161,9 +172,11 @@ export function N0MasterDataManager({
     }),
   );
   const [forms, setForms] = useState<FormsState>(() => buildInitialForms());
+  const [catalogMessages, setCatalogMessages] = useState<CatalogMessagesState>(() => ({ ...EMPTY_CATALOG_MESSAGES }));
   const [workers, setWorkers] = useState(() => sortWorkers(initialWorkers));
   const [workerForm, setWorkerForm] = useState<WorkerForm>({ ...EMPTY_WORKER_FORM });
-  const [message, setMessage] = useState("");
+  const [workerMessage, setWorkerMessage] = useState("");
+  const [globalMessage, setGlobalMessage] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
@@ -183,9 +196,11 @@ export function N0MasterDataManager({
       }),
     );
     setForms(buildInitialForms());
+    setCatalogMessages({ ...EMPTY_CATALOG_MESSAGES });
     setWorkers(sortWorkers(initialWorkers));
     setWorkerForm({ ...EMPTY_WORKER_FORM });
-    setMessage("");
+    setWorkerMessage("");
+    setGlobalMessage("");
     setSavingKey(null);
     setDeletingKey(null);
   }, [
@@ -215,10 +230,26 @@ export function N0MasterDataManager({
         ...patch,
       },
     }));
+    setCatalogMessages((current) => (current[type] ? { ...current, [type]: "" } : current));
   }
 
   function clearForm(type: MasterDataType) {
     updateForm(type, { ...EMPTY_FORM });
+  }
+
+  function setCatalogMessage(type: MasterDataType, value: string) {
+    setCatalogMessages((current) => ({
+      ...current,
+      [type]: value,
+    }));
+  }
+
+  function updateWorkerForm(patch: Partial<WorkerForm>) {
+    setWorkerForm((current) => ({
+      ...current,
+      ...patch,
+    }));
+    setWorkerMessage("");
   }
 
   function startEdit(type: MasterDataType, item: CatalogItem) {
@@ -229,7 +260,10 @@ export function N0MasterDataManager({
       name: item.name,
       category: item.category ?? "",
     });
-    setMessage(formatMasterDataMessage(labels.itemEditMessage, { section: section.title.toLowerCase(), code: item.code }));
+    setCatalogMessage(
+      type,
+      formatMasterDataMessage(labels.itemEditMessage, { section: section.title.toLowerCase(), code: item.code }),
+    );
   }
 
   function startWorkerEdit(worker: Worker) {
@@ -239,7 +273,7 @@ export function N0MasterDataManager({
       name: worker.name,
       dept: worker.dept ?? "",
     });
-    setMessage(formatMasterDataMessage(labels.workerEditMessage, { code: worker.employeeNo }));
+    setWorkerMessage(formatMasterDataMessage(labels.workerEditMessage, { code: worker.employeeNo }));
   }
 
   function hasDuplicateCatalogCode(type: MasterDataType, code: string, currentId?: string | null) {
@@ -283,12 +317,16 @@ export function N0MasterDataManager({
   async function submitCatalog(type: MasterDataType, event: React.FormEvent) {
     event.preventDefault();
     const form = forms[type];
-    if (hasDuplicateCatalogCode(type, form.code, form.id)) {
-      setMessage(getSection(labels, type).duplicateMessage);
+    const code = form.code.trim();
+    const name = form.name.trim();
+    const category = form.category.trim();
+
+    if (hasDuplicateCatalogCode(type, code, form.id)) {
+      setCatalogMessage(type, getSection(labels, type).duplicateMessage);
       return;
     }
     setSavingKey(`catalog:${type}`);
-    setMessage("");
+    setCatalogMessage(type, "");
 
     try {
       const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
@@ -297,9 +335,9 @@ export function N0MasterDataManager({
         body: JSON.stringify({
           id: form.id ?? undefined,
           type,
-          code: form.code,
-          name: form.name,
-          category: supportsCategory(type) ? form.category : undefined,
+          code,
+          name,
+          category: supportsCategory(type) ? category : undefined,
         }),
       });
       const json = await parseApiResponse<{ item: CatalogItem }>(response);
@@ -314,13 +352,19 @@ export function N0MasterDataManager({
       }
       setCatalog(type, [...catalogs[type].filter((entry) => entry.id !== saved.id), saved]);
       clearForm(type);
-      setMessage(
+      setCatalogMessage(
+        type,
         formatMasterDataMessage(form.id ? labels.itemUpdated : labels.itemCreated, {
           section: getSection(labels, type).title,
         }),
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : formatMasterDataMessage(labels.failedToSaveItem, { section: getSection(labels, type).title.toLowerCase() }));
+      setCatalogMessage(
+        type,
+        error instanceof Error
+          ? error.message
+          : formatMasterDataMessage(labels.failedToSaveItem, { section: getSection(labels, type).title.toLowerCase() }),
+      );
     } finally {
       setSavingKey(null);
     }
@@ -332,7 +376,7 @@ export function N0MasterDataManager({
     }
 
     setDeletingKey(`catalog:${type}:${item.id}`);
-    setMessage("");
+    setCatalogMessage(type, "");
 
     try {
       const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
@@ -350,9 +394,14 @@ export function N0MasterDataManager({
       if (forms[type].id === item.id) {
         clearForm(type);
       }
-      setMessage(getSection(labels, type).deleteSuccess);
+      setCatalogMessage(type, getSection(labels, type).deleteSuccess);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : formatMasterDataMessage(labels.failedToUpdateItem, { section: getSection(labels, type).title.toLowerCase() }));
+      setCatalogMessage(
+        type,
+        error instanceof Error
+          ? error.message
+          : formatMasterDataMessage(labels.failedToUpdateItem, { section: getSection(labels, type).title.toLowerCase() }),
+      );
     } finally {
       setDeletingKey(null);
     }
@@ -360,12 +409,16 @@ export function N0MasterDataManager({
 
   async function submitWorker(event: React.FormEvent) {
     event.preventDefault();
-    if (hasDuplicateWorkerEmployeeNo(workerForm.employeeNo, workerForm.id)) {
-      setMessage(labels.duplicateWorker);
+    const employeeNo = workerForm.employeeNo.trim();
+    const name = workerForm.name.trim();
+    const dept = workerForm.dept.trim();
+
+    if (hasDuplicateWorkerEmployeeNo(employeeNo, workerForm.id)) {
+      setWorkerMessage(labels.duplicateWorker);
       return;
     }
     setSavingKey("worker");
-    setMessage("");
+    setWorkerMessage("");
 
     try {
       const response = await fetch(`/api/plants/${plant}/admin/workers`, {
@@ -373,9 +426,9 @@ export function N0MasterDataManager({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id: workerForm.id ?? undefined,
-          employeeNo: workerForm.employeeNo,
-          name: workerForm.name,
-          dept: workerForm.dept || undefined,
+          employeeNo,
+          name,
+          dept: dept || undefined,
         }),
       });
       const json = await parseApiResponse<{ worker: Worker }>(response);
@@ -390,9 +443,9 @@ export function N0MasterDataManager({
       }
       setWorkers((current) => sortWorkers([...current.filter((entry) => entry.id !== saved.id), saved]));
       setWorkerForm({ ...EMPTY_WORKER_FORM });
-      setMessage(workerForm.id ? labels.workerUpdated : labels.workerCreated);
+      setWorkerMessage(workerForm.id ? labels.workerUpdated : labels.workerCreated);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : labels.failedToSaveWorker);
+      setWorkerMessage(error instanceof Error ? error.message : labels.failedToSaveWorker);
     } finally {
       setSavingKey(null);
     }
@@ -404,7 +457,7 @@ export function N0MasterDataManager({
     }
 
     setDeletingKey(`worker:${worker.id}`);
-    setMessage("");
+    setWorkerMessage("");
 
     try {
       const response = await fetch(`/api/plants/${plant}/admin/workers`, {
@@ -422,9 +475,9 @@ export function N0MasterDataManager({
       if (workerForm.id === worker.id) {
         setWorkerForm({ ...EMPTY_WORKER_FORM });
       }
-      setMessage(labels.workerDeleteSuccess);
+      setWorkerMessage(labels.workerDeleteSuccess);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
+      setWorkerMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
     } finally {
       setDeletingKey(null);
     }
@@ -432,7 +485,7 @@ export function N0MasterDataManager({
 
   async function importExcel(file: File) {
     setImportLoading(true);
-    setMessage("");
+    setGlobalMessage("");
 
     try {
       const formData = new FormData();
@@ -452,7 +505,7 @@ export function N0MasterDataManager({
         throw new Error(labels.importError);
       }
 
-      setMessage(
+      setGlobalMessage(
         formatMasterDataMessage(labels.importSuccess, {
           departments: data.summary.departments,
           workstations: data.summary.workstations,
@@ -461,7 +514,7 @@ export function N0MasterDataManager({
       );
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : labels.importError);
+      setGlobalMessage(error instanceof Error ? error.message : labels.importError);
     } finally {
       setImportLoading(false);
     }
@@ -469,7 +522,7 @@ export function N0MasterDataManager({
 
   async function bootstrapPl01Defaults() {
     setBootstrapLoading(true);
-    setMessage("");
+    setGlobalMessage("");
 
     try {
       const response = await fetch(`/api/plants/${plant}/admin/bootstrap-pl01`, {
@@ -490,7 +543,7 @@ export function N0MasterDataManager({
       setCatalog("workstation", data.workstations);
       setWorkers(sortWorkers(data.workers));
       setCatalog("injuryType", data.injuryTypes);
-      setMessage(
+      setGlobalMessage(
         formatMasterDataMessage(labels.pl01Success, {
           workstations: data.summary.workstations,
           workers: data.summary.workers,
@@ -498,7 +551,7 @@ export function N0MasterDataManager({
         }),
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : labels.pl01Error);
+      setGlobalMessage(error instanceof Error ? error.message : labels.pl01Error);
     } finally {
       setBootstrapLoading(false);
     }
@@ -506,7 +559,7 @@ export function N0MasterDataManager({
 
   async function syncDefaultInjuryTypes() {
     setInjuryTypesLoading(true);
-    setMessage("");
+    setGlobalMessage("");
 
     try {
       const response = await fetch(`/api/plants/${plant}/admin/injury-types`, {
@@ -523,9 +576,9 @@ export function N0MasterDataManager({
       }
 
       setCatalog("injuryType", data.injuryTypes);
-      setMessage(formatMasterDataMessage(labels.injurySyncSuccess, { injuryTypes: data.summary.injuryTypes }));
+      setGlobalMessage(formatMasterDataMessage(labels.injurySyncSuccess, { injuryTypes: data.summary.injuryTypes }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : labels.injurySyncError);
+      setGlobalMessage(error instanceof Error ? error.message : labels.injurySyncError);
     } finally {
       setInjuryTypesLoading(false);
     }
@@ -578,6 +631,7 @@ export function N0MasterDataManager({
         <Button type="submit" size="sm" disabled={savingKey === `catalog:${type}`}>
           {savingKey === `catalog:${type}` ? labels.saving : form.id ? labels.saveChanges : section.createLabel}
         </Button>
+        {catalogMessages[type] ? <p className="text-xs text-slate-600" aria-live="polite">{catalogMessages[type]}</p> : null}
 
         <div className="max-h-56 space-y-2 overflow-y-auto text-xs text-slate-600">
           {catalogs[type].length === 0 ? (
@@ -647,6 +701,7 @@ export function N0MasterDataManager({
           ) : null}
         </div>
       </header>
+      {globalMessage ? <p className="text-xs text-slate-600" aria-live="polite">{globalMessage}</p> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
         {renderCatalogCard("area")}
@@ -667,21 +722,21 @@ export function N0MasterDataManager({
 
           <input
             value={workerForm.employeeNo}
-            onChange={(event) => setWorkerForm((current) => ({ ...current, employeeNo: event.target.value }))}
+            onChange={(event) => updateWorkerForm({ employeeNo: event.target.value })}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             placeholder={labels.employeeNumber}
             required
           />
           <input
             value={workerForm.name}
-            onChange={(event) => setWorkerForm((current) => ({ ...current, name: event.target.value }))}
+            onChange={(event) => updateWorkerForm({ name: event.target.value })}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             placeholder={labels.workerName}
             required
           />
           <input
             value={workerForm.dept}
-            onChange={(event) => setWorkerForm((current) => ({ ...current, dept: event.target.value }))}
+            onChange={(event) => updateWorkerForm({ dept: event.target.value })}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             placeholder={labels.department}
           />
@@ -689,6 +744,7 @@ export function N0MasterDataManager({
           <Button type="submit" size="sm" disabled={savingKey === "worker"}>
             {savingKey === "worker" ? labels.saving : workerForm.id ? labels.saveChanges : labels.saveWorker}
           </Button>
+          {workerMessage ? <p className="text-xs text-slate-600" aria-live="polite">{workerMessage}</p> : null}
 
           <div className="max-h-56 space-y-2 overflow-y-auto text-xs text-slate-600">
             {workers.length === 0 ? (
@@ -726,7 +782,6 @@ export function N0MasterDataManager({
         {renderCatalogCard("nearMissType")}
         {renderCatalogCard("injuryType")}
       </div>
-      {message ? <p className="text-xs text-slate-600">{message}</p> : null}
     </section>
   );
 }

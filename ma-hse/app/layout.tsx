@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import Script from "next/script";
+import { cookies } from "next/headers";
 import { Sora, IBM_Plex_Mono } from "next/font/google";
 import { getLocale, getMessages } from "next-intl/server";
 import { Providers } from "@/components/layout/providers";
+import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 import "./globals.css";
 
 const sora = Sora({
@@ -26,22 +27,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
   const locale = await getLocale();
   const messages = await getMessages();
+  const theme = parseTheme(cookieStore.get(THEME_STORAGE_KEY)?.value);
 
   return (
-    <html lang={locale} data-theme="normal" suppressHydrationWarning>
+    <html lang={locale} data-theme={theme} suppressHydrationWarning>
       <body className={`${sora.variable} ${plexMono.variable} min-h-screen antialiased`}>
-        <Script id="theme-init" strategy="beforeInteractive">
-          {`
-            try {
-              var storedTheme = window.localStorage.getItem("ma-hse-theme");
-              if (storedTheme === "black" || storedTheme === "normal") {
-                document.documentElement.setAttribute("data-theme", storedTheme);
-              }
-            } catch (error) {}
-          `}
-        </Script>
         <Providers locale={locale} messages={messages}>
           {children}
         </Providers>
