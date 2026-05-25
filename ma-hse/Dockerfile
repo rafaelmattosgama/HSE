@@ -9,14 +9,18 @@ COPY package*.json ./
 RUN npm ci
 
 FROM base AS builder
+ARG GIT_COMMIT=N/A
+ENV NEXT_PUBLIC_GIT_COMMIT=${GIT_COMMIT}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
 RUN npm run build
 
 FROM base AS runner
+ARG GIT_COMMIT=N/A
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_GIT_COMMIT=${GIT_COMMIT}
 COPY --from=builder --chown=node:node /app/.next ./.next
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules

@@ -1,26 +1,25 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { THEME_COOKIE_MAX_AGE, THEME_STORAGE_KEY, type ThemeMode } from "@/lib/theme";
 
-type ThemeMode = "normal" | "black";
+function writeTheme(theme: ThemeMode) {
+  document.documentElement.setAttribute("data-theme", theme);
+  document.cookie = `${THEME_STORAGE_KEY}=${theme}; path=/; max-age=${THEME_COOKIE_MAX_AGE}; samesite=lax`;
+  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
 
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof document !== "undefined") {
-      const currentTheme = document.documentElement.getAttribute("data-theme");
-      if (currentTheme === "black" || currentTheme === "normal") {
-        return currentTheme;
-      }
-    }
+export function ThemeToggle({ initialTheme }: { initialTheme: ThemeMode }) {
+  const [theme, setTheme] = useState<ThemeMode>(initialTheme);
 
-    return "normal";
-  });
+  useEffect(() => {
+    writeTheme(theme);
+  }, [theme]);
 
   function applyTheme(nextTheme: ThemeMode) {
     setTheme(nextTheme);
-    document.documentElement.setAttribute("data-theme", nextTheme);
-    window.localStorage.setItem("ma-hse-theme", nextTheme);
+    writeTheme(nextTheme);
   }
 
   const isBlack = theme === "black";

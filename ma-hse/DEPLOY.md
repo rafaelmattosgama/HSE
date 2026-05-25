@@ -124,7 +124,7 @@ A aplicacao bloqueia o runtime em producao se esses defaults forem usados.
 
 ```bash
 cd /opt/ma-hse
-docker compose --env-file .env.production -f docker-compose.prod.yml build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose --env-file .env.production -f docker-compose.prod.yml build
 ```
 
 ## Primeira Subida Sem Importar Dump
@@ -409,7 +409,7 @@ Para atualizar codigo sem reimportar dados:
 ```bash
 cd /opt/ma-hse
 git pull
-docker compose --env-file .env.production -f docker-compose.prod.yml build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose --env-file .env.production -f docker-compose.prod.yml build
 docker compose --env-file .env.production -f docker-compose.prod.yml --profile tasks run --rm migrate
 docker compose --env-file .env.production -f docker-compose.prod.yml --profile tasks run --rm scheduler
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d app worker

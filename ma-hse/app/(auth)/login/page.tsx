@@ -6,6 +6,8 @@ import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { MaSymbol } from "@/components/branding/ma-symbol";
 
+const buildCommit = process.env.NEXT_PUBLIC_BUILD_COMMIT?.trim() || "N/A";
+
 export default function LoginPage() {
   const search = useSearchParams();
   const callbackUrl = search.get("callbackUrl") ?? "/app/corporate";
@@ -127,6 +129,7 @@ export default function LoginPage() {
             <div className="mt-8 space-y-1 text-[15px] leading-relaxed text-white/95 md:text-[17px]">
               <p>software developed by</p>
               <p>MAAP - MA Automotive Portugal</p>
+              <p className="pt-1 text-[11px] leading-snug text-white/75 md:text-[12px]">Commit: {buildCommit}</p>
             </div>
           </div>
         </section>

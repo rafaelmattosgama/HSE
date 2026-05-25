@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { RoleCode } from "@prisma/client";
+import { CommunicationType, RoleCode } from "@prisma/client";
 import { AlertTriangle, CheckCircle2, Clock3, ClipboardCheck, Inbox, Stethoscope, UserCheck } from "lucide-react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
@@ -13,6 +13,11 @@ import {
 } from "@/lib/dashboard-visualization";
 import { prisma } from "@/lib/prisma";
 import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
+import {
+  buildCommunicationTypeTopEntries,
+  getCommunicationTypeTotal,
+  type CommunicationTypeTopEntry,
+} from "@/lib/communication-type-top";
 import { CommunicationPyramid } from "@/components/feature/communication-pyramid";
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
@@ -72,6 +77,14 @@ function buildTopEntries(map: Map<string, number>) {
 function toRootCauseRankingEntries(entries: ReturnType<typeof buildSewoRootCauseTopEntries>): RankingEntry[] {
   return entries.map((entry, index) => ({
     plantCode: `root-cause-${index}-${entry.label}`,
+    plantName: entry.label,
+    value: entry.percentage,
+  }));
+}
+
+function toCommunicationTypeRankingEntries(entries: CommunicationTypeTopEntry[], prefix: string): RankingEntry[] {
+  return entries.map((entry, index) => ({
+    plantCode: `${prefix}-${index}-${entry.label}`,
     plantName: entry.label,
     value: entry.percentage,
   }));
@@ -178,6 +191,21 @@ export default async function DashboardsPage({
           },
         },
         workstation: {
+          select: {
+            name: true,
+          },
+        },
+        unsafeActType: {
+          select: {
+            name: true,
+          },
+        },
+        unsafeConditionType: {
+          select: {
+            name: true,
+          },
+        },
+        nearMissType: {
           select: {
             name: true,
           },
@@ -301,6 +329,12 @@ export default async function DashboardsPage({
   const rootCauseCount = sewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const rootCauseTopEntries = buildSewoRootCauseTopEntries(sewoRows);
   const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries);
+  const unsafeActTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_ACT);
+  const unsafeConditionTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_CONDITION);
+  const nearMissTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.NEAR_MISS);
+  const unsafeActTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.UNSAFE_ACT);
+  const unsafeConditionTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.UNSAFE_CONDITION);
+  const nearMissTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.NEAR_MISS);
   const lostDays = validCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
   const closedActionsPercent = totalActions > 0 ? (closedActions / totalActions) * 100 : 0;
   const actionsToClosePercent = totalActions > 0 ? (actionsToClose / totalActions) * 100 : 0;
@@ -333,6 +367,27 @@ export default async function DashboardsPage({
       title: ui.dashboard.rootCauseTopFive,
       variant: "percent",
       higher: rootCauseRankingEntries,
+      lower: [],
+    },
+    {
+      id: "unsafe-act-types-top",
+      title: ui.dashboard.unsafeActTypeTopFive,
+      variant: "percent",
+      higher: toCommunicationTypeRankingEntries(unsafeActTypeTopEntries, "unsafe-act-type"),
+      lower: [],
+    },
+    {
+      id: "unsafe-condition-types-top",
+      title: ui.dashboard.unsafeConditionTypeTopFive,
+      variant: "percent",
+      higher: toCommunicationTypeRankingEntries(unsafeConditionTypeTopEntries, "unsafe-condition-type"),
+      lower: [],
+    },
+    {
+      id: "near-miss-types-top",
+      title: ui.dashboard.nearMissTypeTopFive,
+      variant: "percent",
+      higher: toCommunicationTypeRankingEntries(nearMissTypeTopEntries, "near-miss-type"),
       lower: [],
     },
     {
@@ -439,6 +494,40 @@ export default async function DashboardsPage({
         const monthRows = validCommunications.filter(
           (row) => getMonthKey(row.eventDatetime.getUTCFullYear(), row.eventDatetime.getUTCMonth() + 1) === bucket.key,
         );
+
+        if (group.id === "unsafe-act-types-top") {
+          return {
+            monthKey: bucket.key,
+            monthLabel: bucket.label,
+            entries: toCommunicationTypeRankingEntries(
+              buildCommunicationTypeTopEntries(monthRows, CommunicationType.UNSAFE_ACT),
+              "unsafe-act-type",
+            ),
+          };
+        }
+
+        if (group.id === "unsafe-condition-types-top") {
+          return {
+            monthKey: bucket.key,
+            monthLabel: bucket.label,
+            entries: toCommunicationTypeRankingEntries(
+              buildCommunicationTypeTopEntries(monthRows, CommunicationType.UNSAFE_CONDITION),
+              "unsafe-condition-type",
+            ),
+          };
+        }
+
+        if (group.id === "near-miss-types-top") {
+          return {
+            monthKey: bucket.key,
+            monthLabel: bucket.label,
+            entries: toCommunicationTypeRankingEntries(
+              buildCommunicationTypeTopEntries(monthRows, CommunicationType.NEAR_MISS),
+              "near-miss-type",
+            ),
+          };
+        }
+
         const monthMap = new Map<string, number>();
 
         for (const row of monthRows) {
@@ -612,14 +701,36 @@ export default async function DashboardsPage({
           tone="warning"
           icon={<UserCheck className="h-5 w-5" />}
         />
-        <RootCauseTopFiveCard
-          title={ui.dashboard.rootCauseTopFive}
-          entries={rootCauseTopEntries}
-          total={rootCauseCount}
-          noDataLabel={ui.dashboard.noRootCauses}
-          totalLabel={ui.dashboard.rootCauseTotal}
-          className="md:col-span-5"
-        />
+        <div className="grid gap-4 md:col-span-5 xl:grid-cols-4">
+          <RootCauseTopFiveCard
+            title={ui.dashboard.rootCauseTopFive}
+            entries={rootCauseTopEntries}
+            total={rootCauseCount}
+            noDataLabel={ui.dashboard.noRootCauses}
+            totalLabel={ui.dashboard.rootCauseTotal}
+          />
+          <RootCauseTopFiveCard
+            title={ui.dashboard.unsafeActTypeTopFive}
+            entries={unsafeActTypeTopEntries}
+            total={unsafeActTypeTotal}
+            noDataLabel={ui.dashboard.noUnsafeActTypes}
+            totalLabel={ui.dashboard.rootCauseTotal}
+          />
+          <RootCauseTopFiveCard
+            title={ui.dashboard.unsafeConditionTypeTopFive}
+            entries={unsafeConditionTypeTopEntries}
+            total={unsafeConditionTypeTotal}
+            noDataLabel={ui.dashboard.noUnsafeConditionTypes}
+            totalLabel={ui.dashboard.rootCauseTotal}
+          />
+          <RootCauseTopFiveCard
+            title={ui.dashboard.nearMissTypeTopFive}
+            entries={nearMissTypeTopEntries}
+            total={nearMissTypeTotal}
+            noDataLabel={ui.dashboard.noNearMissTypes}
+            totalLabel={ui.dashboard.rootCauseTotal}
+          />
+        </div>
       </section>
 
       {actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N2_PLANT_MANAGER ? (

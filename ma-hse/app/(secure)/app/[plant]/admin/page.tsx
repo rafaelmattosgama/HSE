@@ -9,14 +9,16 @@ import { SafetyDaysAdminEditor } from "@/components/feature/safety-days-admin-ed
 import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
-import { UnsafeActTypeManager } from "@/components/feature/unsafe-act-type-manager";
+import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { prisma } from "@/lib/prisma";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getPlantRepeatabilityAlertConfig, getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
+import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
+import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 
 export default async function AdminPage({
   params,
@@ -26,7 +28,11 @@ export default async function AdminPage({
   const { plant } = await params;
   const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
-  await ensureDefaultUnsafeActTypes(plantRow.id);
+  await Promise.all([
+    ensureDefaultNearMissTypes(plantRow.id),
+    ensureDefaultUnsafeActTypes(plantRow.id),
+    ensureDefaultUnsafeConditionTypes(plantRow.id),
+  ]);
   const uiLocale = await getServerUiLocale({
     userLanguage: session?.user.language,
     plantLanguage: plantRow.defaultLanguage,
@@ -44,7 +50,21 @@ export default async function AdminPage({
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
 
-  const [sla, recipients, rules, areas, workstations, workers, unsafeActTypes, repeatabilityConfig, safetyDaysConfig] = await Promise.all([
+  const [
+    sla,
+    recipients,
+    rules,
+    areas,
+    workstations,
+    equipments,
+    workers,
+    unsafeActTypes,
+    unsafeConditionTypes,
+    nearMissTypes,
+    injuryTypes,
+    repeatabilityConfig,
+    safetyDaysConfig,
+  ] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
         plantId_key: {
@@ -77,6 +97,10 @@ export default async function AdminPage({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: { name: "asc" },
     }),
+    prisma.equipment.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: { name: "asc" },
+    }),
     prisma.employeeDirectory.findMany({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: { name: "asc" },
@@ -84,6 +108,18 @@ export default async function AdminPage({
     prisma.unsafeActType.findMany({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
+    }),
+    prisma.unsafeConditionType.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
+    }),
+    prisma.nearMissType.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: [{ code: "asc" }, { name: "asc" }],
+    }),
+    prisma.injuryType.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: [{ code: "asc" }, { name: "asc" }],
     }),
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
@@ -160,27 +196,30 @@ export default async function AdminPage({
         labels={ui.dashboard}
       />
 
-      <MasterDataManager
-        key={plant}
-        plantCode={plant}
-        initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-        initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-        initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
-        labels={masterDataUi}
-      />
-
       {actorRole === RoleCode.N0_ADMIN ? (
-        <UnsafeActTypeManager
+        <N0MasterDataManager
+          key={plant}
           plantCode={plant}
-          initialTypes={unsafeActTypes.map((type) => ({
-            id: type.id,
-            code: type.code,
-            category: type.category,
-            name: type.name,
-          }))}
+          initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialEquipments={equipments.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          initialNearMissTypes={nearMissTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialUnsafeActTypes={unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
+          initialUnsafeConditionTypes={unsafeConditionTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
+          initialInjuryTypes={injuryTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
           labels={masterDataUi}
         />
-      ) : null}
+      ) : (
+        <MasterDataManager
+          key={plant}
+          plantCode={plant}
+          initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          labels={masterDataUi}
+        />
+      )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">

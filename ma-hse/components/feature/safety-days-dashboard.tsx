@@ -1,14 +1,7 @@
-import { Award, CalendarClock, ShieldCheck, TrendingUp } from "lucide-react";
+import { Award, ShieldCheck, TrendingUp } from "lucide-react";
 import { HelpPopover } from "@/components/ui/help-popover";
 import type { SafetyDaysSummary } from "@/lib/safety-days";
 import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
-
-type PlantSafetyDays = {
-  id: string;
-  code: string;
-  name: string;
-  safetyDays: SafetyDaysSummary;
-};
 
 function formatDate(dateKey: string | null, labels: DashboardUiDictionary) {
   if (!dateKey) return labels.noInjuryRecord;
@@ -119,71 +112,6 @@ export function SafetyDaysSpotlight({
             </div>
           </article>
         </div>
-      </div>
-    </section>
-  );
-}
-
-export function GroupSafetyDaysBoard({
-  plants,
-  labels = getUiDictionary("en").dashboard,
-}: {
-  plants: PlantSafetyDays[];
-  labels?: DashboardUiDictionary;
-}) {
-  const bestCurrent = [...plants].sort((left, right) => right.safetyDays.currentDays - left.safetyDays.currentDays)[0];
-  const bestRecord = [...plants].sort((left, right) => right.safetyDays.recordDays - left.safetyDays.recordDays)[0];
-
-  return (
-    <section className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.12)]">
-      <div className="bg-[linear-gradient(135deg,#062c43_0%,#0f766e_48%,#f59e0b_100%)] p-6 text-white">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
-              <CalendarClock className="h-4 w-4" />
-              {labels.groupSafetyDays}
-            </div>
-            <h2 className="mt-4 text-3xl font-black">{labels.daysWithoutAccidentsAcrossPlants}</h2>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-white/25 bg-white/15 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-white/75">{labels.bestCurrent}</p>
-              <p className="mt-1 text-2xl font-black">{bestCurrent?.safetyDays.currentDays.toLocaleString() ?? 0}</p>
-              <p className="text-xs text-white/75">{bestCurrent?.name ?? "-"}</p>
-            </div>
-            <div className="rounded-xl border border-white/25 bg-white/15 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-white/75">{labels.bestRecord}</p>
-              <p className="mt-1 text-2xl font-black">{bestRecord?.safetyDays.recordDays.toLocaleString() ?? 0}</p>
-              <p className="text-xs text-white/75">{bestRecord?.name ?? "-"}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-        {plants.map((plant) => (
-          <article key={plant.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold text-slate-900">{plant.name}</p>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{plant.code.toUpperCase()}</p>
-              </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                {formatDate(plant.safetyDays.lastAccidentDate, labels)}
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-lg bg-emerald-100 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{labels.current}</p>
-                <p className="text-2xl font-black text-emerald-950">{plant.safetyDays.currentDays.toLocaleString()}</p>
-              </div>
-              <div className="rounded-lg bg-amber-100 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{labels.record}</p>
-                <p className="text-2xl font-black text-amber-950">{plant.safetyDays.recordDays.toLocaleString()}</p>
-              </div>
-            </div>
-          </article>
-        ))}
       </div>
     </section>
   );

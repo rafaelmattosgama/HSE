@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { RoleCode } from "@prisma/client";
 import { MaSymbol } from "@/components/branding/ma-symbol";
@@ -9,6 +10,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
 import { authOptions } from "@/lib/auth/options";
 import { getServerUiLocale } from "@/lib/server-ui-language";
+import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 import { getUiDictionary } from "@/lib/ui-language";
 
 export default async function SecureAppLayout({
@@ -17,6 +19,7 @@ export default async function SecureAppLayout({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
+  const cookieStore = await cookies();
 
   if (!session?.user) {
     redirect("/login");
@@ -29,6 +32,7 @@ export default async function SecureAppLayout({
   const homeHref = session.user.plantRoles.some((entry) => entry.role === "N0_ADMIN") ? "/app/settings" : "/app/corporate";
   const uiLocale = await getServerUiLocale({ userLanguage: session.user.language });
   const ui = getUiDictionary(uiLocale);
+  const theme = parseTheme(cookieStore.get(THEME_STORAGE_KEY)?.value);
   const hasN1Validation = session.user.plantRoles.some(
     (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
   );
@@ -53,7 +57,7 @@ export default async function SecureAppLayout({
                 {ui.modules.validation}
               </Link>
             ) : null}
-            <ThemeToggle />
+            <ThemeToggle initialTheme={theme} />
             <div data-no-translate className="app-toolbar">{session.user.name}</div>
             <LogoutButton />
           </div>

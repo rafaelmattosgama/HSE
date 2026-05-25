@@ -15,12 +15,17 @@ import {
 } from "@/lib/dashboard-visualization";
 import { prisma } from "@/lib/prisma";
 import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
+import {
+  buildCommunicationTypeTopEntries,
+  getCommunicationTypeTotal,
+  type CommunicationTypeTopEntry,
+} from "@/lib/communication-type-top";
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { CorporateActionPlans } from "@/components/feature/corporate-action-plans";
 import { EnvironmentDashboardBoard } from "@/components/feature/environment-dashboard-board";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
-import { GroupSafetyDaysBoard } from "@/components/feature/safety-days-dashboard";
+import { GroupSafetyDaysBoard } from "@/components/feature/group-safety-days-board";
 import { SYSTEM_PARAMETER_KEYS } from "@/lib/constants";
 import { buildEnvironmentDashboardPlant } from "@/lib/environment-dashboard";
 import { getGlobalRepeatabilityAlertConfig } from "@/lib/services/parameter-service";
@@ -59,8 +64,22 @@ function toRootCauseRankingEntries(entries: ReturnType<typeof buildSewoRootCause
   }));
 }
 
+function toCommunicationTypeRankingEntries(entries: CommunicationTypeTopEntry[], prefix: string): RankingEntry[] {
+  return entries.map((entry, index) => ({
+    plantCode: `${prefix}-${index}-${entry.label}`,
+    plantName: entry.label,
+    value: entry.percentage,
+  }));
+}
+
 function getMonthKey(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function shiftDateByYears(date: Date, years: number) {
+  const shiftedDate = new Date(date);
+  shiftedDate.setUTCFullYear(shiftedDate.getUTCFullYear() + years);
+  return shiftedDate;
 }
 
 function getMetricValue(snapshot: MonthlyMetricSnapshot, metricId: "nearMisses" | "injuries" | "rootCauses" | "frequencyRate" | "gravityRate" | "actionsToClose" | "closedActions") {
@@ -110,6 +129,10 @@ export default async function CorporatePage({
   const previousMonthlyInputFilter = {
     OR: monthBuckets.map((bucket) => ({ year: bucket.year - 1, month: bucket.month })),
   };
+  const previousPeriod = {
+    from: shiftDateByYears(period.from, -1),
+    to: shiftDateByYears(period.to, -1),
+  };
   const clearDatesParams = new URLSearchParams();
   clearDatesParams.set("year", String(period.year));
   if (period.month) {
@@ -124,7 +147,16 @@ export default async function CorporatePage({
       entry.role === RoleCode.N5_OPERATOR,
   );
 
-  const [plants, corporateActions, globalRepeatabilityConfig, injuryHistoryRows, safetyDaysConfigs, previousEnvironmentRows] = await Promise.all([
+  const [
+    plants,
+    corporateActions,
+    globalRepeatabilityConfig,
+    injuryHistoryRows,
+    safetyDaysConfigs,
+    previousEnvironmentRows,
+    previousYearInjuryRows,
+    previousYearKpiRows,
+  ] = await Promise.all([
     prisma.plant.findMany({
       include: {
         communications: {
@@ -141,6 +173,21 @@ export default async function CorporatePage({
             status: true,
             classification: true,
             eventDatetime: true,
+            unsafeActType: {
+              select: {
+                name: true,
+              },
+            },
+            unsafeConditionType: {
+              select: {
+                name: true,
+              },
+            },
+            nearMissType: {
+              select: {
+                name: true,
+              },
+            },
           },
         },
         actions: {
@@ -233,6 +280,28 @@ export default async function CorporatePage({
     prisma.plantMonthlyInput.findMany({
       where: previousMonthlyInputFilter,
     }),
+    prisma.communication.findMany({
+      where: {
+        type: CommunicationType.ACCIDENT,
+        status: {
+          in: KPI_COMMUNICATION_STATUSES,
+        },
+        eventDatetime: {
+          gte: previousPeriod.from,
+          lte: previousPeriod.to,
+        },
+      },
+      select: {
+        plantId: true,
+      },
+    }),
+    prisma.safetyKpiMonthlyInput.findMany({
+      where: previousMonthlyInputFilter,
+      select: {
+        plantId: true,
+        hoursWorked: true,
+      },
+    }),
   ]);
   const canManageGlobalRepeatability = session?.user.plantRoles.some(
     (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
@@ -259,6 +328,17 @@ export default async function CorporatePage({
       .filter((entry): entry is typeof entry & { plantId: string } => Boolean(entry.plantId))
       .map((entry) => [entry.plantId, getHistoricalRecordStartDate(entry.valueJson)]),
   );
+  const previousYearInjuryCountByPlantId = new Map<string, number>();
+  for (const row of previousYearInjuryRows) {
+    previousYearInjuryCountByPlantId.set(row.plantId, (previousYearInjuryCountByPlantId.get(row.plantId) ?? 0) + 1);
+  }
+  const previousYearHoursWorkedByPlantId = new Map<string, number>();
+  for (const row of previousYearKpiRows) {
+    previousYearHoursWorkedByPlantId.set(
+      row.plantId,
+      (previousYearHoursWorkedByPlantId.get(row.plantId) ?? 0) + Number(row.hoursWorked ?? 0),
+    );
+  }
 
   const plantSummaries = plants.map((plant) => {
     const monthlyMetricsMap = new Map(
@@ -321,6 +401,10 @@ export default async function CorporatePage({
     const closedActionsPercent = totalActions > 0 ? (closedActions / totalActions) * 100 : 0;
     const actionsToClosePercent = totalActions > 0 ? (actionsToClose / totalActions) * 100 : 0;
     const frequencyIndex = hoursWorked > 0 ? (injuryCount / hoursWorked) * ONE_MILLION : 0;
+    const previousYearHoursWorked = previousYearHoursWorkedByPlantId.get(plant.id) ?? 0;
+    const previousYearInjuryCount = previousYearInjuryCountByPlantId.get(plant.id) ?? 0;
+    const previousYearFrequencyIndex =
+      previousYearHoursWorked > 0 ? (previousYearInjuryCount / previousYearHoursWorked) * ONE_MILLION : null;
     const severityIndex = hoursWorked > 0 ? (lostDays / hoursWorked) * ONE_MILLION : 0;
     const safetyDays = buildSafetyDaysSummary({
       plantCreatedAt: plant.createdAt,
@@ -346,6 +430,7 @@ export default async function CorporatePage({
       injuryCount,
       rootCauseCount,
       frequencyIndex,
+      previousYearFrequencyIndex,
       severityIndex,
       safetyDays,
       communicationPyramid: {
@@ -377,6 +462,15 @@ export default async function CorporatePage({
   const totalRootCauses = plantSummaries.reduce((sum, plant) => sum + plant.rootCauseCount, 0);
   const rootCauseTopEntries = buildSewoRootCauseTopEntries(plants.flatMap((plant) => plant.sewoRecords));
   const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries);
+  const validCommunicationRows = plants.flatMap((plant) =>
+    plant.communications.filter((entry) => KPI_COMMUNICATION_STATUSES.includes(entry.status)),
+  );
+  const unsafeActTypeTopEntries = buildCommunicationTypeTopEntries(validCommunicationRows, CommunicationType.UNSAFE_ACT);
+  const unsafeConditionTypeTopEntries = buildCommunicationTypeTopEntries(validCommunicationRows, CommunicationType.UNSAFE_CONDITION);
+  const nearMissTypeTopEntries = buildCommunicationTypeTopEntries(validCommunicationRows, CommunicationType.NEAR_MISS);
+  const unsafeActTypeTotal = getCommunicationTypeTotal(validCommunicationRows, CommunicationType.UNSAFE_ACT);
+  const unsafeConditionTypeTotal = getCommunicationTypeTotal(validCommunicationRows, CommunicationType.UNSAFE_CONDITION);
+  const nearMissTypeTotal = getCommunicationTypeTotal(validCommunicationRows, CommunicationType.NEAR_MISS);
   const totalHoursWorked = plants.reduce((sum, plant) => sum + plant.kpiInputs.reduce((innerSum, entry) => innerSum + Number(entry.hoursWorked ?? 0), 0), 0);
   const totalLostDays = plants.reduce((sum, plant) => {
     const validCommunications = plant.communications.filter((entry) => KPI_COMMUNICATION_STATUSES.includes(entry.status));
@@ -419,6 +513,27 @@ export default async function CorporatePage({
       title: ui.dashboard.rootCauseTopFive,
       variant: "percent",
       higher: rootCauseRankingEntries,
+      lower: [],
+    },
+    {
+      id: "unsafe-act-types-top",
+      title: ui.dashboard.unsafeActTypeTopFive,
+      variant: "percent",
+      higher: toCommunicationTypeRankingEntries(unsafeActTypeTopEntries, "unsafe-act-type"),
+      lower: [],
+    },
+    {
+      id: "unsafe-condition-types-top",
+      title: ui.dashboard.unsafeConditionTypeTopFive,
+      variant: "percent",
+      higher: toCommunicationTypeRankingEntries(unsafeConditionTypeTopEntries, "unsafe-condition-type"),
+      lower: [],
+    },
+    {
+      id: "near-miss-types-top",
+      title: ui.dashboard.nearMissTypeTopFive,
+      variant: "percent",
+      higher: toCommunicationTypeRankingEntries(nearMissTypeTopEntries, "near-miss-type"),
       lower: [],
     },
     {
@@ -478,6 +593,48 @@ export default async function CorporatePage({
         ),
       ),
     })),
+    "unsafe-act-types-top": monthBuckets.map((bucket) => {
+      const monthRows = validCommunicationRows.filter(
+        (entry) => getMonthKey(entry.eventDatetime.getUTCFullYear(), entry.eventDatetime.getUTCMonth() + 1) === bucket.key,
+      );
+
+      return {
+        monthKey: bucket.key,
+        monthLabel: bucket.label,
+        entries: toCommunicationTypeRankingEntries(
+          buildCommunicationTypeTopEntries(monthRows, CommunicationType.UNSAFE_ACT),
+          "unsafe-act-type",
+        ),
+      };
+    }),
+    "unsafe-condition-types-top": monthBuckets.map((bucket) => {
+      const monthRows = validCommunicationRows.filter(
+        (entry) => getMonthKey(entry.eventDatetime.getUTCFullYear(), entry.eventDatetime.getUTCMonth() + 1) === bucket.key,
+      );
+
+      return {
+        monthKey: bucket.key,
+        monthLabel: bucket.label,
+        entries: toCommunicationTypeRankingEntries(
+          buildCommunicationTypeTopEntries(monthRows, CommunicationType.UNSAFE_CONDITION),
+          "unsafe-condition-type",
+        ),
+      };
+    }),
+    "near-miss-types-top": monthBuckets.map((bucket) => {
+      const monthRows = validCommunicationRows.filter(
+        (entry) => getMonthKey(entry.eventDatetime.getUTCFullYear(), entry.eventDatetime.getUTCMonth() + 1) === bucket.key,
+      );
+
+      return {
+        monthKey: bucket.key,
+        monthLabel: bucket.label,
+        entries: toCommunicationTypeRankingEntries(
+          buildCommunicationTypeTopEntries(monthRows, CommunicationType.NEAR_MISS),
+          "near-miss-type",
+        ),
+      };
+    }),
     "nearMisses-higher": monthBuckets.map((bucket) => ({
       monthKey: bucket.key,
       monthLabel: bucket.label,
@@ -685,7 +842,40 @@ export default async function CorporatePage({
         code: plant.code,
         name: plant.name,
         safetyDays: plant.safetyDays,
+        currentFrequencyIndex: plant.frequencyIndex,
+        previousYearFrequencyIndex: plant.previousYearFrequencyIndex,
       }))} labels={ui.dashboard} />
+
+      <section className="mb-6 grid gap-4 xl:grid-cols-4">
+        <RootCauseTopFiveCard
+          title={ui.dashboard.rootCauseTopFive}
+          entries={rootCauseTopEntries}
+          total={totalRootCauses}
+          noDataLabel={ui.dashboard.noRootCauses}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+        <RootCauseTopFiveCard
+          title={ui.dashboard.unsafeActTypeTopFive}
+          entries={unsafeActTypeTopEntries}
+          total={unsafeActTypeTotal}
+          noDataLabel={ui.dashboard.noUnsafeActTypes}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+        <RootCauseTopFiveCard
+          title={ui.dashboard.unsafeConditionTypeTopFive}
+          entries={unsafeConditionTypeTopEntries}
+          total={unsafeConditionTypeTotal}
+          noDataLabel={ui.dashboard.noUnsafeConditionTypes}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+        <RootCauseTopFiveCard
+          title={ui.dashboard.nearMissTypeTopFive}
+          entries={nearMissTypeTopEntries}
+          total={nearMissTypeTotal}
+          noDataLabel={ui.dashboard.noNearMissTypes}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+      </section>
 
       <EnvironmentDashboardBoard
         title={ui.modules.environmentDashboard}
@@ -698,16 +888,6 @@ export default async function CorporatePage({
         className="mb-6"
         labels={ui.dashboard}
       />
-
-      <section className="mb-6 grid gap-4 md:grid-cols-1">
-        <RootCauseTopFiveCard
-          title={ui.dashboard.rootCauseTopFive}
-          entries={rootCauseTopEntries}
-          total={totalRootCauses}
-          noDataLabel={ui.dashboard.noRootCauses}
-          totalLabel={ui.dashboard.rootCauseTotal}
-        />
-      </section>
 
       <CorporatePlantManager
         totalPlants={plantSummaries.length}
