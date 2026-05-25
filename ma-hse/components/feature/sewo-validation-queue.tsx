@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, Check, FileSpreadsheet, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { requireApiResponse } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 import type { SewoUi } from "@/lib/sewo-ui";
 import type { SifPsifResult } from "@/lib/sewo-sif-psif";
@@ -90,11 +91,7 @@ export function SewoValidationQueue({
           approvalComment,
         }),
       });
-      const json = await response.json();
-
-      if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? ui.n1ValidationFailed);
-      }
+      await requireApiResponse(response, ui.n1ValidationFailed);
 
       setComments((current) => {
         const next = { ...current };
@@ -171,7 +168,7 @@ export function SewoValidationQueue({
               </div>
 
               <div className="flex shrink-0 flex-wrap gap-2">
-                <Link href={`/app/${row.plantCode}/sewo`} className="app-toolbar">
+                <Link href={`/app/${row.plantCode}/sewo?sewoId=${row.id}`} className="app-toolbar">
                   {ui.n1ValidationOpenSewo}
                 </Link>
                 <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?format=pdf`} className="app-toolbar" title={ui.n1ValidationExportPdf}>

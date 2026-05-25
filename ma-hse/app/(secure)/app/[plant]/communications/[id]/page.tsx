@@ -163,6 +163,16 @@ export default async function CommunicationDetailPage({
   ]);
 
   const canEdit = Boolean(actorRole && EDIT_ROLES.includes(actorRole) && VALID_COMMUNICATION_STATUSES.includes(communication.status));
+  const manageableStatuses: CommunicationStatus[] = [
+    CommunicationStatus.VALID_OPEN,
+    CommunicationStatus.ONGOING,
+    CommunicationStatus.CLOSED,
+  ];
+  const canManageStatus = Boolean(
+    actorRole &&
+    EDIT_ROLES.includes(actorRole) &&
+    manageableStatuses.includes(communication.status),
+  );
   const canManageClassification = canManageCommunicationClassification(actorRole);
   const canValidate = Boolean(
     actorRole &&
@@ -212,8 +222,10 @@ export default async function CommunicationDetailPage({
           initialLostDays: communication.initialLostDays,
           hasLeave: communication.hasLeave,
           returnDate: communication.returnDate?.toISOString() ?? null,
+          linkedActionStatuses: communication.actions.map((entry) => entry.status),
         }}
         canEdit={canEdit}
+        canManageStatus={canManageStatus}
         canManageClassification={canManageClassification}
         areas={areas.map((entry) => ({ id: entry.id, name: entry.name }))}
         workstations={workstations.map((entry) => ({ id: entry.id, name: entry.name }))}

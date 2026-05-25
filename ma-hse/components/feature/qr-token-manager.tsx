@@ -5,6 +5,8 @@ import { PlantAccessTokenType } from "@prisma/client";
 import { usePathname } from "next/navigation";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 type GeneratedQr = {
   type: PlantAccessTokenType;
@@ -13,7 +15,11 @@ type GeneratedQr = {
   qrDataUrl: string;
 };
 
-export function QrTokenManager() {
+export function QrTokenManager({
+  labels = getStaticN0MasterDataUi("en"),
+}: {
+  labels?: N0MasterDataUi;
+}) {
   const pathname = usePathname();
   const plant = pathname.split("/")[2];
   const [tokenType, setTokenType] = useState<PlantAccessTokenType>(PlantAccessTokenType.REPORT);
@@ -22,8 +28,8 @@ export function QrTokenManager() {
   const [loading, setLoading] = useState(false);
 
   const title = useMemo(() => {
-    return tokenType === PlantAccessTokenType.REPORT ? "Report QR token" : "Kiosk QR token";
-  }, [tokenType]);
+    return tokenType === PlantAccessTokenType.REPORT ? labels.qr.reportToken : labels.qr.kioskToken;
+  }, [labels.qr.kioskToken, labels.qr.reportToken, tokenType]);
 
   async function regenerate() {
     setLoading(true);
@@ -38,7 +44,7 @@ export function QrTokenManager() {
 
       const json = await response.json();
       if (!json.ok) {
-        setMessage(json.message ?? "Failed to regenerate token");
+        setMessage(json.message ?? labels.qr.failedRegenerate);
         return;
       }
 
@@ -65,9 +71,9 @@ export function QrTokenManager() {
         publicUrl,
         qrDataUrl,
       });
-      setMessage("Token regenerated. Previous active token of this type was revoked.");
+      setMessage(labels.qr.regenerated);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to regenerate token");
+      setMessage(error instanceof Error ? error.message : labels.qr.failedRegenerate);
     } finally {
       setLoading(false);
     }
@@ -81,7 +87,7 @@ export function QrTokenManager() {
   async function copyLink() {
     if (!generated) return;
     await navigator.clipboard.writeText(generated.publicUrl);
-    setMessage("Link copied to clipboard.");
+    setMessage(labels.qr.linkCopied);
   }
 
   function downloadImage() {
@@ -96,7 +102,7 @@ export function QrTokenManager() {
     if (!generated) return;
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) {
-      setMessage("Unable to open print window. Check browser pop-up settings.");
+      setMessage(labels.qr.printBlocked);
       return;
     }
 
@@ -109,7 +115,7 @@ export function QrTokenManager() {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Print QR</title>
+    <title>${labels.qr.printQr}</title>
     <style>
       body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
       .wrap { max-width: 640px; margin: 0 auto; text-align: center; }
@@ -126,9 +132,9 @@ export function QrTokenManager() {
       <img src="${generated.qrDataUrl}" alt="QR code" />
       <p class="meta">${escapedUrl}</p>
       <div class="actions">
-        <button type="button" onclick="window.print()">Print</button>
+        <button type="button" onclick="window.print()">${labels.qr.print}</button>
       </div>
-      <p class="hint">If auto-print does not start, click the button above.</p>
+      <p class="hint">${labels.qr.printHint}</p>
     </main>
   </body>
 </html>`;
@@ -141,7 +147,7 @@ export function QrTokenManager() {
         win.focus();
         win.print();
       } catch {
-        setMessage("Could not start print automatically. Use the Print button in the opened window.");
+        setMessage(labels.qr.printFailed);
       }
     };
 
@@ -150,22 +156,22 @@ export function QrTokenManager() {
 
   return (
     <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-900">QR Token Manager</h3>
-      <p className="text-xs text-slate-600">
-        Regenerate one token type at a time. The previous active token of the same type is revoked.
-      </p>
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-900">{labels.qr.title}</h3>
+        <HelpPopover title={labels.qr.title} body={labels.qr.help} buttonLabel={labels.helpButton} />
+      </div>
 
       <select
         value={tokenType}
         onChange={(event) => setTokenType(event.target.value as PlantAccessTokenType)}
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       >
-        <option value={PlantAccessTokenType.REPORT}>REPORT</option>
-        <option value={PlantAccessTokenType.KIOSK}>KIOSK</option>
+        <option value={PlantAccessTokenType.REPORT}>{labels.qr.reportToken}</option>
+        <option value={PlantAccessTokenType.KIOSK}>{labels.qr.kioskToken}</option>
       </select>
 
       <Button size="sm" onClick={regenerate} disabled={loading}>
-        {loading ? "Regenerating..." : `Regenerate ${title}`}
+        {loading ? labels.qr.regenerating : formatMasterDataMessage(labels.qr.regenerate, { token: title })}
       </Button>
 
       {message ? <p className="text-xs text-slate-700">{message}</p> : null}
@@ -176,13 +182,13 @@ export function QrTokenManager() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={generated.qrDataUrl}
-              alt={`${generated.type} QR code`}
+              alt={formatMasterDataMessage(labels.qr.qrAlt, { type: generated.type })}
               className="h-56 w-56 rounded-lg border border-slate-300 bg-white p-2"
             />
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Public link</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.qr.publicLink}</p>
             <a
               href={generated.publicUrl}
               target="_blank"
@@ -194,7 +200,7 @@ export function QrTokenManager() {
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Raw token</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.qr.rawToken}</p>
             <code className="block break-all rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700">
               {generated.token}
             </code>
@@ -202,16 +208,16 @@ export function QrTokenManager() {
 
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" size="sm" variant="secondary" onClick={copyLink}>
-              Copy link
+              {labels.qr.copyLink}
             </Button>
             <Button type="button" size="sm" variant="secondary" onClick={openLink}>
-              Open link
+              {labels.qr.openLink}
             </Button>
             <Button type="button" size="sm" variant="secondary" onClick={downloadImage}>
-              Save image
+              {labels.qr.saveImage}
             </Button>
             <Button type="button" size="sm" variant="secondary" onClick={printQr}>
-              Print QR
+              {labels.qr.printQr}
             </Button>
           </div>
         </div>

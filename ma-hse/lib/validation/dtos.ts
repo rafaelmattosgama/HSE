@@ -152,6 +152,10 @@ export const manualCloseCommunicationInput = z.object({
   reason: z.string().min(5),
 });
 
+export const manualCloseSewoInput = z.object({
+  reason: z.string().min(5),
+});
+
 export const reopenEntityInput = z.object({
   reason: z.string().min(5),
 });
@@ -234,6 +238,7 @@ export const createSMATAuditInput = z.object({
 
 export const closeActionInput = z.object({
   closureComment: z.string().min(5),
+  closedAt: z.coerce.date(),
   evidence: z
     .array(
       z.object({
@@ -248,6 +253,7 @@ export const closeActionInput = z.object({
 export const bulkCloseActionInput = z.object({
   actionIds: z.array(z.string().uuid()).min(1),
   closureComment: z.string().min(5),
+  closedAt: z.coerce.date(),
   evidence: z
     .array(
       z.object({
@@ -486,13 +492,15 @@ export const updateMapFeatureInput = z.object({
 });
 
 export const createMasterDataItemInput = z.object({
-  type: z.enum(["area", "workstation"]),
+  id: z.string().uuid().optional(),
+  type: z.enum(["area", "workstation", "equipment", "nearMissType", "unsafeActType", "unsafeConditionType", "injuryType"]),
   code: z.string().min(1),
   name: z.string().min(2),
+  category: z.string().optional(),
 });
 
 export const deleteMasterDataItemInput = z.object({
-  type: z.enum(["area", "workstation"]),
+  type: z.enum(["area", "workstation", "equipment", "nearMissType", "unsafeActType", "unsafeConditionType", "injuryType"]),
   id: z.string().uuid(),
 });
 
@@ -519,6 +527,7 @@ export const deleteUnsafeActTypeInput = z.object({
 });
 
 export const createWorkerInput = z.object({
+  id: z.string().uuid().optional(),
   employeeNo: z.string().min(1),
   name: z.string().min(2),
   dept: z.string().optional(),
@@ -686,6 +695,7 @@ export type CreateCommunicationInput = z.infer<typeof createCommunicationInput>;
 export type UpdateCommunicationInput = z.infer<typeof updateCommunicationInput>;
 export type ValidateCommunicationInput = z.infer<typeof validateCommunicationInput>;
 export type ManualCloseCommunicationInput = z.infer<typeof manualCloseCommunicationInput>;
+export type ManualCloseSewoInput = z.infer<typeof manualCloseSewoInput>;
 export type CreateActionInput = z.infer<typeof createActionInput>;
 export type CreateSMATAuditInput = z.infer<typeof createSMATAuditInput>;
 export type CloseActionInput = z.infer<typeof closeActionInput>;

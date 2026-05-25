@@ -516,6 +516,7 @@ export default async function DashboardsPage({
         eyebrow={ui.modules.safetyDashboard}
         title={ui.dashboard.plantTitle}
         description={ui.dashboard.plantDescription}
+        helpLabel={ui.dashboard.help}
       />
 
       <section className="app-panel rounded-2xl p-5">
@@ -580,7 +581,7 @@ export default async function DashboardsPage({
         </form>
       </section>
 
-      <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} />
+      <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} />
 
       <section className="grid gap-4 md:grid-cols-5">
         <AppCard>
@@ -646,6 +647,16 @@ export default async function DashboardsPage({
         title={ui.dashboard.safetyCommunicationPyramid}
         description={ui.dashboard.selectedPeriodPyramidDescription}
         counts={pyramidCounts}
+        helpLabel={ui.dashboard.help}
+        labels={{
+          fatal: ui.dashboard.pyramidFatal,
+          seriousInjury: ui.dashboard.pyramidSeriousInjury,
+          minorInjury: ui.dashboard.pyramidMinorInjury,
+          firstAid: ui.dashboard.pyramidFirstAid,
+          nearMiss: ui.dashboard.pyramidNearMiss,
+          unsafeCondition: ui.dashboard.pyramidUnsafeCondition,
+          unsafeAct: ui.dashboard.pyramidUnsafeAct,
+        }}
       />
 
       {(actorRole === RoleCode.N0_ADMIN ||

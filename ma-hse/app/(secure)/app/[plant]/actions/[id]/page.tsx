@@ -74,6 +74,7 @@ export default async function ActionDetailPage({
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-4"><dt>Created at</dt><dd>{action.createdAt.toISOString()}</dd></div>
             <div className="flex justify-between gap-4"><dt>Updated at</dt><dd>{action.updatedAt.toISOString()}</dd></div>
+            <div className="flex justify-between gap-4"><dt>Closure date</dt><dd>{action.closedAt?.toISOString().slice(0, 10) ?? "-"}</dd></div>
             <div className="flex justify-between gap-4"><dt>Closed at</dt><dd>{action.closedAt?.toISOString() ?? "-"}</dd></div>
             <div className="flex justify-between gap-4"><dt>Closed by</dt><dd>{action.closedByUser?.name ?? "-"}</dd></div>
             <div className="flex justify-between gap-4"><dt>Reopened at</dt><dd>{action.reopenedAt?.toISOString() ?? "-"}</dd></div>

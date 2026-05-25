@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 type ReportLayout = {
   id: string;
@@ -20,9 +22,11 @@ function createEmptyLayout(): ReportLayout {
 export function ReportLayoutManager({
   plantCode,
   initialLayouts,
+  labels = getStaticN0MasterDataUi("en"),
 }: {
   plantCode: string;
   initialLayouts: ReportLayout[];
+  labels?: N0MasterDataUi;
 }) {
   const [layouts, setLayouts] = useState<ReportLayout[]>(initialLayouts.length ? initialLayouts : [createEmptyLayout()]);
   const [saving, setSaving] = useState(false);
@@ -43,13 +47,13 @@ export function ReportLayoutManager({
 
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to save report layouts");
+        throw new Error(json.message ?? labels.reportLayout.error);
       }
 
       setLayouts(json.data.layouts ?? layouts);
-      setMessage("Report layouts saved.");
+      setMessage(labels.reportLayout.saved);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save report layouts");
+      setMessage(error instanceof Error ? error.message : labels.reportLayout.error);
     } finally {
       setSaving(false);
     }
@@ -59,10 +63,13 @@ export function ReportLayoutManager({
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <header className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Report Layout</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.reportLayout.title}</h2>
+              <HelpPopover title={labels.reportLayout.title} body={labels.reportLayout.help} buttonLabel={labels.helpButton} />
+            </div>
           </div>
         <Button type="button" size="sm" variant="secondary" onClick={() => setLayouts((current) => [...current, createEmptyLayout()])}>
-          Add layout
+          {labels.reportLayout.addLayout}
         </Button>
       </header>
 
@@ -70,14 +77,14 @@ export function ReportLayoutManager({
         {layouts.map((layout, index) => (
           <div key={layout.id} className="grid gap-3 rounded-xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-900">Layout {index + 1}</p>
+              <p className="text-sm font-semibold text-slate-900">{formatMasterDataMessage(labels.reportLayout.layoutTitle, { index: index + 1 })}</p>
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
                 onClick={() => setLayouts((current) => (current.length === 1 ? current : current.filter((item) => item.id !== layout.id)))}
               >
-                Remove
+                {labels.reportLayout.remove}
               </Button>
             </div>
             <input
@@ -88,7 +95,7 @@ export function ReportLayoutManager({
                 )
               }
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Layout title"
+              placeholder={labels.reportLayout.titlePlaceholder}
             />
             <textarea
               value={layout.description}
@@ -99,7 +106,7 @@ export function ReportLayoutManager({
               }
               rows={3}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Layout description / sections"
+              placeholder={labels.reportLayout.descriptionPlaceholder}
             />
           </div>
         ))}
@@ -107,7 +114,7 @@ export function ReportLayoutManager({
 
       <div className="mt-4 flex items-center gap-3">
         <Button type="button" size="sm" onClick={saveLayouts} disabled={saving}>
-          {saving ? "Saving..." : "Save layouts"}
+          {saving ? labels.saving : labels.reportLayout.saveLayouts}
         </Button>
         {message ? <p className="text-sm text-slate-600">{message}</p> : null}
       </div>

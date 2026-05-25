@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { parseApiResponse } from "@/lib/client-api";
 
 export function CloseActionQuick() {
   const pathname = usePathname();
@@ -10,6 +11,7 @@ export function CloseActionQuick() {
 
   const [actionId, setActionId] = useState("");
   const [comment, setComment] = useState("");
+  const [closedAt, setClosedAt] = useState(new Date().toISOString().slice(0, 10));
   const [fileKey, setFileKey] = useState("");
   const [message, setMessage] = useState("");
 
@@ -24,6 +26,7 @@ export function CloseActionQuick() {
       },
       body: JSON.stringify({
         closureComment: comment,
+        closedAt,
         evidence: [
           {
             fileKey,
@@ -34,8 +37,8 @@ export function CloseActionQuick() {
       }),
     });
 
-    const json = await response.json();
-    setMessage(json.ok ? "Action closed" : json.message ?? "Failed to close action");
+    const json = await parseApiResponse(response);
+    setMessage(json?.ok ? "Action closed" : json?.message ?? "Failed to close action");
   }
 
   return (
@@ -43,6 +46,7 @@ export function CloseActionQuick() {
       <h3 className="text-sm font-semibold text-slate-900">Close action with evidence</h3>
       <input value={actionId} onChange={(event) => setActionId(event.target.value)} placeholder="Action ID" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
       <textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Closure comment" rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+      <input type="date" value={closedAt} onChange={(event) => setClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
       <input value={fileKey} onChange={(event) => setFileKey(event.target.value)} placeholder="Evidence file key" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
       <Button size="sm" type="submit">Close Action</Button>
       {message ? <p className="text-xs text-slate-700">{message}</p> : null}

@@ -685,17 +685,18 @@ export default async function CorporatePage({
         code: plant.code,
         name: plant.name,
         safetyDays: plant.safetyDays,
-      }))} />
+      }))} labels={ui.dashboard} />
 
       <EnvironmentDashboardBoard
-        title="Group Environment KPIs Dashboard"
-        scopeLabel={`${plantSummaries.length} plants`}
+        title={ui.modules.environmentDashboard}
+        scopeLabel={`${plantSummaries.length} ${ui.dashboard.plants.toLowerCase()}`}
         periodLabel={period.label}
         plants={environmentPlants}
         comparisonPlants={previousEnvironmentPlants}
         periodMonthsCount={monthBuckets.length}
         storageKeyBase="ma-hse-environment-corporate"
         className="mb-6"
+        labels={ui.dashboard}
       />
 
       <section className="mb-6 grid gap-4 md:grid-cols-1">

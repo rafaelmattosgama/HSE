@@ -5,6 +5,7 @@ import { RoleCode } from "@prisma/client";
 import { usePathname } from "next/navigation";
 import { ROLE_LABELS } from "@/lib/rbac/permissions";
 import { Button } from "@/components/ui/button";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 type ManagedUser = {
   id: string;
@@ -21,6 +22,7 @@ type UserManagerProps = {
   users: ManagedUser[];
   allowedCreateRoles: RoleCode[];
   plantCode?: string;
+  labels?: N0MasterDataUi;
 };
 
 type FeedbackPopup = {
@@ -69,7 +71,7 @@ function formatDate(value: string | Date) {
   return new Date(value).toISOString().slice(0, 16).replace("T", " ");
 }
 
-export function UserManager({ users, allowedCreateRoles, plantCode }: UserManagerProps) {
+export function UserManager({ users, allowedCreateRoles, plantCode, labels = getStaticN0MasterDataUi("en") }: UserManagerProps) {
   const pathname = usePathname();
   const plant = plantCode ?? pathname.split("/")[2];
 
@@ -126,7 +128,7 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
     });
     const json = await response.json();
     if (!json.ok) {
-      throw new Error(json.message ?? "Failed to load users");
+      throw new Error(json.message ?? labels.users.loadError);
     }
     setRows((json.data.users as ManagedUser[]) ?? []);
   }
@@ -153,20 +155,20 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
       });
       const json = await response.json();
       if (!json.ok) {
-        showPopup("error", "Failed to update user", json.message ?? "Failed to update user");
+        showPopup("error", labels.users.updateError, json.message ?? labels.users.updateError);
         return;
       }
       await refreshUsers();
-      showPopup("success", "User updated", !entry.isActive ? "User was activated successfully." : "User was deactivated successfully.");
+      showPopup("success", labels.users.userUpdated, !entry.isActive ? labels.users.userActivated : labels.users.userDeactivated);
     } catch (error) {
-      showPopup("error", "Unexpected error", error instanceof Error ? error.message : "Unexpected error while updating user status");
+      showPopup("error", labels.users.unexpectedError, error instanceof Error ? error.message : labels.users.updateStatusUnexpected);
     } finally {
       setRowActionId(null);
     }
   }
 
   async function deleteUser(entry: ManagedUser) {
-    const confirmed = window.confirm(`Delete user "${entry.name}"?`);
+    const confirmed = window.confirm(formatMasterDataMessage(labels.users.deleteConfirm, { name: entry.name }));
     if (!confirmed) return;
 
     setRowActionId(entry.id);
@@ -177,16 +179,16 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
       });
       const json = await response.json();
       if (!json.ok) {
-        showPopup("error", "Failed to delete user", json.message ?? "Failed to delete user");
+        showPopup("error", labels.users.deleteError, json.message ?? labels.users.deleteError);
         return;
       }
       await refreshUsers();
       if (editingUserId === entry.id) {
         resetForm();
       }
-      showPopup("success", "User deleted", "User was deleted successfully.");
+      showPopup("success", labels.users.userDeleted, labels.users.userDeletedMessage);
     } catch (error) {
-      showPopup("error", "Unexpected error", error instanceof Error ? error.message : "Unexpected error while deleting user");
+      showPopup("error", labels.users.unexpectedError, error instanceof Error ? error.message : labels.users.deleteUnexpected);
     } finally {
       setRowActionId(null);
     }
@@ -197,7 +199,7 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
     if (!canCreate || !role) return;
 
     if (password.trim().length > 0 && password.trim().length < 8) {
-      showPopup("error", "Validation error", "Password must be at least 8 characters, or leave it empty to keep the current value.");
+      showPopup("error", labels.users.validationError, labels.users.passwordMinLength);
       return;
     }
 
@@ -224,7 +226,7 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
 
       const json = await response.json();
       if (!json.ok) {
-        showPopup("error", isEditing ? "Failed to update user" : "Failed to save user", json.message ?? "Failed to save user");
+        showPopup("error", isEditing ? labels.users.updateError : labels.users.saveError, json.message ?? labels.users.saveError);
         return;
       }
 
@@ -235,21 +237,21 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
         const passwordDelivery = json.data.passwordDelivery as "UNCHANGED" | "CUSTOM_SET" | "TEMP_EMAILED" | "TEMP_MANUAL" | undefined;
 
         if (passwordDelivery === "TEMP_EMAILED") {
-          showPopup("success", "User saved", "Temporary password was sent by email and user must change it at first login.");
+          showPopup("success", labels.users.userSaved, labels.users.tempPasswordEmailed);
         } else if (passwordDelivery === "TEMP_MANUAL" && generatedPassword) {
-          showPopup("error", "Email delivery failed", `User saved, but email delivery failed. Share this temporary password securely: ${generatedPassword}`);
+          showPopup("error", labels.users.emailDeliveryFailed, formatMasterDataMessage(labels.users.emailDeliveryFailedMessage, { password: generatedPassword }));
         } else if (passwordDelivery === "CUSTOM_SET") {
-          showPopup("success", "User saved", "User saved with the password informed in the form.");
+          showPopup("success", labels.users.userSaved, labels.users.customPasswordSet);
         } else {
-          showPopup("success", "User saved", "User saved.");
+          showPopup("success", labels.users.userSaved, labels.users.userSavedMessage);
         }
       } else {
-        showPopup("success", "User updated", "User updated successfully.");
+        showPopup("success", labels.users.userUpdated, labels.users.userUpdatedMessage);
       }
 
       resetForm();
     } catch (error) {
-      showPopup("error", "Unexpected error", error instanceof Error ? error.message : "Unexpected error while saving user");
+      showPopup("error", labels.users.unexpectedError, error instanceof Error ? error.message : labels.users.saveUnexpected);
     } finally {
       setLoading(false);
     }
@@ -258,13 +260,13 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
   return (
     <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <header>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">User Management</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.users.title}</h2>
       </header>
 
       {canCreate ? (
         <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
           <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="email@company.com" required />
-          <input type="text" value={name} onChange={(event) => setName(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Full name" required />
+          <input type="text" value={name} onChange={(event) => setName(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.users.fullName} required />
 
           <select value={language} onChange={(event) => setLanguage(event.target.value as (typeof LANGUAGE_OPTIONS)[number])} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
             {LANGUAGE_OPTIONS.map((entry) => (
@@ -282,41 +284,41 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
             ))}
           </select>
 
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder={editingUserId ? "New password (optional)" : "Password (optional, auto-generated if empty)"} />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder={editingUserId ? labels.users.newPasswordPlaceholder : labels.users.passwordPlaceholder} />
           <p className="text-xs text-slate-500 md:col-span-2">
             {editingUserId
-              ? "Leave password empty to keep the current password."
-              : "Password is optional. If left empty, the system generates a temporary password, sends it by email, and requires password change at first login."}
+              ? labels.users.keepPasswordHelp
+              : labels.users.generatedPasswordHelp}
           </p>
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />
-            Active
+            {labels.users.active}
           </label>
 
           <div className="flex flex-wrap gap-2 md:col-span-2">
             <Button type="submit" size="sm" disabled={loading}>
-              {loading ? "Saving..." : editingUserId ? "Update user" : "Create user"}
+              {loading ? labels.saving : editingUserId ? labels.users.updateUser : labels.users.createUser}
             </Button>
             {editingUserId ? (
               <Button type="button" size="sm" variant="secondary" onClick={resetForm}>
-                Cancel edit
+                {labels.users.cancelEdit}
               </Button>
             ) : null}
           </div>
         </form>
       ) : (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          You do not have permission to create users in this plant.
+          {labels.users.noPermission}
         </p>
       )}
 
       <div className="overflow-x-auto">
         <div className="mb-3 grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-5">
-          <input type="text" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder="Search by name or email" />
+          <input type="text" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder={labels.users.searchPlaceholder} />
 
           <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as RoleCode | "ALL")} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-            <option value="ALL">All roles</option>
+            <option value="ALL">{labels.users.allRoles}</option>
             {roleFilterOptions.map((entry) => (
               <option key={entry} value={entry}>
                 {ROLE_LABELS[entry] ?? entry}
@@ -325,32 +327,32 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
           </select>
 
           <select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-            <option value="ALL">All status</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
+            <option value="ALL">{labels.users.allStatus}</option>
+            <option value="ACTIVE">{labels.users.activeStatus}</option>
+            <option value="INACTIVE">{labels.users.inactiveStatus}</option>
           </select>
 
           <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortOption)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-            <option value="created_desc">Created (newest first)</option>
-            <option value="created_asc">Created (oldest first)</option>
-            <option value="updated_desc">Updated (newest first)</option>
-            <option value="updated_asc">Updated (oldest first)</option>
-            <option value="name_asc">Name (A-Z)</option>
-            <option value="name_desc">Name (Z-A)</option>
+            <option value="created_desc">{labels.users.sortCreatedDesc}</option>
+            <option value="created_asc">{labels.users.sortCreatedAsc}</option>
+            <option value="updated_desc">{labels.users.sortUpdatedDesc}</option>
+            <option value="updated_asc">{labels.users.sortUpdatedAsc}</option>
+            <option value="name_asc">{labels.users.sortNameAsc}</option>
+            <option value="name_desc">{labels.users.sortNameDesc}</option>
           </select>
         </div>
 
         <table className="w-full min-w-[860px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Lang</th>
-              <th className="px-3 py-2">Active</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2">Updated</th>
-              <th className="px-3 py-2">Actions</th>
+              <th className="px-3 py-2">{labels.users.fullName}</th>
+              <th className="px-3 py-2">{labels.users.email}</th>
+              <th className="px-3 py-2">{labels.users.role}</th>
+              <th className="px-3 py-2">{labels.users.language}</th>
+              <th className="px-3 py-2">{labels.users.active}</th>
+              <th className="px-3 py-2">{labels.users.created}</th>
+              <th className="px-3 py-2">{labels.users.updated}</th>
+              <th className="px-3 py-2">{labels.users.actions}</th>
             </tr>
           </thead>
           <tbody>
@@ -360,19 +362,19 @@ export function UserManager({ users, allowedCreateRoles, plantCode }: UserManage
                 <td className="px-3 py-2">{entry.email ?? "-"}</td>
                 <td className="px-3 py-2">{ROLE_LABELS[entry.role] ?? entry.role}</td>
                 <td className="px-3 py-2">{entry.language.toUpperCase()}</td>
-                <td className="px-3 py-2">{entry.isActive ? "Yes" : "No"}</td>
+                <td className="px-3 py-2">{entry.isActive ? labels.users.yes : labels.users.no}</td>
                 <td className="px-3 py-2">{formatDate(entry.createdAt)}</td>
                 <td className="px-3 py-2">{formatDate(entry.updatedAt)}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="secondary" onClick={() => startEdit(entry)} disabled={rowActionId === entry.id}>
-                      Edit
+                      {labels.edit}
                     </Button>
                     <Button type="button" size="sm" variant={entry.isActive ? "destructive" : "secondary"} onClick={() => toggleUserStatus(entry)} disabled={rowActionId === entry.id}>
-                      {rowActionId === entry.id ? "Saving..." : entry.isActive ? "Deactivate" : "Activate"}
+                      {rowActionId === entry.id ? labels.saving : entry.isActive ? labels.users.deactivate : labels.users.activate}
                     </Button>
                     <Button type="button" size="sm" variant="destructive" onClick={() => deleteUser(entry)} disabled={rowActionId === entry.id}>
-                      Delete
+                      {labels.users.delete}
                     </Button>
                   </div>
                 </td>

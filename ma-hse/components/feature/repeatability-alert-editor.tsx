@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 
 type RepeatabilityAlertEditorProps = {
@@ -55,9 +56,9 @@ export function RepeatabilityAlertEditor({
 
   return (
     <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div>
+      <div className="flex items-start justify-between gap-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
+        <HelpPopover title={title} body={description} buttonLabel={text.help} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

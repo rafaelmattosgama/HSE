@@ -2,12 +2,18 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { MODULE_OPTIONS, type ModuleToggleKey, type ModuleToggleMap } from "@/lib/modules";
 
 export function ModuleToggleManager({
   endpoint,
   title,
+  description,
   saveLabel,
+  savingLabel = "Saving...",
+  successMessage = "Module settings saved.",
+  errorMessage = "Failed to save module settings.",
+  helpButtonLabel = "Help",
   initialModules,
   moduleLabels,
 }: {
@@ -15,6 +21,10 @@ export function ModuleToggleManager({
   title: string;
   description: string;
   saveLabel: string;
+  savingLabel?: string;
+  successMessage?: string;
+  errorMessage?: string;
+  helpButtonLabel?: string;
   initialModules: ModuleToggleMap;
   moduleLabels?: Partial<Record<ModuleToggleKey, string>>;
 }) {
@@ -35,13 +45,13 @@ export function ModuleToggleManager({
 
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to save module settings");
+        throw new Error(json.message ?? errorMessage);
       }
 
       setModules(json.data.modules ?? modules);
-      setMessage("Module settings saved.");
+      setMessage(successMessage);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save module settings");
+      setMessage(error instanceof Error ? error.message : errorMessage);
     } finally {
       setSaving(false);
     }
@@ -49,8 +59,9 @@ export function ModuleToggleManager({
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <header>
+      <header className="flex items-center gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+        <HelpPopover title={title} body={description} buttonLabel={helpButtonLabel} />
       </header>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -82,7 +93,7 @@ export function ModuleToggleManager({
 
       <div className="mt-4 flex items-center gap-3">
         <Button type="button" size="sm" onClick={saveModules} disabled={saving}>
-          {saving ? "Saving..." : saveLabel}
+          {saving ? savingLabel : saveLabel}
         </Button>
         {message ? <p className="text-sm text-slate-600">{message}</p> : null}
       </div>

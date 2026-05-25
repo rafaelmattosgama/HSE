@@ -1,6 +1,7 @@
 import { RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
+import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
@@ -21,23 +22,36 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const parsed = await parseBody(request, bulkCloseActionInput);
   if ("error" in parsed) return parsed.error;
 
-  const plant = await getPlantByCode(plantCode);
-  const count = await prisma.action.count({
-    where: {
-      plantId: plant.id,
-      id: {
-        in: parsed.data.actionIds,
+  try {
+    const plant = await getPlantByCode(plantCode);
+    const count = await prisma.action.count({
+      where: {
+        plantId: plant.id,
+        id: {
+          in: parsed.data.actionIds,
+        },
       },
-    },
-  });
-  if (count !== parsed.data.actionIds.length) {
-    return fail("NOT_FOUND", "One or more actions were not found in this plant", 404);
+    });
+    if (count !== parsed.data.actionIds.length) {
+      return fail("NOT_FOUND", "One or more actions were not found in this plant", 404);
+    }
+
+    const updated = await ActionService.closeMany({
+      actorUserId: auth.session.user.id,
+      payload: parsed.data,
+    });
+
+    return ok(updated);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        plantCode,
+        actorUserId: auth.session.user.id,
+        actionIds: parsed.data.actionIds,
+      },
+      "failed_to_bulk_close_actions",
+    );
+    return fail("INTERNAL_ERROR", error instanceof Error ? error.message : "Failed to close selected actions", 500);
   }
-
-  const updated = await ActionService.closeMany({
-    actorUserId: auth.session.user.id,
-    payload: parsed.data,
-  });
-
-  return ok(updated);
 }

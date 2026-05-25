@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -50,6 +51,15 @@ export function RepeatabilityAlertModal({ plantCode, title = "Alerts", alerts }:
     }
   }
 
+  function extractAlertAction(body: string) {
+    const match = body.match(/Abrir S-EWO:\s*(https?:\/\/\S+)/);
+    return match ? match[1] : null;
+  }
+
+  function stripAlertAction(body: string) {
+    return body.replace(/\n?Abrir S-EWO:\s*https?:\/\/\S+/g, "").trim();
+  }
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-[2px]">
       <div className="w-full max-w-2xl rounded-2xl border border-amber-200 bg-white shadow-2xl">
@@ -67,8 +77,22 @@ export function RepeatabilityAlertModal({ plantCode, title = "Alerts", alerts }:
         <div className="max-h-[60vh] space-y-3 overflow-y-auto px-6 py-5">
           {alerts.map((alert) => (
             <article key={alert.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
-              <p className="mt-2 text-sm text-slate-700">{alert.body}</p>
+              {(() => {
+                const actionUrl = extractAlertAction(alert.body);
+                const body = stripAlertAction(alert.body);
+
+                return (
+                  <>
+                    <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
+                    <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{body}</p>
+                    {actionUrl ? (
+                      <Link href={actionUrl} className="mt-3 inline-flex text-sm font-semibold text-teal-700 hover:underline">
+                        Abrir S-EWO
+                      </Link>
+                    ) : null}
+                  </>
+                );
+              })()}
               <p className="mt-2 text-xs text-slate-500">
                 Generated at {alert.createdAt.replace("T", " ").slice(0, 16)}
               </p>

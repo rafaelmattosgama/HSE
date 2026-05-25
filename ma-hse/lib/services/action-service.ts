@@ -1,9 +1,12 @@
 import { ActionPriority, ActionSourceType, ActionStatus, CommunicationStatus, SEWOStatus } from "@prisma/client";
 import { addDays, differenceInCalendarDays } from "date-fns";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { CommunicationService } from "@/lib/services/communication-service";
 import { NotificationService } from "@/lib/services/notification-service";
 import { getSlaConfig } from "@/lib/services/parameter-service";
+import { SewaService } from "@/lib/services/sewo-service";
 import type { BulkCloseActionInput, CloseActionInput, CreateActionInput, ReopenActionInput, UpdateActionInput } from "@/lib/validation/dtos";
 
 function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriority, number>, inputDueDate?: Date) {
@@ -16,60 +19,85 @@ function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriori
 
 export const ActionService = {
   async syncParentStatuses(input: {
+    actionId?: string | null;
     communicationId?: string | null;
     sewoId?: string | null;
   }) {
     if (input.communicationId) {
-      const communication = await prisma.communication.findUniqueOrThrow({ where: { id: input.communicationId } });
-      const blockedStatuses: CommunicationStatus[] = [
-        CommunicationStatus.REJECTED,
-        CommunicationStatus.INVALID,
-        CommunicationStatus.SUBMITTED,
-        CommunicationStatus.PENDING_VALIDATION,
-      ];
-
-      if (!blockedStatuses.includes(communication.status)) {
-        const openActions = await prisma.action.count({
-          where: {
-            communicationId: input.communicationId,
-            status: {
-              in: [ActionStatus.OPEN, ActionStatus.ONGOING],
-            },
-          },
-        });
-
-        const nextStatus = openActions > 0 ? CommunicationStatus.ONGOING : CommunicationStatus.CLOSED;
-        if (communication.status !== nextStatus) {
-          await prisma.communication.update({
-            where: { id: input.communicationId },
-            data: { status: nextStatus },
-          });
-        }
-      }
+      await CommunicationService.syncStatusWithActions(input.communicationId);
     }
 
+    const sewoIds = new Set<string>();
     if (input.sewoId) {
-      const sewo = await prisma.sEWO.findUniqueOrThrow({ where: { id: input.sewoId } });
-      const blockedStatuses: SEWOStatus[] = [SEWOStatus.IN_APPROVAL, SEWOStatus.APPROVED, SEWOStatus.REJECTED];
+      sewoIds.add(input.sewoId);
+    }
 
-      if (!blockedStatuses.includes(sewo.status)) {
-        const openActions = await prisma.action.count({
-          where: {
-            sewoId: input.sewoId,
-            status: {
-              in: [ActionStatus.OPEN, ActionStatus.ONGOING],
-            },
+    if (input.actionId) {
+      const links = await prisma.sEWOActionLink.findMany({
+        where: { actionId: input.actionId },
+        select: { sewoId: true },
+      });
+
+      links.forEach((entry) => sewoIds.add(entry.sewoId));
+    }
+
+    for (const sewoId of sewoIds) {
+      await SewaService.syncStatusWithActions(sewoId);
+    }
+  },
+
+  async notifyAssignees(actionId: string) {
+    const recipients = await prisma.action.findUniqueOrThrow({
+      where: { id: actionId },
+      include: {
+        ownerUser: true,
+        coOwners: {
+          include: {
+            user: true,
           },
-        });
+        },
+      },
+    });
 
-        const nextStatus: SEWOStatus = openActions > 0 ? SEWOStatus.DRAFT : SEWOStatus.CLOSED;
-        if (sewo.status !== nextStatus) {
-          await prisma.sEWO.update({
-            where: { id: input.sewoId },
-            data: { status: nextStatus },
-          });
-        }
-      }
+    try {
+      await NotificationService.notify({
+        plantId: recipients.plantId,
+        userIds: [recipients.ownerUserId, ...recipients.coOwners.map((entry) => entry.userId)],
+        emailTo: [
+          ...(recipients.ownerUser.email ? [recipients.ownerUser.email] : []),
+          ...recipients.coOwners.flatMap((entry) => (entry.user.email ? [entry.user.email] : [])),
+        ],
+        title: `New action assigned: ${recipients.title}`,
+        body: `A new action was assigned to you with due date ${recipients.dueDate.toISOString().slice(0, 10)}.`,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          error,
+          actionId,
+          plantId: recipients.plantId,
+        },
+        "failed_to_notify_action_assignees",
+      );
+    }
+  },
+
+  async reopenSewoStatusForNewAction(sewoId: string) {
+    const sewo = await prisma.sEWO.findUniqueOrThrow({ where: { id: sewoId } });
+    if (sewo.status === SEWOStatus.IN_APPROVAL || sewo.status === SEWOStatus.REJECTED) {
+      return;
+    }
+
+    const reopenedStatus =
+      sewo.approvedAt || sewo.approvedByUserId || sewo.status === SEWOStatus.APPROVED
+        ? SEWOStatus.APPROVED
+        : SEWOStatus.DRAFT;
+
+    if (sewo.status !== reopenedStatus) {
+      await prisma.sEWO.update({
+        where: { id: sewoId },
+        data: { status: reopenedStatus },
+      });
     }
   },
 
@@ -138,44 +166,26 @@ export const ActionService = {
     if (action.communicationId) {
       await prisma.communication.update({
         where: { id: action.communicationId },
-        data: { status: CommunicationStatus.ONGOING },
+        data: {
+          status: CommunicationStatus.ONGOING,
+          manuallyClosedBy: null,
+          manuallyClosedAt: null,
+          manualCloseReason: null,
+        },
       });
     }
 
     if (action.sewoId) {
-      await prisma.sEWO.updateMany({
-        where: {
-          id: action.sewoId,
-          status: {
-            notIn: [SEWOStatus.IN_APPROVAL, SEWOStatus.APPROVED, SEWOStatus.REJECTED, SEWOStatus.CLOSED],
-          },
-        },
-        data: { status: SEWOStatus.DRAFT },
-      });
+      await this.reopenSewoStatusForNewAction(action.sewoId);
     }
 
-    const recipients = await prisma.action.findUniqueOrThrow({
-      where: { id: action.id },
-      include: {
-        ownerUser: true,
-        coOwners: {
-          include: {
-            user: true,
-          },
-        },
-      },
+    await this.syncParentStatuses({
+      actionId: action.id,
+      communicationId: action.communicationId,
+      sewoId: action.sewoId,
     });
 
-    await NotificationService.notify({
-      plantId: action.plantId,
-      userIds: [recipients.ownerUserId, ...recipients.coOwners.map((entry) => entry.userId)],
-      emailTo: [
-        ...(recipients.ownerUser.email ? [recipients.ownerUser.email] : []),
-        ...recipients.coOwners.flatMap((entry) => (entry.user.email ? [entry.user.email] : [])),
-      ],
-      title: `New action assigned: ${action.title}`,
-      body: `A new action was assigned to you with due date ${action.dueDate.toISOString().slice(0, 10)}.`,
-    });
+    await this.notifyAssignees(action.id);
 
     return action;
   },
@@ -191,7 +201,7 @@ export const ActionService = {
       where: { id: input.actionId },
       data: {
         status: ActionStatus.CLOSED,
-        closedAt: new Date(),
+        closedAt: input.payload.closedAt,
         closedBy: input.actorUserId,
         closureComment: input.payload.closureComment,
         evidenceAttachments: input.payload.evidence.length
@@ -220,6 +230,7 @@ export const ActionService = {
     });
 
     await this.syncParentStatuses({
+      actionId: action.id,
       communicationId: action.communicationId,
       sewoId: action.sewoId,
     });
@@ -270,6 +281,7 @@ export const ActionService = {
           actorUserId: input.actorUserId,
           payload: {
             closureComment: input.payload.closureComment,
+            closedAt: input.payload.closedAt,
             evidence: input.payload.evidence,
           },
         }),
@@ -305,6 +317,7 @@ export const ActionService = {
     });
 
     await this.syncParentStatuses({
+      actionId: action.id,
       communicationId: action.communicationId,
       sewoId: action.sewoId,
     });

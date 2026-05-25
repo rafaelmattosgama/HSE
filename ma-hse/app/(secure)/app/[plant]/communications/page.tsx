@@ -62,7 +62,7 @@ export default async function CommunicationsPage({
           in: ["VALID_OPEN", "ONGOING", "CLOSED"],
         },
       },
-      include: { area: true, workstation: true, unsafeConditionType: true, nearMissType: true },
+      include: { area: true, workstation: true, unsafeActType: true, unsafeConditionType: true, nearMissType: true },
       orderBy: { eventDatetime: "desc" },
       take: 200,
     }),
@@ -147,6 +147,7 @@ export default async function CommunicationsPage({
             reporterName: reporterEmployee ? `${reporterEmployee.employeeNo} - ${reporterEmployee.name}` : row.reporterName,
             department: row.area?.name ?? "-",
             location: row.workstation?.name ?? "-",
+            unsafeActType: canManageClassification ? row.unsafeActType?.name ?? "-" : undefined,
             unsafeConditionType: canManageClassification ? row.unsafeConditionType?.name ?? "-" : undefined,
             nearMissType: canManageClassification ? row.nearMissType?.name ?? "-" : undefined,
           };

@@ -2,3 +2,9 @@ git status
 git add .
 git commit -m "Corrige bugs X"
 git push origin correcoesluis
+
+
+Executar para fazer o delpoy
+
+ssh ma_hse_deploy@157.245.31.71
+sudo /usr/local/sbin/deploy-ma-hse

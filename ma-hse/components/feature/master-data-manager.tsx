@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { isPl01Code } from "@/lib/defaults/pl01-master-data";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 type Item = {
   id: string;
@@ -20,8 +22,8 @@ type Worker = {
 };
 
 type EditingState = {
-  areaCode: string | null;
-  workstationCode: string | null;
+  areaId: string | null;
+  workstationId: string | null;
   employeeNo: string | null;
 };
 
@@ -43,11 +45,13 @@ export function MasterDataManager({
   initialWorkstations,
   initialWorkers,
   plantCode,
+  labels = getStaticN0MasterDataUi("en"),
 }: {
   initialAreas: Item[];
   initialWorkstations: Item[];
   initialWorkers: Worker[];
   plantCode?: string;
+  labels?: N0MasterDataUi;
 }) {
   const pathname = usePathname();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,8 +68,8 @@ export function MasterDataManager({
   const [workerName, setWorkerName] = useState("");
   const [workerDept, setWorkerDept] = useState("");
   const [editing, setEditing] = useState<EditingState>({
-    areaCode: null,
-    workstationCode: null,
+    areaId: null,
+    workstationId: null,
     employeeNo: null,
   });
   const [deleting, setDeleting] = useState<DeletingState | null>(null);
@@ -86,22 +90,22 @@ export function MasterDataManager({
     setWorkerName("");
     setWorkerDept("");
     setEditing({
-      areaCode: null,
-      workstationCode: null,
+      areaId: null,
+      workstationId: null,
       employeeNo: null,
     });
     setDeleting(null);
     setMessage("");
   }, [initialAreas, initialWorkstations, initialWorkers, plant]);
 
-  async function createMasterData(type: "area" | "workstation", code: string, name: string) {
+  async function createMasterData(type: "area" | "workstation", code: string, name: string, id?: string | null) {
     const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type, code, name }),
+      body: JSON.stringify({ id: id ?? undefined, type, code, name }),
     });
     const json = await response.json();
-    if (!json.ok) throw new Error(json.message ?? `Failed to save ${type}`);
+    if (!json.ok) throw new Error(json.message ?? formatMasterDataMessage(labels.failedToSaveItem, { section: labels.sections[type].title }));
     return json.data.item as Item;
   }
 
@@ -116,7 +120,7 @@ export function MasterDataManager({
       }),
     });
     const json = await response.json();
-    if (!json.ok) throw new Error(json.message ?? "Failed to save worker");
+    if (!json.ok) throw new Error(json.message ?? labels.failedToSaveWorker);
     return json.data.worker as Worker;
   }
 
@@ -125,8 +129,7 @@ export function MasterDataManager({
   }
 
   async function deleteMasterData(type: "area" | "workstation", item: Item) {
-    const label = type === "area" ? "departamento" : "posto de trabalho";
-    if (!window.confirm(`Eliminar ${label} ${item.code}? Esta acao remove-o das listas ativas.`)) {
+    if (!window.confirm(labels.sections[type].deleteConfirm)) {
       return;
     }
 
@@ -141,27 +144,27 @@ export function MasterDataManager({
       });
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? `Failed to delete ${label}`);
+        throw new Error(json.message ?? labels.sections[type].deleteSuccess);
       }
 
       if (type === "area") {
         setAreas((current) => current.filter((entry) => entry.id !== item.id));
-        if (editing.areaCode === item.code) cancelAreaEdit();
-        setMessage("Departamento eliminado.");
+        if (editing.areaId === item.id) cancelAreaEdit();
+        setMessage(labels.sections.area.deleteSuccess);
       } else {
         setWorkstations((current) => current.filter((entry) => entry.id !== item.id));
-        if (editing.workstationCode === item.code) cancelWorkstationEdit();
-        setMessage("Posto de trabalho eliminado.");
+        if (editing.workstationId === item.id) cancelWorkstationEdit();
+        setMessage(labels.sections.workstation.deleteSuccess);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `Failed to delete ${label}`);
+      setMessage(error instanceof Error ? error.message : labels.sections[type].deleteSuccess);
     } finally {
       setDeleting(null);
     }
   }
 
   async function deleteWorker(item: Worker) {
-    if (!window.confirm(`Eliminar trabalhador ${item.employeeNo}? Esta acao remove-o das listas ativas.`)) {
+    if (!window.confirm(labels.workerDeleteConfirm)) {
       return;
     }
 
@@ -176,14 +179,14 @@ export function MasterDataManager({
       });
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to delete worker");
+        throw new Error(json.message ?? labels.failedToSaveWorker);
       }
 
       setWorkers((current) => current.filter((entry) => entry.id !== item.id));
       if (editing.employeeNo === item.employeeNo) cancelWorkerEdit();
-      setMessage("Trabalhador eliminado.");
+      setMessage(labels.workerDeleteSuccess);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to delete worker");
+      setMessage(error instanceof Error ? error.message : labels.failedToSaveWorker);
     } finally {
       setDeleting(null);
     }
@@ -192,30 +195,38 @@ export function MasterDataManager({
   async function submitArea(event: React.FormEvent) {
     event.preventDefault();
     try {
-      const item = await createMasterData("area", areaCode, areaName);
-      setAreas((current) => sortItems([...current.filter((entry) => entry.code !== item.code), item]));
-      const updated = editing.areaCode ? "Departamento atualizado." : "Departamento gravado.";
+      const item = await createMasterData("area", areaCode, areaName, editing.areaId);
+      setAreas((current) =>
+        sortItems(editing.areaId ? current.map((entry) => (entry.id === item.id ? item : entry)) : [...current, item]),
+      );
+      const updated = editing.areaId
+        ? formatMasterDataMessage(labels.itemUpdated, { section: labels.sections.area.title })
+        : formatMasterDataMessage(labels.itemCreated, { section: labels.sections.area.title });
       setAreaCode("");
       setAreaName("");
-      setEditing((current) => ({ ...current, areaCode: null }));
+      setEditing((current) => ({ ...current, areaId: null }));
       setMessage(updated);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save department");
+      setMessage(error instanceof Error ? error.message : formatMasterDataMessage(labels.failedToSaveItem, { section: labels.sections.area.title }));
     }
   }
 
   async function submitWorkstation(event: React.FormEvent) {
     event.preventDefault();
     try {
-      const item = await createMasterData("workstation", workstationCode, workstationName);
-      setWorkstations((current) => sortItems([...current.filter((entry) => entry.code !== item.code), item]));
-      const updated = editing.workstationCode ? "Posto de trabalho atualizado." : "Posto de trabalho gravado.";
+      const item = await createMasterData("workstation", workstationCode, workstationName, editing.workstationId);
+      setWorkstations((current) =>
+        sortItems(editing.workstationId ? current.map((entry) => (entry.id === item.id ? item : entry)) : [...current, item]),
+      );
+      const updated = editing.workstationId
+        ? formatMasterDataMessage(labels.itemUpdated, { section: labels.sections.workstation.title })
+        : formatMasterDataMessage(labels.itemCreated, { section: labels.sections.workstation.title });
       setWorkstationCode("");
       setWorkstationName("");
-      setEditing((current) => ({ ...current, workstationCode: null }));
+      setEditing((current) => ({ ...current, workstationId: null }));
       setMessage(updated);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save workstation");
+      setMessage(error instanceof Error ? error.message : formatMasterDataMessage(labels.failedToSaveItem, { section: labels.sections.workstation.title }));
     }
   }
 
@@ -224,29 +235,29 @@ export function MasterDataManager({
     try {
       const worker = await createWorker();
       setWorkers((current) => sortWorkers([...current.filter((entry) => entry.employeeNo !== worker.employeeNo), worker]));
-      const updated = editing.employeeNo ? "Trabalhador atualizado." : "Trabalhador gravado.";
+      const updated = editing.employeeNo ? labels.workerUpdated : labels.workerCreated;
       setEmployeeNo("");
       setWorkerName("");
       setWorkerDept("");
       setEditing((current) => ({ ...current, employeeNo: null }));
       setMessage(updated);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save worker");
+      setMessage(error instanceof Error ? error.message : labels.failedToSaveWorker);
     }
   }
 
   function startAreaEdit(item: Item) {
     setAreaCode(item.code);
     setAreaName(item.name);
-    setEditing((current) => ({ ...current, areaCode: item.code }));
-    setMessage(`A editar departamento ${item.code}.`);
+    setEditing((current) => ({ ...current, areaId: item.id }));
+    setMessage(formatMasterDataMessage(labels.itemEditMessage, { section: labels.sections.area.title, code: item.code }));
   }
 
   function startWorkstationEdit(item: Item) {
     setWorkstationCode(item.code);
     setWorkstationName(item.name);
-    setEditing((current) => ({ ...current, workstationCode: item.code }));
-    setMessage(`A editar posto de trabalho ${item.code}.`);
+    setEditing((current) => ({ ...current, workstationId: item.id }));
+    setMessage(formatMasterDataMessage(labels.itemEditMessage, { section: labels.sections.workstation.title, code: item.code }));
   }
 
   function startWorkerEdit(item: Worker) {
@@ -254,19 +265,19 @@ export function MasterDataManager({
     setWorkerName(item.name);
     setWorkerDept(item.dept ?? "");
     setEditing((current) => ({ ...current, employeeNo: item.employeeNo }));
-    setMessage(`A editar trabalhador ${item.employeeNo}.`);
+    setMessage(formatMasterDataMessage(labels.workerEditMessage, { code: item.employeeNo }));
   }
 
   function cancelAreaEdit() {
     setAreaCode("");
     setAreaName("");
-    setEditing((current) => ({ ...current, areaCode: null }));
+    setEditing((current) => ({ ...current, areaId: null }));
   }
 
   function cancelWorkstationEdit() {
     setWorkstationCode("");
     setWorkstationName("");
-    setEditing((current) => ({ ...current, workstationCode: null }));
+    setEditing((current) => ({ ...current, workstationId: null }));
   }
 
   function cancelWorkerEdit() {
@@ -290,15 +301,19 @@ export function MasterDataManager({
       });
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to import Excel");
+        throw new Error(json.message ?? labels.importError);
       }
 
       setMessage(
-        `Importação concluída: ${json.data.summary.departments} departamentos, ${json.data.summary.workstations} postos de trabalho e ${json.data.summary.workers} trabalhadores.`,
+        formatMasterDataMessage(labels.importSuccess, {
+          departments: json.data.summary.departments,
+          workstations: json.data.summary.workstations,
+          workers: json.data.summary.workers,
+        }),
       );
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to import Excel");
+      setMessage(error instanceof Error ? error.message : labels.importError);
     } finally {
       setImportLoading(false);
     }
@@ -314,7 +329,7 @@ export function MasterDataManager({
       });
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to import PL01 defaults");
+        throw new Error(json.message ?? labels.pl01Error);
       }
 
       setWorkstations(
@@ -331,10 +346,14 @@ export function MasterDataManager({
         ),
       );
       setMessage(
-        `PL01 defaults loaded: ${json.data.summary.workstations} workstations, ${json.data.summary.workers} workers and ${json.data.summary.injuryTypes} injury types.`,
+        formatMasterDataMessage(labels.pl01Success, {
+          workstations: json.data.summary.workstations,
+          workers: json.data.summary.workers,
+          injuryTypes: json.data.summary.injuryTypes,
+        }),
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to import PL01 defaults");
+      setMessage(error instanceof Error ? error.message : labels.pl01Error);
     } finally {
       setBootstrapLoading(false);
     }
@@ -350,12 +369,12 @@ export function MasterDataManager({
       });
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to sync injury types");
+        throw new Error(json.message ?? labels.injurySyncError);
       }
 
-      setMessage(`Global injury type list synchronized for this plant: ${json.data.summary.injuryTypes} active nature options.`);
+      setMessage(formatMasterDataMessage(labels.injurySyncSuccess, { injuryTypes: json.data.summary.injuryTypes }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to sync injury types");
+      setMessage(error instanceof Error ? error.message : labels.injurySyncError);
     } finally {
       setInjuryTypesLoading(false);
     }
@@ -364,10 +383,12 @@ export function MasterDataManager({
   return (
     <section className="app-panel space-y-4 rounded-xl p-5">
       <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Plant Master Data</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.title}</h2>
+          <HelpPopover title={labels.title} body={labels.help.module} buttonLabel={labels.helpButton} />
         </div>
         <div className="flex flex-wrap gap-2">
+          <HelpPopover title={labels.importExcel} body={labels.excelHelp} buttonLabel={labels.helpButton} />
           <input
             ref={fileInputRef}
             type="file"
@@ -380,17 +401,17 @@ export function MasterDataManager({
             }}
           />
           <Button type="button" size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={importLoading}>
-            {importLoading ? "Importing Excel..." : "Import Excel"}
+            {importLoading ? labels.importingExcel : labels.importExcel}
           </Button>
           <Link href={`/api/plants/${plant}/admin/master-data/template`} className="app-toolbar">
-            Download template
+            {labels.downloadTemplate}
           </Link>
           <Button type="button" size="sm" variant="secondary" onClick={syncDefaultInjuryTypes} disabled={injuryTypesLoading}>
-            {injuryTypesLoading ? "Syncing injury types..." : "Sync injury types"}
+            {injuryTypesLoading ? labels.syncingInjuryTypes : labels.syncInjuryTypes}
           </Button>
           {isPl01Code(plant) ? (
             <Button type="button" size="sm" variant="secondary" onClick={bootstrapPl01Defaults} disabled={bootstrapLoading}>
-              {bootstrapLoading ? "Loading PL01 data..." : "Load PL01 defaults"}
+              {bootstrapLoading ? labels.loadingPl01Defaults : labels.loadPl01Defaults}
             </Button>
           ) : null}
         </div>
@@ -399,10 +420,13 @@ export function MasterDataManager({
       <div className="grid gap-4 lg:grid-cols-3">
         <form onSubmit={submitArea} className="space-y-3 rounded-lg border border-slate-200 p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">Departamento</h3>
-            {editing.areaCode ? (
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">{labels.sections.area.title}</h3>
+              <HelpPopover title={labels.sections.area.title} body={labels.help.area} buttonLabel={labels.helpButton} />
+            </div>
+            {editing.areaId ? (
               <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelAreaEdit}>
-                Cancelar edição
+                {labels.cancel}
               </button>
             ) : null}
           </div>
@@ -410,28 +434,29 @@ export function MasterDataManager({
             value={areaCode}
             onChange={(event) => setAreaCode(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-            placeholder="Código"
+            placeholder={labels.sections.area.codePlaceholder}
             required
-            disabled={Boolean(editing.areaCode)}
+            disabled={Boolean(editing.areaId)}
           />
           <input
             value={areaName}
             onChange={(event) => setAreaName(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Nome do departamento"
+            placeholder={labels.sections.area.namePlaceholder}
             required
           />
-          <Button type="submit" size="sm">{editing.areaCode ? "Guardar edição" : "Guardar departamento"}</Button>
+          <Button type="submit" size="sm">{editing.areaId ? labels.saveChanges : labels.sections.area.createLabel}</Button>
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
+            {areas.length === 0 ? <p>{labels.sections.area.emptyLabel}</p> : null}
             {areas.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
                 <p className="min-w-0 truncate">{item.code} - {item.name}</p>
                 <div className="flex shrink-0 items-center gap-2">
                   <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startAreaEdit(item)} disabled={Boolean(deleting)}>
-                    Editar
+                    {labels.edit}
                   </button>
                   <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteMasterData("area", item)} disabled={Boolean(deleting)}>
-                    {isDeleting("area", item.id) ? "A eliminar..." : "Eliminar"}
+                    {isDeleting("area", item.id) ? labels.updating : labels.deactivate}
                   </button>
                 </div>
               </div>
@@ -441,10 +466,13 @@ export function MasterDataManager({
 
         <form onSubmit={submitWorkstation} className="space-y-3 rounded-lg border border-slate-200 p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">Workstation</h3>
-            {editing.workstationCode ? (
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">{labels.sections.workstation.title}</h3>
+              <HelpPopover title={labels.sections.workstation.title} body={labels.help.workstation} buttonLabel={labels.helpButton} />
+            </div>
+            {editing.workstationId ? (
               <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkstationEdit}>
-                Cancelar edição
+                {labels.cancel}
               </button>
             ) : null}
           </div>
@@ -452,28 +480,29 @@ export function MasterDataManager({
             value={workstationCode}
             onChange={(event) => setWorkstationCode(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-            placeholder="Code"
+            placeholder={labels.sections.workstation.codePlaceholder}
             required
-            disabled={Boolean(editing.workstationCode)}
+            disabled={Boolean(editing.workstationId)}
           />
           <input
             value={workstationName}
             onChange={(event) => setWorkstationName(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Name"
+            placeholder={labels.sections.workstation.namePlaceholder}
             required
           />
-          <Button type="submit" size="sm">{editing.workstationCode ? "Save edit" : "Save workstation"}</Button>
+          <Button type="submit" size="sm">{editing.workstationId ? labels.saveChanges : labels.sections.workstation.createLabel}</Button>
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
+            {workstations.length === 0 ? <p>{labels.sections.workstation.emptyLabel}</p> : null}
             {workstations.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
                 <p className="min-w-0 truncate">{item.code} - {item.name}</p>
                 <div className="flex shrink-0 items-center gap-2">
                   <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startWorkstationEdit(item)} disabled={Boolean(deleting)}>
-                    Editar
+                    {labels.edit}
                   </button>
                   <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteMasterData("workstation", item)} disabled={Boolean(deleting)}>
-                    {isDeleting("workstation", item.id) ? "A eliminar..." : "Eliminar"}
+                    {isDeleting("workstation", item.id) ? labels.updating : labels.deactivate}
                   </button>
                 </div>
               </div>
@@ -483,10 +512,13 @@ export function MasterDataManager({
 
         <form onSubmit={submitWorker} className="space-y-3 rounded-lg border border-slate-200 p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">Trabalhador</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">{labels.workerSectionTitle}</h3>
+              <HelpPopover title={labels.workerSectionTitle} body={labels.help.workers} buttonLabel={labels.helpButton} />
+            </div>
             {editing.employeeNo ? (
               <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkerEdit}>
-                Cancelar edição
+                {labels.cancel}
               </button>
             ) : null}
           </div>
@@ -494,7 +526,7 @@ export function MasterDataManager({
             value={employeeNo}
             onChange={(event) => setEmployeeNo(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-            placeholder="Número de trabalhador"
+            placeholder={labels.employeeNumber}
             required
             disabled={Boolean(editing.employeeNo)}
           />
@@ -502,26 +534,27 @@ export function MasterDataManager({
             value={workerName}
             onChange={(event) => setWorkerName(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Nome"
+            placeholder={labels.workerName}
             required
           />
           <input
             value={workerDept}
             onChange={(event) => setWorkerDept(event.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Departamento"
+            placeholder={labels.department}
           />
-          <Button type="submit" size="sm">{editing.employeeNo ? "Guardar edição" : "Guardar trabalhador"}</Button>
+          <Button type="submit" size="sm">{editing.employeeNo ? labels.saveChanges : labels.saveWorker}</Button>
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
+            {workers.length === 0 ? <p>{labels.noWorkers}</p> : null}
             {workers.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
                 <p className="min-w-0 truncate">{item.employeeNo} - {item.name}{item.dept ? ` (${item.dept})` : ""}</p>
                 <div className="flex shrink-0 items-center gap-2">
                   <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startWorkerEdit(item)} disabled={Boolean(deleting)}>
-                    Editar
+                    {labels.edit}
                   </button>
                   <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteWorker(item)} disabled={Boolean(deleting)}>
-                    {isDeleting("worker", item.id) ? "A eliminar..." : "Eliminar"}
+                    {isDeleting("worker", item.id) ? labels.updating : labels.deactivate}
                   </button>
                 </div>
               </div>
@@ -529,10 +562,6 @@ export function MasterDataManager({
           </div>
         </form>
       </div>
-
-      <p className="text-xs text-slate-500">
-        O Excel pode incluir folhas com os nomes `Departments` ou `Departamentos`, `Workstations` e `Workers` ou `Trabalhadores`. As atualizações são feitas pelo código ou número do trabalhador.
-      </p>
 
       {message ? <p className="text-xs text-slate-600">{message}</p> : null}
     </section>

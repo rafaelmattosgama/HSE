@@ -20,10 +20,13 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export default async function SewoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ plant: string }>;
+  searchParams: Promise<{ sewoId?: string }>;
 }) {
   const { plant } = await params;
+  const currentSearchParams = await searchParams;
   const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
   const uiLocale = await getServerUiLocale({
@@ -44,6 +47,7 @@ export default async function SewoPage({
             workstation: true,
           },
         },
+        approvedBy: true,
         performedBy: true,
         actions: {
           include: {
@@ -140,7 +144,9 @@ export default async function SewoPage({
 
   return (
     <SewoWorkspace
+      key={`${plant}:${currentSearchParams.sewoId ?? "list"}`}
       plant={plant}
+      initialSelectedSewoId={currentSearchParams.sewoId ?? null}
       causeCatalogVersionId={currentCatalog?.id}
       sewoRows={sewoRecords.map((record, index) => {
         const linkedActions = new Map(
@@ -181,6 +187,9 @@ export default async function SewoPage({
             templateData,
             causeCatalogVersionId: record.causeCatalogVersionId,
             status: record.status,
+            approvalComment: record.approvalComment,
+            approvedAt: record.approvedAt?.toISOString() ?? null,
+            approvedByName: record.approvedBy?.name ?? null,
             linkedActions: Array.from(linkedActions.values()).map((action) => ({
               id: action.id,
               title: action.title,

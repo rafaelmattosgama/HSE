@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 const LANGUAGE_OPTIONS = ["pt", "it", "en", "pl", "de", "ro", "fr"] as const;
 
@@ -11,6 +12,7 @@ type PlantLanguageSettingsProps = {
   plantCode: string;
   timezone: string;
   defaultLanguage: string;
+  labels?: N0MasterDataUi;
 };
 
 export function PlantLanguageSettings({
@@ -19,6 +21,7 @@ export function PlantLanguageSettings({
   plantCode,
   timezone,
   defaultLanguage,
+  labels = getStaticN0MasterDataUi("en"),
 }: PlantLanguageSettingsProps) {
   const [language, setLanguage] = useState(defaultLanguage);
   const [savedLanguage, setSavedLanguage] = useState(defaultLanguage);
@@ -41,14 +44,14 @@ export function PlantLanguageSettings({
 
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to update plant language");
+        throw new Error(json.message ?? labels.plantLanguageError);
       }
 
       setLanguage(json.data.plant.defaultLanguage);
       setSavedLanguage(json.data.plant.defaultLanguage);
-      setMessage(`Default language updated for ${plantName}.`);
+      setMessage(formatMasterDataMessage(labels.plantLanguageSaved, { plant: plantName }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to update plant language");
+      setMessage(error instanceof Error ? error.message : labels.plantLanguageError);
     } finally {
       setSaving(false);
     }
@@ -56,7 +59,7 @@ export function PlantLanguageSettings({
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Selected plant</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.selectedPlantTitle}</h2>
       <p className="mt-2 text-lg font-semibold text-slate-900">
         {plantName} ({plantCode.toUpperCase()})
       </p>
@@ -64,7 +67,7 @@ export function PlantLanguageSettings({
 
       <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
         <label className="flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Default language
+          {labels.defaultLanguage}
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value)}
@@ -78,7 +81,7 @@ export function PlantLanguageSettings({
           </select>
         </label>
         <Button type="button" size="sm" disabled={saving || language === savedLanguage} onClick={save}>
-          {saving ? "Saving..." : "Save"}
+          {saving ? labels.saving : labels.save}
         </Button>
       </div>
 

@@ -70,6 +70,9 @@ type SewoFormData = {
   templateData: Record<string, unknown>;
   causeCatalogVersionId: string;
   status: string;
+  approvalComment: string | null;
+  approvedAt: string | null;
+  approvedByName: string | null;
   linkedActions: CommunicationActionOption[];
 };
 
@@ -88,6 +91,7 @@ type SewoRow = {
 
 export function SewoWorkspace({
   plant,
+  initialSelectedSewoId,
   causeCatalogVersionId,
   sewoRows,
   communications,
@@ -102,6 +106,7 @@ export function SewoWorkspace({
   rootCauseGroups,
 }: {
   plant: string;
+  initialSelectedSewoId?: string | null;
   causeCatalogVersionId?: string;
   sewoRows: SewoRow[];
   communications: CommunicationOption[];
@@ -116,7 +121,7 @@ export function SewoWorkspace({
   rootCauseGroups: RootCauseGroup[];
 }) {
   const [creating, setCreating] = useState(false);
-  const [selectedSewoId, setSelectedSewoId] = useState<string | null>(null);
+  const [selectedSewoId, setSelectedSewoId] = useState<string | null>(initialSelectedSewoId ?? null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const openSewos = useMemo(() => sewoRows.filter((row) => row.status === "DRAFT" || row.status === "IN_APPROVAL"), [sewoRows]);
   const selectedSewo = sewoRows.find((row) => row.id === selectedSewoId) ?? null;

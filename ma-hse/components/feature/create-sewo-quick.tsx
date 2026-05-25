@@ -7,6 +7,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { Button } from "@/components/ui/button";
+import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
+import { hasOpenLinkedActions } from "@/lib/communication-status";
+import { getNextSewoSubmissionStatus } from "@/lib/sewo-status";
 import {
   SIF_PSIF_EXPOSURE_KEYS,
   createEmptySifPsifDecision,
@@ -111,6 +114,9 @@ type SewoInitialData = {
   templateData: Record<string, unknown>;
   causeCatalogVersionId: string;
   status: string;
+  approvalComment: string | null;
+  approvedAt: string | null;
+  approvedByName: string | null;
   linkedActions: CommunicationActionOption[];
 };
 
@@ -349,6 +355,10 @@ export function CreateSewoQuick({
   const [loading, setLoading] = useState(false);
   const [actionsMessage, setActionsMessage] = useState("");
   const [savingActionId, setSavingActionId] = useState<string | null>(null);
+  const [creatingLinkedAction, setCreatingLinkedAction] = useState(false);
+  const [statusReason, setStatusReason] = useState("");
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [linkedActionDraft, setLinkedActionDraft] = useState<ActionPlanRow>(() => createActionPlanRow());
   const [editableCommunicationActions, setEditableCommunicationActions] = useState<EditableCommunicationAction[]>(
     () => initialSewo?.linkedActions.map((action) => ({ ...action, dirty: false })) ?? [],
   );
@@ -383,6 +393,13 @@ export function CreateSewoQuick({
   const showPsifReasonability = Boolean(activePsifExposureKey);
   const requiresBodyPart = selectedCommunication?.type === "FIRST_AID" || selectedCommunication?.type === "ACCIDENT";
   const isSubmittedSewo = Boolean(initialSewo?.status && initialSewo.status !== SEWOStatus.DRAFT);
+  const isRejectedSewo = initialSewo?.status === SEWOStatus.REJECTED;
+  const hasBlockingLinkedActions = hasOpenLinkedActions(editableCommunicationActions.map((action) => action.status));
+  const canManageStatus = Boolean(
+    initialSewo && initialSewo.status !== SEWOStatus.IN_APPROVAL && initialSewo.status !== SEWOStatus.REJECTED && initialSewo.status !== SEWOStatus.CLOSED,
+  );
+  const showLinkedActionsSection = Boolean(initialSewo || editableCommunicationActions.length);
+  const showLinkedActionCreator = Boolean(initialSewo && isSubmittedSewo);
 
   useEffect(() => {
     if (!monthKeys.length) {
@@ -428,6 +445,8 @@ export function CreateSewoQuick({
     setPhotos([]);
     setMessage("");
     setActionsMessage("");
+    setStatusReason("");
+    setLinkedActionDraft(createActionPlanRow());
     setEditableCommunicationActions(initialSewo.linkedActions.map((action) => ({ ...action, dirty: false })));
   }, [communications, initialSewo, injuryTypes, monthKeys]);
 
@@ -518,10 +537,7 @@ export function CreateSewoQuick({
         }),
       });
 
-      const json = await response.json();
-      if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? ui.updateActionError);
-      }
+      await requireApiResponse(response, ui.updateActionError);
 
       setEditableCommunicationActions((current) =>
         current.map((entry) => (entry.id === actionId ? { ...entry, dirty: false, ownerName: actionOwners.find((owner) => owner.id === entry.ownerUserId)?.name ?? entry.ownerName } : entry)),
@@ -531,6 +547,47 @@ export function CreateSewoQuick({
       setActionsMessage(error instanceof Error ? error.message : ui.updateActionError);
     } finally {
       setSavingActionId(null);
+    }
+  }
+
+  async function createLinkedAction() {
+    if (!initialSewo) return;
+
+    if (
+      !linkedActionDraft.title.trim()
+      || !linkedActionDraft.description.trim()
+      || !linkedActionDraft.ownerUserId
+    ) {
+      setActionsMessage(ui.linkedActionCreateError);
+      return;
+    }
+
+    setCreatingLinkedAction(true);
+    setActionsMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/actions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: "SEWO",
+          sewoId: initialSewo.id,
+          category: linkedActionDraft.category,
+          priority: linkedActionDraft.priority,
+          title: linkedActionDraft.title.trim(),
+          description: linkedActionDraft.description.trim(),
+          ownerUserId: linkedActionDraft.ownerUserId,
+          dueDate: linkedActionDraft.dueDate || undefined,
+        }),
+      });
+
+      await requireApiResponse(response, ui.linkedActionCreateError);
+      setActionsMessage(ui.linkedActionCreated);
+      window.location.reload();
+    } catch (error) {
+      setActionsMessage(error instanceof Error ? error.message : ui.linkedActionCreateError);
+    } finally {
+      setCreatingLinkedAction(false);
     }
   }
 
@@ -549,12 +606,17 @@ export function CreateSewoQuick({
         }),
       });
 
-      const presignJson = await presignResponse.json();
-      if (!presignResponse.ok || !presignJson.ok) {
-        throw new Error(presignJson.message ?? ui.preparePhotoUploadError);
+      const presignJson = await requireApiResponse<{
+        uploadUrl: string;
+        key: string;
+      }>(presignResponse, ui.preparePhotoUploadError);
+      const presignData = presignJson.data;
+
+      if (!presignData) {
+        throw new Error(ui.preparePhotoUploadError);
       }
 
-      const putResponse = await fetch(presignJson.data.uploadUrl, {
+      const putResponse = await fetch(presignData.uploadUrl, {
         method: "PUT",
         headers: {
           "content-type": photo.type || "image/jpeg",
@@ -567,7 +629,7 @@ export function CreateSewoQuick({
       }
 
       uploaded.push({
-        fileKey: presignJson.data.key,
+        fileKey: presignData.key,
         fileName: photo.name,
         contentType: photo.type || "image/jpeg",
       });
@@ -576,8 +638,13 @@ export function CreateSewoQuick({
     return uploaded;
   }
 
-  async function saveSewo(mode: "draft" | "submit") {
+  async function saveSewo(mode: "draft" | "save" | "submit") {
     const resolvedCauseCatalogVersionId = initialSewo?.causeCatalogVersionId ?? causeCatalogVersionId;
+    const fallbackErrorMessage = mode === "draft"
+      ? ui.draftSaveError
+      : initialSewo
+        ? ui.updateError
+        : ui.createError;
 
     if (!resolvedCauseCatalogVersionId) {
       setMessage(ui.noCauseCatalog);
@@ -594,6 +661,8 @@ export function CreateSewoQuick({
     try {
       const attachments = photos.length ? await uploadPhotos() : [];
       const isDraft = mode === "draft";
+      const isSubmission = mode === "submit";
+      const isResubmission = Boolean(initialSewo && initialSewo.status === SEWOStatus.REJECTED && isSubmission);
       const resolvedEventClassification = eventClassification.trim()
         || selectedCommunication?.typeLabel
         || initialSewo?.eventClassification
@@ -620,9 +689,16 @@ export function CreateSewoQuick({
         }));
       const nextStatus = isDraft
         ? SEWOStatus.DRAFT
-        : initialSewo?.status && initialSewo.status !== SEWOStatus.DRAFT
-          ? initialSewo.status
-          : SEWOStatus.IN_APPROVAL;
+        : isSubmission
+          ? getNextSewoSubmissionStatus(initialSewo?.status ?? null)
+          : (initialSewo?.status as SEWOStatus | undefined) ?? SEWOStatus.DRAFT;
+      const successMessage = isDraft
+        ? ui.draftSaved
+        : isResubmission
+          ? ui.resubmitSuccess
+          : initialSewo
+            ? ui.updateSuccess
+            : ui.createSuccess;
 
       const response = await fetch(initialSewo ? `/api/plants/${plant}/sewo/${initialSewo.id}` : `/api/plants/${plant}/sewo`, {
         method: initialSewo ? "PUT" : "POST",
@@ -665,27 +741,70 @@ export function CreateSewoQuick({
           causeCatalogVersionId: resolvedCauseCatalogVersionId,
           causeSelections: [],
           status: nextStatus,
-          actionPlans: isDraft ? [] : completeActionPlans,
+          actionPlans: isSubmission ? completeActionPlans : [],
         }),
       });
 
-      const json = await response.json();
-      const successMessage = isDraft ? ui.draftSaved : initialSewo ? ui.updateSuccess : ui.createSuccess;
-      const errorMessage = isDraft ? ui.draftSaveError : initialSewo ? ui.updateError : ui.createError;
-      setMessage(json.ok ? successMessage : json.message ?? errorMessage);
-      if (json.ok) {
-        window.location.reload();
+      const json = await parseApiResponse(response);
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? fallbackErrorMessage);
       }
+
+      setMessage(successMessage);
+      window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : mode === "draft" ? ui.draftSaveError : initialSewo ? ui.updateError : ui.createError);
+      setMessage(error instanceof Error ? error.message : fallbackErrorMessage);
     } finally {
       setLoading(false);
     }
   }
 
+  async function changeStatus() {
+    if (!initialSewo) return;
+
+    const trimmedReason = statusReason.trim();
+
+    if (trimmedReason.length < 5) {
+      setMessage(ui.statusReasonRequired);
+      return;
+    }
+
+    if (hasBlockingLinkedActions) {
+      setMessage(ui.cannotCloseWithOpenActions);
+      return;
+    }
+
+    setChangingStatus(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/sewo/${initialSewo.id}/manual-close`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: trimmedReason }),
+      });
+
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) {
+        if (json?.errorCode === "SEWO_HAS_OPEN_ACTIONS") {
+          throw new Error(ui.cannotCloseWithOpenActions);
+        }
+        throw new Error(json?.message ?? ui.statusChangeFailed);
+      }
+
+      setMessage(ui.statusChangeSaved);
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : ui.statusChangeFailed);
+    } finally {
+      setChangingStatus(false);
+    }
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    await saveSewo("submit");
+    await saveSewo(!initialSewo || initialSewo.status === SEWOStatus.DRAFT || isRejectedSewo ? "submit" : "save");
   }
 
   return (
@@ -693,6 +812,58 @@ export function CreateSewoQuick({
       <div className="flex flex-col gap-2">
         <h3 className="text-lg font-semibold text-slate-900">{initialSewo ? ui.editSewoTitle : ui.investigationTitle}</h3>
       </div>
+
+      {isRejectedSewo || initialSewo?.approvalComment ? (
+        <section className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-rose-700">{ui.rejectionFeedbackTitle}</h4>
+          <div className="grid gap-3 md:grid-cols-2">
+            {initialSewo?.approvedByName ? (
+              <p className="text-sm text-slate-700">
+                <span className="font-semibold text-slate-900">{ui.rejectedBy}:</span> {initialSewo.approvedByName}
+              </p>
+            ) : null}
+            {initialSewo?.approvedAt ? (
+              <p className="text-sm text-slate-700">
+                <span className="font-semibold text-slate-900">{ui.reviewedAt}:</span> {new Date(initialSewo.approvedAt).toLocaleString()}
+              </p>
+            ) : null}
+          </div>
+          {initialSewo?.approvalComment ? (
+            <p className="whitespace-pre-line rounded-xl border border-rose-100 bg-white px-4 py-3 text-sm text-slate-700">
+              {initialSewo.approvalComment}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {canManageStatus ? (
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.statusManagement}</h4>
+            <span className="text-xs text-slate-500">{ui.linkedActions}: {editableCommunicationActions.length}</span>
+          </div>
+          <textarea
+            value={statusReason}
+            onChange={(event) => setStatusReason(event.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            placeholder={ui.statusChangeReason}
+            disabled={changingStatus}
+          />
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={changingStatus || hasBlockingLinkedActions}
+              onClick={() => void changeStatus()}
+            >
+              {changingStatus ? ui.savingAction : ui.closeSewo}
+            </Button>
+          </div>
+          {hasBlockingLinkedActions ? <p className="text-sm text-amber-700">{ui.cannotCloseWithOpenActions}</p> : null}
+        </section>
+      ) : null}
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -839,16 +1010,18 @@ export function CreateSewoQuick({
             </div>
           </section>
 
-          {editableCommunicationActions.length ? (
+          {showLinkedActionsSection ? (
             <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.openActionsFromCommunication}</h4>
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    {initialSewo ? ui.linkedActions : ui.openActionsFromCommunication}
+                  </h4>
                 </div>
                 {actionsMessage ? <p className="text-sm text-slate-700">{actionsMessage}</p> : null}
               </div>
               <div className="space-y-3">
-                {editableCommunicationActions.map((action) => (
+                {editableCommunicationActions.length ? editableCommunicationActions.map((action) => (
                   <div key={action.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <div>
@@ -906,8 +1079,62 @@ export function CreateSewoQuick({
                       </label>
                     </div>
                   </div>
-                ))}
+                )) : <p className="text-sm text-slate-500">{ui.noLinkedActions}</p>}
               </div>
+
+              {showLinkedActionCreator ? (
+                <div className="space-y-3 rounded-xl border border-dashed border-[var(--brand-300)] bg-[var(--brand-50)] p-4">
+                  <h5 className="text-sm font-semibold text-slate-900">{ui.createLinkedAction}</h5>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
+                      <input value={linkedActionDraft.title} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
+                      <select value={linkedActionDraft.category} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, category: event.target.value as ActionCategory }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
+                        <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
+                        <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="space-y-1 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
+                    <textarea value={linkedActionDraft.description} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  </label>
+
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
+                      <select value={linkedActionDraft.ownerUserId} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, ownerUserId: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value="">{ui.selectOwner}</option>
+                        {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
+                      <select value={linkedActionDraft.priority} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, priority: event.target.value as ActionPriority }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
+                        <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
+                        <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
+                      <input type="date" value={linkedActionDraft.dueDate} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, dueDate: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="button" size="sm" onClick={() => void createLinkedAction()} disabled={creatingLinkedAction}>
+                      {creatingLinkedAction ? ui.savingAction : ui.createLinkedAction}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
@@ -1220,7 +1447,8 @@ export function CreateSewoQuick({
             </label>
           </section>
 
-          <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
+          {!isSubmittedSewo ? (
+            <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.actionPlan}</h4>
@@ -1289,7 +1517,8 @@ export function CreateSewoQuick({
                 </div>
               ))}
             </div>
-          </section>
+            </section>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-3">
             {!isSubmittedSewo ? (
@@ -1297,7 +1526,20 @@ export function CreateSewoQuick({
                 {loading ? ui.savingAction : ui.saveDraft}
               </Button>
             ) : null}
-            <Button size="sm" type="submit" disabled={loading}>{loading ? ui.savingAction : isSubmittedSewo ? ui.updateSewo : ui.createSewo}</Button>
+            {isRejectedSewo ? (
+              <Button size="sm" type="button" variant="secondary" disabled={loading} onClick={() => void saveSewo("save")}>
+                {loading ? ui.savingAction : ui.saveChanges}
+              </Button>
+            ) : null}
+            <Button size="sm" type="submit" disabled={loading}>
+              {loading
+                ? ui.savingAction
+                : !initialSewo || initialSewo.status === SEWOStatus.DRAFT
+                  ? ui.createSewo
+                  : isRejectedSewo
+                    ? ui.resubmitSewo
+                    : ui.saveChanges}
+            </Button>
             {message ? <p className="text-sm text-slate-700">{message}</p> : null}
           </div>
         </>

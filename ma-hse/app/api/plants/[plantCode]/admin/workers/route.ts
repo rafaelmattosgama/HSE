@@ -8,7 +8,7 @@ import { createWorkerInput, deleteWorkerInput } from "@/lib/validation/dtos";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
@@ -22,40 +22,99 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, createWorkerInput);
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
-  const worker = await prisma.employeeDirectory.upsert({
-    where: {
-      plantId_employeeNo: {
+  const employeeNo = parsed.data.employeeNo.trim();
+  const name = parsed.data.name.trim();
+  const dept = parsed.data.dept?.trim() || null;
+
+  if (parsed.data.id) {
+    const existing = await prisma.employeeDirectory.findFirst({
+      where: {
+        id: parsed.data.id,
         plantId: plant.id,
-        employeeNo: parsed.data.employeeNo.trim(),
       },
-    },
-    update: {
-      name: parsed.data.name.trim(),
-      dept: parsed.data.dept?.trim() || null,
-      isActive: true,
-    },
-    create: {
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existing) {
+      return fail("NOT_FOUND", "Worker not found for the selected plant.", 404);
+    }
+
+    const duplicate = await prisma.employeeDirectory.findFirst({
+      where: {
+        plantId: plant.id,
+        employeeNo,
+        id: {
+          not: existing.id,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (duplicate) {
+      return fail("DUPLICATE_EMPLOYEE_NO", "A worker with this employee number already exists for the selected plant.", 409);
+    }
+
+    const worker = await prisma.employeeDirectory.update({
+      where: { id: existing.id },
+      data: {
+        employeeNo,
+        name,
+        dept,
+        isActive: true,
+      },
+    });
+
+    return ok({ worker });
+  }
+
+  const duplicate = await prisma.employeeDirectory.findFirst({
+    where: {
       plantId: plant.id,
-      employeeNo: parsed.data.employeeNo.trim(),
-      name: parsed.data.name.trim(),
-      dept: parsed.data.dept?.trim() || null,
-      isActive: true,
+      employeeNo,
     },
   });
+
+  if (duplicate?.isActive) {
+    return fail("DUPLICATE_EMPLOYEE_NO", "A worker with this employee number already exists for the selected plant.", 409);
+  }
+
+  const worker = duplicate
+    ? await prisma.employeeDirectory.update({
+        where: { id: duplicate.id },
+        data: {
+          employeeNo,
+          name,
+          dept,
+          isActive: true,
+        },
+      })
+    : await prisma.employeeDirectory.create({
+        data: {
+          plantId: plant.id,
+          employeeNo,
+          name,
+          dept,
+          isActive: true,
+        },
+      });
 
   return ok({ worker }, { status: 201 });
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, deleteWorkerInput);
