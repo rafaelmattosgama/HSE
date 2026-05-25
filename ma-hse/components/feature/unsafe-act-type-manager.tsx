@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { groupUnsafeActTypes } from "@/components/feature/unsafe-act-type-select";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 type UnsafeActType = {
   id: string;
@@ -26,9 +28,11 @@ function sortTypes(types: UnsafeActType[]) {
 export function UnsafeActTypeManager({
   initialTypes,
   plantCode,
+  labels = getStaticN0MasterDataUi("en"),
 }: {
   initialTypes: UnsafeActType[];
   plantCode?: string;
+  labels?: N0MasterDataUi;
 }) {
   const pathname = usePathname();
   const plant = plantCode ?? pathname.split("/")[2];
@@ -58,7 +62,7 @@ export function UnsafeActTypeManager({
     setCode(type.code ?? "");
     setCategory(type.category ?? "");
     setName(type.name);
-    setMessage(`Editing ${type.code ?? type.name}.`);
+    setMessage(formatMasterDataMessage(labels.unsafeActManager.editing, { code: type.code ?? type.name }));
   }
 
   async function submit(event: React.FormEvent) {
@@ -80,22 +84,22 @@ export function UnsafeActTypeManager({
       const json = await response.json();
 
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to save unsafe act type");
+        throw new Error(json.message ?? labels.unsafeActManager.saveError);
       }
 
       const saved = json.data.type as UnsafeActType;
       setTypes((current) => sortTypes([...current.filter((entry) => entry.id !== saved.id && entry.code !== saved.code), saved]));
       clearForm();
-      setMessage("Unsafe act type saved.");
+      setMessage(labels.unsafeActManager.saved);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save unsafe act type");
+      setMessage(error instanceof Error ? error.message : labels.unsafeActManager.saveError);
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteType(type: UnsafeActTypeOption) {
-    if (!window.confirm(`Delete unsafe act type "${type.name}"? Existing communications keep their saved reference.`)) {
+    if (!window.confirm(formatMasterDataMessage(labels.unsafeActManager.deleteConfirm, { name: type.name }))) {
       return;
     }
 
@@ -111,14 +115,14 @@ export function UnsafeActTypeManager({
       const json = await response.json();
 
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to delete unsafe act type");
+        throw new Error(json.message ?? labels.unsafeActManager.deleteError);
       }
 
       setTypes((current) => current.filter((entry) => entry.id !== type.id));
       if (editingId === type.id) clearForm();
-      setMessage("Unsafe act type removed from active lists.");
+      setMessage(labels.unsafeActManager.removed);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to delete unsafe act type");
+      setMessage(error instanceof Error ? error.message : labels.unsafeActManager.deleteError);
     } finally {
       setDeletingId(null);
     }
@@ -126,33 +130,31 @@ export function UnsafeActTypeManager({
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <header>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Unsafe Act Types</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Configure the grouped options used when a communication is classified as Unsafe Act.
-        </p>
+      <header className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.sections.unsafeActType.title}</h2>
+        <HelpPopover title={labels.sections.unsafeActType.title} body={labels.unsafeActManager.help} buttonLabel={labels.helpButton} />
       </header>
 
       <form onSubmit={submit} className="mt-4 grid gap-3 lg:grid-cols-[0.8fr_1fr_1.2fr_auto] lg:items-end">
         <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Code</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.professionalRisks.code}</span>
           <input value={code} onChange={(event) => setCode(event.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required disabled={Boolean(editingId)} />
         </label>
         <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.category}</span>
           <input value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
         </label>
         <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subcategory option</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.unsafeActManager.subcategoryOption}</span>
           <input value={name} onChange={(event) => setName(event.target.value)} className="h-10 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
         </label>
         <div className="flex gap-2">
           <Button type="submit" size="sm" disabled={saving}>
-            {saving ? "Saving..." : editingId ? "Save edit" : "Add type"}
+            {saving ? labels.saving : editingId ? labels.saveChanges : labels.unsafeActManager.addType}
           </Button>
           {editingId ? (
             <Button type="button" size="sm" variant="secondary" onClick={clearForm}>
-              Cancel
+              {labels.cancel}
             </Button>
           ) : null}
         </div>
@@ -168,10 +170,10 @@ export function UnsafeActTypeManager({
                   <p className="min-w-0 truncate">{type.code ? `${type.code} - ` : ""}{type.name}</p>
                   <div className="flex shrink-0 items-center gap-2">
                     <button type="button" className="font-medium text-slate-600 hover:text-slate-900" onClick={() => startEdit(type)} disabled={Boolean(deletingId)}>
-                      Edit
+                      {labels.edit}
                     </button>
                     <button type="button" className="font-medium text-red-700 hover:text-red-900" onClick={() => void deleteType(type)} disabled={Boolean(deletingId)}>
-                      {deletingId === type.id ? "Deleting..." : "Delete"}
+                      {deletingId === type.id ? labels.updating : labels.deactivate}
                     </button>
                   </div>
                 </div>

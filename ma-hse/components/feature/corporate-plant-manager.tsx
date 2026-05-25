@@ -637,6 +637,16 @@ export function CorporatePlantManager({
                 title={text.communicationPyramid}
                 description={pyramidDescriptionLabel}
                 counts={activePlant ? activePlant.communicationPyramid : totalCommunicationPyramid}
+                helpLabel={text.help}
+                labels={{
+                  fatal: text.pyramidFatal,
+                  seriousInjury: text.pyramidSeriousInjury,
+                  minorInjury: text.pyramidMinorInjury,
+                  firstAid: text.pyramidFirstAid,
+                  nearMiss: text.pyramidNearMiss,
+                  unsafeCondition: text.pyramidUnsafeCondition,
+                  unsafeAct: text.pyramidUnsafeAct,
+                }}
               />
             )}
 

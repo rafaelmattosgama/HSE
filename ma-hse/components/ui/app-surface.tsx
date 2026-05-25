@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { cn } from "@/lib/utils";
 
 type Tone = "default" | "brand" | "success" | "info" | "warning" | "danger" | "violet";
@@ -19,22 +20,31 @@ export function AppHero({
   description,
   actions,
   className,
+  helpLabel = "Info",
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   className?: string;
+  helpLabel?: string;
 }) {
+  const helpTitle = typeof title === "string" ? title : "Help";
+  const helpBody = typeof description === "string" ? description : null;
+
   return (
     <header className={cn("app-hero rounded-2xl p-6", className)}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           {eyebrow ? <p className="app-section-eyebrow">{eyebrow}</p> : null}
           <h1 className="mt-1 text-2xl font-bold text-slate-900">{title}</h1>
-          {description ? <p className="mt-2 max-w-3xl text-sm text-slate-600">{description}</p> : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions || helpBody ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {helpBody ? <HelpPopover title={helpTitle} body={helpBody} buttonLabel={helpLabel} /> : null}
+            {actions}
+          </div>
+        ) : null}
       </div>
     </header>
   );

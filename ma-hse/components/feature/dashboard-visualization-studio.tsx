@@ -9,6 +9,7 @@ import {
 } from "@/lib/dashboard-visualization";
 import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 import { AppCard, AppSectionHeader } from "@/components/ui/app-surface";
+import { HelpPopover } from "@/components/ui/help-popover";
 
 type MetricId =
   | "validatedEvents"
@@ -560,6 +561,7 @@ export function DashboardVisualizationStudio({
         title={<span className="sr-only">{text.visualAnalysis}</span>}
         actions={
           <div className="flex flex-wrap gap-2">
+          <HelpPopover title={text.visualAnalysis} body={text.visualAnalysisDescription} buttonLabel={text.help} />
           {(["bar", "circular", "points", "pareto"] as ChartType[]).map((type) => {
             const disabled = !trendChartsEnabled && (type === "bar" || type === "points");
             return (
@@ -581,7 +583,6 @@ export function DashboardVisualizationStudio({
           </div>
         }
       />
-      <p className="mt-1 text-sm text-slate-600">{text.visualAnalysisDescription}</p>
 
       <div className="mt-4 space-y-4">
           {plants.length > 1 ? (

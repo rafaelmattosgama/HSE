@@ -93,7 +93,7 @@ export default async function PlantLayout({
           userId: session.user.id,
           plantId: plantRecord.id,
           channel: {
-            in: ["REPEATABILITY_ALERT"],
+            in: ["REPEATABILITY_ALERT", "SEWO_REJECTED"],
           },
           status: "UNREAD",
         },

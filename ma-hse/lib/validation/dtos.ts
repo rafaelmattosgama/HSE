@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const optionalUuid = z.string().uuid().optional().nullable();
 const noDigits = /\d/;
+const futureCommunicationDatetimeMessage = "A data e hora da comunicação não podem ser posteriores ao momento atual.";
 
 const communicationInputShape = z.object({
     type: z.nativeEnum(CommunicationType),
@@ -53,8 +54,13 @@ const communicationInputShape = z.object({
       .optional(),
   });
 
-export const createCommunicationInput = communicationInputShape
-  .superRefine((value, ctx) => {
+type CommunicationValidationValue = z.infer<typeof communicationInputShape>;
+
+function validateCommunicationPayload(
+  value: CommunicationValidationValue,
+  ctx: z.RefinementCtx,
+  options: { requireUnsafeActType: boolean },
+) {
     const baseRequired = ["eventDatetime", "reporterName", "description"] as const;
     baseRequired.forEach((field) => {
       if (!value[field]) {
@@ -66,6 +72,14 @@ export const createCommunicationInput = communicationInputShape
       }
     });
 
+    if (value.eventDatetime && value.eventDatetime.getTime() > Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: futureCommunicationDatetimeMessage,
+        path: ["eventDatetime"],
+      });
+    }
+
     const requiresInvolvedWorker = value.type === CommunicationType.UNSAFE_ACT || value.type === CommunicationType.NEAR_MISS;
 
     if (requiresInvolvedWorker && !value.targetText && !value.targetEmployeeId && !value.targetEmployeeNo) {
@@ -76,7 +90,7 @@ export const createCommunicationInput = communicationInputShape
       });
     }
 
-    if (value.type === CommunicationType.UNSAFE_ACT && !value.unsafeActTypeId) {
+    if (options.requireUnsafeActType && value.type === CommunicationType.UNSAFE_ACT && !value.unsafeActTypeId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Unsafe act type is required",
@@ -109,68 +123,23 @@ export const createCommunicationInput = communicationInputShape
         });
       }
     }
+}
+
+export const createCommunicationInput = communicationInputShape
+  .superRefine((value, ctx) => {
+    validateCommunicationPayload(value, ctx, { requireUnsafeActType: true });
   });
 
-export const createPublicReportCommunicationInput = createCommunicationInput;
+export const createPublicReportCommunicationInput = communicationInputShape
+  .superRefine((value, ctx) => {
+    validateCommunicationPayload(value, ctx, { requireUnsafeActType: false });
+  });
 
 export const updateCommunicationInput = communicationInputShape.omit({
   attachments: true,
   quickAction: true,
 }).superRefine((value, ctx) => {
-  const baseRequired = ["eventDatetime", "reporterName", "description"] as const;
-  baseRequired.forEach((field) => {
-    if (!value[field]) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `${field} is required`,
-        path: [field],
-      });
-    }
-  });
-
-  const requiresInvolvedWorker = value.type === CommunicationType.UNSAFE_ACT || value.type === CommunicationType.NEAR_MISS;
-
-  if (requiresInvolvedWorker && !value.targetText && !value.targetEmployeeId && !value.targetEmployeeNo) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "This communication requires involved worker information",
-      path: ["targetText"],
-    });
-  }
-
-  if (value.type === CommunicationType.UNSAFE_ACT && !value.unsafeActTypeId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Unsafe act type is required",
-      path: ["unsafeActTypeId"],
-    });
-  }
-
-  if (value.type === CommunicationType.FIRST_AID || value.type === CommunicationType.ACCIDENT) {
-    if (!value.targetEmployeeId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Involved worker is required",
-        path: ["targetEmployeeId"],
-      });
-    }
-
-    if (!value.bodyPartId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Body part affected is required",
-        path: ["bodyPartId"],
-      });
-    }
-
-    if (value.isFatal && value.returnDate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Fatal injuries cannot have a return date",
-        path: ["returnDate"],
-      });
-    }
-  }
+  validateCommunicationPayload(value, ctx, { requireUnsafeActType: true });
 });
 
 export const validateCommunicationInput = z.object({
@@ -180,6 +149,10 @@ export const validateCommunicationInput = z.object({
 });
 
 export const manualCloseCommunicationInput = z.object({
+  reason: z.string().min(5),
+});
+
+export const manualCloseSewoInput = z.object({
   reason: z.string().min(5),
 });
 
@@ -265,6 +238,7 @@ export const createSMATAuditInput = z.object({
 
 export const closeActionInput = z.object({
   closureComment: z.string().min(5),
+  closedAt: z.coerce.date(),
   evidence: z
     .array(
       z.object({
@@ -279,6 +253,7 @@ export const closeActionInput = z.object({
 export const bulkCloseActionInput = z.object({
   actionIds: z.array(z.string().uuid()).min(1),
   closureComment: z.string().min(5),
+  closedAt: z.coerce.date(),
   evidence: z
     .array(
       z.object({
@@ -517,13 +492,15 @@ export const updateMapFeatureInput = z.object({
 });
 
 export const createMasterDataItemInput = z.object({
-  type: z.enum(["area", "workstation"]),
+  id: z.string().uuid().optional(),
+  type: z.enum(["area", "workstation", "equipment", "nearMissType", "unsafeActType", "unsafeConditionType", "injuryType"]),
   code: z.string().min(1),
   name: z.string().min(2),
+  category: z.string().optional(),
 });
 
 export const deleteMasterDataItemInput = z.object({
-  type: z.enum(["area", "workstation"]),
+  type: z.enum(["area", "workstation", "equipment", "nearMissType", "unsafeActType", "unsafeConditionType", "injuryType"]),
   id: z.string().uuid(),
 });
 
@@ -550,6 +527,7 @@ export const deleteUnsafeActTypeInput = z.object({
 });
 
 export const createWorkerInput = z.object({
+  id: z.string().uuid().optional(),
   employeeNo: z.string().min(1),
   name: z.string().min(2),
   dept: z.string().optional(),
@@ -717,6 +695,7 @@ export type CreateCommunicationInput = z.infer<typeof createCommunicationInput>;
 export type UpdateCommunicationInput = z.infer<typeof updateCommunicationInput>;
 export type ValidateCommunicationInput = z.infer<typeof validateCommunicationInput>;
 export type ManualCloseCommunicationInput = z.infer<typeof manualCloseCommunicationInput>;
+export type ManualCloseSewoInput = z.infer<typeof manualCloseSewoInput>;
 export type CreateActionInput = z.infer<typeof createActionInput>;
 export type CreateSMATAuditInput = z.infer<typeof createSMATAuditInput>;
 export type CloseActionInput = z.infer<typeof closeActionInput>;

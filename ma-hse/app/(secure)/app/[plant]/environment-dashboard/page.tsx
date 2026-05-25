@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { EnvironmentDashboardBoard } from "@/components/feature/environment-dashboard-board";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { buildEnvironmentDashboardPlant } from "@/lib/environment-dashboard";
 import { resolveDashboardPeriod, type DashboardSearchParams } from "@/lib/dashboard-period";
 import { buildMonthBuckets } from "@/lib/dashboard-visualization";
@@ -22,14 +23,14 @@ function hasDateFilter(searchParams: DashboardSearchParams) {
   );
 }
 
-function resolveDefaultEnvironmentPeriod(latestRow: { year: number; month: number } | null, now = new Date()) {
+function resolveDefaultEnvironmentPeriod(latestRow: { year: number; month: number } | null, noDataLabel: string, now = new Date()) {
   const year = latestRow?.year ?? now.getUTCFullYear();
   const month = latestRow?.month ?? 12;
   const from = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
   const to = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
   return {
-    label: latestRow ? `${from.toISOString().slice(0, 10)} - ${to.toISOString().slice(0, 10)}` : "No monthly input data",
+    label: latestRow ? `${from.toISOString().slice(0, 10)} - ${to.toISOString().slice(0, 10)}` : noDataLabel,
     from,
     to,
     year,
@@ -74,6 +75,10 @@ function getMonthLabel(locale: string, monthIndex: number) {
   return `${String(monthIndex + 1).padStart(2, "0")} - ${localizedName}`;
 }
 
+function formatUiLabel(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce((label, [key, value]) => label.replace(`{${key}}`, String(value)), template);
+}
+
 export default async function EnvironmentDashboardPage({
   params,
   searchParams,
@@ -102,7 +107,7 @@ export default async function EnvironmentDashboardPage({
       _max: { year: true },
     }),
   ]);
-  const period = filterApplied ? resolveDashboardPeriod(currentSearchParams) : resolveDefaultEnvironmentPeriod(latestInputRow);
+  const period = filterApplied ? resolveDashboardPeriod(currentSearchParams) : resolveDefaultEnvironmentPeriod(latestInputRow, ui.dashboard.noMonthlyInputData);
   const monthBuckets = buildMonthBuckets(period.from, period.to);
   const monthlyInputFilter = buildMonthlyInputFilter(monthBuckets);
   const previousMonthlyInputFilter = buildMonthlyInputFilter(previousYearBuckets(monthBuckets));
@@ -158,21 +163,22 @@ export default async function EnvironmentDashboardPage({
     value: String(index + 1),
     label: getMonthLabel(session?.user.language ?? plantRow.defaultLanguage ?? "en", index),
   }));
+  const environmentHelp = formatUiLabel(ui.dashboard.environmentDashboardHelp, { plant: plantRow.name });
 
   return (
     <>
       <header className="app-hero rounded-2xl p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Environment dashboard</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{ui.dashboard.environmentDashboardEyebrow}</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">{ui.modules.environmentDashboard}</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Visual overview of monthly environmental indicators for {plantRow.name}.
-            </p>
           </div>
-          <Link href={`/app/${plant}/monthly-inputs`} className="app-toolbar h-11 whitespace-nowrap px-4 text-emerald-800">
-            Update monthly inputs
-          </Link>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <HelpPopover title={ui.modules.environmentDashboard} body={environmentHelp} buttonLabel={ui.dashboard.help} />
+            <Link href={`/app/${plant}/monthly-inputs`} className="app-toolbar h-11 whitespace-nowrap px-4 text-emerald-800">
+              {ui.dashboard.updateMonthlyInputs}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -247,6 +253,7 @@ export default async function EnvironmentDashboardPage({
         isDefaultPeriod={!filterApplied}
         periodMonthsCount={monthBuckets.length}
         storageKeyBase={`ma-hse-environment-${plantRow.code}`}
+        labels={ui.dashboard}
       />
     </>
   );

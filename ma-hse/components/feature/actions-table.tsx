@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
 
 type EvidenceRow = {
@@ -18,6 +19,7 @@ type ActionRow = {
   status: string;
   ownerName: string;
   dueDate: string;
+  closedDate: string | null;
   local: string;
   sourceLabel: string;
   sourceHref: string | null;
@@ -27,6 +29,10 @@ type ActionRow = {
 };
 
 type DateSortDirection = "asc" | "desc";
+
+function todayDateInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export function ActionsTable({
   plant,
@@ -38,8 +44,10 @@ export function ActionsTable({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bulkComment, setBulkComment] = useState("");
+  const [bulkClosedAt, setBulkClosedAt] = useState(todayDateInputValue());
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [rowComments, setRowComments] = useState<Record<string, string>>({});
+  const [rowClosedDates, setRowClosedDates] = useState<Record<string, string>>({});
   const [rowFiles, setRowFiles] = useState<Record<string, File[]>>({});
   const [message, setMessage] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -107,12 +115,17 @@ export function ActionsTable({
           folder: "actions",
         }),
       });
-      const presignJson = await presignResponse.json();
-      if (!presignResponse.ok || !presignJson.ok) {
-        throw new Error(presignJson.message ?? "Failed to prepare evidence upload");
+      const presignJson = await requireApiResponse<{
+        uploadUrl: string;
+        key: string;
+      }>(presignResponse, "Failed to prepare evidence upload");
+      const presignData = presignJson.data;
+
+      if (!presignData) {
+        throw new Error("Failed to prepare evidence upload");
       }
 
-      const putResponse = await fetch(presignJson.data.uploadUrl, {
+      const putResponse = await fetch(presignData.uploadUrl, {
         method: "PUT",
         headers: { "content-type": file.type || "application/octet-stream" },
         body: file,
@@ -122,7 +135,7 @@ export function ActionsTable({
       }
 
       uploaded.push({
-        fileKey: presignJson.data.key,
+        fileKey: presignData.key,
         fileName: file.name,
         contentType: file.type || "application/octet-stream",
       });
@@ -132,8 +145,13 @@ export function ActionsTable({
 
   async function closeAction(actionId: string) {
     const comment = rowComments[actionId] ?? "";
+    const closedAt = rowClosedDates[actionId] ?? todayDateInputValue();
     if (comment.trim().length < 5) {
       setMessage("Write at least 5 characters in the closure comment.");
+      return;
+    }
+    if (!closedAt) {
+      setMessage("Select a closure date.");
       return;
     }
 
@@ -146,12 +164,13 @@ export function ActionsTable({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           closureComment: comment,
+          closedAt,
           evidence,
         }),
       });
-      const json = await response.json();
-      if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to close action");
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? "Failed to close action");
       }
       window.location.reload();
     } catch (error) {
@@ -170,6 +189,10 @@ export function ActionsTable({
       setMessage("Write at least 5 characters in the bulk closure comment.");
       return;
     }
+    if (!bulkClosedAt) {
+      setMessage("Select a closure date.");
+      return;
+    }
 
     setBusyId("bulk");
     setMessage("");
@@ -181,12 +204,13 @@ export function ActionsTable({
         body: JSON.stringify({
           actionIds: selectedIds,
           closureComment: bulkComment,
+          closedAt: bulkClosedAt,
           evidence,
         }),
       });
-      const json = await response.json();
-      if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to close selected actions");
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? "Failed to close selected actions");
       }
       window.location.reload();
     } catch (error) {
@@ -254,6 +278,10 @@ export function ActionsTable({
           <div className="flex-1">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bulk closure comment</label>
             <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="What was done to close the selected actions?" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Closure date</label>
+            <input type="date" value={bulkClosedAt} onChange={(event) => setBulkClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Photos / documents</label>
@@ -339,6 +367,10 @@ export function ActionsTable({
                               </p>
                             </div>
                             <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closure date</p>
+                              <p className="mt-2 text-sm text-slate-700">{row.closedDate ?? "-"}</p>
+                            </div>
+                            <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence already attached</p>
                               <div className="mt-2 space-y-1 text-sm text-slate-700">
                                 {row.evidence.length ? row.evidence.map((item) => <p key={item.id}>{item.fileName}</p>) : <p>-</p>}
@@ -348,6 +380,16 @@ export function ActionsTable({
                           {isOpen ? (
                             <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                               <h3 className="text-sm font-semibold text-slate-900">Close action</h3>
+                              <label className="space-y-1 text-sm">
+                                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Closure date</span>
+                                <input
+                                  type="date"
+                                  value={rowClosedDates[row.id] ?? todayDateInputValue()}
+                                  onChange={(event) => setRowClosedDates((current) => ({ ...current, [row.id]: event.target.value }))}
+                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                  required
+                                />
+                              </label>
                               <textarea
                                 value={rowComments[row.id] ?? ""}
                                 onChange={(event) => setRowComments((current) => ({ ...current, [row.id]: event.target.value }))}

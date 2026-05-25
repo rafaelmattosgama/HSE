@@ -4,15 +4,19 @@ import { useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
+import { getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 export function SafetyDaysAdminEditor({
   initialManualLastAccidentDate,
   initialHistoricalRecordDays,
   initialHistoricalRecordStartDate,
+  labels = getStaticN0MasterDataUi("en"),
 }: {
   initialManualLastAccidentDate: string | null;
   initialHistoricalRecordDays: number | null;
   initialHistoricalRecordStartDate: string | null;
+  labels?: N0MasterDataUi;
 }) {
   const pathname = usePathname();
   const plant = pathname.split("/")[2];
@@ -39,12 +43,12 @@ export function SafetyDaysAdminEditor({
       const json = await response.json();
 
       if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Error saving Days without accidents settings");
+        throw new Error(json.message ?? labels.safetyDays.error);
       }
 
-      setMessage("Days without accidents settings saved.");
+      setMessage(labels.safetyDays.saved);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Error saving Days without accidents settings");
+      setMessage(error instanceof Error ? error.message : labels.safetyDays.error);
     } finally {
       setSaving(false);
     }
@@ -56,17 +60,17 @@ export function SafetyDaysAdminEditor({
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
           <CalendarDays className="h-5 w-5" />
         </span>
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900">Days without accidents</h3>
-          <p className="mt-1 text-xs text-slate-600">
-            Set the last accident date used by the Safety Dashboard and register a historical record from before this application existed.
-          </p>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-900">{labels.safetyDays.title}</h3>
+            <HelpPopover title={labels.safetyDays.title} body={labels.safetyDays.help} buttonLabel={labels.helpButton} />
+          </div>
         </div>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last accident date</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.safetyDays.lastAccidentDate}</span>
           <input
             type="date"
             value={manualLastAccidentDate}
@@ -75,7 +79,7 @@ export function SafetyDaysAdminEditor({
           />
         </label>
         <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Historical record days</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.safetyDays.historicalRecordDays}</span>
           <input
             type="number"
             min="0"
@@ -87,7 +91,7 @@ export function SafetyDaysAdminEditor({
           />
         </label>
         <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Record start date</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.safetyDays.recordStartDate}</span>
           <input
             type="date"
             value={historicalRecordStartDate}
@@ -99,7 +103,7 @@ export function SafetyDaysAdminEditor({
 
       <div className="mt-4 flex justify-end">
         <Button type="button" size="sm" onClick={save} disabled={saving}>
-          {saving ? "Saving..." : "Save settings"}
+          {saving ? labels.saving : labels.safetyDays.saveSettings}
         </Button>
       </div>
 

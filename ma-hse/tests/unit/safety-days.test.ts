@@ -13,7 +13,7 @@ describe("buildSafetyDaysSummary", () => {
     });
 
     expect(summary.currentDays).toBe(10);
-    expect(summary.recordDays).toBe(22);
+    expect(summary.recordDays).toBe(21);
     expect(summary.lastAccidentDate).toBe("2026-02-01");
     expect(summary.source).toBe("recorded");
   });
@@ -27,7 +27,7 @@ describe("buildSafetyDaysSummary", () => {
     });
 
     expect(summary.currentDays).toBe(7);
-    expect(summary.recordDays).toBe(26);
+    expect(summary.recordDays).toBe(25);
     expect(summary.lastAccidentDate).toBe("2026-02-05");
     expect(summary.source).toBe("manual");
   });
@@ -43,6 +43,23 @@ describe("buildSafetyDaysSummary", () => {
     expect(summary.recordDays).toBe(15);
     expect(summary.lastAccidentDate).toBeNull();
     expect(summary.source).toBe("plant-start");
+  });
+
+  it("starts counting on the day after the last injury", () => {
+    const sameDaySummary = buildSafetyDaysSummary({
+      plantCreatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      injuryDates: [new Date("2026-02-01T10:00:00.000Z")],
+      today: new Date("2026-02-01T12:00:00.000Z"),
+    });
+    const summary = buildSafetyDaysSummary({
+      plantCreatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      injuryDates: [new Date("2026-02-01T10:00:00.000Z")],
+      today: new Date("2026-02-02T12:00:00.000Z"),
+    });
+
+    expect(sameDaySummary.currentDays).toBe(0);
+    expect(summary.currentDays).toBe(1);
+    expect(summary.lastAccidentDate).toBe("2026-02-01");
   });
 
   it("keeps the current counter and applies a manual historical record", () => {

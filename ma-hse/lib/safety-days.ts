@@ -46,6 +46,10 @@ function daysBetweenDateKeys(from: string, to: string) {
   return Math.max(0, Math.floor((toDate.getTime() - fromDate.getTime()) / DAY_MS));
 }
 
+function daysBetweenAccidents(previousAccidentDate: string, nextAccidentDate: string) {
+  return Math.max(0, daysBetweenDateKeys(previousAccidentDate, nextAccidentDate) - 1);
+}
+
 function uniqueSortedDateKeys(dateKeys: string[]) {
   return Array.from(new Set(dateKeys)).sort((left, right) => left.localeCompare(right));
 }
@@ -95,11 +99,12 @@ export function buildSafetyDaysSummary(input: {
     manualKey === lastAccidentDate && !recordedKeys.some((dateKey) => dateKey > manualKey)
       ? "manual"
       : "recorded";
-  const firstBoundary = plantCreatedKey < accidentKeys[0] ? [plantCreatedKey] : [];
-  const timeline = [...firstBoundary, ...accidentKeys, todayKey];
+  const closedPeriods = accidentKeys.slice(1).map((dateKey, index) => daysBetweenAccidents(accidentKeys[index], dateKey));
+  const plantStartPeriod = plantCreatedKey < accidentKeys[0] ? daysBetweenDateKeys(plantCreatedKey, accidentKeys[0]) : 0;
   const automaticRecordDays = Math.max(
     currentDays,
-    ...timeline.slice(1).map((dateKey, index) => daysBetweenDateKeys(timeline[index], dateKey)),
+    plantStartPeriod,
+    ...closedPeriods,
   );
   const recordDays = Math.max(automaticRecordDays, historicalRecordDays ?? 0);
 

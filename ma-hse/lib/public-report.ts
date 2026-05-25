@@ -9,6 +9,7 @@ type ReportText = {
   typeNearMiss: string;
   typeFirstAid: string;
   dateTime: string;
+  futureDatetime: string;
   reporterName: string;
   reporterNameNoNumbers: string;
   reporterNumber: string;
@@ -47,6 +48,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Near Miss",
     typeFirstAid: "First Aid",
     dateTime: "Date and time",
+    futureDatetime: "The communication date and time cannot be later than the current moment.",
     reporterName: "Reporter name",
     reporterNameNoNumbers: "Reporter name cannot contain numbers",
     reporterNumber: "Reporter number",
@@ -75,7 +77,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     submitFailed: "Submission failed",
   },
   pt: {
-    title: "Relatório de Segurança da Fábrica",
+    title: "Comunicações de segurança do trabalho",
     intro: "Ato inseguro, condição insegura, quase acidente e primeiros socorros seguem a mesma lógica obrigatória do fluxo de comunicação do software.",
     type: "Tipo",
     typeUnsafeAct: "Ato inseguro",
@@ -83,6 +85,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Quase acidente",
     typeFirstAid: "Primeiros socorros",
     dateTime: "Data e hora",
+    futureDatetime: "A data e hora da comunicação não podem ser posteriores ao momento atual.",
     reporterName: "Nome do comunicante",
     reporterNameNoNumbers: "O nome do comunicante nao pode conter numeros",
     reporterNumber: "Número do comunicante",
@@ -119,6 +122,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Near miss",
     typeFirstAid: "Primo soccorso",
     dateTime: "Data e ora",
+    futureDatetime: "La data e l'ora della comunicazione non possono essere successive al momento attuale.",
     reporterName: "Nome del segnalatore",
     reporterNameNoNumbers: "Il nome del segnalatore non puo contenere numeri",
     reporterNumber: "Numero del segnalatore",
@@ -155,6 +159,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Near miss",
     typeFirstAid: "Pierwsza pomoc",
     dateTime: "Data i godzina",
+    futureDatetime: "Data i godzina zgloszenia nie moga byc pozniejsze niz aktualny moment.",
     reporterName: "Imie i nazwisko zglaszajacego",
     reporterNameNoNumbers: "Imie i nazwisko zglaszajacego nie moze zawierac cyfr",
     reporterNumber: "Numer zglaszajacego",
@@ -191,6 +196,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Beinaheunfall",
     typeFirstAid: "Erste Hilfe",
     dateTime: "Datum und Uhrzeit",
+    futureDatetime: "Datum und Uhrzeit der Meldung duerfen nicht nach dem aktuellen Zeitpunkt liegen.",
     reporterName: "Name des Meldenden",
     reporterNameNoNumbers: "Der Name des Meldenden darf keine Zahlen enthalten",
     reporterNumber: "Nummer des Meldenden",
@@ -227,6 +233,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Near miss",
     typeFirstAid: "Prim ajutor",
     dateTime: "Data si ora",
+    futureDatetime: "Data si ora comunicarii nu pot fi ulterioare momentului curent.",
     reporterName: "Numele raportorului",
     reporterNameNoNumbers: "Numele raportorului nu poate contine cifre",
     reporterNumber: "Numarul raportorului",
@@ -263,6 +270,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeNearMiss: "Presque accident",
     typeFirstAid: "Premiers secours",
     dateTime: "Date et heure",
+    futureDatetime: "La date et l'heure de la communication ne peuvent pas etre posterieures au moment actuel.",
     reporterName: "Nom du declarant",
     reporterNameNoNumbers: "Le nom du declarant ne peut pas contenir de chiffres",
     reporterNumber: "Numero du declarant",

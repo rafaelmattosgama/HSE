@@ -1,6 +1,7 @@
 import { ActionPriority, CommunicationSource, CommunicationStatus, CommunicationType, Prisma, RoleCode } from "@prisma/client";
 import { addDays } from "date-fns";
 import { writeAuditLog, buildDiff } from "@/lib/audit";
+import { OPEN_LINKED_ACTION_STATUSES } from "@/lib/communication-status";
 import type { CreateCommunicationInput, ManualCloseCommunicationInput, ReopenActionInput, UpdateCommunicationInput, ValidateCommunicationInput } from "@/lib/validation/dtos";
 import {
   canManageCommunicationClassification,
@@ -29,6 +30,7 @@ const ALERT_TYPES: CommunicationType[] = [
 
 const REPORTER_REVIEW_REQUIRED_MESSAGE = "Open the communication and select a valid reporter before validating.";
 const CLASSIFICATION_REQUIRED_MESSAGE = "Complete the required classification fields before validating.";
+const OPEN_LINKED_ACTIONS_MESSAGE = "Cannot close this communication because linked actions are still open.";
 
 export class CommunicationValidationError extends Error {
   constructor(
@@ -621,7 +623,21 @@ export const CommunicationService = {
     actorUserId: string;
     payload: ManualCloseCommunicationInput;
   }) {
-    const before = await prisma.communication.findUniqueOrThrow({ where: { id: input.communicationId } });
+    const [before, openLinkedActions] = await Promise.all([
+      prisma.communication.findUniqueOrThrow({ where: { id: input.communicationId } }),
+      prisma.action.count({
+        where: {
+          communicationId: input.communicationId,
+          status: {
+            in: [...OPEN_LINKED_ACTION_STATUSES],
+          },
+        },
+      }),
+    ]);
+
+    if (openLinkedActions > 0) {
+      throw new CommunicationValidationError("COMMUNICATION_HAS_OPEN_ACTIONS", OPEN_LINKED_ACTIONS_MESSAGE);
+    }
 
     const updated = await prisma.communication.update({
       where: { id: input.communicationId },
@@ -697,7 +713,7 @@ export const CommunicationService = {
       where: {
         communicationId,
         status: {
-          in: ["OPEN", "ONGOING"],
+          in: [...OPEN_LINKED_ACTION_STATUSES],
         },
       },
     });
@@ -707,7 +723,12 @@ export const CommunicationService = {
     if (communication.status !== nextStatus) {
       return prisma.communication.update({
         where: { id: communicationId },
-        data: { status: nextStatus },
+        data: {
+          status: nextStatus,
+          manuallyClosedBy: null,
+          manuallyClosedAt: null,
+          manualCloseReason: null,
+        },
       });
     }
 

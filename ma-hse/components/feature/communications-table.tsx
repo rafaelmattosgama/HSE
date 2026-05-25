@@ -14,6 +14,7 @@ type CommunicationRow = {
   reporterName: string;
   department: string;
   location: string;
+  unsafeActType?: string;
   unsafeConditionType?: string;
   nearMissType?: string;
 };
@@ -38,6 +39,7 @@ export function CommunicationsTable({
   const [dateToFilter, setDateToFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
+  const [unsafeActTypeFilter, setUnsafeActTypeFilter] = useState("all");
   const [unsafeConditionTypeFilter, setUnsafeConditionTypeFilter] = useState("all");
   const [nearMissTypeFilter, setNearMissTypeFilter] = useState("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -59,6 +61,10 @@ export function CommunicationsTable({
     () => Array.from(new Set(tableRows.map((row) => row.nearMissType).filter((value): value is string => Boolean(value && value !== "-")))).sort((a, b) => a.localeCompare(b)),
     [tableRows],
   );
+  const unsafeActTypeOptions = useMemo(
+    () => Array.from(new Set(tableRows.map((row) => row.unsafeActType).filter((value): value is string => Boolean(value && value !== "-")))).sort((a, b) => a.localeCompare(b)),
+    [tableRows],
+  );
   const unsafeConditionTypeOptions = useMemo(
     () => Array.from(new Set(tableRows.map((row) => row.unsafeConditionType).filter((value): value is string => Boolean(value && value !== "-")))).sort((a, b) => a.localeCompare(b)),
     [tableRows],
@@ -75,11 +81,12 @@ export function CommunicationsTable({
         if (dateToFilter && eventDate > dateToFilter) return false;
         if (departmentFilter !== "all" && row.department !== departmentFilter) return false;
         if (locationFilter !== "all" && row.location !== locationFilter) return false;
+        if (canViewClassification && unsafeActTypeFilter !== "all" && row.unsafeActType !== unsafeActTypeFilter) return false;
         if (canViewClassification && unsafeConditionTypeFilter !== "all" && row.unsafeConditionType !== unsafeConditionTypeFilter) return false;
         if (canViewClassification && nearMissTypeFilter !== "all" && row.nearMissType !== nearMissTypeFilter) return false;
         return true;
       }),
-    [canViewClassification, dateFromFilter, dateToFilter, departmentFilter, locationFilter, nearMissTypeFilter, reporterFilter, tableRows, statusFilter, typeFilter, unsafeConditionTypeFilter],
+    [canViewClassification, dateFromFilter, dateToFilter, departmentFilter, locationFilter, nearMissTypeFilter, reporterFilter, tableRows, statusFilter, typeFilter, unsafeActTypeFilter, unsafeConditionTypeFilter],
   );
 
   async function deleteCommunication(row: CommunicationRow) {
@@ -163,6 +170,17 @@ export function CommunicationsTable({
         </label>
         {canViewClassification ? (
           <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Unsafe act type</span>
+            <select value={unsafeActTypeFilter} onChange={(event) => setUnsafeActTypeFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="all">All unsafe act types</option>
+              {unsafeActTypeOptions.map((unsafeActType) => (
+                <option key={unsafeActType} value={unsafeActType}>{unsafeActType}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {canViewClassification ? (
+          <label className="space-y-1">
             <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Unsafe condition type</span>
             <select value={unsafeConditionTypeFilter} onChange={(event) => setUnsafeConditionTypeFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
               <option value="all">All unsafe condition types</option>
@@ -188,13 +206,11 @@ export function CommunicationsTable({
       {message ? <p className="text-sm text-slate-700">{message}</p> : null}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] text-sm">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Event</th>
               <th className="px-4 py-3">Type</th>
-              {canViewClassification ? <th className="px-4 py-3">Unsafe condition type</th> : null}
-              {canViewClassification ? <th className="px-4 py-3">Near miss type</th> : null}
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Reporter</th>
               <th className="px-4 py-3">Department</th>
@@ -208,8 +224,6 @@ export function CommunicationsTable({
               <tr key={row.id} className="border-t border-slate-200">
                 <td className="px-4 py-3">{row.eventDatetime.replace("T", " ").slice(0, 16)}</td>
                 <td className="px-4 py-3">{formatCommunicationType(row.type)}</td>
-                {canViewClassification ? <td className="px-4 py-3">{row.unsafeConditionType ?? "-"}</td> : null}
-                {canViewClassification ? <td className="px-4 py-3">{row.nearMissType ?? "-"}</td> : null}
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getCommunicationStatusClasses(row.status)}`}>
                     {formatCommunicationStatus(row.status)}
@@ -240,7 +254,7 @@ export function CommunicationsTable({
             ))}
             {filteredRows.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={(canDelete ? 8 : 7) + (canViewClassification ? 2 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">No communications found for the selected filters.</td>
+                <td colSpan={canDelete ? 8 : 7} className="px-4 py-6 text-center text-sm text-slate-500">No communications found for the selected filters.</td>
               </tr>
             ) : null}
           </tbody>

@@ -11,6 +11,7 @@ import {
 
 export const SEWO_N1_APPROVAL_CHANNEL = "SEWO_N1_APPROVAL";
 export const SEWO_APPROVED_CHANNEL = "SEWO_APPROVED";
+export const SEWO_REJECTED_CHANNEL = "SEWO_REJECTED";
 export const SEWO_SUBMITTER_ROLES = [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] as const;
 export const SEWO_STAKEHOLDER_ROLES = [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] as const;
 

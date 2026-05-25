@@ -1,5 +1,7 @@
-import { Prisma, RoleCode, SEWOStatus } from "@prisma/client";
+import { ActionStatus, Prisma, RoleCode, SEWOStatus } from "@prisma/client";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
+import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
 import { NotificationService } from "@/lib/services/notification-service";
@@ -7,6 +9,7 @@ import { SewoExportService } from "@/lib/services/sewo-export";
 import {
   SEWO_APPROVED_CHANNEL,
   SEWO_N1_APPROVAL_CHANNEL,
+  SEWO_REJECTED_CHANNEL,
   SEWO_STAKEHOLDER_ROLES,
   buildSewoSubmissionTemplateData,
   formatSewoOccurrenceType,
@@ -17,7 +20,8 @@ import {
   isPrioritySifPsif,
   isSewoSubmitterRole,
 } from "@/lib/services/sewo-validation-service";
-import type { ApproveSEWOInput, CreateSEWOInput, UpdateSEWOInput } from "@/lib/validation/dtos";
+import { getSewoStatusFromLinkedActions } from "@/lib/sewo-status";
+import type { ApproveSEWOInput, CreateSEWOInput, ManualCloseSewoInput, UpdateSEWOInput } from "@/lib/validation/dtos";
 
 async function notifySewoSubmitted(input: {
   sewoId: string;
@@ -115,6 +119,154 @@ async function notifySewoApproved(sewoId: string) {
   });
 }
 
+async function notifySewoRejected(input: {
+  sewoId: string;
+  actorUserId: string;
+  approvalComment: string;
+}) {
+  const [sewo, actor] = await Promise.all([
+    prisma.sEWO.findUniqueOrThrow({
+      where: { id: input.sewoId },
+      include: {
+        plant: true,
+        communication: true,
+        approvedBy: true,
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: input.actorUserId },
+      select: { name: true },
+    }),
+  ]);
+  const recipients = await getRoleRecipients(sewo.plantId, [RoleCode.N3_SAFETY]);
+  if (!recipients.userIds.length && !recipients.emails.length) return;
+
+  const summary = buildSewoNotificationSummary(sewo);
+  const detailPath = `/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`;
+  const detailUrl = new URL(detailPath, env.APP_URL).toString();
+  const rejectedAt = sewo.approvedAt ?? new Date();
+  const rejectedBy = sewo.approvedBy?.name ?? actor?.name ?? "N1";
+  const title = "S-EWO rejeitado pelo N1 — ação necessária";
+  const body = [
+    "S-EWO rejeitado pelo N1. Por favor, reveja a informação e volte a submeter.",
+    `S-EWO: ${sewo.id}`,
+    `Planta: ${summary.plantLabel}`,
+    `Tipo de ocorrência: ${summary.occurrenceType}`,
+    `Data/hora da rejeição: ${rejectedAt.toISOString().replace("T", " ").slice(0, 16)}`,
+    `Rejeitado por: ${rejectedBy}`,
+    input.approvalComment.trim() ? `Motivo: ${input.approvalComment.trim()}` : null,
+    `Abrir S-EWO: ${detailUrl}`,
+  ].filter(Boolean).join("\n");
+
+  await NotificationService.notify({
+    plantId: sewo.plantId,
+    userIds: recipients.userIds,
+    emailTo: recipients.emails,
+    title,
+    body,
+    html: buildSewoRejectedEmailHtml({
+      title,
+      intro: "O S-EWO foi rejeitado na validação N1. Reveja a informação, atualize o registo e submeta novamente.",
+      plantLabel: summary.plantLabel,
+      occurrenceType: summary.occurrenceType,
+      sewoId: sewo.id,
+      rejectedAt,
+      rejectedBy,
+      approvalComment: input.approvalComment,
+      detailUrl,
+    }),
+    channel: SEWO_REJECTED_CHANNEL,
+  });
+}
+
+const OPEN_LINKED_ACTIONS_MESSAGE = "Não é possível fechar este S-EWO porque existem ações associadas ainda em aberto.";
+
+export class SewoValidationError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status = 400,
+  ) {
+    super(message);
+    this.name = "SewoValidationError";
+  }
+}
+
+function collectLinkedActionStatuses(sewo: {
+  actions: Array<{ id: string; status: ActionStatus }>;
+  actionLinks: Array<{ action: { id: string; status: ActionStatus } }>;
+}) {
+  const actionStatuses = new Map<string, ActionStatus>();
+
+  sewo.actions.forEach((action) => {
+    actionStatuses.set(action.id, action.status);
+  });
+  sewo.actionLinks.forEach((entry) => {
+    actionStatuses.set(entry.action.id, entry.action.status);
+  });
+
+  return Array.from(actionStatuses.values());
+}
+
+function isApprovedLifecycleState(sewo: {
+  status: SEWOStatus;
+  approvedAt: Date | null;
+  approvedByUserId: string | null;
+}) {
+  return sewo.status === SEWOStatus.APPROVED || Boolean(sewo.approvedAt || sewo.approvedByUserId);
+}
+
+async function safeNotifySewoSubmitted(input: {
+  sewoId: string;
+  actorRole: RoleCode | null;
+}) {
+  try {
+    await notifySewoSubmitted(input);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        sewoId: input.sewoId,
+        actorRole: input.actorRole,
+      },
+      "failed_to_notify_sewo_submitted",
+    );
+  }
+}
+
+async function safeNotifySewoApproved(sewoId: string) {
+  try {
+    await notifySewoApproved(sewoId);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        sewoId,
+      },
+      "failed_to_notify_sewo_approved",
+    );
+  }
+}
+
+async function safeNotifySewoRejected(input: {
+  sewoId: string;
+  actorUserId: string;
+  approvalComment: string;
+}) {
+  try {
+    await notifySewoRejected(input);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        sewoId: input.sewoId,
+        actorUserId: input.actorUserId,
+      },
+      "failed_to_notify_sewo_rejected",
+    );
+  }
+}
+
 async function getRoleRecipients(plantId: string, roles: RoleCode[]) {
   const recipients = await prisma.userPlantRole.findMany({
     where: {
@@ -188,6 +340,40 @@ function buildSewoEmailHtml(input: {
         <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Tipo de ocorrência</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.occurrenceType)}</td></tr>
         <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Estado</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.statusLabel)}</td></tr>
       </table>
+    </div>
+  `;
+}
+
+function buildSewoRejectedEmailHtml(input: {
+  title: string;
+  intro: string;
+  plantLabel: string;
+  occurrenceType: string;
+  sewoId: string;
+  rejectedAt: Date;
+  rejectedBy: string;
+  approvalComment: string;
+  detailUrl: string;
+}) {
+  const rejectionCommentRow = input.approvalComment.trim()
+    ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Motivo</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.approvalComment.trim())}</td></tr>`
+    : "";
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;">
+      <h2 style="margin:0 0 12px;color:#002663;">${escapeHtml(input.title)}</h2>
+      <p>${escapeHtml(input.intro)}</p>
+      <table style="border-collapse:collapse;margin-top:12px;width:100%;max-width:640px;">
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">S-EWO</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.sewoId)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Planta</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.plantLabel)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Tipo de ocorrência</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.occurrenceType)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Data/hora da rejeição</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.rejectedAt.toISOString().replace("T", " ").slice(0, 16))}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Rejeitado por</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.rejectedBy)}</td></tr>
+        ${rejectionCommentRow}
+      </table>
+      <p style="margin-top:16px;">
+        <a href="${escapeHtml(input.detailUrl)}" style="display:inline-block;border-radius:8px;background:#0f766e;color:#ffffff;padding:10px 16px;text-decoration:none;font-weight:bold;">Abrir S-EWO</a>
+      </p>
     </div>
   `;
 }
@@ -278,7 +464,7 @@ export const SewaService = {
     });
 
     if (sewo.status === SEWOStatus.IN_APPROVAL) {
-      await notifySewoSubmitted({
+      await safeNotifySewoSubmitted({
         sewoId: sewo.id,
         actorRole,
       });
@@ -369,7 +555,7 @@ export const SewaService = {
     });
 
     if (isNewSubmission) {
-      await notifySewoSubmitted({
+      await safeNotifySewoSubmitted({
         sewoId: updated.id,
         actorRole,
       });
@@ -403,7 +589,7 @@ export const SewaService = {
     });
 
     if (before.status !== SEWOStatus.IN_APPROVAL) {
-      await notifySewoSubmitted({
+      await safeNotifySewoSubmitted({
         sewoId: updated.id,
         actorRole,
       });
@@ -439,19 +625,134 @@ export const SewaService = {
     });
 
     if (input.payload.approved) {
-      await notifySewoApproved(updated.id);
+      await safeNotifySewoApproved(updated.id);
+      return this.syncStatusWithActions(updated.id);
     }
+
+    await safeNotifySewoRejected({
+      sewoId: updated.id,
+      actorUserId: input.actorUserId,
+      approvalComment: input.payload.approvalComment,
+    });
 
     return updated;
   },
 
+  async manualClose(input: {
+    sewoId: string;
+    actorUserId: string;
+    payload: ManualCloseSewoInput;
+  }) {
+    const before = await prisma.sEWO.findUniqueOrThrow({
+      where: { id: input.sewoId },
+      include: {
+        actions: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        actionLinks: {
+          select: {
+            action: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const openLinkedActions = collectLinkedActionStatuses(before).filter(
+      (status) => status === ActionStatus.OPEN || status === ActionStatus.ONGOING,
+    );
+
+    if (openLinkedActions.length > 0) {
+      throw new SewoValidationError("SEWO_HAS_OPEN_ACTIONS", OPEN_LINKED_ACTIONS_MESSAGE);
+    }
+
+    const updated = await prisma.sEWO.update({
+      where: { id: input.sewoId },
+      data: {
+        status: SEWOStatus.CLOSED,
+      },
+    });
+
+    await writeAuditLog({
+      entityType: "SEWO",
+      entityId: input.sewoId,
+      action: "MANUAL_CLOSE",
+      actorUserId: input.actorUserId,
+      plantId: updated.plantId,
+      diff: {
+        ...buildDiff(before as unknown as Record<string, unknown>, updated as unknown as Record<string, unknown>),
+        after: {
+          ...updated,
+          manualCloseReason: input.payload.reason,
+        } as unknown as Record<string, unknown>,
+      },
+    });
+
+    return updated;
+  },
+
+  async syncStatusWithActions(sewoId: string) {
+    const sewo = await prisma.sEWO.findUniqueOrThrow({
+      where: { id: sewoId },
+      include: {
+        actions: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        actionLinks: {
+          select: {
+            action: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (sewo.status === SEWOStatus.IN_APPROVAL || sewo.status === SEWOStatus.REJECTED) {
+      return prisma.sEWO.findUniqueOrThrow({ where: { id: sewoId } });
+    }
+
+    const actionStatuses = collectLinkedActionStatuses(sewo);
+    const nextStatus = getSewoStatusFromLinkedActions(actionStatuses, {
+      approved: isApprovedLifecycleState(sewo),
+    });
+
+    if (!nextStatus || nextStatus === sewo.status) {
+      return prisma.sEWO.findUniqueOrThrow({ where: { id: sewoId } });
+    }
+
+    return prisma.sEWO.update({
+      where: { id: sewoId },
+      data: {
+        status: nextStatus,
+      },
+    });
+  },
+
   async linkAction(sewoId: string, actionId: string) {
-    return prisma.sEWOActionLink.create({
+    const link = await prisma.sEWOActionLink.create({
       data: {
         sewoId,
         actionId,
       },
     });
+
+    await this.syncStatusWithActions(sewoId);
+
+    return link;
   },
 
   async createProvisionalFromCommunication(input: {

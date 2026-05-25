@@ -23,6 +23,7 @@ import {
   type EnvironmentSummary,
   type EnvironmentWasteBreakdownItem,
 } from "@/lib/environment-dashboard";
+import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -35,6 +36,7 @@ type Props = {
   periodMonthsCount?: number;
   storageKeyBase?: string;
   className?: string;
+  labels?: DashboardUiDictionary;
 };
 
 type MetricKey = "energyMwh" | "waterM3" | "totalWasteTons" | "spills";
@@ -75,12 +77,12 @@ const METRIC_COLORS: Record<MetricKey, string> = {
   totalWasteTons: "#22c55e",
   spills: "#e11d48",
 };
-const VIEW_LABELS: Record<VisualizationType, string> = {
-  card: "Card",
-  bar: "Bars",
-  line: "Line",
-  pie: "Circular",
-  table: "Table",
+const VIEW_LABEL_KEYS: Record<VisualizationType, keyof DashboardUiDictionary> = {
+  card: "card",
+  bar: "bars",
+  line: "line",
+  pie: "circular",
+  table: "table",
 };
 const DEFAULT_WIDGETS: WidgetPreference[] = [
   { id: "trend", visible: true, view: "bar" },
@@ -93,18 +95,49 @@ const DEFAULT_WIDGETS: WidgetPreference[] = [
   { id: "waterReuse", visible: true, view: "card" },
   { id: "resourceLoad", visible: true, view: "card" },
 ];
-const WIDGET_TITLES: Record<WidgetId, string> = {
-  trend: "Environmental pulse",
-  water: "Water profile",
-  waste: "Waste by type",
-  context: "Operational context",
-  snapshot: "Recent monthly snapshot",
-  energy: "Energy profile",
-  coverage: "Reporting coverage",
-  waterReuse: "Water reuse signal",
-  resourceLoad: "Resource load",
+const WIDGET_TITLE_KEYS: Record<WidgetId, keyof DashboardUiDictionary> = {
+  trend: "environmentalPulse",
+  water: "waterProfile",
+  waste: "wasteByType",
+  context: "operationalContext",
+  snapshot: "recentMonthlySnapshot",
+  energy: "energyProfile",
+  coverage: "reportingCoverage",
+  waterReuse: "waterReuseSignal",
+  resourceLoad: "resourceLoad",
 };
 const COMPACT_WIDGETS = new Set<WidgetId>(["coverage", "waterReuse", "resourceLoad"]);
+
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce((label, [key, value]) => label.replace(`{${key}}`, String(value)), template);
+}
+
+function getViewLabel(labels: DashboardUiDictionary, view: VisualizationType) {
+  return labels[VIEW_LABEL_KEYS[view]];
+}
+
+function getWidgetTitle(labels: DashboardUiDictionary, id: WidgetId) {
+  return labels[WIDGET_TITLE_KEYS[id]];
+}
+
+function localizeWasteItem(item: EnvironmentWasteBreakdownItem, labels: DashboardUiDictionary): EnvironmentWasteBreakdownItem {
+  const key = item.key.toLowerCase();
+  const normalizedLabel = item.label.toLowerCase();
+
+  if (key === "non-hazardous" || normalizedLabel === "non-hazardous") {
+    return { ...item, label: labels.nonHazardous };
+  }
+
+  if (key === "hazardous" || normalizedLabel === "hazardous") {
+    return { ...item, label: labels.hazardous };
+  }
+
+  if (key === "recycled" || normalizedLabel === "recycled") {
+    return { ...item, label: labels.recycled };
+  }
+
+  return item;
+}
 
 function formatNumber(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat("en-US", {
@@ -282,19 +315,19 @@ function TrendRow({
   );
 }
 
-function TrendPanel({ months }: { months: EnvironmentMonthlySnapshot[] }) {
+function TrendPanel({ months, labels }: { months: EnvironmentMonthlySnapshot[]; labels: DashboardUiDictionary }) {
   const visibleMonths = months.slice(-12);
 
   if (visibleMonths.length === 0) {
-    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">No monthly input data yet.</div>;
+    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">{labels.noMonthlyInputData}</div>;
   }
 
   return (
     <div className="space-y-4">
-      <TrendRow label="Energy" unit="MWh" color={METRIC_COLORS.energyMwh} months={visibleMonths} metric="energyMwh" digits={1} />
-      <TrendRow label="Water" unit="m3" color={METRIC_COLORS.waterM3} months={visibleMonths} metric="waterM3" digits={1} />
-      <TrendRow label="Waste" unit="t" color={METRIC_COLORS.totalWasteTons} months={visibleMonths} metric="totalWasteTons" digits={2} />
-      <TrendRow label="Spills" unit="events" color={METRIC_COLORS.spills} months={visibleMonths} metric="spills" />
+      <TrendRow label={labels.energyConsumption} unit="MWh" color={METRIC_COLORS.energyMwh} months={visibleMonths} metric="energyMwh" digits={1} />
+      <TrendRow label={labels.waterUsage} unit="m3" color={METRIC_COLORS.waterM3} months={visibleMonths} metric="waterM3" digits={1} />
+      <TrendRow label={labels.waste} unit="t" color={METRIC_COLORS.totalWasteTons} months={visibleMonths} metric="totalWasteTons" digits={2} />
+      <TrendRow label={labels.spills} unit="events" color={METRIC_COLORS.spills} months={visibleMonths} metric="spills" />
     </div>
   );
 }
@@ -303,15 +336,17 @@ function HorizontalBreakdown({
   rows,
   unit,
   digits = 0,
+  noDataLabel,
 }: {
   rows: Array<{ label: string; value: number; color: string }>;
   unit: string;
   digits?: number;
+  noDataLabel: string;
 }) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
 
   if (total <= 0) {
-    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">No data for this period.</div>;
+    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">{noDataLabel}</div>;
   }
 
   return (
@@ -331,12 +366,12 @@ function HorizontalBreakdown({
   );
 }
 
-function donutItems(items: EnvironmentWasteBreakdownItem[]) {
+function donutItems(items: EnvironmentWasteBreakdownItem[], labels: DashboardUiDictionary) {
   const visible = items.slice(0, 6);
   const otherValue = items.slice(6).reduce((sum, item) => sum + item.value, 0);
 
   if (otherValue <= 0) return visible;
-  return [...visible, { key: "other", label: "Other", value: otherValue, color: "#94a3b8" }];
+  return [...visible, { key: "other", label: labels.other, value: otherValue, color: "#94a3b8" }];
 }
 
 function DonutChart({
@@ -345,14 +380,16 @@ function DonutChart({
   unit = "t",
   digits = 1,
   noDataLabel = "No data for this period.",
+  labels = getUiDictionary("en").dashboard,
 }: {
   items: EnvironmentWasteBreakdownItem[];
   centerLabel?: string;
   unit?: string;
   digits?: number;
   noDataLabel?: string;
+  labels?: DashboardUiDictionary;
 }) {
-  const data = donutItems(items);
+  const data = donutItems(items, labels);
   const total = data.reduce((sum, item) => sum + item.value, 0);
 
   if (total <= 0) {
@@ -423,7 +460,7 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone: 
   );
 }
 
-function OperationalContext({ summary }: { summary: EnvironmentSummary }) {
+function OperationalContext({ summary, labels }: { summary: EnvironmentSummary; labels: DashboardUiDictionary }) {
   const selfProducedShare = percent(summary.selfProducedEnergyMwh, summary.energyMwh);
   const recycledShare = percent(summary.recycledWasteTons, summary.totalWasteTons);
   const waterPerWorker = summary.averageWorkers > 0 ? summary.waterM3 / summary.averageWorkers : 0;
@@ -435,21 +472,21 @@ function OperationalContext({ summary }: { summary: EnvironmentSummary }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <MiniStat label="Avg. workers" value={formatNumber(summary.averageWorkers, 0)} tone="text-slate-950" />
-      <MiniStat label="Standard hours" value={formatMetric(summary.standardHours, "h", 1)} tone="text-indigo-950" />
-      <MiniStat label="Self-produced energy" value={`${formatNumber(selfProducedShare, 1)}%`} tone="text-emerald-700" />
-      <MiniStat label="Recycled waste share" value={`${formatNumber(recycledShare, 1)}%`} tone="text-teal-700" />
-      <MiniStat label="Energy per worker" value={formatMetric(energyPerWorker, "MWh", 2)} tone="text-orange-700" />
-      <MiniStat label="Energy per standard h" value={formatMetric(energyPerStandardHour, "MWh/h", 4)} tone="text-orange-700" />
-      <MiniStat label="Water per worker" value={formatMetric(waterPerWorker, "m3", 1)} tone="text-sky-700" />
-      <MiniStat label="Water per standard h" value={formatMetric(waterPerStandardHour, "m3/h", 2)} tone="text-sky-700" />
-      <MiniStat label="Waste per worker" value={formatMetric(wastePerWorker, "t", 3)} tone="text-emerald-700" />
-      <MiniStat label="Waste per standard h" value={formatMetric(wastePerStandardHour, "t/h", 5)} tone="text-emerald-700" />
+      <MiniStat label={labels.avgWorkers} value={formatNumber(summary.averageWorkers, 0)} tone="text-slate-950" />
+      <MiniStat label={labels.standardHours} value={formatMetric(summary.standardHours, "h", 1)} tone="text-indigo-950" />
+      <MiniStat label={labels.selfProducedEnergy} value={`${formatNumber(selfProducedShare, 1)}%`} tone="text-emerald-700" />
+      <MiniStat label={labels.recycledWasteShare} value={`${formatNumber(recycledShare, 1)}%`} tone="text-teal-700" />
+      <MiniStat label={labels.energyPerWorker} value={formatMetric(energyPerWorker, "MWh", 2)} tone="text-orange-700" />
+      <MiniStat label={labels.energyPerStandardHour} value={formatMetric(energyPerStandardHour, "MWh/h", 4)} tone="text-orange-700" />
+      <MiniStat label={labels.waterPerWorker} value={formatMetric(waterPerWorker, "m3", 1)} tone="text-sky-700" />
+      <MiniStat label={labels.waterPerStandardHour} value={formatMetric(waterPerStandardHour, "m3/h", 2)} tone="text-sky-700" />
+      <MiniStat label={labels.wastePerWorker} value={formatMetric(wastePerWorker, "t", 3)} tone="text-emerald-700" />
+      <MiniStat label={labels.wastePerStandardHour} value={formatMetric(wastePerStandardHour, "t/h", 5)} tone="text-emerald-700" />
     </div>
   );
 }
 
-function PlantComparison({ plants }: { plants: EnvironmentDashboardPlant[] }) {
+function PlantComparison({ plants, labels }: { plants: EnvironmentDashboardPlant[]; labels: DashboardUiDictionary }) {
   const summaries = plants
     .map((plant) => ({
       plant,
@@ -460,7 +497,7 @@ function PlantComparison({ plants }: { plants: EnvironmentDashboardPlant[] }) {
   const maxEnergy = Math.max(1, ...summaries.map((entry) => entry.summary.energyMwh));
 
   if (summaries.length === 0) {
-    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">No plant data for this period.</div>;
+    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">{labels.noPlantDataForThisPeriod}</div>;
   }
 
   return (
@@ -468,11 +505,11 @@ function PlantComparison({ plants }: { plants: EnvironmentDashboardPlant[] }) {
       <table className="w-full min-w-[560px] text-sm">
         <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="py-2 pr-3">Plant</th>
-            <th className="px-3 py-2">Energy</th>
-            <th className="px-3 py-2">Water</th>
-            <th className="px-3 py-2">Waste</th>
-            <th className="px-3 py-2">Spills</th>
+            <th className="py-2 pr-3">{labels.plant}</th>
+            <th className="px-3 py-2">{labels.energyConsumption}</th>
+            <th className="px-3 py-2">{labels.waterUsage}</th>
+            <th className="px-3 py-2">{labels.waste}</th>
+            <th className="px-3 py-2">{labels.spills}</th>
           </tr>
         </thead>
         <tbody>
@@ -499,11 +536,11 @@ function PlantComparison({ plants }: { plants: EnvironmentDashboardPlant[] }) {
   );
 }
 
-function SnapshotTable({ months }: { months: EnvironmentMonthlySnapshot[] }) {
+function SnapshotTable({ months, labels }: { months: EnvironmentMonthlySnapshot[]; labels: DashboardUiDictionary }) {
   const visibleMonths = months.slice(-6).reverse();
 
   if (visibleMonths.length === 0) {
-    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">No monthly rows to show.</div>;
+    return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">{labels.noMonthlyRows}</div>;
   }
 
   return (
@@ -511,11 +548,11 @@ function SnapshotTable({ months }: { months: EnvironmentMonthlySnapshot[] }) {
       <table className="w-full min-w-[620px] text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="px-3 py-2">Period</th>
-            <th className="px-3 py-2">Energy</th>
-            <th className="px-3 py-2">Water</th>
-            <th className="px-3 py-2">Waste</th>
-            <th className="px-3 py-2">Spills</th>
+            <th className="px-3 py-2">{labels.period}</th>
+            <th className="px-3 py-2">{labels.energyConsumption}</th>
+            <th className="px-3 py-2">{labels.waterUsage}</th>
+            <th className="px-3 py-2">{labels.waste}</th>
+            <th className="px-3 py-2">{labels.spills}</th>
           </tr>
         </thead>
         <tbody>
@@ -547,7 +584,7 @@ function metricValue(month: EnvironmentMonthlySnapshot, metric: SnapshotMetricKe
   return month[metric];
 }
 
-function NoData({ children = "No data for this period." }: { children?: ReactNode }) {
+function NoData({ children }: { children: ReactNode }) {
   return <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">{children}</div>;
 }
 
@@ -564,11 +601,11 @@ function ChartLegend({ series }: { series: Array<{ key: string; label: string; c
   );
 }
 
-function MonthlyBarChart({ months, series }: { months: EnvironmentMonthlySnapshot[]; series: MetricSeries[] }) {
+function MonthlyBarChart({ months, series, labels }: { months: EnvironmentMonthlySnapshot[]; series: MetricSeries[]; labels: DashboardUiDictionary }) {
   const visibleMonths = months.slice(-12);
 
   if (visibleMonths.length === 0) {
-    return <NoData>No monthly input data yet.</NoData>;
+    return <NoData>{labels.noMonthlyInputData}</NoData>;
   }
 
   const maxValue = Math.max(1, ...visibleMonths.flatMap((month) => series.map((entry) => metricValue(month, entry.metric))));
@@ -600,11 +637,11 @@ function MonthlyBarChart({ months, series }: { months: EnvironmentMonthlySnapsho
   );
 }
 
-function MonthlyLineChart({ months, series }: { months: EnvironmentMonthlySnapshot[]; series: MetricSeries[] }) {
+function MonthlyLineChart({ months, series, labels }: { months: EnvironmentMonthlySnapshot[]; series: MetricSeries[]; labels: DashboardUiDictionary }) {
   const visibleMonths = months.slice(-12);
 
   if (visibleMonths.length === 0) {
-    return <NoData>No monthly input data yet.</NoData>;
+    return <NoData>{labels.noMonthlyInputData}</NoData>;
   }
 
   const width = 720;
@@ -654,7 +691,7 @@ function MonthlyLineChart({ months, series }: { months: EnvironmentMonthlySnapsh
           </text>
         ))}
         <text x="48" y="26" fontSize="12" fill="#64748b">
-          Max: {formatNumber(maxValue, 1)}
+          {labels.max}: {formatNumber(maxValue, 1)}
         </text>
       </svg>
     </div>
@@ -664,16 +701,18 @@ function MonthlyLineChart({ months, series }: { months: EnvironmentMonthlySnapsh
 function MonthlyMetricTable({
   months,
   series,
+  labels,
   limit = 12,
 }: {
   months: EnvironmentMonthlySnapshot[];
   series: MetricSeries[];
+  labels: DashboardUiDictionary;
   limit?: number;
 }) {
   const visibleMonths = months.slice(-limit).reverse();
 
   if (visibleMonths.length === 0) {
-    return <NoData>No monthly rows to show.</NoData>;
+    return <NoData>{labels.noMonthlyRows}</NoData>;
   }
 
   return (
@@ -681,7 +720,7 @@ function MonthlyMetricTable({
       <table className="w-full min-w-[620px] text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="px-3 py-2">Period</th>
+            <th className="px-3 py-2">{labels.period}</th>
             {series.map((entry) => (
               <th key={entry.key} className="px-3 py-2">{entry.label}</th>
             ))}
@@ -704,11 +743,21 @@ function MonthlyMetricTable({
   );
 }
 
-function BreakdownTable({ rows, unit, digits = 0 }: { rows: Array<{ label: string; value: number }>; unit: string; digits?: number }) {
+function BreakdownTable({
+  rows,
+  unit,
+  labels,
+  digits = 0,
+}: {
+  rows: Array<{ label: string; value: number }>;
+  unit: string;
+  labels: DashboardUiDictionary;
+  digits?: number;
+}) {
   const visibleRows = rows.filter((row) => row.value > 0);
 
   if (visibleRows.length === 0) {
-    return <NoData />;
+    return <NoData>{labels.noDataForThisPeriod}</NoData>;
   }
 
   return (
@@ -716,8 +765,8 @@ function BreakdownTable({ rows, unit, digits = 0 }: { rows: Array<{ label: strin
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="px-3 py-2">Indicator</th>
-            <th className="px-3 py-2">Value</th>
+            <th className="px-3 py-2">{labels.indicator}</th>
+            <th className="px-3 py-2">{labels.value}</th>
           </tr>
         </thead>
         <tbody>
@@ -742,18 +791,18 @@ function breakdownToItems(rows: Array<{ label: string; value: number; color: str
   }));
 }
 
-function waterBreakdown(summary: EnvironmentSummary) {
+function waterBreakdown(summary: EnvironmentSummary, labels: DashboardUiDictionary) {
   return [
-    { label: "Network water", value: summary.waterNetworkM3, color: "#0ea5e9" },
-    { label: "Captured water", value: summary.waterCapturedM3, color: "#14b8a6" },
+    { label: labels.networkWater, value: summary.waterNetworkM3, color: "#0ea5e9" },
+    { label: labels.capturedWater, value: summary.waterCapturedM3, color: "#14b8a6" },
   ];
 }
 
-function energyBreakdown(summary: EnvironmentSummary) {
+function energyBreakdown(summary: EnvironmentSummary, labels: DashboardUiDictionary) {
   return [
-    { label: "Grid electricity", value: summary.electricityFromGridMwh, color: "#f97316" },
-    { label: "Self-produced electricity", value: summary.selfProducedEnergyMwh, color: "#22c55e" },
-    { label: "Compressed air", value: summary.compressedAirMwh, color: "#8b5cf6" },
+    { label: labels.gridElectricity, value: summary.electricityFromGridMwh, color: "#f97316" },
+    { label: labels.selfProducedElectricity, value: summary.selfProducedEnergyMwh, color: "#22c55e" },
+    { label: labels.compressedAir, value: summary.compressedAirMwh, color: "#8b5cf6" },
   ];
 }
 
@@ -761,34 +810,34 @@ function metricSeries(metric: SnapshotMetricKey, label: string, unit: string, co
   return { key: metric, label, metric, unit, color, digits };
 }
 
-function trendSeries() {
+function trendSeries(labels: DashboardUiDictionary) {
   return [
-    metricSeries("energyMwh", "Energy", "MWh", METRIC_COLORS.energyMwh, 1),
-    metricSeries("waterM3", "Water", "m3", METRIC_COLORS.waterM3, 1),
-    metricSeries("totalWasteTons", "Waste", "t", METRIC_COLORS.totalWasteTons, 2),
-    metricSeries("spills", "Spills", "events", METRIC_COLORS.spills, 0),
+    metricSeries("energyMwh", labels.energyConsumption, "MWh", METRIC_COLORS.energyMwh, 1),
+    metricSeries("waterM3", labels.waterUsage, "m3", METRIC_COLORS.waterM3, 1),
+    metricSeries("totalWasteTons", labels.waste, "t", METRIC_COLORS.totalWasteTons, 2),
+    metricSeries("spills", labels.spills, "events", METRIC_COLORS.spills, 0),
   ];
 }
 
-function SummaryCards({ summary }: { summary: EnvironmentSummary }) {
+function SummaryCards({ summary, labels }: { summary: EnvironmentSummary; labels: DashboardUiDictionary }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <MiniStat label="Energy" value={formatMetric(summary.energyMwh, "MWh", 1)} tone="text-orange-700" />
-      <MiniStat label="Water" value={formatMetric(summary.waterM3, "m3", 1)} tone="text-sky-700" />
-      <MiniStat label="Waste" value={formatMetric(summary.totalWasteTons, "t", 2)} tone="text-emerald-700" />
-      <MiniStat label="Spills" value={formatNumber(summary.spills)} tone="text-rose-700" />
+      <MiniStat label={labels.energyConsumption} value={formatMetric(summary.energyMwh, "MWh", 1)} tone="text-orange-700" />
+      <MiniStat label={labels.waterUsage} value={formatMetric(summary.waterM3, "m3", 1)} tone="text-sky-700" />
+      <MiniStat label={labels.waste} value={formatMetric(summary.totalWasteTons, "t", 2)} tone="text-emerald-700" />
+      <MiniStat label={labels.spills} value={formatNumber(summary.spills)} tone="text-rose-700" />
     </div>
   );
 }
 
-function PlantComparisonCards({ plants }: { plants: EnvironmentDashboardPlant[] }) {
+function PlantComparisonCards({ plants, labels }: { plants: EnvironmentDashboardPlant[]; labels: DashboardUiDictionary }) {
   const summaries = plants
     .map((plant) => ({ plant, summary: summarizeEnvironmentMonths(plant.months) }))
     .sort((left, right) => right.summary.energyMwh - left.summary.energyMwh || left.plant.name.localeCompare(right.plant.name))
     .slice(0, 4);
 
   if (summaries.length === 0) {
-    return <NoData>No plant data for this period.</NoData>;
+    return <NoData>{labels.noPlantDataForThisPeriod}</NoData>;
   }
 
   return (
@@ -809,138 +858,143 @@ function renderWidgetContent(input: {
   months: EnvironmentMonthlySnapshot[];
   summary: EnvironmentSummary;
   plants: EnvironmentDashboardPlant[];
+  labels: DashboardUiDictionary;
 }) {
-  const { preference, months, summary, plants } = input;
+  const { preference, months, summary, plants, labels } = input;
+  const localizedWasteBreakdown = summary.wasteBreakdown.map((item) => localizeWasteItem(item, labels));
 
   if (preference.id === "trend") {
-    if (preference.view === "card") return <SummaryCards summary={summary} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={trendSeries()} />;
+    if (preference.view === "card") return <SummaryCards summary={summary} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={trendSeries(labels)} labels={labels} />;
     if (preference.view === "pie") {
       return (
         <DonutChart
-          centerLabel="Total"
+          centerLabel={labels.total}
           unit=""
           digits={1}
+          labels={labels}
+          noDataLabel={labels.noDataForThisPeriod}
           items={[
-            { key: "energy", label: "Energy", value: summary.energyMwh, color: METRIC_COLORS.energyMwh },
-            { key: "water", label: "Water", value: summary.waterM3, color: METRIC_COLORS.waterM3 },
-            { key: "waste", label: "Waste", value: summary.totalWasteTons, color: METRIC_COLORS.totalWasteTons },
-            { key: "spills", label: "Spills", value: summary.spills, color: METRIC_COLORS.spills },
+            { key: "energy", label: labels.energyConsumption, value: summary.energyMwh, color: METRIC_COLORS.energyMwh },
+            { key: "water", label: labels.waterUsage, value: summary.waterM3, color: METRIC_COLORS.waterM3 },
+            { key: "waste", label: labels.waste, value: summary.totalWasteTons, color: METRIC_COLORS.totalWasteTons },
+            { key: "spills", label: labels.spills, value: summary.spills, color: METRIC_COLORS.spills },
           ]}
         />
       );
     }
-    if (preference.view === "table") return <MonthlyMetricTable months={months} series={trendSeries()} />;
-    return <TrendPanel months={months} />;
+    if (preference.view === "table") return <MonthlyMetricTable months={months} series={trendSeries(labels)} labels={labels} />;
+    return <TrendPanel months={months} labels={labels} />;
   }
 
   if (preference.id === "water") {
-    const rows = waterBreakdown(summary);
+    const rows = waterBreakdown(summary, labels);
     const series = [
-      metricSeries("waterNetworkM3", "Network water", "m3", "#0ea5e9", 1),
-      metricSeries("waterCapturedM3", "Captured water", "m3", "#14b8a6", 1),
+      metricSeries("waterNetworkM3", labels.networkWater, "m3", "#0ea5e9", 1),
+      metricSeries("waterCapturedM3", labels.capturedWater, "m3", "#14b8a6", 1),
     ];
-    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} />;
-    if (preference.view === "pie") return <DonutChart items={breakdownToItems(rows)} centerLabel="Water" unit="m3" digits={1} />;
-    if (preference.view === "table") return <BreakdownTable rows={rows} unit="m3" digits={1} />;
-    return <HorizontalBreakdown unit="m3" digits={1} rows={rows} />;
+    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} labels={labels} />;
+    if (preference.view === "pie") return <DonutChart items={breakdownToItems(rows)} centerLabel={labels.waterUsage} unit="m3" digits={1} labels={labels} noDataLabel={labels.noDataForThisPeriod} />;
+    if (preference.view === "table") return <BreakdownTable rows={rows} unit="m3" digits={1} labels={labels} />;
+    return <HorizontalBreakdown unit="m3" digits={1} rows={rows} noDataLabel={labels.noDataForThisPeriod} />;
   }
 
   if (preference.id === "waste") {
     const series = [
-      metricSeries("nonHazardousWasteTons", "Non-hazardous", "t", "#84cc16", 2),
-      metricSeries("hazardousWasteTons", "Hazardous", "t", "#be123c", 2),
-      metricSeries("recycledWasteTons", "Recycled", "t", "#10b981", 2),
+      metricSeries("nonHazardousWasteTons", labels.nonHazardous, "t", "#84cc16", 2),
+      metricSeries("hazardousWasteTons", labels.hazardous, "t", "#be123c", 2),
+      metricSeries("recycledWasteTons", labels.recycled, "t", "#10b981", 2),
     ];
-    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} />;
-    if (preference.view === "table") return <BreakdownTable rows={summary.wasteBreakdown} unit="t" digits={2} />;
+    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} labels={labels} />;
+    if (preference.view === "table") return <BreakdownTable rows={localizedWasteBreakdown} unit="t" digits={2} labels={labels} />;
     if (preference.view === "card") {
       return (
         <div className="grid gap-3 sm:grid-cols-3">
-          <MiniStat label="Non-hazardous" value={formatMetric(summary.nonHazardousWasteTons, "t", 2)} tone="text-lime-700" />
-          <MiniStat label="Hazardous" value={formatMetric(summary.hazardousWasteTons, "t", 2)} tone="text-rose-700" />
-          <MiniStat label="Recycled" value={formatMetric(summary.recycledWasteTons, "t", 2)} tone="text-emerald-700" />
+          <MiniStat label={labels.nonHazardous} value={formatMetric(summary.nonHazardousWasteTons, "t", 2)} tone="text-lime-700" />
+          <MiniStat label={labels.hazardous} value={formatMetric(summary.hazardousWasteTons, "t", 2)} tone="text-rose-700" />
+          <MiniStat label={labels.recycled} value={formatMetric(summary.recycledWasteTons, "t", 2)} tone="text-emerald-700" />
         </div>
       );
     }
-    return <DonutChart items={summary.wasteBreakdown} />;
+    return <DonutChart items={localizedWasteBreakdown} centerLabel={labels.waste} labels={labels} noDataLabel={labels.noDataForThisPeriod} />;
   }
 
   if (preference.id === "context") {
     if (preference.view === "table") {
-      return plants.length > 1 ? <PlantComparison plants={plants} /> : <OperationalContext summary={summary} />;
+      return plants.length > 1 ? <PlantComparison plants={plants} labels={labels} /> : <OperationalContext summary={summary} labels={labels} />;
     }
     if (preference.view === "card") {
-      return plants.length > 1 ? <PlantComparisonCards plants={plants} /> : <OperationalContext summary={summary} />;
+      return plants.length > 1 ? <PlantComparisonCards plants={plants} labels={labels} /> : <OperationalContext summary={summary} labels={labels} />;
     }
     return plants.length > 1 ? (
       <MonthlyBarChart
         months={months}
+        labels={labels}
         series={[
-          metricSeries("energyMwh", "Energy", "MWh", METRIC_COLORS.energyMwh, 1),
-          metricSeries("waterM3", "Water", "m3", METRIC_COLORS.waterM3, 1),
+          metricSeries("energyMwh", labels.energyConsumption, "MWh", METRIC_COLORS.energyMwh, 1),
+          metricSeries("waterM3", labels.waterUsage, "m3", METRIC_COLORS.waterM3, 1),
         ]}
       />
     ) : (
-      <OperationalContext summary={summary} />
+      <OperationalContext summary={summary} labels={labels} />
     );
   }
 
   if (preference.id === "snapshot") {
-    if (preference.view === "card") return <SummaryCards summary={summary} />;
-    if (preference.view === "bar") return <MonthlyBarChart months={months} series={trendSeries()} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={trendSeries()} />;
+    if (preference.view === "card") return <SummaryCards summary={summary} labels={labels} />;
+    if (preference.view === "bar") return <MonthlyBarChart months={months} series={trendSeries(labels)} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={trendSeries(labels)} labels={labels} />;
     if (preference.view === "pie") {
-      return <DonutChart items={breakdownToItems(waterBreakdown(summary))} centerLabel="Water" unit="m3" digits={1} />;
+      return <DonutChart items={breakdownToItems(waterBreakdown(summary, labels))} centerLabel={labels.waterUsage} unit="m3" digits={1} labels={labels} noDataLabel={labels.noDataForThisPeriod} />;
     }
-    return <SnapshotTable months={months} />;
+    return <SnapshotTable months={months} labels={labels} />;
   }
 
   if (preference.id === "energy") {
-    const rows = energyBreakdown(summary);
+    const rows = energyBreakdown(summary, labels);
     const series = [
-      metricSeries("electricityFromGridMwh", "Grid", "MWh", "#f97316", 1),
-      metricSeries("selfProducedEnergyMwh", "Self-produced", "MWh", "#22c55e", 1),
-      metricSeries("compressedAirMwh", "Compressed air", "MWh", "#8b5cf6", 1),
+      metricSeries("electricityFromGridMwh", labels.grid, "MWh", "#f97316", 1),
+      metricSeries("selfProducedEnergyMwh", labels.selfProduced, "MWh", "#22c55e", 1),
+      metricSeries("compressedAirMwh", labels.compressedAir, "MWh", "#8b5cf6", 1),
     ];
-    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} />;
-    if (preference.view === "pie") return <DonutChart items={breakdownToItems(rows)} centerLabel="Energy" unit="MWh" digits={1} />;
-    if (preference.view === "table") return <BreakdownTable rows={rows} unit="MWh" digits={1} />;
+    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} labels={labels} />;
+    if (preference.view === "pie") return <DonutChart items={breakdownToItems(rows)} centerLabel={labels.energyConsumption} unit="MWh" digits={1} labels={labels} noDataLabel={labels.noDataForThisPeriod} />;
+    if (preference.view === "table") return <BreakdownTable rows={rows} unit="MWh" digits={1} labels={labels} />;
     return (
       <>
-        <HorizontalBreakdown unit="MWh" digits={1} rows={rows} />
+        <HorizontalBreakdown unit="MWh" digits={1} rows={rows} noDataLabel={labels.noDataForThisPeriod} />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <MiniStat label="Heating" value={formatMetric(summary.heatingM3, "m3", 1)} tone="text-orange-800" />
-          <MiniStat label="Compressed air" value={formatMetric(summary.compressedAirM3, "m3", 1)} tone="text-violet-800" />
+          <MiniStat label={labels.heating} value={formatMetric(summary.heatingM3, "m3", 1)} tone="text-orange-800" />
+          <MiniStat label={labels.compressedAir} value={formatMetric(summary.compressedAirM3, "m3", 1)} tone="text-violet-800" />
         </div>
       </>
     );
   }
 
   if (preference.id === "coverage") {
-    const series = [metricSeries("standardHours", "Standard hours", "h", "#22c55e", 1)];
-    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} />;
-    if (preference.view === "table") return <MonthlyMetricTable months={months} series={series} />;
-    return <MiniStat label="Months with inputs" value={formatNumber(summary.monthsCount)} tone="text-emerald-950" />;
+    const series = [metricSeries("standardHours", labels.standardHours, "h", "#22c55e", 1)];
+    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} labels={labels} />;
+    if (preference.view === "table") return <MonthlyMetricTable months={months} series={series} labels={labels} />;
+    return <MiniStat label={labels.monthsWithInputs} value={formatNumber(summary.monthsCount)} tone="text-emerald-950" />;
   }
 
   if (preference.id === "waterReuse") {
-    const series = [metricSeries("waterCapturedM3", "Captured water", "m3", "#0ea5e9", 1)];
-    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} />;
-    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} />;
-    if (preference.view === "table") return <MonthlyMetricTable months={months} series={series} />;
-    return <MiniStat label="Captured water" value={formatMetric(summary.waterCapturedM3, "m3", 1)} tone="text-sky-950" />;
+    const series = [metricSeries("waterCapturedM3", labels.capturedWater, "m3", "#0ea5e9", 1)];
+    if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} labels={labels} />;
+    if (preference.view === "line") return <MonthlyLineChart months={months} series={series} labels={labels} />;
+    if (preference.view === "table") return <MonthlyMetricTable months={months} series={series} labels={labels} />;
+    return <MiniStat label={labels.capturedWater} value={formatMetric(summary.waterCapturedM3, "m3", 1)} tone="text-sky-950" />;
   }
 
-  const series = [metricSeries("hoursWorked", "Hours worked", "h", "#f97316", 1)];
-  if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} />;
-  if (preference.view === "line") return <MonthlyLineChart months={months} series={series} />;
-  if (preference.view === "table") return <MonthlyMetricTable months={months} series={series} />;
-  return <MiniStat label="Hours worked" value={formatMetric(summary.hoursWorked, "h", 1)} tone="text-orange-950" />;
+  const series = [metricSeries("hoursWorked", labels.hoursWorked, "h", "#f97316", 1)];
+  if (preference.view === "bar") return <MonthlyBarChart months={months} series={series} labels={labels} />;
+  if (preference.view === "line") return <MonthlyLineChart months={months} series={series} labels={labels} />;
+  if (preference.view === "table") return <MonthlyMetricTable months={months} series={series} labels={labels} />;
+  return <MiniStat label={labels.hoursWorked} value={formatMetric(summary.hoursWorked, "h", 1)} tone="text-orange-950" />;
 }
 
 function sanitizePreferences(value: unknown): WidgetPreference[] {
@@ -958,7 +1012,7 @@ function sanitizePreferences(value: unknown): WidgetPreference[] {
       return {
         id: defaultPreference.id,
         visible: typeof (entry as Partial<WidgetPreference>).visible === "boolean" ? Boolean((entry as Partial<WidgetPreference>).visible) : defaultPreference.visible,
-        view: view && view in VIEW_LABELS ? view : defaultPreference.view,
+        view: view && view in VIEW_LABEL_KEYS ? view : defaultPreference.view,
       } satisfies WidgetPreference;
     })
     .filter((entry): entry is WidgetPreference => entry !== null);
@@ -972,10 +1026,12 @@ function DashboardCustomizer({
   preferences,
   onChange,
   onReset,
+  labels,
 }: {
   preferences: WidgetPreference[];
   onChange: (preferences: WidgetPreference[]) => void;
   onReset: () => void;
+  labels: DashboardUiDictionary;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -1001,7 +1057,7 @@ function DashboardCustomizer({
           onClick={() => setOpen((current) => !current)}
         >
           <Settings2 className="h-4 w-4" />
-          Customize
+          {labels.customize}
         </button>
         <button
           type="button"
@@ -1009,7 +1065,7 @@ function DashboardCustomizer({
           onClick={onReset}
         >
           <RotateCcw className="h-4 w-4" />
-          Reset
+          {labels.reset}
         </button>
       </div>
 
@@ -1028,22 +1084,22 @@ function DashboardCustomizer({
                 onClick={() => updatePreference(preference.id, { visible: !preference.visible })}
               >
                 {preference.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                {WIDGET_TITLES[preference.id]}
+                {getWidgetTitle(labels, preference.id)}
               </button>
               <select
                 value={preference.view}
                 onChange={(event) => updatePreference(preference.id, { view: event.target.value as VisualizationType })}
                 className="h-10 rounded-[10px] border border-slate-300 bg-white px-3 text-sm text-slate-900"
               >
-                {(Object.keys(VIEW_LABELS) as VisualizationType[]).map((view) => (
-                  <option key={view} value={view}>{VIEW_LABELS[view]}</option>
+                {(Object.keys(VIEW_LABEL_KEYS) as VisualizationType[]).map((view) => (
+                  <option key={view} value={view}>{getViewLabel(labels, view)}</option>
                 ))}
               </select>
               <div className="flex justify-end gap-1">
                 <button
                   type="button"
-                  title="Move up"
-                  aria-label="Move up"
+                  title={labels.moveUp}
+                  aria-label={labels.moveUp}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-slate-300 bg-white text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={index === 0}
                   onClick={() => movePreference(preference.id, -1)}
@@ -1052,8 +1108,8 @@ function DashboardCustomizer({
                 </button>
                 <button
                   type="button"
-                  title="Move down"
-                  aria-label="Move down"
+                  title={labels.moveDown}
+                  aria-label={labels.moveDown}
                   className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-slate-300 bg-white text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={index === preferences.length - 1}
                   onClick={() => movePreference(preference.id, 1)}
@@ -1069,15 +1125,15 @@ function DashboardCustomizer({
   );
 }
 
-function widgetEyebrow(preference: WidgetPreference, plants: EnvironmentDashboardPlant[]) {
-  if (preference.id === "trend") return "Monthly trend";
-  if (preference.id === "water" || preference.id === "energy") return preference.view === "card" ? "Consumption split" : VIEW_LABELS[preference.view];
-  if (preference.id === "waste") return preference.view === "pie" ? "Distribution" : VIEW_LABELS[preference.view];
-  if (preference.id === "context") return plants.length > 1 ? "Group view" : "Intensity";
-  if (preference.id === "snapshot") return "Last inputs";
-  if (preference.id === "coverage") return "Inputs";
-  if (preference.id === "waterReuse") return "Captured water";
-  return "Operational hours";
+function widgetEyebrow(preference: WidgetPreference, plants: EnvironmentDashboardPlant[], labels: DashboardUiDictionary) {
+  if (preference.id === "trend") return labels.monthlyTrend;
+  if (preference.id === "water" || preference.id === "energy") return preference.view === "card" ? labels.consumptionSplit : getViewLabel(labels, preference.view);
+  if (preference.id === "waste") return preference.view === "pie" ? labels.distribution : getViewLabel(labels, preference.view);
+  if (preference.id === "context") return plants.length > 1 ? labels.groupView : labels.intensity;
+  if (preference.id === "snapshot") return labels.lastInputs;
+  if (preference.id === "coverage") return labels.inputs;
+  if (preference.id === "waterReuse") return labels.capturedWater;
+  return labels.operationalHours;
 }
 
 function EnvironmentDashboardWidgets({
@@ -1085,11 +1141,13 @@ function EnvironmentDashboardWidgets({
   summary,
   plants,
   storageKeyBase,
+  labels,
 }: {
   months: EnvironmentMonthlySnapshot[];
   summary: EnvironmentSummary;
   plants: EnvironmentDashboardPlant[];
   storageKeyBase: string;
+  labels: DashboardUiDictionary;
 }) {
   const storageKey = `${storageKeyBase}-layout`;
   const [preferences, setPreferences] = useState<WidgetPreference[]>(DEFAULT_WIDGETS);
@@ -1118,16 +1176,16 @@ function EnvironmentDashboardWidgets({
 
   return (
     <>
-      <DashboardCustomizer preferences={preferences} onChange={setPreferences} onReset={() => setPreferences(DEFAULT_WIDGETS)} />
+      <DashboardCustomizer preferences={preferences} onChange={setPreferences} onReset={() => setPreferences(DEFAULT_WIDGETS)} labels={labels} />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
         {mainWidgets.map((preference) => (
           <Panel
             key={preference.id}
-            title={preference.id === "context" && plants.length > 1 ? "Plant comparison" : WIDGET_TITLES[preference.id]}
-            eyebrow={widgetEyebrow(preference, plants)}
+            title={preference.id === "context" && plants.length > 1 ? labels.plantComparison : getWidgetTitle(labels, preference.id)}
+            eyebrow={widgetEyebrow(preference, plants, labels)}
             className={preference.id === "trend" ? "xl:row-span-2" : undefined}
           >
-            {renderWidgetContent({ preference, months, summary, plants })}
+            {renderWidgetContent({ preference, months, summary, plants, labels })}
           </Panel>
         ))}
       </div>
@@ -1135,8 +1193,8 @@ function EnvironmentDashboardWidgets({
       {compactWidgets.length > 0 ? (
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {compactWidgets.map((preference) => (
-            <Panel key={preference.id} title={WIDGET_TITLES[preference.id]} eyebrow={widgetEyebrow(preference, plants)}>
-              {renderWidgetContent({ preference, months, summary, plants })}
+            <Panel key={preference.id} title={getWidgetTitle(labels, preference.id)} eyebrow={widgetEyebrow(preference, plants, labels)}>
+              {renderWidgetContent({ preference, months, summary, plants, labels })}
             </Panel>
           ))}
         </div>
@@ -1155,8 +1213,9 @@ function buildRailState(input: {
   comparisonSummary: EnvironmentSummary;
   isDefaultPeriod: boolean;
   periodMonthsCount: number;
+  labels: DashboardUiDictionary;
 }) {
-  const { metric, unit, digits, months, summary, comparisonMonths, comparisonSummary, isDefaultPeriod, periodMonthsCount } = input;
+  const { metric, unit, digits, months, summary, comparisonMonths, comparisonSummary, isDefaultPeriod, periodMonthsCount, labels } = input;
   const latest = months.at(-1);
   const primaryValue = summary[metric];
 
@@ -1165,10 +1224,10 @@ function buildRailState(input: {
     const previousValue = latest ? findPreviousMonth(comparisonMonths, latest, metric) : 0;
     return {
       value: formatNumber(primaryValue, digits),
-      detailLabel: latest ? `Latest ${latest.label}:` : "No monthly data",
+      detailLabel: latest ? formatTemplate(labels.latestMonth, { month: latest.label }) : labels.noMonthlyData,
       detailValue: latest ? formatMetric(latestValue, unit, digits) : undefined,
       variation: latest ? percentChange(latestValue, previousValue) : null,
-      variationContext: latest ? `Compared with ${latest.month}/${latest.year - 1}` : "No previous-year data",
+      variationContext: latest ? formatTemplate(labels.comparedWithMonthYear, { month: latest.month, year: latest.year - 1 }) : labels.noPreviousYearData,
     };
   }
 
@@ -1177,10 +1236,10 @@ function buildRailState(input: {
 
   return {
     value: formatNumber(primaryValue, digits),
-    detailLabel: singleMonth ? "Previous year same month:" : "Previous year same period:",
+    detailLabel: singleMonth ? labels.previousYearSameMonth : labels.previousYearSamePeriod,
     detailValue: formatMetric(previousValue, unit, digits),
     variation: percentChange(primaryValue, previousValue),
-    variationContext: singleMonth ? "Compared with the same month last year" : "Compared with the same period last year",
+    variationContext: singleMonth ? labels.comparedWithSameMonthLastYear : labels.comparedWithSamePeriodLastYear,
   };
 }
 
@@ -1194,6 +1253,7 @@ export function EnvironmentDashboardBoard({
   periodMonthsCount = 12,
   storageKeyBase = "ma-hse-environment-dashboard",
   className,
+  labels = getUiDictionary("en").dashboard,
 }: Props) {
   const months = aggregateEnvironmentMonths(plants);
   const summary = summarizeEnvironmentMonths(months);
@@ -1201,7 +1261,7 @@ export function EnvironmentDashboardBoard({
   const comparisonSummary = summarizeEnvironmentMonths(comparisonMonths);
   const railCards = [
     {
-      title: "Energy consumption",
+      title: labels.energyConsumption,
       unit: "MWh",
       metric: "energyMwh" as const,
       digits: 1,
@@ -1209,7 +1269,7 @@ export function EnvironmentDashboardBoard({
       accent: METRIC_COLORS.energyMwh,
     },
     {
-      title: "Water usage",
+      title: labels.waterUsage,
       unit: "m3",
       metric: "waterM3" as const,
       digits: 1,
@@ -1217,7 +1277,7 @@ export function EnvironmentDashboardBoard({
       accent: METRIC_COLORS.waterM3,
     },
     {
-      title: "Waste",
+      title: labels.waste,
       unit: "t",
       metric: "totalWasteTons" as const,
       digits: 2,
@@ -1225,7 +1285,7 @@ export function EnvironmentDashboardBoard({
       accent: METRIC_COLORS.totalWasteTons,
     },
     {
-      title: "Spills",
+      title: labels.spills,
       unit: "events",
       metric: "spills" as const,
       digits: 0,
@@ -1244,6 +1304,7 @@ export function EnvironmentDashboardBoard({
       comparisonSummary,
       isDefaultPeriod,
       periodMonthsCount,
+      labels,
     }),
   }));
 
@@ -1253,7 +1314,7 @@ export function EnvironmentDashboardBoard({
         <aside className="bg-[radial-gradient(circle_at_18%_12%,rgba(34,197,94,0.32),transparent_30%),radial-gradient(circle_at_92%_16%,rgba(14,165,233,0.28),transparent_26%),linear-gradient(160deg,#14532d_0%,#0f172a_54%,#422006_100%)] p-5 text-white sm:p-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-50">
             <Leaf className="h-4 w-4" />
-            Environment KPIs
+            {labels.environmentKpis}
           </div>
           <h2 className="mt-4 text-3xl font-black leading-tight text-white">{title}</h2>
           <p className="mt-2 text-sm font-medium text-white/70">{scopeLabel}</p>
@@ -1284,6 +1345,7 @@ export function EnvironmentDashboardBoard({
             summary={summary}
             plants={plants}
             storageKeyBase={storageKeyBase}
+            labels={labels}
           />
         </div>
       </div>

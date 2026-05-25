@@ -10,10 +10,12 @@ import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { UnsafeActTypeManager } from "@/components/feature/unsafe-act-type-manager";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { prisma } from "@/lib/prisma";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getPlantRepeatabilityAlertConfig, getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
+import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 
 export default async function AdminPage({
@@ -30,6 +32,7 @@ export default async function AdminPage({
     plantLanguage: plantRow.defaultLanguage,
   });
   const ui = getUiDictionary(uiLocale);
+  const masterDataUi = await getLocalizedN0MasterDataUi(uiLocale);
 
   const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN)
     ? RoleCode.N0_ADMIN
@@ -138,13 +141,15 @@ export default async function AdminPage({
             MEDIUM: Number(slaConfig.MEDIUM ?? 14),
             HIGH: Number(slaConfig.HIGH ?? 7),
           }}
+          labels={masterDataUi}
         />
         <SafetyDaysAdminEditor
           initialManualLastAccidentDate={safetyDaysConfig.manualLastAccidentDate}
           initialHistoricalRecordDays={safetyDaysConfig.historicalRecordDays}
           initialHistoricalRecordStartDate={safetyDaysConfig.historicalRecordStartDate}
+          labels={masterDataUi}
         />
-        <QrTokenManager />
+        <QrTokenManager labels={masterDataUi} />
       </section>
 
       <RepeatabilityAlertEditor
@@ -161,6 +166,7 @@ export default async function AdminPage({
         initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
         initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
         initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+        labels={masterDataUi}
       />
 
       {actorRole === RoleCode.N0_ADMIN ? (
@@ -172,11 +178,15 @@ export default async function AdminPage({
             category: type.category,
             name: type.name,
           }))}
+          labels={masterDataUi}
         />
       ) : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.recipientLists}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.recipientLists}</h2>
+          <HelpPopover title={ui.dashboard.recipientLists} body={masterDataUi.recipientListsHelp} buttonLabel={masterDataUi.helpButton} />
+        </div>
         <div className="mt-3 space-y-3">
           {recipients.map((list) => (
             <article key={list.id} className="rounded-md border border-slate-200 p-3">
@@ -186,11 +196,15 @@ export default async function AdminPage({
               </p>
             </article>
           ))}
+          {recipients.length === 0 ? <p className="text-sm text-slate-600">{masterDataUi.noRecipientLists}</p> : null}
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.alertRules}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.alertRules}</h2>
+          <HelpPopover title={ui.dashboard.alertRules} body={masterDataUi.alertRulesHelp} buttonLabel={masterDataUi.helpButton} />
+        </div>
         <div className="mt-3 space-y-3">
           {rules.map((rule) => (
             <article key={rule.id} className="rounded-md border border-slate-200 p-3">
@@ -201,11 +215,12 @@ export default async function AdminPage({
               </p>
             </article>
           ))}
+          {rules.length === 0 ? <p className="text-sm text-slate-600">{masterDataUi.noAlertRules}</p> : null}
         </div>
       </section>
 
       {canManageUsers ? (
-        <UserManager users={users} allowedCreateRoles={allowedCreateRoles} />
+        <UserManager users={users} allowedCreateRoles={allowedCreateRoles} labels={masterDataUi} />
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
           {ui.dashboard.userManagementUnavailable}

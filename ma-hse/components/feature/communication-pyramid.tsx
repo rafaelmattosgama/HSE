@@ -1,6 +1,7 @@
 "use client";
 
 import { AppCard, AppSectionHeader } from "@/components/ui/app-surface";
+import { HelpPopover } from "@/components/ui/help-popover";
 
 type CommunicationPyramidCounts = {
   unsafeAct: number;
@@ -38,15 +39,21 @@ export function CommunicationPyramid({
   title,
   description,
   counts,
+  labels = {},
+  helpLabel = "Help",
 }: {
   title: string;
   description?: string;
   counts: CommunicationPyramidCounts;
+  labels?: Partial<Record<keyof CommunicationPyramidCounts, string>>;
+  helpLabel?: string;
 }) {
   return (
     <AppCard>
-      <AppSectionHeader eyebrow={title} />
-      {description ? <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p> : null}
+      <AppSectionHeader
+        eyebrow={title}
+        actions={description ? <HelpPopover title={title} body={description} buttonLabel={helpLabel} /> : undefined}
+      />
 
       <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
         <div className="mx-auto flex min-w-[620px] max-w-[820px] flex-col items-center gap-1.5">
@@ -72,7 +79,7 @@ export function CommunicationPyramid({
                     }}
                   />
                   <span className="relative min-w-0 truncate text-center text-[12px] font-black uppercase tracking-[0.12em] text-slate-950 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]">
-                    {layer.label}
+                    {labels[layer.key] ?? layer.label}
                   </span>
                 </article>
                 <span

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RoleCode } from "@prisma/client";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
 const LANGUAGE_OPTIONS = ["pt", "it", "en", "pl", "de", "ro", "fr"] as const;
 
@@ -20,6 +21,7 @@ type ManagedPlant = {
 type CorporatePlantFormProps = {
   plants?: ManagedPlant[];
   selectedPlantId?: string | null;
+  labels?: N0MasterDataUi;
 };
 
 function emptyCreateState() {
@@ -37,7 +39,7 @@ function emptyCreateState() {
   };
 }
 
-export function CorporatePlantForm({ plants = [], selectedPlantId = null }: CorporatePlantFormProps) {
+export function CorporatePlantForm({ plants = [], selectedPlantId = null, labels = getStaticN0MasterDataUi("en") }: CorporatePlantFormProps) {
   const router = useRouter();
   const selectedPlant = useMemo(
     () => plants.find((plant) => plant.id === selectedPlantId) ?? plants[0] ?? null,
@@ -93,14 +95,14 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
 
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to save plant");
+        throw new Error(json.message ?? labels.failedToSavePlant);
       }
 
       setGeneratedPasswords(json.data.generatedPasswords ?? []);
-      setCreateMessage("Plant and leadership roles saved.");
+      setCreateMessage(labels.plantSaved);
       setCreateForm(emptyCreateState());
     } catch (error) {
-      setCreateMessage(error instanceof Error ? error.message : "Failed to save plant");
+      setCreateMessage(error instanceof Error ? error.message : labels.failedToSavePlant);
     } finally {
       setCreateLoading(false);
     }
@@ -128,14 +130,14 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
 
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to update plant");
+        throw new Error(json.message ?? labels.failedToUpdatePlant);
       }
 
-      setEditMessage("Plant updated successfully.");
+      setEditMessage(labels.plantUpdated);
       router.push(`/app/settings?plant=${json.data.plant.code}`);
       router.refresh();
     } catch (error) {
-      setEditMessage(error instanceof Error ? error.message : "Failed to update plant");
+      setEditMessage(error instanceof Error ? error.message : labels.failedToUpdatePlant);
     } finally {
       setEditLoading(false);
     }
@@ -143,7 +145,7 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
 
   async function deletePlant() {
     if (!editingPlantId || !selectedPlant) return;
-    const confirmed = window.confirm(`Delete plant "${selectedPlant.name}"? This removes plant-scoped data and roles.`);
+    const confirmed = window.confirm(formatMasterDataMessage(labels.deletePlantConfirm, { plant: selectedPlant.name }));
     if (!confirmed) return;
 
     setDeleteLoading(true);
@@ -154,15 +156,15 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
       });
       const json = await response.json();
       if (!json.ok) {
-        throw new Error(json.message ?? "Failed to delete plant");
+        throw new Error(json.message ?? labels.failedToDeletePlant);
       }
 
       const nextPlant = plants.find((plant) => plant.id !== editingPlantId);
-      setEditMessage("Plant deleted successfully.");
+      setEditMessage(labels.plantDeleted);
       router.push(nextPlant ? `/app/settings?plant=${nextPlant.code}` : "/app/settings");
       router.refresh();
     } catch (error) {
-      setEditMessage(error instanceof Error ? error.message : "Failed to delete plant");
+      setEditMessage(error instanceof Error ? error.message : labels.failedToDeletePlant);
     } finally {
       setDeleteLoading(false);
     }
@@ -173,7 +175,7 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
       {plants.length > 0 ? (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <header className="mb-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Manage plants</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.managePlants}</h2>
           </header>
 
           <div className="mb-4 flex flex-wrap gap-2">
@@ -188,16 +190,16 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
                 }`}
                 onClick={() => selectPlant(plant)}
               >
-                {plant.name} {!plant.isActive ? "(inactive)" : ""}
+                {plant.name} {!plant.isActive ? `(${labels.inactive})` : ""}
               </button>
             ))}
           </div>
 
           {editingPlantId ? (
             <form onSubmit={submitEdit} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
-              <input value={editCode} onChange={(event) => setEditCode(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Plant Code" required />
-              <input value={editName} onChange={(event) => setEditName(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Plant Name" required />
-              <input value={editTimezone} onChange={(event) => setEditTimezone(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Time zone" required />
+              <input value={editCode} onChange={(event) => setEditCode(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.plantCode} required />
+              <input value={editName} onChange={(event) => setEditName(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.plantName} required />
+              <input value={editTimezone} onChange={(event) => setEditTimezone(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.timeZone} required />
               <select value={editLanguage} onChange={(event) => setEditLanguage(event.target.value as (typeof LANGUAGE_OPTIONS)[number])} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
                 {LANGUAGE_OPTIONS.map((entry) => (
                   <option key={entry} value={entry}>
@@ -208,15 +210,15 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
 
               <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
                 <input type="checkbox" checked={editIsActive} onChange={(event) => setEditIsActive(event.target.checked)} />
-                Active plant
+                {labels.activePlant}
               </label>
 
               <div className="flex flex-wrap gap-2 md:col-span-2">
                 <Button type="submit" size="sm" disabled={editLoading}>
-                  {editLoading ? "Saving..." : "Save plant"}
+                  {editLoading ? labels.saving : labels.save}
                 </Button>
                 <Button type="button" size="sm" variant="destructive" disabled={deleteLoading} onClick={deletePlant}>
-                  {deleteLoading ? "Deleting..." : "Delete plant"}
+                  {deleteLoading ? labels.updating : labels.deletePlant}
                 </Button>
               </div>
             </form>
@@ -229,17 +231,17 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Create plant</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.createPlant}</h2>
           </div>
           <Link href="/app/corporate" className={buttonVariants({ variant: "secondary", size: "sm" })}>
-            Back to corporate
+            {labels.backToCorporate}
           </Link>
         </header>
 
         <form onSubmit={submitCreate} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
-          <input value={createForm.code} onChange={(event) => setCreateForm((current) => ({ ...current, code: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Plant Code" required />
-          <input value={createForm.name} onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Plant Name" required />
-          <input value={createForm.timezone} onChange={(event) => setCreateForm((current) => ({ ...current, timezone: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Time zone" required />
+          <input value={createForm.code} onChange={(event) => setCreateForm((current) => ({ ...current, code: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.plantCode} required />
+          <input value={createForm.name} onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.plantName} required />
+          <input value={createForm.timezone} onChange={(event) => setCreateForm((current) => ({ ...current, timezone: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.timeZone} required />
           <select value={createForm.defaultLanguage} onChange={(event) => setCreateForm((current) => ({ ...current, defaultLanguage: event.target.value as (typeof LANGUAGE_OPTIONS)[number] }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
             {LANGUAGE_OPTIONS.map((entry) => (
               <option key={entry} value={entry}>
@@ -248,16 +250,16 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
             ))}
           </select>
 
-          <input value={createForm.n1Email} onChange={(event) => setCreateForm((current) => ({ ...current, n1Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="N1 email" required />
-          <input value={createForm.n1Name} onChange={(event) => setCreateForm((current) => ({ ...current, n1Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="N1 name" required />
-          <input value={createForm.n2Email} onChange={(event) => setCreateForm((current) => ({ ...current, n2Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="N2 email" required />
-          <input value={createForm.n2Name} onChange={(event) => setCreateForm((current) => ({ ...current, n2Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="N2 name" required />
-          <input value={createForm.n3Email} onChange={(event) => setCreateForm((current) => ({ ...current, n3Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="N3 email" required />
-          <input value={createForm.n3Name} onChange={(event) => setCreateForm((current) => ({ ...current, n3Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="N3 name" required />
+          <input value={createForm.n1Email} onChange={(event) => setCreateForm((current) => ({ ...current, n1Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n1Email} required />
+          <input value={createForm.n1Name} onChange={(event) => setCreateForm((current) => ({ ...current, n1Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n1Name} required />
+          <input value={createForm.n2Email} onChange={(event) => setCreateForm((current) => ({ ...current, n2Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n2Email} required />
+          <input value={createForm.n2Name} onChange={(event) => setCreateForm((current) => ({ ...current, n2Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n2Name} required />
+          <input value={createForm.n3Email} onChange={(event) => setCreateForm((current) => ({ ...current, n3Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n3Email} required />
+          <input value={createForm.n3Name} onChange={(event) => setCreateForm((current) => ({ ...current, n3Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n3Name} required />
 
           <div className="md:col-span-2">
             <Button type="submit" size="sm" disabled={createLoading}>
-              {createLoading ? "Saving..." : "Create plant"}
+              {createLoading ? labels.saving : labels.createPlant}
             </Button>
           </div>
         </form>
@@ -266,7 +268,7 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null }: Corp
 
         {generatedPasswords.length ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-semibold">Generated passwords</p>
+            <p className="font-semibold">{labels.generatedPasswords}</p>
             {generatedPasswords.map((entry) => (
               <p key={`${entry.role}-${entry.email}`}>
                 {entry.role} - {entry.email}: {entry.password}

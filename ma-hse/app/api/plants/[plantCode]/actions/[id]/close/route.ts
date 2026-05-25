@@ -1,6 +1,7 @@
 import { RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
+import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
@@ -23,15 +24,28 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const parsed = await parseBody(request, closeActionInput);
   if ("error" in parsed) return parsed.error;
 
-  const plant = await getPlantByCode(plantCode);
-  const action = await prisma.action.findFirst({ where: { id, plantId: plant.id } });
-  if (!action) return fail("NOT_FOUND", "Action not found", 404);
+  try {
+    const plant = await getPlantByCode(plantCode);
+    const action = await prisma.action.findFirst({ where: { id, plantId: plant.id } });
+    if (!action) return fail("NOT_FOUND", "Action not found", 404);
 
-  const updated = await ActionService.close({
-    actionId: id,
-    actorUserId: auth.session.user.id,
-    payload: parsed.data,
-  });
+    const updated = await ActionService.close({
+      actionId: id,
+      actorUserId: auth.session.user.id,
+      payload: parsed.data,
+    });
 
-  return ok(updated);
+    return ok(updated);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        plantCode,
+        actionId: id,
+        actorUserId: auth.session.user.id,
+      },
+      "failed_to_close_action",
+    );
+    return fail("INTERNAL_ERROR", error instanceof Error ? error.message : "Failed to close action", 500);
+  }
 }

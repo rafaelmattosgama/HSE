@@ -100,6 +100,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
           status: row.status,
           ownerName: row.ownerUser.name,
           dueDate: row.dueDate.toISOString().slice(0, 10),
+          closedDate: row.closedAt ? row.closedAt.toISOString().slice(0, 10) : null,
           local:
             row.communication?.workstation?.name ??
             row.communication?.area?.name ??
@@ -119,7 +120,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
             row.communicationId
               ? `/app/${plant}/communications/${row.communicationId}`
               : row.sewoId
-                ? `/app/${plant}/sewo`
+                ? `/app/${plant}/sewo?sewoId=${row.sewoId}`
                 : null,
           communicationId: row.communicationId,
           sewoId: row.sewoId,

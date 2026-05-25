@@ -1,6 +1,7 @@
 import { ActionSourceType, RoleCode, SEWOStatus } from "@prisma/client";
-import { ok } from "@/lib/api";
+import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
+import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
@@ -41,32 +42,44 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const parsed = await parseBody(request, createSEWOInput);
   if ("error" in parsed) return parsed.error;
 
-  const plant = await getPlantByCode(plantCode);
+  try {
+    const plant = await getPlantByCode(plantCode);
 
-  const sewo = await SewaService.create({
-    plantId: plant.id,
-    actorUserId: auth.session.user.id,
-    payload: parsed.data,
-  });
+    const sewo = await SewaService.create({
+      plantId: plant.id,
+      actorUserId: auth.session.user.id,
+      payload: parsed.data,
+    });
 
-  if (parsed.data.status === SEWOStatus.IN_APPROVAL) {
-    for (const actionPlan of parsed.data.actionPlans) {
-      await ActionService.create({
-        plantId: plant.id,
-        actorUserId: auth.session.user.id,
-        payload: {
-          sourceType: ActionSourceType.SEWO,
-          sewoId: sewo.id,
-          category: actionPlan.category,
-          priority: actionPlan.priority,
-          title: actionPlan.title,
-          description: actionPlan.description,
-          ownerUserId: actionPlan.ownerUserId,
-          dueDate: actionPlan.dueDate,
-        },
-      });
+    if (parsed.data.status === SEWOStatus.IN_APPROVAL) {
+      for (const actionPlan of parsed.data.actionPlans) {
+        await ActionService.create({
+          plantId: plant.id,
+          actorUserId: auth.session.user.id,
+          payload: {
+            sourceType: ActionSourceType.SEWO,
+            sewoId: sewo.id,
+            category: actionPlan.category,
+            priority: actionPlan.priority,
+            title: actionPlan.title,
+            description: actionPlan.description,
+            ownerUserId: actionPlan.ownerUserId,
+            dueDate: actionPlan.dueDate,
+          },
+        });
+      }
     }
-  }
 
-  return ok(sewo, { status: 201 });
+    return ok(sewo, { status: 201 });
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        plantCode,
+        actorUserId: auth.session.user.id,
+      },
+      "failed_to_create_sewo",
+    );
+    return fail("INTERNAL_ERROR", error instanceof Error ? error.message : "Failed to create S-EWO", 500);
+  }
 }

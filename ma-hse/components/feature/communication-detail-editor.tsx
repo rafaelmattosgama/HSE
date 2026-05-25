@@ -1,6 +1,6 @@
 "use client";
 
-import { CommunicationType } from "@prisma/client";
+import { ActionStatus, CommunicationStatus, CommunicationType } from "@prisma/client";
 import { useState } from "react";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
@@ -8,6 +8,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
 import type { BodyZonePickerLabels } from "@/lib/sewo-ui";
 
@@ -27,7 +28,7 @@ type ActionOwnerOption = {
 type CommunicationRecord = {
   id: string;
   type: CommunicationType;
-  status: string;
+  status: CommunicationStatus;
   eventDatetime: string;
   reporterName: string;
   reporterEmployeeNo: string | null;
@@ -51,12 +52,14 @@ type CommunicationRecord = {
   initialLostDays: number | null;
   hasLeave: boolean | null;
   returnDate: string | null;
+  linkedActionStatuses: ActionStatus[];
 };
 
 export function CommunicationDetailEditor({
   plant,
   communication,
   canEdit,
+  canManageStatus,
   canManageClassification,
   areas,
   workstations,
@@ -78,6 +81,7 @@ export function CommunicationDetailEditor({
   plant: string;
   communication: CommunicationRecord;
   canEdit: boolean;
+  canManageStatus: boolean;
   canManageClassification: boolean;
   areas: Option[];
   workstations: Option[];
@@ -119,7 +123,10 @@ export function CommunicationDetailEditor({
   const [returnDate, setReturnDate] = useState(communication.returnDate?.slice(0, 10) ?? "");
   const [isFatal, setIsFatal] = useState(Boolean(communication.isFatal));
   const [message, setMessage] = useState("");
+  const [statusReason, setStatusReason] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
 
   const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
   const needsRestrictedProfessionalRisk = type === "NEAR_MISS" || type === "FIRST_AID";
@@ -131,6 +138,7 @@ export function CommunicationDetailEditor({
   const selectedReporter = employees.find((employee) => employee.employeeNo === reporterEmployeeNo) ?? null;
   const selectedTarget = employees.find((employee) => employee.id === targetEmployeeId) ?? null;
   const communicationLabel = `${communication.id} | ${typeLabels[communication.type] ?? communication.type} | ${statusLabel}`;
+  const hasBlockingLinkedActions = hasOpenLinkedActions(communication.linkedActionStatuses);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -183,6 +191,47 @@ export function CommunicationDetailEditor({
     }
   }
 
+  async function changeStatus(nextStatus: "closed" | "to_do") {
+    const trimmedReason = statusReason.trim();
+
+    if (trimmedReason.length < 5) {
+      setStatusMessage(text.statusReasonRequired);
+      return;
+    }
+
+    if (nextStatus === "closed" && hasBlockingLinkedActions) {
+      setStatusMessage(text.cannotCloseWithOpenActions);
+      return;
+    }
+
+    setChangingStatus(true);
+    setStatusMessage("");
+
+    try {
+      const endpoint = nextStatus === "closed" ? "manual-close" : "reopen";
+      const response = await fetch(`/api/plants/${plant}/communications/${communication.id}/${endpoint}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: trimmedReason }),
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.ok) {
+        if (json?.errorCode === "COMMUNICATION_HAS_OPEN_ACTIONS") {
+          throw new Error(text.cannotCloseWithOpenActions);
+        }
+        throw new Error(json?.message ?? text.statusChangeFailed);
+      }
+
+      setStatusMessage(text.statusChangeSaved);
+      window.location.reload();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : text.statusChangeFailed);
+    } finally {
+      setChangingStatus(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <form onSubmit={submit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -194,6 +243,53 @@ export function CommunicationDetailEditor({
             {statusLabel}
           </div>
         </div>
+
+        {canManageStatus ? (
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="text-sm font-semibold text-slate-900">{text.statusManagement}</h3>
+              <span className="text-xs text-slate-500">
+                {text.linkedActions}: {communication.linkedActionStatuses.length}
+              </span>
+            </div>
+            <textarea
+              value={statusReason}
+              onChange={(event) => setStatusReason(event.target.value)}
+              rows={3}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder={text.statusChangeReason}
+              disabled={changingStatus}
+            />
+            <div className="flex flex-wrap gap-3">
+              {communication.status !== CommunicationStatus.CLOSED ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={changingStatus || hasBlockingLinkedActions}
+                  onClick={() => void changeStatus("closed")}
+                >
+                  {changingStatus ? text.applyingStatus : text.closeCommunication}
+                </Button>
+              ) : null}
+              {communication.status === CommunicationStatus.CLOSED ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={changingStatus}
+                  onClick={() => void changeStatus("to_do")}
+                >
+                  {changingStatus ? text.applyingStatus : text.reopenCommunication}
+                </Button>
+              ) : null}
+            </div>
+            {communication.status !== CommunicationStatus.CLOSED && hasBlockingLinkedActions ? (
+              <p className="text-sm text-amber-700">{text.cannotCloseWithOpenActions}</p>
+            ) : null}
+            {statusMessage ? <p className="text-sm text-slate-600">{statusMessage}</p> : null}
+          </div>
+        ) : null}
 
         <div className="grid gap-3 md:grid-cols-2">
           <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
