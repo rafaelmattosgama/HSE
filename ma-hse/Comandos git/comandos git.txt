@@ -1,3 +1,4 @@
+cd C:\HSE\ma-hse
 git status
 git add .
 git commit -m "Corrige bugs X"
@@ -8,3 +9,11 @@ Executar para fazer o delpoy
 
 ssh ma_hse_deploy@157.245.31.71
 sudo /usr/local/sbin/deploy-ma-hse
+
+
+
+
+
+cd C:\HSE\ma-hse
+docker compose up -d
+npm run dev:all
