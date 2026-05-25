@@ -1,8 +1,10 @@
 cd C:\HSE\ma-hse
 git status
 git add .
-git commit -m "Corrige bugs X"
+git commit -m "Correção Deploy Automatico2"
+git switch -c correcoesluis
 git push origin correcoesluis
+$env:Path += ";C:\Program Files\GitHub CLI"
 gh pr create --base main --head correcoesluis --title "Correções Luis" --body "Correções aplicadas"
 gh pr merge --auto --merge --delete-branch
 
