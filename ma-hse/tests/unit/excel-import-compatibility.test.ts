@@ -3,9 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
   area: {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+  },
+  equipment: {
+    findMany: vi.fn(),
     upsert: vi.fn(),
   },
   employeeDirectory: {
+    findMany: vi.fn(),
     upsert: vi.fn(),
   },
   workstation: {
@@ -13,6 +19,7 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
     upsert: vi.fn(),
   },
+  $transaction: vi.fn(),
   $executeRaw: vi.fn(),
   $queryRaw: vi.fn(),
 }));
@@ -60,11 +67,16 @@ async function workbookBuffer(workbook: ExcelJS.Workbook) {
 describe("importable Excel compatibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.area.findMany.mockResolvedValue([{ code: "DEP1", name: "Producao" }]);
     prismaMock.area.upsert.mockResolvedValue({});
+    prismaMock.equipment.findMany.mockResolvedValue([{ code: "EQ1", name: "Empilhador 1" }]);
+    prismaMock.equipment.upsert.mockResolvedValue({});
+    prismaMock.employeeDirectory.findMany.mockResolvedValue([{ employeeNo: "1001", name: "Maria Silva", dept: "Producao" }]);
     prismaMock.employeeDirectory.upsert.mockResolvedValue({});
     prismaMock.workstation.findFirst.mockResolvedValue({ id: "ws-1" });
     prismaMock.workstation.findMany.mockResolvedValue([{ code: "WS1", name: "Linha 1" }]);
     prismaMock.workstation.upsert.mockResolvedValue({});
+    prismaMock.$transaction.mockImplementation((operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
     prismaMock.$executeRaw.mockResolvedValue(1);
     prismaMock.$queryRaw.mockResolvedValue([occupationalWorkerRow]);
   });
@@ -75,6 +87,7 @@ describe("importable Excel compatibility", () => {
 
     workbook.getWorksheet("Departments")!.getRow(4).values = ["DEP1", "Producao"];
     workbook.getWorksheet("Workstations")!.getRow(4).values = ["WS1", "Linha 1"];
+    workbook.getWorksheet("Equipment")!.getRow(4).values = ["EQ1", "Empilhador 1"];
     workbook.getWorksheet("Workers")!.getRow(4).values = ["1001", "Maria Silva", "Producao"];
 
     const summary = await MasterDataImportService.importFromExcel("plant-1", new Uint8Array(await workbookBuffer(workbook)));
@@ -82,11 +95,23 @@ describe("importable Excel compatibility", () => {
     expect(summary).toEqual({
       departments: 1,
       workstations: 1,
+      equipments: 1,
       workers: 1,
     });
     expect(prismaMock.area.upsert).toHaveBeenCalledTimes(1);
     expect(prismaMock.workstation.upsert).toHaveBeenCalledTimes(1);
+    expect(prismaMock.equipment.upsert).toHaveBeenCalledTimes(1);
     expect(prismaMock.employeeDirectory.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("exports master data with the equipment sheet populated", async () => {
+    const exported = await MasterDataImportService.buildExport("plant-1");
+    const workbook = await loadWorkbook(exported);
+
+    expect(workbook.getWorksheet("Departments")!.getRow(4).values).toEqual([, "DEP1", "Producao"]);
+    expect(workbook.getWorksheet("Workstations")!.getRow(4).values).toEqual([, "WS1", "Linha 1"]);
+    expect(workbook.getWorksheet("Equipment")!.getRow(4).values).toEqual([, "EQ1", "Empilhador 1"]);
+    expect(workbook.getWorksheet("Workers")!.getRow(4).values).toEqual([, "1001", "Maria Silva", "Producao"]);
   });
 
   it("imports data filled into the downloaded occupational health template", async () => {

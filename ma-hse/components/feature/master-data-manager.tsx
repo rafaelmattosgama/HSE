@@ -29,7 +29,8 @@ type EditingState = {
 
 type DeletingState = {
   type: "area" | "workstation" | "worker";
-  id: string;
+  id: string | null;
+  scope: "single" | "all";
 };
 
 function sortItems(items: Item[]) {
@@ -125,7 +126,11 @@ export function MasterDataManager({
   }
 
   function isDeleting(type: DeletingState["type"], id: string) {
-    return deleting?.type === type && deleting.id === id;
+    return deleting?.type === type && deleting.scope === "single" && deleting.id === id;
+  }
+
+  function isDeletingAll(type: DeletingState["type"]) {
+    return deleting?.type === type && deleting.scope === "all";
   }
 
   async function deleteMasterData(type: "area" | "workstation", item: Item) {
@@ -133,7 +138,7 @@ export function MasterDataManager({
       return;
     }
 
-    setDeleting({ type, id: item.id });
+    setDeleting({ type, id: item.id, scope: "single" });
     setMessage("");
 
     try {
@@ -163,12 +168,47 @@ export function MasterDataManager({
     }
   }
 
+  async function deleteAllMasterData(type: "area" | "workstation") {
+    if (!window.confirm(labels.sections[type].deleteAllConfirm)) {
+      return;
+    }
+
+    setDeleting({ type, id: null, scope: "all" });
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type, deleteAll: true }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.ok) {
+        throw new Error(json.message ?? labels.sections[type].deleteAllSuccess);
+      }
+
+      if (type === "area") {
+        setAreas([]);
+        cancelAreaEdit();
+        setMessage(labels.sections.area.deleteAllSuccess);
+      } else {
+        setWorkstations([]);
+        cancelWorkstationEdit();
+        setMessage(labels.sections.workstation.deleteAllSuccess);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : labels.sections[type].deleteAllSuccess);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   async function deleteWorker(item: Worker) {
     if (!window.confirm(labels.workerDeleteConfirm)) {
       return;
     }
 
-    setDeleting({ type: "worker", id: item.id });
+    setDeleting({ type: "worker", id: item.id, scope: "single" });
     setMessage("");
 
     try {
@@ -187,6 +227,35 @@ export function MasterDataManager({
       setMessage(labels.workerDeleteSuccess);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : labels.failedToSaveWorker);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function deleteAllWorkers() {
+    if (!window.confirm(labels.workerDeleteAllConfirm)) {
+      return;
+    }
+
+    setDeleting({ type: "worker", id: null, scope: "all" });
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/workers`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deleteAll: true }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.ok) {
+        throw new Error(json.message ?? labels.workerDeleteAllSuccess);
+      }
+
+      setWorkers([]);
+      cancelWorkerEdit();
+      setMessage(labels.workerDeleteAllSuccess);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
     } finally {
       setDeleting(null);
     }
@@ -308,6 +377,7 @@ export function MasterDataManager({
         formatMasterDataMessage(labels.importSuccess, {
           departments: json.data.summary.departments,
           workstations: json.data.summary.workstations,
+          equipments: json.data.summary.equipments ?? 0,
           workers: json.data.summary.workers,
         }),
       );
@@ -424,11 +494,21 @@ export function MasterDataManager({
               <h3 className="text-sm font-semibold text-slate-900">{labels.sections.area.title}</h3>
               <HelpPopover title={labels.sections.area.title} body={labels.help.area} buttonLabel={labels.helpButton} />
             </div>
-            {editing.areaId ? (
-              <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelAreaEdit}>
-                {labels.cancel}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+                onClick={() => void deleteAllMasterData("area")}
+                disabled={areas.length === 0 || Boolean(deleting)}
+              >
+                {isDeletingAll("area") ? labels.deactivatingAll : labels.deactivateAll}
               </button>
-            ) : null}
+              {editing.areaId ? (
+                <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelAreaEdit}>
+                  {labels.cancel}
+                </button>
+              ) : null}
+            </div>
           </div>
           <input
             value={areaCode}
@@ -470,11 +550,21 @@ export function MasterDataManager({
               <h3 className="text-sm font-semibold text-slate-900">{labels.sections.workstation.title}</h3>
               <HelpPopover title={labels.sections.workstation.title} body={labels.help.workstation} buttonLabel={labels.helpButton} />
             </div>
-            {editing.workstationId ? (
-              <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkstationEdit}>
-                {labels.cancel}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+                onClick={() => void deleteAllMasterData("workstation")}
+                disabled={workstations.length === 0 || Boolean(deleting)}
+              >
+                {isDeletingAll("workstation") ? labels.deactivatingAll : labels.deactivateAll}
               </button>
-            ) : null}
+              {editing.workstationId ? (
+                <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkstationEdit}>
+                  {labels.cancel}
+                </button>
+              ) : null}
+            </div>
           </div>
           <input
             value={workstationCode}
@@ -516,11 +606,21 @@ export function MasterDataManager({
               <h3 className="text-sm font-semibold text-slate-900">{labels.workerSectionTitle}</h3>
               <HelpPopover title={labels.workerSectionTitle} body={labels.help.workers} buttonLabel={labels.helpButton} />
             </div>
-            {editing.employeeNo ? (
-              <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkerEdit}>
-                {labels.cancel}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+                onClick={() => void deleteAllWorkers()}
+                disabled={workers.length === 0 || Boolean(deleting)}
+              >
+                {isDeletingAll("worker") ? labels.deactivatingAll : labels.deactivateAll}
               </button>
-            ) : null}
+              {editing.employeeNo ? (
+                <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkerEdit}>
+                  {labels.cancel}
+                </button>
+              ) : null}
+            </div>
           </div>
           <input
             value={employeeNo}

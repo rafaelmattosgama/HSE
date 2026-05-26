@@ -1,6 +1,24 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 
+type CatalogWorkbookRow = {
+  code: string;
+  name: string;
+};
+
+type WorkerWorkbookRow = {
+  employeeNo: string;
+  name: string;
+  dept: string | null;
+};
+
+type MasterDataWorkbookData = {
+  departments?: CatalogWorkbookRow[];
+  workstations?: CatalogWorkbookRow[];
+  equipments?: CatalogWorkbookRow[];
+  workers?: WorkerWorkbookRow[];
+};
+
 function normalizeText(value: unknown) {
   return String(value ?? "")
     .normalize("NFD")
@@ -70,6 +88,95 @@ function findWorkerSheetByHeaders(workbook: ExcelJS.Workbook) {
   return workbook.worksheets.find((sheet) => findWorkerHeaderRow(sheet) > 0);
 }
 
+function applyWorksheetTitle(sheet: ExcelJS.Worksheet, title: string, mergeRange: string) {
+  sheet.getCell("A1").value = title;
+  sheet.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+  sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+  sheet.mergeCells(mergeRange);
+}
+
+function applyHeaderRow(row: ExcelJS.Row) {
+  row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+}
+
+function addCatalogSheet(workbook: ExcelJS.Workbook, sheetName: string, title: string, rows: CatalogWorkbookRow[]) {
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.columns = [{ width: 18 }, { width: 40 }];
+  applyWorksheetTitle(sheet, title, "A1:B1");
+  sheet.getRow(3).values = ["Code", "Name"];
+  applyHeaderRow(sheet.getRow(3));
+
+  sheet.addRows(
+    rows.length > 0
+      ? rows.map((row) => [row.code, row.name])
+      : [
+          ["", ""],
+          ["", ""],
+          ["", ""],
+          ["", ""],
+          ["", ""],
+        ],
+  );
+
+  sheet.views = [{ state: "frozen", ySplit: 3 }];
+  return sheet;
+}
+
+function addWorkersSheet(workbook: ExcelJS.Workbook, rows: WorkerWorkbookRow[]) {
+  const sheet = workbook.addWorksheet("Workers");
+  sheet.columns = [{ width: 20 }, { width: 32 }, { width: 28 }];
+  applyWorksheetTitle(sheet, "Workers", "A1:C1");
+  sheet.getRow(3).values = ["Employee Number", "Name", "Department"];
+  applyHeaderRow(sheet.getRow(3));
+
+  sheet.addRows(
+    rows.length > 0
+      ? rows.map((row) => [row.employeeNo, row.name, row.dept ?? ""])
+      : [
+          ["", "", ""],
+          ["", "", ""],
+          ["", "", ""],
+          ["", "", ""],
+          ["", "", ""],
+        ],
+  );
+
+  sheet.views = [{ state: "frozen", ySplit: 3 }];
+  return sheet;
+}
+
+async function buildWorkbook(data: MasterDataWorkbookData = {}) {
+  const workbook = new ExcelJS.Workbook();
+  const departments = data.departments ?? [];
+  const workstations = data.workstations ?? [];
+  const equipments = data.equipments ?? [];
+  const workers = data.workers ?? [];
+  const hasPrefilledData = departments.length + workstations.length + equipments.length + workers.length > 0;
+
+  const instructions = workbook.addWorksheet("Instructions");
+  instructions.columns = [{ width: 120 }];
+  instructions.getCell("A1").value = hasPrefilledData ? "Master data export" : "Master data import template";
+  instructions.getCell("A1").font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  instructions.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
+  instructions.getCell("A3").value = "Use the sheets Departments, Workstations, Equipment and Workers.";
+  instructions.getCell("A4").value = "Departments, Workstations and Equipment sheets require the columns Code and Name.";
+  instructions.getCell("A5").value = "Workers sheet requires the columns Employee Number and Name. Department is optional.";
+  instructions.getCell("A6").value = hasPrefilledData
+    ? "Active records for the selected plant are prefilled. Edit existing rows or append new rows before re-importing."
+    : "Leave rows blank if you do not want to import that entity.";
+  instructions.getCell("A7").value = "Imports update existing records by code or employee number and reactivate them automatically.";
+  instructions.getCell("A8").value = "Keep the worksheet names unchanged when possible to simplify imports.";
+
+  addCatalogSheet(workbook, "Departments", "Departments", departments);
+  addCatalogSheet(workbook, "Workstations", "Workstations", workstations);
+  addCatalogSheet(workbook, "Equipment", "Equipment", equipments);
+  addWorkersSheet(workbook, workers);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer as ArrayBuffer);
+}
+
 async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
@@ -121,6 +228,43 @@ async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet) {
     if (!code || !name) continue;
 
     await prisma.workstation.upsert({
+      where: {
+        plantId_code: {
+          plantId,
+          code,
+        },
+      },
+      update: {
+        name,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        code,
+        name,
+      },
+    });
+
+    imported += 1;
+  }
+
+  return imported;
+}
+
+async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet) {
+  const headerRow = findHeaderRow(sheet, ["code", "name"]);
+  if (!headerRow) return 0;
+
+  const headerMap = buildHeaderMap(sheet, headerRow);
+  let imported = 0;
+
+  for (let rowNumber = headerRow + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    const code = getCellText(row, headerMap, ["code", "codigo"], 1);
+    const name = getCellText(row, headerMap, ["name", "nome", "equipment", "equipamento"], 2);
+    if (!code || !name) continue;
+
+    await prisma.equipment.upsert({
       where: {
         plantId_code: {
           plantId,
@@ -201,91 +345,56 @@ export const MasterDataImportService = {
 
     const departmentSheet = findSheetByNames(workbook, ["depart", "area"]);
     const workstationSheet = findSheetByNames(workbook, ["workstation", "posto"]);
+    const equipmentSheet = findSheetByNames(workbook, ["equipment", "equipamento"]);
     const workerSheet = findSheetByNames(workbook, ["worker", "trabalhador", "employee"]) ?? findWorkerSheetByHeaders(workbook);
 
     const summary = {
       departments: departmentSheet ? await importDepartments(plantId, departmentSheet) : 0,
       workstations: workstationSheet ? await importWorkstations(plantId, workstationSheet) : 0,
+      equipments: equipmentSheet ? await importEquipments(plantId, equipmentSheet) : 0,
       workers: workerSheet ? await importWorkers(plantId, workerSheet) : 0,
     };
 
-    if (summary.departments + summary.workstations + summary.workers === 0) {
-      throw new Error("Excel file does not contain valid Departments, Workstations or Workers sheets");
+    if (summary.departments + summary.workstations + summary.equipments + summary.workers === 0) {
+      throw new Error("Excel file does not contain valid Departments, Workstations, Equipment or Workers sheets");
     }
 
     return summary;
   },
 
   async buildTemplate() {
-    const workbook = new ExcelJS.Workbook();
+    return buildWorkbook();
+  },
 
-    const instructions = workbook.addWorksheet("Instructions");
-    instructions.columns = [{ width: 120 }];
-    instructions.getCell("A1").value = "Master data import template";
-    instructions.getCell("A1").font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
-    instructions.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    instructions.getCell("A3").value = "Fill the sheets Departments, Workstations and Workers. Leave rows blank if you do not want to import that entity.";
-    instructions.getCell("A4").value = "Departments sheet: required columns Code and Name.";
-    instructions.getCell("A5").value = "Workstations sheet: required columns Code and Name.";
-    instructions.getCell("A6").value = "Workers sheet: required columns Employee Number and Name. Department is optional.";
-    instructions.getCell("A7").value = "Imports update existing records by code or employee number and reactivate them automatically.";
-    instructions.getCell("A8").value = "Keep the worksheet names unchanged when possible to simplify imports.";
-
-    const departments = workbook.addWorksheet("Departments");
-    departments.columns = [{ width: 18 }, { width: 40 }];
-    departments.getCell("A1").value = "Departments";
-    departments.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
-    departments.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    departments.mergeCells("A1:B1");
-    departments.getRow(3).values = ["Code", "Name"];
-    departments.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    departments.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    departments.addRows([
-      ["", ""],
-      ["", ""],
-      ["", ""],
-      ["", ""],
-      ["", ""],
+  async buildExport(plantId: string) {
+    const [departments, workstations, equipments, workers] = await prisma.$transaction([
+      prisma.area.findMany({
+        where: { plantId, isActive: true },
+        orderBy: [{ code: "asc" }, { name: "asc" }],
+        select: { code: true, name: true },
+      }),
+      prisma.workstation.findMany({
+        where: { plantId, isActive: true },
+        orderBy: [{ code: "asc" }, { name: "asc" }],
+        select: { code: true, name: true },
+      }),
+      prisma.equipment.findMany({
+        where: { plantId, isActive: true },
+        orderBy: [{ code: "asc" }, { name: "asc" }],
+        select: { code: true, name: true },
+      }),
+      prisma.employeeDirectory.findMany({
+        where: { plantId, isActive: true },
+        orderBy: [{ employeeNo: "asc" }, { name: "asc" }],
+        select: { employeeNo: true, name: true, dept: true },
+      }),
     ]);
-    departments.views = [{ state: "frozen", ySplit: 3 }];
 
-    const workstations = workbook.addWorksheet("Workstations");
-    workstations.columns = [{ width: 18 }, { width: 40 }];
-    workstations.getCell("A1").value = "Workstations";
-    workstations.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
-    workstations.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    workstations.mergeCells("A1:B1");
-    workstations.getRow(3).values = ["Code", "Name"];
-    workstations.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    workstations.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    workstations.addRows([
-      ["", ""],
-      ["", ""],
-      ["", ""],
-      ["", ""],
-      ["", ""],
-    ]);
-    workstations.views = [{ state: "frozen", ySplit: 3 }];
-
-    const workers = workbook.addWorksheet("Workers");
-    workers.columns = [{ width: 20 }, { width: 32 }, { width: 28 }];
-    workers.getCell("A1").value = "Workers";
-    workers.getCell("A1").font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
-    workers.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    workers.mergeCells("A1:C1");
-    workers.getRow(3).values = ["Employee Number", "Name", "Department"];
-    workers.getRow(3).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    workers.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF002663" } };
-    workers.addRows([
-      ["", "", ""],
-      ["", "", ""],
-      ["", "", ""],
-      ["", "", ""],
-      ["", "", ""],
-    ]);
-    workers.views = [{ state: "frozen", ySplit: 3 }];
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(buffer as ArrayBuffer);
+    return buildWorkbook({
+      departments,
+      workstations,
+      equipments,
+      workers,
+    });
   },
 };

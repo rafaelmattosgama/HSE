@@ -6,6 +6,7 @@ import { UserManager } from "@/components/feature/user-manager";
 import { QrTokenManager } from "@/components/feature/qr-token-manager";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { SafetyDaysAdminEditor } from "@/components/feature/safety-days-admin-editor";
+import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
@@ -19,6 +20,7 @@ import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-servic
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
+import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
 
 export default async function AdminPage({
   params,
@@ -62,6 +64,7 @@ export default async function AdminPage({
     unsafeConditionTypes,
     nearMissTypes,
     injuryTypes,
+    sewoRecipients,
     repeatabilityConfig,
     safetyDaysConfig,
   ] = await Promise.all([
@@ -121,6 +124,7 @@ export default async function AdminPage({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: [{ code: "asc" }, { name: "asc" }],
     }),
+    listSewoReportRecipients(plantRow.id),
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
   ]);
@@ -221,23 +225,31 @@ export default async function AdminPage({
         />
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.recipientLists}</h2>
-          <HelpPopover title={ui.dashboard.recipientLists} body={masterDataUi.recipientListsHelp} buttonLabel={masterDataUi.helpButton} />
-        </div>
-        <div className="mt-3 space-y-3">
-          {recipients.map((list) => (
-            <article key={list.id} className="rounded-md border border-slate-200 p-3">
-              <p className="text-sm font-semibold text-slate-900">{list.name} ({list.scope})</p>
-              <p className="text-xs text-slate-600">
-                {list.recipients.length} {ui.dashboard.recipients}
-              </p>
-            </article>
-          ))}
-          {recipients.length === 0 ? <p className="text-sm text-slate-600">{masterDataUi.noRecipientLists}</p> : null}
-        </div>
-      </section>
+      {actorRole === RoleCode.N0_ADMIN ? (
+        <SewoRecipientListManager
+          plantCode={plant}
+          initialRecipients={sewoRecipients}
+          labels={masterDataUi}
+        />
+      ) : (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.recipientLists}</h2>
+            <HelpPopover title={ui.dashboard.recipientLists} body={masterDataUi.recipientListsHelp} buttonLabel={masterDataUi.helpButton} />
+          </div>
+          <div className="mt-3 space-y-3">
+            {recipients.map((list) => (
+              <article key={list.id} className="rounded-md border border-slate-200 p-3">
+                <p className="text-sm font-semibold text-slate-900">{list.name} ({list.scope})</p>
+                <p className="text-xs text-slate-600">
+                  {list.recipients.length} {ui.dashboard.recipients}
+                </p>
+              </article>
+            ))}
+            {recipients.length === 0 ? <p className="text-sm text-slate-600">{masterDataUi.noRecipientLists}</p> : null}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">

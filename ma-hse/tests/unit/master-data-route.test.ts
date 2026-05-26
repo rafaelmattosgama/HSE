@@ -14,36 +14,43 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   workstation: {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   equipment: {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   nearMissType: {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   unsafeActType: {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   unsafeConditionType: {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   injuryType: {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
 }));
 
@@ -53,7 +60,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: prismaMock,
 }));
 
-import { POST } from "@/app/api/plants/[plantCode]/admin/master-data/route";
+import { DELETE, POST } from "@/app/api/plants/[plantCode]/admin/master-data/route";
 
 function routeContext(plantCode = "pl1") {
   return {
@@ -183,6 +190,33 @@ describe("master data route", () => {
         name: "Forklift 1B",
         isActive: true,
       },
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("allows N0 admin to deactivate an entire section", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: { user: { plantRoles: [{ role: RoleCode.N0_ADMIN }] } },
+      role: RoleCode.N0_ADMIN,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.equipment.updateMany.mockResolvedValue({ count: 3 });
+
+    const response = await DELETE(
+      new Request("http://localhost/api/plants/pl1/admin/master-data", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "equipment",
+          deleteAll: true,
+        }),
+      }),
+      routeContext(),
+    );
+
+    expect(prismaMock.equipment.updateMany).toHaveBeenCalledWith({
+      where: { plantId: "plant-1", isActive: true },
+      data: { isActive: false },
     });
     expect(response.status).toBe(200);
   });
