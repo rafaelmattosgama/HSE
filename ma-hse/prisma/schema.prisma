@@ -900,6 +900,7 @@ model ReportRecipient {
   listId     String
   email      String
   name       String?
+  language   String              @default("en")
   isActive   Boolean             @default(true)
   createdAt  DateTime            @default(now())
   list       ReportRecipientList @relation(fields: [listId], references: [id], onDelete: Cascade)

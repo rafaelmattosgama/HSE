@@ -9,6 +9,7 @@ import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager
 import { PlantLanguageSettings } from "@/components/feature/plant-language-settings";
 import { ProfessionalRisksManager } from "@/components/feature/professional-risks-manager";
 import { ReportLayoutManager } from "@/components/feature/report-layout-manager";
+import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { UserManager } from "@/components/feature/user-manager";
 import {
   DEFAULT_MODULE_TOGGLES,
@@ -22,6 +23,7 @@ import { getServerUiDictionary, getServerUiLocale } from "@/lib/server-ui-langua
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
+import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 
@@ -126,6 +128,7 @@ export default async function SettingsPage({
 
   const moduleParameter = selectedPlant?.systemParameters.find((entry) => entry.key === MODULE_TOGGLES_PARAMETER_KEY);
   const reportLayoutParameter = selectedPlant?.systemParameters.find((entry) => entry.key === "REPORT_LAYOUT");
+  const sewoRecipients = selectedPlant ? await listSewoReportRecipients(selectedPlant.id) : [];
   const uiLocale = await getServerUiLocale({
     userLanguage: session.user.language,
     plantLanguage: selectedPlant?.defaultLanguage,
@@ -243,6 +246,12 @@ export default async function SettingsPage({
             initialUnsafeActTypes={selectedPlant.unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
             initialUnsafeConditionTypes={selectedPlant.unsafeCondTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
             initialInjuryTypes={selectedPlant.injuryTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+            labels={masterDataUi}
+          />
+
+          <SewoRecipientListManager
+            plantCode={selectedPlant.code}
+            initialRecipients={sewoRecipients}
             labels={masterDataUi}
           />
 

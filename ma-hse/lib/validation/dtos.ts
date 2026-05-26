@@ -501,7 +501,16 @@ export const createMasterDataItemInput = z.object({
 
 export const deleteMasterDataItemInput = z.object({
   type: z.enum(["area", "workstation", "equipment", "nearMissType", "unsafeActType", "unsafeConditionType", "injuryType"]),
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
+  deleteAll: z.boolean().default(false),
+}).superRefine((value, ctx) => {
+  if (!value.deleteAll && !value.id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["id"],
+      message: "Item id is required when deleteAll is false",
+    });
+  }
 });
 
 export const upsertProfessionalRiskInput = z.object({
@@ -534,7 +543,16 @@ export const createWorkerInput = z.object({
 });
 
 export const deleteWorkerInput = z.object({
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
+  deleteAll: z.boolean().default(false),
+}).superRefine((value, ctx) => {
+  if (!value.deleteAll && !value.id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["id"],
+      message: "Worker id is required when deleteAll is false",
+    });
+  }
 });
 
 export const upsertOccupationalHealthWorkerInput = z.object({

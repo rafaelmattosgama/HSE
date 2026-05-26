@@ -178,6 +178,25 @@ async function deactivateItem(type: MasterDataType, plantId: string, id: string)
   }
 }
 
+async function deactivateAllItems(type: MasterDataType, plantId: string) {
+  switch (type) {
+    case "area":
+      return prisma.area.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+    case "workstation":
+      return prisma.workstation.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+    case "equipment":
+      return prisma.equipment.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+    case "nearMissType":
+      return prisma.nearMissType.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+    case "unsafeActType":
+      return prisma.unsafeActType.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+    case "unsafeConditionType":
+      return prisma.unsafeConditionType.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+    case "injuryType":
+      return prisma.injuryType.updateMany({ where: { plantId, isActive: true }, data: { isActive: false } });
+  }
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
   const auth = await requirePlantAccess(plantCode, [...ADMIN_MASTER_DATA_ROLES]);
@@ -275,7 +294,12 @@ export async function DELETE(request: Request, context: { params: Promise<{ plan
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
-  const result = await deactivateItem(parsed.data.type, plant.id, parsed.data.id);
+  if (parsed.data.deleteAll) {
+    const result = await deactivateAllItems(parsed.data.type, plant.id);
+    return ok({ deletedType: parsed.data.type, deletedCount: result.count, deleteAll: true });
+  }
+
+  const result = await deactivateItem(parsed.data.type, plant.id, parsed.data.id!);
 
   if (result.count === 0) {
     return fail("NOT_FOUND", notFoundMessage(parsed.data.type), 404);

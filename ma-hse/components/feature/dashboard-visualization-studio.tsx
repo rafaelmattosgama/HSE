@@ -64,6 +64,22 @@ const METRIC_OPTIONS: Array<{ id: MetricId; labelKey: keyof DashboardUiDictionar
   { id: "gravityRate", labelKey: "gravityRate", variant: "index" },
 ];
 
+function getDefaultChartType(trendChartsEnabled: boolean): ChartType {
+  return trendChartsEnabled ? "bar" : "pareto";
+}
+
+export function resolveStoredChartType(stored: string | null, trendChartsEnabled: boolean): ChartType {
+  if (stored === "bar" || stored === "points") {
+    return trendChartsEnabled ? stored : "pareto";
+  }
+
+  if (stored === "circular" || stored === "pareto") {
+    return stored;
+  }
+
+  return getDefaultChartType(trendChartsEnabled);
+}
+
 function formatValue(value: number, variant: "count" | "percent" | "index") {
   if (variant === "percent") return `${value.toFixed(1)}%`;
   if (variant === "index") return value.toFixed(2);
@@ -477,14 +493,7 @@ export function DashboardVisualizationStudio({
   );
   const trendChartsEnabled = monthAxis.length > 1;
   const chartStorageKey = `${storageKeyBase}-chart-type`;
-  const [chartType, setChartType] = useState<ChartType>(() => {
-    if (typeof window === "undefined") return monthAxis.length > 1 ? "bar" : "pareto";
-    const stored = window.localStorage.getItem(chartStorageKey);
-    if (stored === "bar" || stored === "points") {
-      return monthAxis.length > 1 ? stored : "pareto";
-    }
-    return stored === "circular" || stored === "pareto" ? stored : monthAxis.length > 1 ? "bar" : "pareto";
-  });
+  const [chartType, setChartType] = useState<ChartType>(getDefaultChartType(trendChartsEnabled));
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId>("nearMisses");
   const [selectedRankingId, setSelectedRankingId] = useState<string>(() => {
     const panels = rankings.flatMap((group) => {
@@ -511,14 +520,10 @@ export function DashboardVisualizationStudio({
   );
 
   useEffect(() => {
-    window.localStorage.setItem(chartStorageKey, chartType);
-  }, [chartStorageKey, chartType]);
-
-  useEffect(() => {
-    if (!trendChartsEnabled && (chartType === "bar" || chartType === "points")) {
-      setChartType("pareto");
-    }
-  }, [chartType, trendChartsEnabled]);
+    const nextChartType = resolveStoredChartType(window.localStorage.getItem(chartStorageKey), trendChartsEnabled);
+    setChartType((current) => (current === nextChartType ? current : nextChartType));
+    window.localStorage.setItem(chartStorageKey, nextChartType);
+  }, [chartStorageKey, trendChartsEnabled]);
 
   const selectedMetric = metricOptions.find((metric) => metric.id === selectedMetricId) ?? metricOptions[0];
   const indicatorTrend = useMemo(
@@ -554,6 +559,11 @@ export function DashboardVisualizationStudio({
     });
   };
 
+  const handleChartTypeChange = (nextChartType: ChartType) => {
+    setChartType(nextChartType);
+    window.localStorage.setItem(chartStorageKey, nextChartType);
+  };
+
   return (
     <section className="app-card-muted p-4">
       <AppSectionHeader
@@ -574,7 +584,7 @@ export function DashboardVisualizationStudio({
                     ? "app-chip--active"
                     : ""
                 }`}
-                onClick={() => setChartType(type)}
+                onClick={() => handleChartTypeChange(type)}
               >
                 {type === "bar" ? text.bars : type === "circular" ? text.circular : type === "points" ? text.points : text.pareto}
               </button>

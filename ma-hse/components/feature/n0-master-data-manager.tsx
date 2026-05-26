@@ -407,6 +407,41 @@ export function N0MasterDataManager({
     }
   }
 
+  async function deactivateAllCatalog(type: MasterDataType) {
+    if (!window.confirm(getSection(labels, type).deleteAllConfirm)) {
+      return;
+    }
+
+    setDeletingKey(`catalog:${type}:all`);
+    setCatalogMessage(type, "");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type, deleteAll: true }),
+      });
+      const json = await parseApiResponse(response);
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(getCatalogErrorMessage(type, response, json));
+      }
+
+      setCatalog(type, []);
+      clearForm(type);
+      setCatalogMessage(type, getSection(labels, type).deleteAllSuccess);
+    } catch (error) {
+      setCatalogMessage(
+        type,
+        error instanceof Error
+          ? error.message
+          : formatMasterDataMessage(labels.failedToUpdateItem, { section: getSection(labels, type).title.toLowerCase() }),
+      );
+    } finally {
+      setDeletingKey(null);
+    }
+  }
+
   async function submitWorker(event: React.FormEvent) {
     event.preventDefault();
     const employeeNo = workerForm.employeeNo.trim();
@@ -483,6 +518,36 @@ export function N0MasterDataManager({
     }
   }
 
+  async function deactivateAllWorkers() {
+    if (!window.confirm(labels.workerDeleteAllConfirm)) {
+      return;
+    }
+
+    setDeletingKey("worker:all");
+    setWorkerMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/workers`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deleteAll: true }),
+      });
+      const json = await parseApiResponse(response);
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(response.status === 403 ? labels.permissionDenied : json?.message ?? labels.failedToUpdateWorker);
+      }
+
+      setWorkers([]);
+      setWorkerForm({ ...EMPTY_WORKER_FORM });
+      setWorkerMessage(labels.workerDeleteAllSuccess);
+    } catch (error) {
+      setWorkerMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
+    } finally {
+      setDeletingKey(null);
+    }
+  }
+
   async function importExcel(file: File) {
     setImportLoading(true);
     setGlobalMessage("");
@@ -495,7 +560,7 @@ export function N0MasterDataManager({
         method: "POST",
         body: formData,
       });
-      const json = await requireApiResponse<{ summary: { departments: number; workstations: number; workers: number } }>(
+      const json = await requireApiResponse<{ summary: { departments: number; workstations: number; equipments: number; workers: number } }>(
         response,
         labels.importError,
       );
@@ -509,6 +574,7 @@ export function N0MasterDataManager({
         formatMasterDataMessage(labels.importSuccess, {
           departments: data.summary.departments,
           workstations: data.summary.workstations,
+          equipments: data.summary.equipments,
           workers: data.summary.workers,
         }),
       );
@@ -595,11 +661,21 @@ export function N0MasterDataManager({
             <h3 className="text-sm font-semibold text-slate-900">{section.title}</h3>
             <HelpPopover title={section.title} body={labels.help[type]} buttonLabel={labels.helpButton} />
           </div>
-          {form.id ? (
-            <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => clearForm(type)}>
-              {labels.cancel}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+              onClick={() => void deactivateAllCatalog(type)}
+              disabled={catalogs[type].length === 0 || Boolean(deletingKey)}
+            >
+              {deletingKey === `catalog:${type}:all` ? labels.deactivatingAll : labels.deactivateAll}
             </button>
-          ) : null}
+            {form.id ? (
+              <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => clearForm(type)}>
+                {labels.cancel}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <input
@@ -713,11 +789,21 @@ export function N0MasterDataManager({
               <h3 className="text-sm font-semibold text-slate-900">{labels.workerSectionTitle}</h3>
               <HelpPopover title={labels.workerSectionTitle} body={labels.help.workers} buttonLabel={labels.helpButton} />
             </div>
-            {workerForm.id ? (
-              <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => setWorkerForm({ ...EMPTY_WORKER_FORM })}>
-                {labels.cancel}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+                onClick={() => void deactivateAllWorkers()}
+                disabled={workers.length === 0 || Boolean(deletingKey)}
+              >
+                {deletingKey === "worker:all" ? labels.deactivatingAll : labels.deactivateAll}
               </button>
-            ) : null}
+              {workerForm.id ? (
+                <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => setWorkerForm({ ...EMPTY_WORKER_FORM })}>
+                  {labels.cancel}
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <input

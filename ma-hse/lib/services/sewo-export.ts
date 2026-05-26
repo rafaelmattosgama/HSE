@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
+import { StorageService } from "@/lib/services/storage-service";
 import { isSewoRootCauseAffirmative } from "@/lib/sewo-root-causes";
 import {
   SIF_PSIF_EXPOSURE_KEYS,
@@ -11,6 +12,11 @@ import {
   type YesNoAnswer,
 } from "@/lib/sewo-sif-psif";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
+import {
+  formatSewoOccurrenceType,
+  getSewoTemplateRecord,
+  getSifPsifResultFromTemplateData,
+} from "@/lib/services/sewo-validation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { formatLocalizedSewoStatus, type SewoUi } from "@/lib/sewo-ui";
 
@@ -19,6 +25,13 @@ const INK = "#0f172a";
 const MUTED = "#64748b";
 const PANEL = "#e2e8f0";
 const SOFT = "#f8fafc";
+const WHITE = "#ffffff";
+
+type ExportAttachment = {
+  fileName: string;
+  contentType: string;
+  fileKey: string;
+};
 
 function pdfBufferFromDocument(doc: InstanceType<typeof PDFDocument>) {
   return new Promise<Buffer>((resolve) => {
@@ -31,6 +44,40 @@ function pdfBufferFromDocument(doc: InstanceType<typeof PDFDocument>) {
 
 function formatDate(value: Date) {
   return value.toISOString().slice(0, 10);
+}
+
+function inferImageExtension(input: ExportAttachment) {
+  const contentType = input.contentType.toLowerCase();
+  if (contentType.includes("png")) return "png" as const;
+  if (contentType.includes("jpeg") || contentType.includes("jpg")) return "jpeg" as const;
+
+  const fileName = input.fileName.toLowerCase();
+  if (fileName.endsWith(".png")) return "png" as const;
+  if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "jpeg" as const;
+
+  return null;
+}
+
+async function loadAttachmentBuffers(attachments: ExportAttachment[]) {
+  const imageAttachments = attachments
+    .map((attachment) => ({
+      ...attachment,
+      extension: inferImageExtension(attachment),
+    }))
+    .filter((attachment): attachment is ExportAttachment & { extension: "png" | "jpeg" } => attachment.extension !== null);
+
+  const results = await Promise.allSettled(
+    imageAttachments.map(async (attachment) => ({
+      ...attachment,
+      buffer: await StorageService.getObjectBuffer({ key: attachment.fileKey }),
+    })),
+  );
+
+  return results.flatMap((result) => {
+    if (result.status !== "fulfilled") return [];
+    if (result.value.buffer.length === 0) return [];
+    return [result.value];
+  });
 }
 
 function drawSectionTitle(doc: InstanceType<typeof PDFDocument>, title: string) {
@@ -79,6 +126,16 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value : "-";
 }
 
+function getDisplayValue(value: unknown, fallback: string) {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized || fallback;
+  }
+
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+}
+
 function worksheetName(value: string) {
   return value.replaceAll(/[\\/*?:[\]]/g, " ").trim().slice(0, 31) || "Sheet";
 }
@@ -98,6 +155,117 @@ function getSifPsifResultLabel(result: SifPsifResult, ui: SewoUi) {
   if (result === "PSIF") return ui.psifResult;
   if (result === "NO_PSIF") return ui.noPsifResult;
   return ui.pendingResult;
+}
+
+function ensurePageSpace(doc: InstanceType<typeof PDFDocument>, height: number) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + height > bottom) {
+    doc.addPage();
+    doc.y = doc.page.margins.top;
+  }
+}
+
+function drawSummaryHeader(doc: InstanceType<typeof PDFDocument>, input: {
+  title: string;
+  referenceLabel: string;
+  reference: string;
+  plantLabel: string;
+  generatedOnLabel: string;
+}) {
+  doc.roundedRect(40, 36, 515, 92, 18).fill(BRAND);
+  doc.fillColor("#ffffff").fontSize(12).text("MAx Safety", 58, 54);
+  doc.fontSize(21).text(input.title, 58, 72, { width: 320 });
+  doc.fontSize(9).text(`${input.referenceLabel}: ${input.reference}`, 58, 106, { width: 240 });
+  doc.fontSize(10).text(input.plantLabel, 320, 60, { width: 217, align: "right" });
+  doc.text(`${input.generatedOnLabel} ${formatDate(new Date())}`, 320, 104, { width: 217, align: "right" });
+  doc.y = 146;
+  doc.fillColor(INK);
+}
+
+function getSummaryLocation(input: {
+  communication?: {
+    workstation?: { name: string } | null;
+    area?: { name: string } | null;
+  } | null;
+  whereText?: string | null;
+  line?: { name: string } | null;
+  area?: { name: string } | null;
+}, fallback: string) {
+  return (
+    input.communication?.workstation?.name?.trim() ||
+    input.communication?.area?.name?.trim() ||
+    input.whereText?.trim() ||
+    input.line?.name?.trim() ||
+    input.area?.name?.trim() ||
+    fallback
+  );
+}
+
+function buildRootCauseText(input: {
+  templateData: Record<string, unknown>;
+  causeSelections: Array<{
+    selected: boolean;
+    isRootCause: boolean;
+    comment?: string | null;
+    causeItem: {
+      label: string;
+    };
+  }>;
+  translated: (text: unknown) => string;
+  fallback: string;
+}) {
+  const templateRootCauseDetails = Array.isArray(input.templateData.rootCauseDetails)
+    ? input.templateData.rootCauseDetails
+        .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+        .map((entry) => ({
+          label: getDisplayValue(entry.label, ""),
+          comment: getDisplayValue(entry.comment, ""),
+          isRootCause: Boolean(entry.isRootCause),
+        }))
+    : [];
+  const preferredTemplateEntries = templateRootCauseDetails.filter((entry) => entry.isRootCause);
+  const selectedSelections = input.causeSelections.filter((selection) => selection.selected);
+  const selectedRootSelections = selectedSelections.filter((selection) => selection.isRootCause);
+  const selectionEntries = (selectedRootSelections.length ? selectedRootSelections : selectedSelections).map((selection) => ({
+    label: selection.causeItem.label,
+    comment: selection.comment ?? "",
+  }));
+  const resolvedEntries = preferredTemplateEntries.length
+    ? preferredTemplateEntries
+    : templateRootCauseDetails.length
+      ? templateRootCauseDetails
+      : selectionEntries;
+
+  if (!resolvedEntries.length) return input.fallback;
+
+  const formatted = resolvedEntries
+    .map((entry) => {
+      const label = input.translated(entry.label);
+      const comment = entry.comment ? input.translated(entry.comment) : "";
+      return comment.trim() ? `${label}: ${comment}` : label;
+    })
+    .filter((entry) => entry.trim().length > 0);
+
+  return formatted.length ? formatted.join("\n\n") : input.fallback;
+}
+
+function drawPhotoCard(doc: InstanceType<typeof PDFDocument>, input: {
+  title: string;
+  imageBuffer: Buffer;
+}) {
+  ensurePageSpace(doc, 284);
+  const captionY = doc.y;
+  const captionHeight = Math.max(14, doc.heightOfString(input.title, { width: 491 }));
+  doc.fillColor(MUTED).fontSize(8).text(input.title, 52, captionY);
+  const imageY = captionY + captionHeight + 8;
+  doc.roundedRect(40, imageY, 515, 220, 12).fillAndStroke(WHITE, PANEL);
+  doc.image(input.imageBuffer, 52, imageY + 12, {
+    fit: [491, 196],
+    align: "center",
+    valign: "center",
+  });
+  doc.y = imageY + 236;
+  doc.fillColor(INK);
 }
 
 function readSifPsifDecision(value: unknown): SifPsifDecision | null {
@@ -425,6 +593,165 @@ export const SewoExportService = {
     return {
       pdf,
       xlsx: Buffer.from(xlsxBuffer as ArrayBuffer),
+    };
+  },
+
+  async buildExternalSummaryExport(sewoId: string, options: { locale?: string } = {}) {
+    const locale = options.locale ?? "en";
+    const { ui } = await getLocalizedSewoUi(locale);
+    const sewo = await prisma.sEWO.findUniqueOrThrow({
+      where: { id: sewoId },
+      include: {
+        plant: true,
+        communication: {
+          include: {
+            area: true,
+            workstation: true,
+          },
+        },
+        attachments: true,
+        causeSelections: {
+          include: {
+            causeItem: true,
+          },
+        },
+        actionLinks: {
+          include: {
+            action: {
+              include: {
+                ownerUser: true,
+              },
+            },
+          },
+        },
+        area: true,
+        line: true,
+      },
+    });
+    const templateData = getSewoTemplateRecord(sewo.templateData);
+    const occurrenceType = formatSewoOccurrenceType({
+      communicationType: sewo.communication?.type,
+      templateEventType: templateData.eventType,
+      eventClassification: sewo.eventClassification,
+    });
+    const translatableTexts = [
+      occurrenceType,
+      sewo.whatText,
+      sewo.howText,
+      ...sewo.causeSelections.flatMap((selection) => [selection.causeItem.label, selection.comment ?? ""]),
+      ...(Array.isArray(templateData.rootCauseDetails)
+        ? templateData.rootCauseDetails
+            .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+            .flatMap((entry) => [getDisplayValue(entry.label, ""), getDisplayValue(entry.comment, "")])
+        : []),
+      ...sewo.actionLinks.flatMap((entry) => [entry.action.title, entry.action.description]),
+    ];
+    const translatedTexts = await translateForViewer(locale, translatableTexts);
+    const translationByText = new Map(translatableTexts.map((text, index) => [text, translatedTexts[index] ?? text]));
+    const translated = (text: unknown) => translationByText.get(getDisplayValue(text, "")) ?? getDisplayValue(text, "");
+    const occurrenceDate = sewo.communication?.eventDatetime ?? sewo.analysisDate;
+    const plantLabel = `${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`;
+    const summaryLocation = getSummaryLocation(sewo, ui.summaryReportNotApplicable);
+    const sifPsifResult = getSifPsifResultFromTemplateData(sewo.templateData);
+    const sifPsifLabel = sifPsifResult === "PENDING"
+      ? ui.summaryReportNotApplicable
+      : getSifPsifResultLabel(sifPsifResult, ui);
+    const rootCauseText = buildRootCauseText({
+      templateData,
+      causeSelections: sewo.causeSelections,
+      translated,
+      fallback: ui.summaryReportNotApplicable,
+    });
+    const photoAttachments = await loadAttachmentBuffers(sewo.attachments);
+    const orderedActions = [...sewo.actionLinks].sort(
+      (left, right) => left.action.dueDate.getTime() - right.action.dueDate.getTime(),
+    );
+
+    const pdf = await (async () => {
+      const doc = new PDFDocument({ margin: 40, size: "A4" });
+
+      drawSummaryHeader(doc, {
+        title: ui.summaryReportTitle,
+        referenceLabel: ui.summaryReportReference,
+        reference: sewo.id,
+        plantLabel,
+        generatedOnLabel: ui.generatedOn,
+      });
+
+      ensurePageSpace(doc, 190);
+      drawSectionTitle(doc, ui.summaryReportGeneralInfo);
+      drawFieldGrid(
+        doc,
+        [
+          [ui.plant, plantLabel],
+          [ui.summaryReportOccurrenceDate, formatDate(occurrenceDate)],
+          [ui.summaryReportOccurrenceType, translated(occurrenceType)],
+          [ui.summaryReportLocation, summaryLocation],
+          [ui.summaryReportInjuryNature, getDisplayValue(translated(sewo.whatText), ui.summaryReportNotApplicable)],
+        ],
+        2,
+      );
+
+      ensurePageSpace(doc, 120);
+      drawSectionTitle(doc, ui.summaryReportDescriptionSection);
+      drawParagraphCard(
+        doc,
+        ui.description,
+        getDisplayValue(translated(sewo.howText), ui.summaryReportNotApplicable),
+      );
+
+      ensurePageSpace(doc, 170);
+      drawSectionTitle(doc, ui.summaryReportAnalysisSection);
+      drawFieldGrid(
+        doc,
+        [[ui.summaryReportClassification, sifPsifLabel]],
+        1,
+      );
+      drawParagraphCard(doc, ui.summaryReportRootCause, rootCauseText);
+
+      ensurePageSpace(doc, 140);
+      drawSectionTitle(doc, ui.summaryReportActionPlanSection);
+      if (!orderedActions.length) {
+        drawParagraphCard(doc, ui.actionPlan, ui.summaryReportNotApplicable);
+      } else {
+        orderedActions.forEach((entry) => {
+          ensurePageSpace(doc, 128);
+          drawParagraphCard(
+            doc,
+            `${translated(entry.action.title)} | ${ui.actionStatusLabels[entry.action.status] ?? entry.action.status}`,
+            [
+              `${ui.owner}: ${entry.action.ownerUser.name}`,
+              `${ui.dueDate}: ${formatDate(entry.action.dueDate)}`,
+              `${ui.tableStatus}: ${ui.actionStatusLabels[entry.action.status] ?? entry.action.status}`,
+              "",
+              getDisplayValue(translated(entry.action.description), ui.summaryReportNotApplicable),
+            ].join("\n"),
+          );
+        });
+      }
+
+      ensurePageSpace(doc, photoAttachments.length ? 300 : 120);
+      drawSectionTitle(doc, ui.summaryReportPhotoEvidenceSection);
+      if (!photoAttachments.length) {
+        drawParagraphCard(doc, ui.summaryReportPhotoEvidenceSection, ui.summaryReportNotApplicable);
+      } else {
+        photoAttachments.forEach((attachment) => {
+          try {
+            drawPhotoCard(doc, {
+              title: attachment.fileName,
+              imageBuffer: attachment.buffer,
+            });
+          } catch {
+            drawParagraphCard(doc, attachment.fileName, ui.summaryReportNotApplicable);
+          }
+        });
+      }
+
+      return pdfBufferFromDocument(doc);
+    })();
+
+    return {
+      pdf,
     };
   },
 };

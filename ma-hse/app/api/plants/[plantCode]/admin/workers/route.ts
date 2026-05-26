@@ -121,10 +121,19 @@ export async function DELETE(request: Request, context: { params: Promise<{ plan
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
-  const result = await prisma.employeeDirectory.updateMany({
-    where: { id: parsed.data.id, plantId: plant.id },
-    data: { isActive: false },
-  });
+  const result = parsed.data.deleteAll
+    ? await prisma.employeeDirectory.updateMany({
+        where: { plantId: plant.id, isActive: true },
+        data: { isActive: false },
+      })
+    : await prisma.employeeDirectory.updateMany({
+        where: { id: parsed.data.id!, plantId: plant.id },
+        data: { isActive: false },
+      });
+
+  if (parsed.data.deleteAll) {
+    return ok({ deletedCount: result.count, deleteAll: true });
+  }
 
   if (result.count === 0) {
     return fail("NOT_FOUND", "Worker not found for plant scope", 404);

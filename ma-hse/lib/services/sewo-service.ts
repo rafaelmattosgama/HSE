@@ -4,8 +4,10 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
+import { EmailService } from "@/lib/services/email-service";
 import { NotificationService } from "@/lib/services/notification-service";
 import { SewoExportService } from "@/lib/services/sewo-export";
+import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
 import {
   SEWO_APPROVED_CHANNEL,
   SEWO_N1_APPROVAL_CHANNEL,
@@ -22,6 +24,103 @@ import {
 } from "@/lib/services/sewo-validation-service";
 import { getSewoStatusFromLinkedActions } from "@/lib/sewo-status";
 import type { ApproveSEWOInput, CreateSEWOInput, ManualCloseSewoInput, UpdateSEWOInput } from "@/lib/validation/dtos";
+
+type SewoApprovedExternalEmailCopy = {
+  subject: string;
+  greeting: string;
+  intro: string;
+  plantLabel: string;
+  workstationLabel: string;
+  occurrenceTypeLabel: string;
+  sewoLabel: string;
+  sifPsifLabel: string;
+  priorityNotice: string;
+};
+
+const SEWO_APPROVED_EXTERNAL_EMAIL_COPY: Record<string, SewoApprovedExternalEmailCopy> = {
+  pt: {
+    subject: "Relatorio S-EWO aprovado",
+    greeting: "Ola",
+    intro: "O relatorio S-EWO validado pelo nivel N1 Corporate segue em anexo.",
+    plantLabel: "Planta",
+    workstationLabel: "Posto de trabalho",
+    occurrenceTypeLabel: "Tipo de ocorrencia",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "Classificacao SIF/PSIF",
+    priorityNotice: "Classificacao SIF/PSIF prioritaria. Rever com urgencia.",
+  },
+  it: {
+    subject: "Rapporto S-EWO approvato",
+    greeting: "Ciao",
+    intro: "In allegato trovi il rapporto S-EWO validato dal livello N1 Corporate.",
+    plantLabel: "Stabilimento",
+    workstationLabel: "Postazione di lavoro",
+    occurrenceTypeLabel: "Tipo di evento",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "Classificazione SIF/PSIF",
+    priorityNotice: "Classificazione SIF/PSIF prioritaria. Verificare con urgenza.",
+  },
+  en: {
+    subject: "Approved S-EWO report",
+    greeting: "Hello",
+    intro: "The S-EWO report validated by N1 Corporate is attached.",
+    plantLabel: "Plant",
+    workstationLabel: "Workstation",
+    occurrenceTypeLabel: "Occurrence Type",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "SIF/PSIF Classification",
+    priorityNotice: "Priority SIF/PSIF classification. Review urgently.",
+  },
+  pl: {
+    subject: "Zatwierdzony raport S-EWO",
+    greeting: "Hello",
+    intro: "W zalaczniku znajduje sie raport S-EWO zatwierdzony przez poziom N1 Corporate.",
+    plantLabel: "Zaklad",
+    workstationLabel: "Stanowisko pracy",
+    occurrenceTypeLabel: "Typ zdarzenia",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "Klasyfikacja SIF/PSIF",
+    priorityNotice: "Priorytetowa klasyfikacja SIF/PSIF. Wymaga pilnej analizy.",
+  },
+  de: {
+    subject: "Freigegebener S-EWO-Bericht",
+    greeting: "Hallo",
+    intro: "Im Anhang finden Sie den vom N1 Corporate freigegebenen S-EWO-Bericht.",
+    plantLabel: "Werk",
+    workstationLabel: "Arbeitsplatz",
+    occurrenceTypeLabel: "Ereignistyp",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "SIF/PSIF-Klassifizierung",
+    priorityNotice: "Prioritaere SIF/PSIF-Klassifizierung. Bitte dringend pruefen.",
+  },
+  ro: {
+    subject: "Raport S-EWO aprobat",
+    greeting: "Buna",
+    intro: "In atasament gasiti raportul S-EWO validat de nivelul N1 Corporate.",
+    plantLabel: "Fabrica",
+    workstationLabel: "Post de lucru",
+    occurrenceTypeLabel: "Tipul evenimentului",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "Clasificare SIF/PSIF",
+    priorityNotice: "Clasificare SIF/PSIF prioritara. Verificati urgent.",
+  },
+  fr: {
+    subject: "Rapport S-EWO approuve",
+    greeting: "Bonjour",
+    intro: "Le rapport S-EWO valide par le niveau N1 Corporate est joint a cet email.",
+    plantLabel: "Usine",
+    workstationLabel: "Poste de travail",
+    occurrenceTypeLabel: "Type d'evenement",
+    sewoLabel: "S-EWO",
+    sifPsifLabel: "Classification SIF/PSIF",
+    priorityNotice: "Classification SIF/PSIF prioritaire. Merci de verifier rapidement.",
+  },
+};
+
+function getSewoApprovedExternalEmailCopy(locale: string) {
+  return SEWO_APPROVED_EXTERNAL_EMAIL_COPY[normalizeSewoReportRecipientLanguage(locale)]
+    ?? SEWO_APPROVED_EXTERNAL_EMAIL_COPY.en;
+}
 
 async function notifySewoSubmitted(input: {
   sewoId: string;
@@ -74,12 +173,20 @@ async function notifySewoApproved(sewoId: string) {
     include: {
       plant: true,
       communication: true,
+      line: true,
     },
   });
-  const recipients = await getRoleRecipients(sewo.plantId, [...SEWO_STAKEHOLDER_ROLES]);
-  if (!recipients.userIds.length && !recipients.emails.length) return;
+  const [recipients, externalRecipients] = await Promise.all([
+    getRoleRecipients(sewo.plantId, [...SEWO_STAKEHOLDER_ROLES]),
+    listSewoReportRecipients(sewo.plantId),
+  ]);
+  if (!recipients.userIds.length && !recipients.emails.length && !externalRecipients.length) return;
 
   const summary = buildSewoNotificationSummary(sewo);
+  const notificationTasks: Promise<unknown>[] = [];
+
+  if (recipients.userIds.length || recipients.emails.length) {
+    notificationTasks.push((async () => {
   const title = `S-EWO aprovado e partilhado: ${summary.occurrenceType}`;
   const body = [
     `Planta: ${summary.plantLabel}`,
@@ -116,6 +223,38 @@ async function notifySewoApproved(sewoId: string) {
           },
         ]
       : undefined,
+  });
+    })());
+  }
+
+  if (externalRecipients.length) {
+    notificationTasks.push(sendSewoApprovedExternalReports({
+      sewoId,
+      sewo: {
+        id: sewo.id,
+        plantId: sewo.plantId,
+        plant: {
+          code: sewo.plant.code,
+          name: sewo.plant.name,
+        },
+      },
+      summary,
+      recipients: externalRecipients,
+    }));
+  }
+
+  const results = await Promise.allSettled(notificationTasks);
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      logger.error(
+        {
+          error: result.reason,
+          sewoId,
+          taskIndex: index,
+        },
+        "failed_to_dispatch_sewo_approved_notification",
+      );
+    }
   });
 }
 
@@ -291,17 +430,29 @@ async function getRoleRecipients(plantId: string, roles: RoleCode[]) {
   };
 }
 
+function getSewoWorkstationValue(sewo: {
+  whereText?: string | null;
+  line?: { name: string } | null;
+}) {
+  if (sewo.whereText?.trim()) return sewo.whereText.trim();
+  if (sewo.line?.name?.trim()) return sewo.line.name.trim();
+  return "-";
+}
+
 function buildSewoNotificationSummary(sewo: {
   plant: { code: string; name: string };
   communication: { type: string } | null;
   templateData: Prisma.JsonValue | null;
   eventClassification: string;
+  whereText?: string | null;
+  line?: { name: string } | null;
 }) {
   const templateData = getSewoTemplateRecord(sewo.templateData);
   const sifPsifResult = getSifPsifResultFromTemplateData(sewo.templateData);
 
   return {
     plantLabel: `${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`,
+    workstation: getSewoWorkstationValue(sewo),
     occurrenceType: formatSewoOccurrenceType({
       communicationType: sewo.communication?.type,
       templateEventType: templateData.eventType,
@@ -310,6 +461,129 @@ function buildSewoNotificationSummary(sewo: {
     sifPsifLabel: getSifPsifDisplayLabel(sifPsifResult),
     isPriority: isPrioritySifPsif(sifPsifResult),
   };
+}
+
+function buildSewoApprovedExternalEmailContent(input: {
+  locale: string;
+  recipientName: string;
+  plantLabel: string;
+  workstation: string;
+  occurrenceType: string;
+  sewoId: string;
+  sifPsifLabel: string;
+  isPriority: boolean;
+}) {
+  const copy = getSewoApprovedExternalEmailCopy(input.locale);
+  const salutation = `${copy.greeting}${input.recipientName.trim() ? ` ${input.recipientName.trim()}` : ""},`;
+  const sifPsifRow = input.isPriority
+    ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.sifPsifLabel)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.sifPsifLabel)}</td></tr>`
+    : "";
+  const priorityHtml = input.isPriority
+    ? `
+      <div style="margin:16px 0;padding:14px 16px;border-radius:10px;background:#fee2e2;border:1px solid #ef4444;color:#991b1b;">
+        <strong style="font-size:16px;">${escapeHtml(input.sifPsifLabel)}</strong>
+        <span style="display:block;margin-top:4px;">${escapeHtml(copy.priorityNotice)}</span>
+      </div>
+    `
+    : "";
+  const priorityText = input.isPriority ? `${input.sifPsifLabel} - ${copy.priorityNotice}` : null;
+
+  return {
+    subject: copy.subject,
+    html: `
+      <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;">
+        <p>${escapeHtml(salutation)}</p>
+        <p>${escapeHtml(copy.intro)}</p>
+        ${priorityHtml}
+        <table style="border-collapse:collapse;margin-top:12px;width:100%;max-width:560px;">
+          <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.plantLabel)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.plantLabel)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.workstationLabel)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.workstation)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.occurrenceTypeLabel)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.occurrenceType)}</td></tr>
+          <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.sewoLabel)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapeHtml(input.sewoId)}</td></tr>
+          ${sifPsifRow}
+        </table>
+      </div>
+    `,
+    text: [
+      salutation,
+      "",
+      copy.intro,
+      `${copy.plantLabel}: ${input.plantLabel}`,
+      `${copy.workstationLabel}: ${input.workstation}`,
+      `${copy.occurrenceTypeLabel}: ${input.occurrenceType}`,
+      `${copy.sewoLabel}: ${input.sewoId}`,
+      input.isPriority ? `${copy.sifPsifLabel}: ${input.sifPsifLabel}` : null,
+      priorityText,
+    ].filter(Boolean).join("\n"),
+  };
+}
+
+async function sendSewoApprovedExternalReports(input: {
+  sewoId: string;
+  sewo: {
+    id: string;
+    plantId: string;
+    plant: {
+      code: string;
+      name: string;
+    };
+  };
+  summary: {
+    plantLabel: string;
+    workstation: string;
+    occurrenceType: string;
+    sifPsifLabel: string;
+    isPriority: boolean;
+  };
+  recipients: Awaited<ReturnType<typeof listSewoReportRecipients>>;
+}) {
+  const exportPromises = new Map<string, Promise<{ pdf: Buffer }>>();
+
+  const results = await Promise.allSettled(input.recipients.map(async (recipient) => {
+    const locale = normalizeSewoReportRecipientLanguage(recipient.language);
+    let exportedPromise = exportPromises.get(locale);
+    if (!exportedPromise) {
+      exportedPromise = SewoExportService.buildExternalSummaryExport(input.sewoId, { locale });
+      exportPromises.set(locale, exportedPromise);
+    }
+
+    const exported = await exportedPromise;
+    const email = buildSewoApprovedExternalEmailContent({
+      locale,
+      recipientName: recipient.name,
+      plantLabel: input.summary.plantLabel,
+      workstation: input.summary.workstation,
+      occurrenceType: input.summary.occurrenceType,
+      sewoId: input.sewo.id,
+      sifPsifLabel: input.summary.sifPsifLabel,
+      isPriority: input.summary.isPriority,
+    });
+
+    await EmailService.sendMail({
+      to: recipient.email,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      attachments: [
+        {
+          filename: `sewo-summary-${input.sewo.plant.code}-${input.sewo.id}.pdf`,
+          content: exported.pdf,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+  }));
+
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failures.length) {
+    logger.error(
+      {
+        sewoId: input.sewoId,
+        failures: failures.map((failure) => failure.reason),
+      },
+      "failed_to_send_sewo_external_reports",
+    );
+  }
 }
 
 function buildSewoEmailHtml(input: {

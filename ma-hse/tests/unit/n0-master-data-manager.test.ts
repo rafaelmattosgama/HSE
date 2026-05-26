@@ -49,6 +49,7 @@ function getSectionForm(name: string) {
 describe("N0MasterDataManager", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("confirm", vi.fn(() => true));
   });
 
   afterEach(() => {
@@ -234,5 +235,70 @@ describe("N0MasterDataManager", () => {
     fireEvent.click(within(form).getByRole("button", { name: "Save equipment" }));
 
     expect(await within(form).findByText(labels.permissionDenied)).toBeTruthy();
+  });
+
+  it("allows admin to deactivate all items in a catalog section", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      buildResponse({
+        ok: true,
+        data: {
+          deletedType: "equipment",
+          deletedCount: 2,
+          deleteAll: true,
+        },
+      }),
+    );
+
+    renderManager({
+      initialEquipments: [
+        { id: "eq-1", code: "EQ1", name: "Forklift 1" },
+        { id: "eq-2", code: "EQ2", name: "Forklift 2" },
+      ],
+    });
+
+    const form = getSectionForm("Equipment");
+    fireEvent.click(within(form).getByRole("button", { name: "Deactivate all" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      type: "equipment",
+      deleteAll: true,
+    });
+    expect(await within(form).findByText(labels.sections.equipment.deleteAllSuccess)).toBeTruthy();
+    expect(within(form).queryByText("EQ1")).toBeNull();
+    expect(within(form).queryByText("EQ2")).toBeNull();
+  });
+
+  it("allows admin to deactivate all workers in the section", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      buildResponse({
+        ok: true,
+        data: {
+          deletedCount: 2,
+          deleteAll: true,
+        },
+      }),
+    );
+
+    renderManager({
+      initialWorkers: [
+        { id: "w-1", employeeNo: "1001", name: "Maria Silva", dept: "Prod" },
+        { id: "w-2", employeeNo: "1002", name: "Joao Costa", dept: "Qual" },
+      ],
+    });
+
+    const form = getSectionForm("Workers");
+    fireEvent.click(within(form).getByRole("button", { name: "Deactivate all" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/plants/pl1/admin/workers");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      deleteAll: true,
+    });
+    expect(await within(form).findByText(labels.workerDeleteAllSuccess)).toBeTruthy();
+    expect(within(form).queryByText("1001")).toBeNull();
+    expect(within(form).queryByText("1002")).toBeNull();
   });
 });
