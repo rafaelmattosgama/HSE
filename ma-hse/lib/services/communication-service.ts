@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { calculateLeaveFields, initialStatusForCommunicationCreation, nextStatusAfterValidation } from "@/lib/services/workflow";
 import { NotificationService } from "@/lib/services/notification-service";
 import { RepeatabilityAlertService } from "@/lib/services/repeatability-alert-service";
+import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
 import { SewaService } from "@/lib/services/sewo-service";
 
 const ALERT_TYPES: CommunicationType[] = [
@@ -374,6 +375,17 @@ export const CommunicationService = {
       });
     }
 
+    if (communication.status === CommunicationStatus.VALID_OPEN && ALERT_TYPES.includes(communication.type) && input.reporterUserId) {
+      await SewaService.createProvisionalFromCommunication({
+        communicationId: communication.id,
+        actorUserId: input.reporterUserId,
+      });
+      await SafetyCommunicationAlertService.safeDispatchApprovedCommunicationAlerts({
+        communicationId: communication.id,
+        actorRole: input.actorRole,
+      });
+    }
+
     await RepeatabilityAlertService.processCommunication({
       communicationId: communication.id,
       plantId: input.plantId,
@@ -424,6 +436,7 @@ export const CommunicationService = {
   async validate(input: {
     communicationId: string;
     actorUserId: string;
+    actorRole?: RoleCode | null;
     payload: ValidateCommunicationInput;
   }) {
     const before = await prisma.communication.findUniqueOrThrow({ where: { id: input.communicationId } });
@@ -482,6 +495,10 @@ export const CommunicationService = {
       await SewaService.createProvisionalFromCommunication({
         communicationId: updated.id,
         actorUserId: input.actorUserId,
+      });
+      await SafetyCommunicationAlertService.safeDispatchApprovedCommunicationAlerts({
+        communicationId: updated.id,
+        actorRole: input.actorRole,
       });
     }
 

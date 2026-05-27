@@ -195,12 +195,12 @@ export function SewoWorkspace({
                 <h2 className="text-lg font-semibold text-slate-900">{ui.editSewoTitle}</h2>
                 <p className="mt-1 text-sm text-slate-600">{selectedSewo.date} | {selectedSewo.typeLabel} | {selectedSewo.local}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?format=pdf`} className="app-toolbar">
-                  {ui.exportPdf}
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?type=summary&format=pdf`} className="app-toolbar">
+                  {ui.exportSummaryReport}
                 </Link>
-                <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?format=xlsx`} className="app-toolbar">
-                  {ui.exportExcel}
+                <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?type=complete&format=pdf`} className="app-toolbar">
+                  {ui.exportCompleteReport}
                 </Link>
                 <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedSewoId(null)}>
                   {ui.close}

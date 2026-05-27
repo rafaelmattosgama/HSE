@@ -9,6 +9,7 @@ import {
 } from "@/lib/modules";
 import { PlantNav } from "@/components/layout/plant-nav";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
+import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 
@@ -69,6 +70,7 @@ export default async function PlantLayout({
     : session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
       ? RoleCode.N1_CORPORATE
       : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
+  const hasSafetyCommunicationAlerts = plantRole === RoleCode.N4_SUPERVISOR;
   const [plantRecord, globalModuleParameter] = await prisma.$transaction([
     prisma.plant.findUnique({
       where: { code: plant },
@@ -162,6 +164,7 @@ export default async function PlantLayout({
           createdAt: alert.createdAt.toISOString(),
         }))}
       />
+      <SafetyCommunicationFloatingAlert plantCode={plant} enabled={hasSafetyCommunicationAlerts} />
     </>
   );
 }

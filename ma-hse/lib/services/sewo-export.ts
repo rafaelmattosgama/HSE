@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
+import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
 import { isSewoRootCauseAffirmative } from "@/lib/sewo-root-causes";
@@ -355,7 +355,7 @@ export const SewoExportService = {
     const localizedStatus = formatLocalizedSewoStatus(sewo.status, ui);
 
     const pdf = await (async () => {
-      const doc = new PDFDocument({ margin: 40, size: "A4" });
+      const doc = createPdfDocument({ margin: 40, size: "A4" });
 
       doc.roundedRect(40, 36, 515, 86, 18).fill(BRAND);
       doc.fillColor("#ffffff").fontSize(24).text(ui.reportTitle, 58, 58);
@@ -668,7 +668,7 @@ export const SewoExportService = {
     );
 
     const pdf = await (async () => {
-      const doc = new PDFDocument({ margin: 40, size: "A4" });
+      const doc = createPdfDocument({ margin: 40, size: "A4" });
 
       drawSummaryHeader(doc, {
         title: ui.summaryReportTitle,

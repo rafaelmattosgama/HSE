@@ -64,6 +64,8 @@ export const BASE_SEWO_UI = {
   summaryStatus: "Status",
   summaryPerformedBy: "Performed by",
   summaryCommunication: "Communication",
+  exportSummaryReport: "Export summary report",
+  exportCompleteReport: "Export complete report",
   openSewoTitle: "Open S-EWO",
   noOpenSewo: "No open S-EWO records.",
   investigationTitle: "S-EWO Investigation",

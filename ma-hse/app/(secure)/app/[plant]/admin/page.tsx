@@ -5,6 +5,7 @@ import { getCreatableRoles } from "@/lib/rbac/user-management";
 import { UserManager } from "@/components/feature/user-manager";
 import { QrTokenManager } from "@/components/feature/qr-token-manager";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
+import { SafetyCommunicationRecipientManager } from "@/components/feature/safety-communication-recipient-manager";
 import { SafetyDaysAdminEditor } from "@/components/feature/safety-days-admin-editor";
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { SlaEditor } from "@/components/feature/sla-editor";
@@ -18,6 +19,7 @@ import { getUiDictionary } from "@/lib/ui-language";
 import { getPlantRepeatabilityAlertConfig, getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
+import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
@@ -50,6 +52,13 @@ export default async function AdminPage({
 
   const canManageUsers =
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
+  const canManageSafetyCommunicationRecipients =
+    actorRole === RoleCode.N0_ADMIN
+    || actorRole === RoleCode.N1_CORPORATE
+    || actorRole === RoleCode.N2_PLANT_MANAGER
+    || actorRole === RoleCode.N3_SAFETY;
+  const canManageSafetyCommunicationRecipientData =
+    canManageSafetyCommunicationRecipients && SafetyCommunicationAlertService.isRecipientManagementAvailable();
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
 
   const [
@@ -64,6 +73,8 @@ export default async function AdminPage({
     unsafeConditionTypes,
     nearMissTypes,
     injuryTypes,
+    safetyCommunicationRecipients,
+    safetyCommunicationRecipientOptions,
     sewoRecipients,
     repeatabilityConfig,
     safetyDaysConfig,
@@ -124,6 +135,12 @@ export default async function AdminPage({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: [{ code: "asc" }, { name: "asc" }],
     }),
+    canManageSafetyCommunicationRecipientData
+      ? SafetyCommunicationAlertService.listRecipients(plantRow.id)
+      : Promise.resolve([]),
+    canManageSafetyCommunicationRecipientData
+      ? SafetyCommunicationAlertService.listRecipientOptions(plantRow.id)
+      : Promise.resolve({ users: [], departments: [] }),
     listSewoReportRecipients(plantRow.id),
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
@@ -250,6 +267,16 @@ export default async function AdminPage({
           </div>
         </section>
       )}
+
+      {canManageSafetyCommunicationRecipientData ? (
+        <SafetyCommunicationRecipientManager
+          plantCode={plant}
+          initialRecipients={safetyCommunicationRecipients}
+          users={safetyCommunicationRecipientOptions.users}
+          departments={safetyCommunicationRecipientOptions.departments}
+          labels={masterDataUi}
+        />
+      ) : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">

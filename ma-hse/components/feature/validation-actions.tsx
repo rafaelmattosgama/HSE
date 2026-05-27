@@ -42,11 +42,12 @@ export function ValidationActions({
 
       if (!response.ok || !json.ok) {
         setMessage(
-          json.errorCode === "REPORTER_REVIEW_REQUIRED"
+          json.message
+            ?? (json.errorCode === "REPORTER_REVIEW_REQUIRED"
             ? text.reporterReviewRequired
             : json.errorCode === "CLASSIFICATION_REQUIRED"
               ? text.classificationRequired
-              : text.failed,
+              : text.failed),
         );
         return;
       }
