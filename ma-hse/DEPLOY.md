@@ -497,8 +497,8 @@ Antes de atualizar este guia, foi validado localmente:
 - Base temporaria criada com todas as migrations atuais.
 - Importacao do dump `dump_dados_desenvolvimento.sql` passou apos remover o
   bloco `_prisma_migrations`.
-- O dump contem dados para 59 tabelas publicas.
-- Nao foram encontrados comandos `setval`/sequences no dump.
+- O dump contem dados para 59 tabelas publicas. 
+- **Nota:** A correção de sequências via SQL (passo 6.1) é essencial para evitar erros de Primary Key.
 
 ## Notas De Seguranca
 

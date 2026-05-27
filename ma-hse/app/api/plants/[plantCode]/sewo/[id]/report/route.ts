@@ -27,13 +27,17 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
   }
 
   const format = new URL(request.url).searchParams.get("format") ?? "pdf";
+  const reportType = new URL(request.url).searchParams.get("type") ?? "complete";
   const locale = await getServerUiLocale({
     userLanguage: auth.session.user.language,
     plantLanguage: plant.defaultLanguage,
   });
-  const exported = await SewoExportService.buildExport(id, { locale });
 
-  if (format === "xlsx" || format === "excel") {
+  const exported = reportType === "summary"
+    ? await SewoExportService.buildExternalSummaryExport(id, { locale })
+    : await SewoExportService.buildExport(id, { locale });
+
+  if (reportType !== "summary" && (format === "xlsx" || format === "excel")) {
     return new Response(new Uint8Array(exported.xlsx), {
       status: 200,
       headers: {

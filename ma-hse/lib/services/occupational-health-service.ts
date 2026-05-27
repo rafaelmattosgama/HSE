@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
+import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -470,7 +470,7 @@ export const OccupationalHealthService = {
 
     const xlsxBuffer = await workbook.xlsx.writeBuffer();
 
-    const doc = new PDFDocument({ margin: 36, size: "A4" });
+    const doc = createPdfDocument({ margin: 36, size: "A4" });
     doc.fontSize(18).text(`Medicina do Trabalho - ${plantCode.toUpperCase()}`);
     doc.moveDown(0.5);
     doc.fontSize(10).text(`Generated on ${new Date().toISOString().slice(0, 10)}`);

@@ -26,6 +26,13 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_COMMIT: resolveBuildCommit(),
   },
+  webpack(config, { isServer }) {
+    if (isServer) {
+      config.externals = config.externals ?? [];
+      config.externals.push({ pdfkit: "commonjs pdfkit" });
+    }
+    return config;
+  },
 };
 
 export default withNextIntl(nextConfig);

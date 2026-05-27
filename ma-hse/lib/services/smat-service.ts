@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import PDFDocument from "pdfkit";
+import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
 
@@ -75,7 +75,7 @@ export const SmatService = {
     const attachmentBuffers = await loadAttachmentBuffers(audit.attachments);
 
     const pdf = await (async () => {
-      const doc = new PDFDocument({ margin: 40, size: "A4" });
+      const doc = createPdfDocument({ margin: 40, size: "A4" });
 
       doc.fontSize(20).text("SMAT - Safety Management Audit Training");
       doc.moveDown(0.5);

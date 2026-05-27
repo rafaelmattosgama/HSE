@@ -1,4 +1,4 @@
-import PDFDocument from "pdfkit";
+import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import ExcelJS from "exceljs";
 import { CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
 import { differenceInCalendarDays, endOfMonth, format, max, min, startOfMonth } from "date-fns";
@@ -46,7 +46,7 @@ type CorporatePlantMetrics = {
 
 function pdfBufferFromText(lines: string[]) {
   return new Promise<Buffer>((resolve) => {
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = createPdfDocument({ margin: 50 });
     const chunks: Buffer[] = [];
 
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));

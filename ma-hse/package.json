@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "prisma generate",
     "dev": "next dev",
     "dev:all": "node scripts/dev-all.mjs",
+    "prebuild": "prisma generate",
     "build": "next build",
     "start": "next start",
     "encoding:check": "node scripts/fix-mojibake-files.mjs --check dump_dados_desenvolvimento.sql dump_dados_import.sql",
