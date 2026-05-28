@@ -373,16 +373,36 @@ async function safeNotifySewoSubmitted(input: {
   }
 }
 
-async function safeNotifySewoApproved(sewoId: string) {
+async function enqueueSewoApprovedNotification(sewoId: string) {
   try {
-    await notifySewoApproved(sewoId);
+    const { sewoApprovedNotificationQueue } = await import("@/jobs/queues");
+    await sewoApprovedNotificationQueue.add(
+      "send-sewo-approved-notification",
+      { sewoId },
+      {
+        jobId: `sewo-approved-notification:${sewoId}`,
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 60_000,
+        },
+        removeOnComplete: {
+          age: 7 * 24 * 60 * 60,
+          count: 1000,
+        },
+        removeOnFail: {
+          age: 30 * 24 * 60 * 60,
+          count: 1000,
+        },
+      },
+    );
   } catch (error) {
     logger.error(
       {
         error,
         sewoId,
       },
-      "failed_to_notify_sewo_approved",
+      "failed_to_enqueue_sewo_approved_notification",
     );
   }
 }
@@ -899,7 +919,7 @@ export const SewaService = {
     });
 
     if (input.payload.approved) {
-      await safeNotifySewoApproved(updated.id);
+      void enqueueSewoApprovedNotification(updated.id);
       return this.syncStatusWithActions(updated.id);
     }
 
@@ -910,6 +930,10 @@ export const SewaService = {
     });
 
     return updated;
+  },
+
+  async sendApprovedNotifications(sewoId: string) {
+    await notifySewoApproved(sewoId);
   },
 
   async manualClose(input: {

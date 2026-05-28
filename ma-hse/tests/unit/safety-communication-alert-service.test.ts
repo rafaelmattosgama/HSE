@@ -7,6 +7,9 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
+  $executeRaw: vi.fn(),
+  $queryRaw: vi.fn(),
+  $transaction: vi.fn((queries: Array<Promise<unknown>>) => Promise.all(queries)),
   communication: {
     findUnique: vi.fn(),
   },
@@ -14,10 +17,17 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   area: {
+    findFirst: vi.fn(),
     findMany: vi.fn(),
+  },
+  userPlantRole: {
+    findFirst: vi.fn(),
   },
   safetyCommunicationAlertRecipient: {
     findMany: vi.fn(),
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+    updateMany: vi.fn(),
   },
   safetyCommunicationNotification: {
     findMany: vi.fn(),
@@ -213,5 +223,58 @@ describe("SafetyCommunicationAlertService", () => {
       }),
       "dispatched_safety_communication_alerts",
     );
+  });
+
+  it("can add recipients through raw SQL when the runtime Prisma Client lacks the generated recipient delegate", async () => {
+    const recipientDelegate = prismaMock.safetyCommunicationAlertRecipient;
+    (prismaMock as { safetyCommunicationAlertRecipient?: unknown }).safetyCommunicationAlertRecipient = undefined;
+
+    try {
+      prismaMock.area.findFirst.mockResolvedValue({
+        id: "dept-assembly",
+        code: "A01",
+        name: "Assembly",
+      });
+      prismaMock.userPlantRole.findFirst.mockResolvedValue({ id: "role-1" });
+      prismaMock.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: "recipient-1",
+            userId: "supervisor-1",
+            userName: "Supervisor One",
+            userEmail: "sup1@example.com",
+            departmentId: "dept-assembly",
+            departmentCode: "A01",
+            departmentName: "Assembly",
+            createdAt: new Date("2026-05-28T08:00:00.000Z"),
+            updatedAt: new Date("2026-05-28T08:00:00.000Z"),
+          },
+        ]);
+      prismaMock.$executeRaw.mockResolvedValue(1);
+
+      const recipient = await SafetyCommunicationAlertService.addRecipient({
+        plantId: "plant-1",
+        userId: "supervisor-1",
+        departmentId: "dept-assembly",
+        actorUserId: "actor-1",
+      });
+
+      expect(recipient).toEqual({
+        id: "recipient-1",
+        userId: "supervisor-1",
+        userName: "Supervisor One",
+        userEmail: "sup1@example.com",
+        departmentId: "dept-assembly",
+        departmentCode: "A01",
+        departmentName: "Assembly",
+        createdAt: "2026-05-28T08:00:00.000Z",
+        updatedAt: "2026-05-28T08:00:00.000Z",
+      });
+      expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(recipientDelegate.upsert).not.toHaveBeenCalled();
+    } finally {
+      prismaMock.safetyCommunicationAlertRecipient = recipientDelegate;
+    }
   });
 });

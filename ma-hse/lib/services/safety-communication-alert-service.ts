@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   CommunicationStatus,
   NotificationStatus,
@@ -77,6 +78,23 @@ type SafetyCommunicationNotificationDelegate = {
   update: typeof prisma.safetyCommunicationNotification.update;
 };
 
+type RawSafetyCommunicationAlertRecipientRow = {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string | null;
+  departmentId: string;
+  departmentCode: string;
+  departmentName: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+type RawSafetyCommunicationAlertRecipientState = {
+  id: string;
+  isActive: boolean;
+};
+
 function getSafetyCommunicationRuntimeClient() {
   return prisma as typeof prisma & {
     safetyCommunicationAlertRecipient?: SafetyCommunicationAlertRecipientDelegate;
@@ -99,6 +117,223 @@ function logMissingSafetyCommunicationDelegate(
 
 function hasSafetyCommunicationAlertRecipientDelegate() {
   return Boolean(getSafetyCommunicationRuntimeClient().safetyCommunicationAlertRecipient);
+}
+
+function toIsoString(value: Date | string) {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function mapRawRecipientRow(row: RawSafetyCommunicationAlertRecipientRow): SafetyCommunicationAlertRecipientRow {
+  return {
+    id: row.id,
+    userId: row.userId,
+    userName: row.userName,
+    userEmail: row.userEmail,
+    departmentId: row.departmentId,
+    departmentCode: row.departmentCode,
+    departmentName: row.departmentName,
+    createdAt: toIsoString(row.createdAt),
+    updatedAt: toIsoString(row.updatedAt),
+  };
+}
+
+async function listRecipientsWithRawSql(plantId: string) {
+  const rows = await prisma.$queryRaw<RawSafetyCommunicationAlertRecipientRow[]>`
+    SELECT
+      recipient.id,
+      recipient."userId",
+      "user".name AS "userName",
+      "user".email AS "userEmail",
+      recipient."departmentId",
+      department.code AS "departmentCode",
+      department.name AS "departmentName",
+      recipient."createdAt",
+      recipient."updatedAt"
+    FROM "SafetyCommunicationAlertRecipient" recipient
+    INNER JOIN "User" "user" ON "user".id = recipient."userId"
+    INNER JOIN "Area" department ON department.id = recipient."departmentId"
+    WHERE recipient."plantId" = ${plantId}
+      AND recipient."isActive" = true
+      AND "user"."isActive" = true
+      AND EXISTS (
+        SELECT 1
+        FROM "UserPlantRole" user_plant_role
+        INNER JOIN "Role" role ON role.id = user_plant_role."roleId"
+        WHERE user_plant_role."userId" = "user".id
+          AND user_plant_role."plantId" = ${plantId}
+          AND role.code = ${RoleCode.N4_SUPERVISOR}::"RoleCode"
+      )
+    ORDER BY department.name ASC, "user".name ASC, COALESCE("user".email, '') ASC
+  `;
+
+  return rows.map(mapRawRecipientRow);
+}
+
+async function findRecipientStateWithRawSql(input: {
+  plantId: string;
+  userId: string;
+  departmentId: string;
+}) {
+  const rows = await prisma.$queryRaw<RawSafetyCommunicationAlertRecipientState[]>`
+    SELECT id, "isActive"
+    FROM "SafetyCommunicationAlertRecipient"
+    WHERE "plantId" = ${input.plantId}
+      AND "userId" = ${input.userId}
+      AND "departmentId" = ${input.departmentId}
+    LIMIT 1
+  `;
+
+  return rows[0] ?? null;
+}
+
+async function findRecipientRowWithRawSql(input: {
+  plantId: string;
+  userId: string;
+  departmentId: string;
+}) {
+  const rows = await prisma.$queryRaw<RawSafetyCommunicationAlertRecipientRow[]>`
+    SELECT
+      recipient.id,
+      recipient."userId",
+      "user".name AS "userName",
+      "user".email AS "userEmail",
+      recipient."departmentId",
+      department.code AS "departmentCode",
+      department.name AS "departmentName",
+      recipient."createdAt",
+      recipient."updatedAt"
+    FROM "SafetyCommunicationAlertRecipient" recipient
+    INNER JOIN "User" "user" ON "user".id = recipient."userId"
+    INNER JOIN "Area" department ON department.id = recipient."departmentId"
+    WHERE recipient."plantId" = ${input.plantId}
+      AND recipient."userId" = ${input.userId}
+      AND recipient."departmentId" = ${input.departmentId}
+    LIMIT 1
+  `;
+
+  return rows[0] ? mapRawRecipientRow(rows[0]) : null;
+}
+
+async function addRecipientWithRawSql(input: {
+  plantId: string;
+  userId: string;
+  departmentId: string;
+  actorUserId: string;
+}) {
+  const [department, supervisor] = await prisma.$transaction([
+    prisma.area.findFirst({
+      where: {
+        id: input.departmentId,
+        plantId: input.plantId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    }),
+    prisma.userPlantRole.findFirst({
+      where: {
+        userId: input.userId,
+        plantId: input.plantId,
+        role: {
+          code: RoleCode.N4_SUPERVISOR,
+        },
+        user: {
+          isActive: true,
+        },
+      },
+      select: {
+        id: true,
+      },
+    }),
+  ]);
+
+  if (!department) {
+    throw new SafetyCommunicationAlertRecipientError(
+      "DEPARTMENT_NOT_FOUND",
+      "Department not found for this plant.",
+      404,
+    );
+  }
+
+  if (!supervisor) {
+    throw new SafetyCommunicationAlertRecipientError(
+      "SUPERVISOR_NOT_FOUND",
+      "Supervisor not found for this plant.",
+      404,
+    );
+  }
+
+  const existingRecipient = await findRecipientStateWithRawSql(input);
+  if (existingRecipient?.isActive) {
+    throw new SafetyCommunicationAlertRecipientError(
+      "DUPLICATE_RECIPIENT",
+      "This supervisor is already assigned to the selected department.",
+      409,
+    );
+  }
+
+  await prisma.$executeRaw`
+    INSERT INTO "SafetyCommunicationAlertRecipient" (
+      id,
+      "plantId",
+      "userId",
+      "departmentId",
+      "isActive",
+      "createdBy",
+      "createdAt",
+      "updatedBy",
+      "updatedAt"
+    )
+    VALUES (
+      ${existingRecipient?.id ?? randomUUID()},
+      ${input.plantId},
+      ${input.userId},
+      ${input.departmentId},
+      true,
+      ${input.actorUserId},
+      NOW(),
+      ${input.actorUserId},
+      NOW()
+    )
+    ON CONFLICT ("plantId", "userId", "departmentId")
+    DO UPDATE SET
+      "isActive" = true,
+      "updatedBy" = ${input.actorUserId},
+      "updatedAt" = NOW()
+  `;
+
+  const recipient = await findRecipientRowWithRawSql(input);
+  if (!recipient) {
+    throw new SafetyCommunicationAlertRecipientError(
+      "RECIPIENT_NOT_FOUND",
+      "Alert recipient not found.",
+      404,
+    );
+  }
+
+  return recipient;
+}
+
+async function removeRecipientWithRawSql(input: {
+  id: string;
+  plantId: string;
+  actorUserId: string;
+}) {
+  const updatedCount = await prisma.$executeRaw`
+    UPDATE "SafetyCommunicationAlertRecipient"
+    SET
+      "isActive" = false,
+      "updatedBy" = ${input.actorUserId},
+      "updatedAt" = NOW()
+    WHERE id = ${input.id}
+      AND "plantId" = ${input.plantId}
+      AND "isActive" = true
+  `;
+
+  return updatedCount > 0;
 }
 
 function getSafetyCommunicationAlertRecipientDelegate(): SafetyCommunicationAlertRecipientDelegate;
@@ -545,7 +780,7 @@ export const SafetyCommunicationAlertService = {
       context: "listRecipients",
     });
     if (!recipientModel) {
-      return [];
+      return listRecipientsWithRawSql(plantId);
     }
 
     const rows = await recipientModel.findMany({
@@ -668,7 +903,14 @@ export const SafetyCommunicationAlertService = {
     departmentId: string;
     actorUserId: string;
   }) {
-    const recipientModel = getSafetyCommunicationAlertRecipientDelegate();
+    const recipientModel = getSafetyCommunicationAlertRecipientDelegate({
+      allowMissing: true,
+      context: "addRecipient",
+    });
+    if (!recipientModel) {
+      return addRecipientWithRawSql(input);
+    }
+
     const [department, supervisor, existingRecipient] = await prisma.$transaction([
       prisma.area.findFirst({
         where: {
@@ -798,7 +1040,14 @@ export const SafetyCommunicationAlertService = {
     plantId: string;
     actorUserId: string;
   }) {
-    const recipientModel = getSafetyCommunicationAlertRecipientDelegate();
+    const recipientModel = getSafetyCommunicationAlertRecipientDelegate({
+      allowMissing: true,
+      context: "removeRecipient",
+    });
+    if (!recipientModel) {
+      return removeRecipientWithRawSql(input);
+    }
+
     const updated = await recipientModel.updateMany({
       where: {
         id: input.id,

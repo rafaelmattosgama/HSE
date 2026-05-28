@@ -6,6 +6,7 @@ import { handleMonthlyReport } from "@/jobs/handlers/monthly-report";
 import { handleAnnualReport } from "@/jobs/handlers/annual-report";
 import { handleOverdueActions } from "@/jobs/handlers/overdue-actions";
 import { handleRepetitiveAlerts } from "@/jobs/handlers/repetitive-alerts";
+import { handleSewoApprovedNotification, type SewoApprovedNotificationJob } from "@/jobs/handlers/sewo-approved-notification";
 
 const connection = getQueueConnection();
 
@@ -15,6 +16,7 @@ const workerMap: [string, (data: unknown) => Promise<void>][] = [
   [QUEUE_NAMES.REPORT_ANNUAL, () => handleAnnualReport()],
   [QUEUE_NAMES.ACTIONS_OVERDUE, () => handleOverdueActions()],
   [QUEUE_NAMES.ALERTS_REPETITIVE, (data) => handleRepetitiveAlerts(data as { plantId: string })],
+  [QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, (data) => handleSewoApprovedNotification(data as SewoApprovedNotificationJob)],
 ];
 
 for (const [queueName, handler] of workerMap) {

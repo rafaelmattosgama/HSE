@@ -14,6 +14,7 @@ import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { prisma } from "@/lib/prisma";
+import { canManageSafetyCommunicationAlertRecipients } from "@/lib/rbac/safety-communication-alerts";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getPlantRepeatabilityAlertConfig, getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
@@ -52,13 +53,7 @@ export default async function AdminPage({
 
   const canManageUsers =
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
-  const canManageSafetyCommunicationRecipients =
-    actorRole === RoleCode.N0_ADMIN
-    || actorRole === RoleCode.N1_CORPORATE
-    || actorRole === RoleCode.N2_PLANT_MANAGER
-    || actorRole === RoleCode.N3_SAFETY;
-  const canManageSafetyCommunicationRecipientData =
-    canManageSafetyCommunicationRecipients && SafetyCommunicationAlertService.isRecipientManagementAvailable();
+  const canManageSafetyCommunicationRecipients = canManageSafetyCommunicationAlertRecipients(actorRole);
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
 
   const [
@@ -135,10 +130,10 @@ export default async function AdminPage({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: [{ code: "asc" }, { name: "asc" }],
     }),
-    canManageSafetyCommunicationRecipientData
+    canManageSafetyCommunicationRecipients
       ? SafetyCommunicationAlertService.listRecipients(plantRow.id)
       : Promise.resolve([]),
-    canManageSafetyCommunicationRecipientData
+    canManageSafetyCommunicationRecipients
       ? SafetyCommunicationAlertService.listRecipientOptions(plantRow.id)
       : Promise.resolve({ users: [], departments: [] }),
     listSewoReportRecipients(plantRow.id),
@@ -268,7 +263,7 @@ export default async function AdminPage({
         </section>
       )}
 
-      {canManageSafetyCommunicationRecipientData ? (
+      {canManageSafetyCommunicationRecipients ? (
         <SafetyCommunicationRecipientManager
           plantCode={plant}
           initialRecipients={safetyCommunicationRecipients}

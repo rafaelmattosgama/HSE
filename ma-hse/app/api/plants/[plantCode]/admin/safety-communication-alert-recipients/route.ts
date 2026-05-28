@@ -1,9 +1,9 @@
-import { RoleCode } from "@prisma/client";
 import { z } from "zod";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { SAFETY_COMMUNICATION_ALERT_RECIPIENT_ROLES } from "@/lib/rbac/safety-communication-alerts";
 import {
   SafetyCommunicationAlertRecipientError,
   SafetyCommunicationAlertService,
@@ -18,16 +18,9 @@ const deleteRecipientInput = z.object({
   id: z.string().uuid(),
 });
 
-const ADMIN_ALERT_RECIPIENT_ROLES = [
-  RoleCode.N0_ADMIN,
-  RoleCode.N1_CORPORATE,
-  RoleCode.N2_PLANT_MANAGER,
-  RoleCode.N3_SAFETY,
-] as const;
-
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [...ADMIN_ALERT_RECIPIENT_ROLES]);
+  const auth = await requirePlantAccess(plantCode, [...SAFETY_COMMUNICATION_ALERT_RECIPIENT_ROLES]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
@@ -45,7 +38,7 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [...ADMIN_ALERT_RECIPIENT_ROLES]);
+  const auth = await requirePlantAccess(plantCode, [...SAFETY_COMMUNICATION_ALERT_RECIPIENT_ROLES]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, upsertRecipientInput);
@@ -72,7 +65,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
 
 export async function DELETE(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [...ADMIN_ALERT_RECIPIENT_ROLES]);
+  const auth = await requirePlantAccess(plantCode, [...SAFETY_COMMUNICATION_ALERT_RECIPIENT_ROLES]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, deleteRecipientInput);

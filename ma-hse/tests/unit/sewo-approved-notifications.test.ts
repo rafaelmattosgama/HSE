@@ -47,6 +47,12 @@ const loggerMock = vi.hoisted(() => ({
   },
 }));
 
+const queuesMock = vi.hoisted(() => ({
+  sewoApprovedNotificationQueue: {
+    add: vi.fn().mockResolvedValue({ id: "job-1" }),
+  },
+}));
+
 const validationMock = vi.hoisted(() => ({
   SEWO_APPROVED_CHANNEL: "sewo-approved",
   SEWO_N1_APPROVAL_CHANNEL: "sewo-n1",
@@ -70,6 +76,7 @@ vi.mock("@/lib/services/notification-service", () => notificationMock);
 vi.mock("@/lib/services/sewo-export", () => exportMock);
 vi.mock("@/lib/services/email-service", () => emailMock);
 vi.mock("@/lib/logger", () => loggerMock);
+vi.mock("@/jobs/queues", () => queuesMock);
 vi.mock("@/lib/services/sewo-validation-service", () => validationMock);
 vi.mock("@/lib/env", () => ({
   env: {
@@ -78,33 +85,24 @@ vi.mock("@/lib/env", () => ({
 }));
 
 import { SewaService } from "@/lib/services/sewo-service";
+import { handleSewoApprovedNotification } from "@/jobs/handlers/sewo-approved-notification";
+
+async function flushAsyncWork() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe("SewaService approval notifications", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("sends external S-EWO reports in each recipient language after N1 approval", async () => {
+  it("enqueues approved S-EWO notifications without building reports in the approval request", async () => {
     const approvedAt = new Date("2026-05-26T10:00:00.000Z");
     prismaMock.sEWO.findUniqueOrThrow
       .mockResolvedValueOnce({
         id: "sewo-1",
         plantId: "plant-1",
         status: SEWOStatus.IN_APPROVAL,
-      })
-      .mockResolvedValueOnce({
-        id: "sewo-1",
-        plantId: "plant-1",
-        eventClassification: "NEAR_MISS",
-        templateData: null,
-        whereText: "Workstation A",
-        communication: { type: "NEAR_MISS" },
-        line: { name: "Line 4" },
-        plant: {
-          code: "pl1",
-          name: "Plant 1",
-          defaultLanguage: "pt",
-        },
       })
       .mockResolvedValueOnce({
         id: "sewo-1",
@@ -129,6 +127,49 @@ describe("SewaService approval notifications", () => {
       approvedAt,
       approvedByUserId: "user-1",
     });
+
+    const result = await SewaService.approve({
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      payload: {
+        approved: true,
+        approvalComment: "Approved",
+      },
+    });
+
+    await flushAsyncWork();
+
+    expect(queuesMock.sewoApprovedNotificationQueue.add).toHaveBeenCalledWith(
+      "send-sewo-approved-notification",
+      { sewoId: "sewo-1" },
+      expect.objectContaining({
+        jobId: "sewo-approved-notification:sewo-1",
+        attempts: 3,
+      }),
+    );
+    expect(notificationMock.NotificationService.notify).not.toHaveBeenCalled();
+    expect(exportMock.SewoExportService.buildExport).not.toHaveBeenCalled();
+    expect(exportMock.SewoExportService.buildExternalSummaryExport).not.toHaveBeenCalled();
+    expect(emailMock.EmailService.sendMail).not.toHaveBeenCalled();
+    expect(result.status).toBe(SEWOStatus.APPROVED);
+  });
+
+  it("sends external S-EWO reports in each recipient language from the worker handler", async () => {
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValueOnce({
+      id: "sewo-1",
+      plantId: "plant-1",
+      eventClassification: "NEAR_MISS",
+      templateData: null,
+      whereText: "Workstation A",
+      communication: { type: "NEAR_MISS" },
+      line: { name: "Line 4" },
+      plant: {
+        code: "pl1",
+        name: "Plant 1",
+        defaultLanguage: "pt",
+      },
+    });
+    expect(notificationMock.NotificationService.notify).not.toHaveBeenCalled();
     prismaMock.userPlantRole.findMany.mockResolvedValue([]);
     prismaMock.reportRecipientList.findFirst.mockResolvedValue({ id: "list-1" });
     prismaMock.reportRecipient.findMany.mockResolvedValue([
@@ -155,17 +196,8 @@ describe("SewaService approval notifications", () => {
       .mockResolvedValueOnce({ pdf: Buffer.from("pt-report") })
       .mockResolvedValueOnce({ pdf: Buffer.from("en-report") });
 
-    const result = await SewaService.approve({
-      sewoId: "sewo-1",
-      actorUserId: "user-1",
-      payload: {
-        approved: true,
-        approvalComment: "Approved",
-      },
-    });
+    await handleSewoApprovedNotification({ sewoId: "sewo-1" });
 
-    expect(notificationMock.NotificationService.notify).not.toHaveBeenCalled();
-    expect(exportMock.SewoExportService.buildExport).not.toHaveBeenCalled();
     expect(exportMock.SewoExportService.buildExternalSummaryExport).toHaveBeenCalledTimes(2);
     expect(exportMock.SewoExportService.buildExternalSummaryExport).toHaveBeenNthCalledWith(1, "sewo-1", { locale: "pt" });
     expect(exportMock.SewoExportService.buildExternalSummaryExport).toHaveBeenNthCalledWith(2, "sewo-1", { locale: "en" });
@@ -192,6 +224,5 @@ describe("SewaService approval notifications", () => {
     expect(enEmail?.text).toContain("Workstation A");
     expect(enEmail?.text).toContain("Near Miss");
     expect(enEmail?.text).toContain("SIF");
-    expect(result.status).toBe(SEWOStatus.APPROVED);
   });
 });
