@@ -33,9 +33,7 @@ export default async function SecureAppLayout({
   const uiLocale = await getServerUiLocale({ userLanguage: session.user.language });
   const ui = getUiDictionary(uiLocale);
   const theme = parseTheme(cookieStore.get(THEME_STORAGE_KEY)?.value);
-  const hasN1Validation = session.user.plantRoles.some(
-    (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
-  );
+  const hasN1Validation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
 
   return (
     <div className="app-shell">

@@ -70,7 +70,7 @@ export function isSewoSubmitterRole(role?: RoleCode | null) {
 }
 
 export function canUseN1SewoValidation(role?: RoleCode | null) {
-  return role === RoleCode.N0_ADMIN || role === RoleCode.N1_CORPORATE;
+  return role === RoleCode.N1_CORPORATE;
 }
 
 export function getSewoTemplateRecord(value: unknown): Record<string, unknown> {
@@ -243,7 +243,7 @@ export async function getPendingSewoValidationRows(input: {
     },
   });
   const roleCodes = userRoles.map((entry) => entry.role.code);
-  const canView = roleCodes.includes(RoleCode.N0_ADMIN) || roleCodes.includes(RoleCode.N1_CORPORATE);
+  const canView = roleCodes.includes(RoleCode.N1_CORPORATE);
 
   if (!canView) return [];
 

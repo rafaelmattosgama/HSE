@@ -11,6 +11,7 @@ import { getPendingSewoValidationRows } from "@/lib/services/sewo-validation-ser
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 
 export default async function ValidationPage({
   params,
@@ -19,15 +20,17 @@ export default async function ValidationPage({
 }) {
   const { plant } = await params;
   const session = await getServerSession(authOptions);
+  if (!session?.user) redirect("/login");
+
+  const canUseValidation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  if (!canUseValidation) redirect("/app/corporate");
+
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
   const uiLocale = await getServerUiLocale({
     userLanguage: session?.user.language,
     plantLanguage: plantRow.defaultLanguage,
   });
   const ui = getUiDictionary(uiLocale);
-  const canUseSewoValidation = session?.user.plantRoles.some(
-    (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
-  ) ?? false;
 
   const pending = await prisma.communication.findMany({
     where: {
@@ -50,12 +53,10 @@ export default async function ValidationPage({
     translateForViewer(uiLocale, pending.map((row) => row.description)),
     getLocalizedCommunicationUi(uiLocale),
     getLocalizedSewoUi(uiLocale),
-    canUseSewoValidation && session?.user.id
-      ? getPendingSewoValidationRows({
-          userId: session.user.id,
-          plantCode: plant,
-        })
-      : Promise.resolve([]),
+    getPendingSewoValidationRows({
+      userId: session.user.id,
+      plantCode: plant,
+    }),
   ]);
 
   return (
@@ -63,15 +64,13 @@ export default async function ValidationPage({
       <AppHero
         eyebrow={ui.modules.validation}
         title={ui.modules.validation}
-        description={canUseSewoValidation ? sewoUiResult.ui.n1ValidationSubtitle : undefined}
+        description={sewoUiResult.ui.n1ValidationSubtitle}
       />
 
-      {canUseSewoValidation ? (
-        <section className="space-y-4">
-          <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
-          <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={false} />
-        </section>
-      ) : null}
+      <section className="space-y-4">
+        <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
+        <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={false} />
+      </section>
 
       <section className="space-y-4">
         <AppSectionHeader title={sewoUiResult.ui.n1ValidationCommunicationSection} />

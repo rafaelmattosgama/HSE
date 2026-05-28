@@ -12,9 +12,7 @@ export default async function GlobalValidationPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
-  const canUseValidation = session.user.plantRoles.some(
-    (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
-  );
+  const canUseValidation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
   if (!canUseValidation) redirect("/app/corporate");
 
   const uiLocale = await getServerUiLocale({ userLanguage: session.user.language });
