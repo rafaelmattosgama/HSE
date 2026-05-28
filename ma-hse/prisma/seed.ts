@@ -1375,10 +1375,10 @@ async function main() {
 
   const seedUsers: SeedUserDefinition[] = [
     {
-      email: "admin.n0@ma-hse.local",
+      email: "admin@maxsafety.maportugal.com",
       name: "Admin N0",
       language: "pt",
-      roleBindings: [{ plantCode: "pl1", role: RoleCode.N0_ADMIN }],
+      roleBindings: [],
     },
     {
       email: "corporate@ma-hse.local",
@@ -1821,7 +1821,7 @@ async function main() {
   console.log("Seed complete.");
   console.log(`Default password for credential users: ${SEED_DEFAULT_PASSWORD}`);
   console.log("Credential users by role:");
-  console.log("- N0: admin.n0@ma-hse.local");
+  console.log("- N0: admin@maxsafety.maportugal.com");
   console.log("- N1: corporate@ma-hse.local");
   console.log("- N2: manager.pl01@ma-hse.local, manager.pl02@ma-hse.local");
   console.log("- N3: safety.pl01@ma-hse.local, safety.pl02@ma-hse.local");

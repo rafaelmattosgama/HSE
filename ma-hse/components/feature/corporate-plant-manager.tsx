@@ -478,7 +478,7 @@ export function CorporatePlantManager({
         <div className={`mt-4 grid gap-4 ${hidePlantList ? "" : "xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start"}`}>
           {hidePlantList ? null : (
             <section
-              className="app-card-muted space-y-3 p-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-7rem)] xl:overflow-hidden xl:hover:overflow-y-auto"
+              className="app-card-muted space-y-3 p-4 self-start sticky top-6 max-h-[calc(100vh-7rem)] overflow-y-auto"
               onMouseLeave={() => setActivePlantCode(initialActivePlantCode)}
             >
             <div className="flex items-start justify-between gap-3">

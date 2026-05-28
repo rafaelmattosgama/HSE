@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { RoleCode } from "@prisma/client";
@@ -151,7 +152,18 @@ export default async function PlantLayout({
           <PlantNav items={visibleItems} utilityItems={utilityItems} />
         </aside>
 
-        <section className="space-y-5">{children}</section>
+        <section className="space-y-5">
+          {plantRole === RoleCode.N1_CORPORATE || plantRole === RoleCode.N0_ADMIN ? (
+            <Link
+              href="/app/corporate"
+              className="app-toolbar inline-flex items-center gap-2 rounded-full border-teal-200 bg-teal-50 px-4 py-1.5 text-sm font-semibold text-teal-800 hover:bg-teal-100"
+            >
+              <span aria-hidden="true">←</span>
+              <span>{ui.modules.corporate}</span>
+            </Link>
+          ) : null}
+          {children}
+        </section>
       </div>
 
       <RepeatabilityAlertModal

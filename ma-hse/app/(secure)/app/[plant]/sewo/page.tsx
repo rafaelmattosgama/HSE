@@ -161,7 +161,7 @@ export default async function SewoPage({
         return {
           id: record.id,
           date: record.analysisDate.toISOString().slice(0, 10),
-          local: record.communication?.workstation?.name ?? record.communication?.area?.name ?? record.whereText,
+          local: record.whereText || record.communication?.workstation?.name || record.communication?.area?.name || "",
           typeLabel: record.communication
             ? formatLocalizedCommunicationType(record.communication.type, ui)
             : translatedStandaloneTypes[index] ?? record.eventClassification,
