@@ -24,7 +24,7 @@ SET row_security = off;
 COPY public."User" (id, email, "passwordHash", name, language, "isActive", "createdAt", "updatedAt", "emailVerified", image, "forcePasswordChange") FROM stdin;
 fb343c98-5482-4087-9163-abe869fec141	corporate@ma-hse.local	$2b$12$zB03qyD3WPUUdTYnVWKs7.ZB9xN72TEs0QCozgyi9j6QchGeLVgkG	Corporate N1	en	t	2026-03-25 11:01:36.667	2026-05-15 07:15:58.777	\N	\N	f
 eb8b4a20-a324-4be2-b0aa-1ffdcc346bd2	plant.manager.maap@ma-hse.local	$2b$12$mRAG0Xv18O.lsfOTm0Q7Ze437A1rUpTUdTc0LI1h2/8I7.jvTVavu	Rafael Gama	en	t	2026-05-02 11:03:22.684	2026-05-02 11:03:55.392	\N	\N	f
-1a3af317-ddad-4484-bb0b-d4f2b19d9047	admin.n0@ma-hse.local	$2b$12$zB03qyD3WPUUdTYnVWKs7.ZB9xN72TEs0QCozgyi9j6QchGeLVgkG	Admin N0	pt	t	2026-04-25 21:01:43.324	2026-05-15 07:34:08.032	\N	\N	f
+1a3af317-ddad-4484-bb0b-d4f2b19d9047	admin@maxsafety.maportugal.com	$2b$12$zB03qyD3WPUUdTYnVWKs7.ZB9xN72TEs0QCozgyi9j6QchGeLVgkG	Admin N0	pt	t	2026-04-25 21:01:43.324	2026-05-15 07:34:08.032	\N	\N	f
 62649b54-469f-4584-9540-48b024edceab	safety.maap@ma-hse.local	$2b$12$zAiTQALYeZsFonwAXNjYw.QpY/W5nTOgMowJN6drbbzpx.0r5kK3.	Luís Santos	en	t	2026-04-25 21:04:09.679	2026-05-15 07:35:41.583	\N	\N	f
 07dd7593-c03f-4e21-9b0e-c434ee324108	safety.pl01@ma-hse.local	$2b$12$zB03qyD3WPUUdTYnVWKs7.ZB9xN72TEs0QCozgyi9j6QchGeLVgkG	Safety PL01 (N3)	it	t	2026-03-25 11:01:36.677	2026-04-28 15:49:07.772	\N	\N	f
 a01c4a64-7fad-4bb0-91d2-470d679c72bf	safety.pl02@ma-hse.local	$2b$12$zB03qyD3WPUUdTYnVWKs7.ZB9xN72TEs0QCozgyi9j6QchGeLVgkG	Safety PL02 (N3)	pt	t	2026-03-25 11:01:36.679	2026-04-28 15:49:07.776	\N	\N	f

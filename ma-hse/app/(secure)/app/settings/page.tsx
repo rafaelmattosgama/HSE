@@ -8,6 +8,7 @@ import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager
 import { PlantLanguageSettings } from "@/components/feature/plant-language-settings";
 import { ProfessionalRisksManager } from "@/components/feature/professional-risks-manager";
 import { ReportLayoutManager } from "@/components/feature/report-layout-manager";
+import { SafetyCommunicationRecipientManager } from "@/components/feature/safety-communication-recipient-manager";
 import { SettingsPlantSelector } from "@/components/feature/settings-plant-selector";
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { UserManager } from "@/components/feature/user-manager";
@@ -23,6 +24,7 @@ import { getServerUiDictionary, getServerUiLocale } from "@/lib/server-ui-langua
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
+import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
 import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
@@ -129,6 +131,12 @@ export default async function SettingsPage({
   const moduleParameter = selectedPlant?.systemParameters.find((entry) => entry.key === MODULE_TOGGLES_PARAMETER_KEY);
   const reportLayoutParameter = selectedPlant?.systemParameters.find((entry) => entry.key === "REPORT_LAYOUT");
   const sewoRecipients = selectedPlant ? await listSewoReportRecipients(selectedPlant.id) : [];
+  const safetyCommunicationRecipients = selectedPlant
+    ? await SafetyCommunicationAlertService.listRecipients(selectedPlant.id)
+    : [];
+  const safetyCommunicationRecipientOptions = selectedPlant
+    ? await SafetyCommunicationAlertService.listRecipientOptions(selectedPlant.id)
+    : { users: [], departments: [] };
   const uiLocale = await getServerUiLocale({
     userLanguage: session.user.language,
     plantLanguage: selectedPlant?.defaultLanguage,
@@ -287,6 +295,14 @@ export default async function SettingsPage({
               updatedAt: entry.user.updatedAt,
             }))}
             allowedCreateRoles={getCreatableRoles(RoleCode.N0_ADMIN)}
+            labels={masterDataUi}
+          />
+
+          <SafetyCommunicationRecipientManager
+            plantCode={selectedPlant.code}
+            initialRecipients={safetyCommunicationRecipients}
+            users={safetyCommunicationRecipientOptions.users}
+            departments={safetyCommunicationRecipientOptions.departments}
             labels={masterDataUi}
           />
 
