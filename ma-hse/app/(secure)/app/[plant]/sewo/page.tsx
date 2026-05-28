@@ -23,7 +23,7 @@ export default async function SewoPage({
   searchParams,
 }: {
   params: Promise<{ plant: string }>;
-  searchParams: Promise<{ sewoId?: string }>;
+  searchParams: Promise<{ mode?: string; sewoId?: string }>;
 }) {
   const { plant } = await params;
   const currentSearchParams = await searchParams;
@@ -144,9 +144,10 @@ export default async function SewoPage({
 
   return (
     <SewoWorkspace
-      key={`${plant}:${currentSearchParams.sewoId ?? "list"}`}
+      key={`${plant}:${currentSearchParams.mode ?? "list"}:${currentSearchParams.sewoId ?? ""}`}
       plant={plant}
       initialSelectedSewoId={currentSearchParams.sewoId ?? null}
+      mode={currentSearchParams.mode === "create" ? "create" : "list"}
       causeCatalogVersionId={currentCatalog?.id}
       sewoRows={sewoRecords.map((record, index) => {
         const linkedActions = new Map(

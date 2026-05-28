@@ -1,4 +1,4 @@
-import { PlantAccessTokenType, CommunicationSource } from "@prisma/client";
+import { PlantAccessTokenType, CommunicationSource, CommunicationType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { fail, ok } from "@/lib/api";
 import { buildRateLimitKey } from "@/lib/helpers";
@@ -15,9 +15,11 @@ import {
   getLocalizedShiftName,
   getPublicReportText,
 } from "@/lib/public-report";
-import { createPublicReportCommunicationInput } from "@/lib/validation/dtos";
+import { createPublicReportCommunicationInput, type CreateCommunicationInput } from "@/lib/validation/dtos";
 import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
 import { ensureDefaultShifts } from "@/lib/services/shift-service";
+
+const PUBLIC_REPORT_DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
 
 function escapeHtml(value: string) {
   return value
@@ -61,6 +63,44 @@ function compareEmployees(
 function compareByName(language: string) {
   return (left: { name: string }, right: { name: string }) =>
     left.name.localeCompare(right.name, language, { sensitivity: "base" });
+}
+
+function optionalText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function optionalId(value: string | null | undefined) {
+  return value || null;
+}
+
+async function findRecentDuplicatePublicReport(plantId: string, payload: CreateCommunicationInput) {
+  return prisma.communication.findFirst({
+    where: {
+      plantId,
+      source: CommunicationSource.TOKEN_REPORT,
+      type: payload.type,
+      eventDatetime: payload.eventDatetime,
+      reporterEmployeeNo: optionalText(payload.reporterEmployeeNo),
+      shiftId: optionalId(payload.shiftId),
+      areaId: optionalId(payload.areaId),
+      workstationId: optionalId(payload.workstationId),
+      targetEmployeeId: optionalId(payload.targetEmployeeId),
+      bodyPartId: payload.type === CommunicationType.FIRST_AID ? optionalId(payload.bodyPartId) : null,
+      injuryTypeId: payload.type === CommunicationType.FIRST_AID ? optionalId(payload.injuryTypeId) : null,
+      description: payload.description,
+      suggestedAction: optionalText(payload.suggestedAction),
+      createdAt: {
+        gte: new Date(Date.now() - PUBLIC_REPORT_DUPLICATE_WINDOW_MS),
+      },
+    },
+    include: {
+      attachments: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
 }
 
 function optionMarkup(rows: Array<{ id: string; name: string; employeeNo?: string | null }>) {
@@ -118,7 +158,7 @@ function renderHtml(
       .combo-option { width: 100%; margin: 0; border: 0; border-radius: 0; background: white; color: #0f172a; padding: 9px 10px; text-align: left; font-weight: 500; }
       .combo-option:hover, .combo-option:focus { background: #ecfdf5; outline: none; }
       .combo-empty { padding: 10px; color: #64748b; font-size: 13px; }
-      .ok { color: #065f46; font-size: 13px; }
+      .ok { color: #065f46; font-size: 13px; font-weight: 700; }
       .err { color: #991b1b; font-size: 13px; }
     </style>
   </head>
@@ -208,6 +248,9 @@ function renderHtml(
       const clinicalWrap = document.getElementById('clinical-wrap');
       const eventDatetimeInput = document.getElementById('eventDatetime');
       const submitButton = form.querySelector('button[type="submit"]');
+      const originalSubmitText = submitButton.textContent;
+      const formControls = Array.from(form.elements).filter((element) => element !== submitButton);
+      let submissionCompleted = false;
       const bodyPartSelect = form.elements.bodyPartId;
       const reportData = {
         employees: ${employeesJson},
@@ -221,6 +264,21 @@ function renderHtml(
         selectNature: ${safeJson(text.selectNature)},
         selectBodyPart: ${safeJson(text.selectBodyPart)},
       };
+
+      function setFormLocked(locked) {
+        for (const control of formControls) {
+          control.disabled = locked;
+        }
+        submitButton.disabled = locked;
+      }
+
+      function markSubmissionSuccess() {
+        submissionCompleted = true;
+        msg.className = 'ok';
+        msg.textContent = messages.success;
+        submitButton.textContent = messages.success;
+        setFormLocked(true);
+      }
 
       function normalize(value) {
         return String(value || '')
@@ -388,7 +446,10 @@ function renderHtml(
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (submissionCompleted) return;
+
         msg.textContent = '';
+        msg.className = '';
         syncEventDatetimeMax();
         validateEventDatetime();
         const workerRequired = typeSelect.value === 'UNSAFE_ACT' || typeSelect.value === 'NEAR_MISS' || typeSelect.value === 'FIRST_AID';
@@ -420,6 +481,7 @@ function renderHtml(
         };
 
         submitButton.disabled = true;
+        submitButton.textContent = originalSubmitText;
 
         try {
           const response = await fetch('/r/${plantCode}/report?t=${token}', {
@@ -430,13 +492,7 @@ function renderHtml(
 
           const json = await response.json().catch(() => null);
           if (response.ok && json?.ok) {
-            msg.className = 'ok';
-            msg.textContent = messages.success;
-            form.reset();
-            workerCombo.clear();
-            injuryTypeCombo.clear();
-            syncEventDatetimeMax();
-            syncWorkerVisibility();
+            markSubmissionSuccess();
             return;
           }
 
@@ -446,7 +502,10 @@ function renderHtml(
           msg.className = 'err';
           msg.textContent = error instanceof Error && error.message ? error.message : messages.failed;
         } finally {
-          submitButton.disabled = false;
+          if (!submissionCompleted) {
+            submitButton.disabled = false;
+            submitButton.textContent = originalSubmitText;
+          }
         }
       });
     </script>
@@ -542,6 +601,19 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
 
   if (!CommunicationService.isN6AllowedType(parsed.data.type)) {
     return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
+  }
+
+  const duplicateCommunication = await findRecentDuplicatePublicReport(plant.id, parsed.data);
+  if (duplicateCommunication) {
+    logger.info(
+      {
+        plantCode,
+        route: "report-submit",
+        communicationId: duplicateCommunication.id,
+      },
+      "public report duplicate submission reused",
+    );
+    return ok(duplicateCommunication);
   }
 
   const communication = await (async () => {

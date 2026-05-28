@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CreateSewoQuick } from "@/components/feature/create-sewo-quick";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import type { RootCauseGroup, SewoUi } from "@/lib/sewo-ui";
 
 type Option = {
@@ -92,6 +91,7 @@ type SewoRow = {
 export function SewoWorkspace({
   plant,
   initialSelectedSewoId,
+  mode = "list",
   causeCatalogVersionId,
   sewoRows,
   communications,
@@ -107,6 +107,7 @@ export function SewoWorkspace({
 }: {
   plant: string;
   initialSelectedSewoId?: string | null;
+  mode?: "list" | "create";
   causeCatalogVersionId?: string;
   sewoRows: SewoRow[];
   communications: CommunicationOption[];
@@ -120,17 +121,11 @@ export function SewoWorkspace({
   ui: SewoUi;
   rootCauseGroups: RootCauseGroup[];
 }) {
-  const [creating, setCreating] = useState(false);
-  const [selectedSewoId, setSelectedSewoId] = useState<string | null>(initialSelectedSewoId ?? null);
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const openSewos = useMemo(() => sewoRows.filter((row) => row.status === "DRAFT" || row.status === "IN_APPROVAL"), [sewoRows]);
-  const selectedSewo = sewoRows.find((row) => row.id === selectedSewoId) ?? null;
-
-  useEffect(() => {
-    if (!selectedSewoId) return;
-
-    editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [selectedSewoId]);
+  const selectedSewo = initialSelectedSewoId
+    ? sewoRows.find((row) => row.id === initialSelectedSewoId) ?? null
+    : null;
+  const view = selectedSewo ? "edit" : mode;
+  const listHref = `/app/${plant}/sewo`;
 
   return (
     <div className="space-y-6">
@@ -139,56 +134,58 @@ export function SewoWorkspace({
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{ui.pageTitle}</h1>
           </div>
-          <Button type="button" onClick={() => {
-            setSelectedSewoId(null);
-            setCreating((current) => !current);
-          }}>
-            {creating ? ui.hideCreationButton : ui.createButton}
-          </Button>
+          {view === "list" ? (
+            <Link href={`${listHref}?mode=create`} className={buttonVariants()}>
+              {ui.createButton}
+            </Link>
+          ) : (
+            <Link href={listHref} className={buttonVariants({ variant: "secondary" })}>
+              {ui.close}
+            </Link>
+          )}
         </div>
       </section>
 
-      <section className="app-panel overflow-x-auto rounded-xl">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">{ui.tableDate}</th>
-              <th className="px-4 py-3">{ui.tableLocation}</th>
-              <th className="px-4 py-3">{ui.tableType}</th>
-              <th className="px-4 py-3">{ui.tableStatus}</th>
-              <th className="px-4 py-3">{ui.tableEdit}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sewoRows.map((row) => (
-              <tr key={row.id} className="border-t border-slate-200">
-                <td className="px-4 py-3">{row.date}</td>
-                <td className="px-4 py-3">{row.local}</td>
-                <td className="px-4 py-3">{row.typeLabel}</td>
-                <td className="px-4 py-3">
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.statusLabel}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => {
-                    setCreating(false);
-                    setSelectedSewoId(row.id);
-                  }}>
-                    {ui.editButton}
-                  </Button>
-                </td>
+      {view === "list" ? (
+        <section className="app-panel overflow-x-auto rounded-xl">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">{ui.tableDate}</th>
+                <th className="px-4 py-3">{ui.tableLocation}</th>
+                <th className="px-4 py-3">{ui.tableType}</th>
+                <th className="px-4 py-3">{ui.tableStatus}</th>
+                <th className="px-4 py-3">{ui.tableEdit}</th>
               </tr>
-            ))}
-            {sewoRows.length === 0 ? (
-              <tr className="border-t border-slate-200">
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {sewoRows.map((row) => (
+                <tr key={row.id} className="border-t border-slate-200">
+                  <td className="px-4 py-3">{row.date}</td>
+                  <td className="px-4 py-3">{row.local}</td>
+                  <td className="px-4 py-3">{row.typeLabel}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.statusLabel}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link href={`${listHref}?sewoId=${row.id}`} className={buttonVariants({ size: "sm", variant: "ghost" })}>
+                      {ui.editButton}
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {sewoRows.length === 0 ? (
+                <tr className="border-t border-slate-200">
+                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       {selectedSewo ? (
-        <section ref={editorRef} className="space-y-3">
+        <section className="space-y-3">
           <div className="app-panel rounded-2xl p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -202,9 +199,9 @@ export function SewoWorkspace({
                 <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?type=complete&format=pdf`} className="app-toolbar">
                   {ui.exportCompleteReport}
                 </Link>
-                <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedSewoId(null)}>
+                <Link href={listHref} className={buttonVariants({ size: "sm", variant: "ghost" })}>
                   {ui.close}
-                </Button>
+                </Link>
               </div>
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -235,27 +232,8 @@ export function SewoWorkspace({
         </section>
       ) : null}
 
-      {creating ? (
-        <>
-          <section className="app-panel space-y-3 rounded-2xl p-5">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">{ui.openSewoTitle}</h2>
-            </div>
-            <div className="space-y-3">
-              {openSewos.length ? openSewos.map((row) => (
-                <div key={row.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{row.date} | {row.typeLabel} | {row.local}</p>
-                      <p className="mt-1 text-sm text-slate-600">{row.description}</p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{row.statusLabel}</span>
-                  </div>
-                </div>
-              )) : <p className="text-sm text-slate-500">{ui.noOpenSewo}</p>}
-            </div>
-          </section>
-
+      {view === "create" ? (
+        <section className="space-y-3">
           <CreateSewoQuick
             causeCatalogVersionId={causeCatalogVersionId}
             communications={communications}
@@ -269,7 +247,16 @@ export function SewoWorkspace({
             ui={ui}
             rootCauseGroups={rootCauseGroups}
           />
-        </>
+        </section>
+      ) : null}
+
+      {initialSelectedSewoId && !selectedSewo ? (
+        <section className="app-panel rounded-2xl p-5">
+          <p className="text-sm text-slate-600">{ui.noRecords}</p>
+          <Link href={listHref} className={`${buttonVariants({ size: "sm", variant: "secondary" })} mt-4`}>
+            {ui.close}
+          </Link>
+        </section>
       ) : null}
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ActionCategory, ActionPriority, SEWOStatus } from "@prisma/client";
-import { ArrowRightCircle, Link2Off } from "lucide-react";
+import { ArrowRightCircle, ChevronDown, ChevronUp, Link2Off } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
@@ -149,6 +149,10 @@ function formatUiMessage(template: string, replacements: Record<string, string>)
     (result, [key, value]) => result.replaceAll(`{${key}}`, value),
     template,
   );
+}
+
+function isValidationFeedbackText(value: string) {
+  return /\bvalidated by\b|\bvalidado por\b|\bvalidada por\b/i.test(value);
 }
 
 function getStringValue(value: unknown) {
@@ -356,6 +360,7 @@ export function CreateSewoQuick({
   const [actionsMessage, setActionsMessage] = useState("");
   const [savingActionId, setSavingActionId] = useState<string | null>(null);
   const [creatingLinkedAction, setCreatingLinkedAction] = useState(false);
+  const [associatedCommunicationExpanded, setAssociatedCommunicationExpanded] = useState(!initialSewo);
   const [statusReason, setStatusReason] = useState("");
   const [changingStatus, setChangingStatus] = useState(false);
   const [linkedActionDraft, setLinkedActionDraft] = useState<ActionPlanRow>(() => createActionPlanRow());
@@ -394,12 +399,38 @@ export function CreateSewoQuick({
   const requiresBodyPart = selectedCommunication?.type === "FIRST_AID" || selectedCommunication?.type === "ACCIDENT";
   const isSubmittedSewo = Boolean(initialSewo?.status && initialSewo.status !== SEWOStatus.DRAFT);
   const isRejectedSewo = initialSewo?.status === SEWOStatus.REJECTED;
+  const isValidatedSewo = initialSewo?.status === SEWOStatus.APPROVED || initialSewo?.status === SEWOStatus.CLOSED;
   const hasBlockingLinkedActions = hasOpenLinkedActions(editableCommunicationActions.map((action) => action.status));
   const canManageStatus = Boolean(
     initialSewo && initialSewo.status !== SEWOStatus.IN_APPROVAL && initialSewo.status !== SEWOStatus.REJECTED && initialSewo.status !== SEWOStatus.CLOSED,
   );
   const showLinkedActionsSection = Boolean(initialSewo || editableCommunicationActions.length);
   const showLinkedActionCreator = Boolean(initialSewo && isSubmittedSewo);
+  const showN1Feedback = Boolean(
+    initialSewo
+      && (isRejectedSewo || isValidatedSewo)
+      && (initialSewo.approvedByName || initialSewo.approvedAt || initialSewo.approvalComment),
+  );
+  const n1FeedbackTitle = isRejectedSewo ? ui.rejectionFeedbackTitle : ui.validationFeedbackTitle;
+  const n1FeedbackActorLabel = isRejectedSewo ? ui.rejectedBy : ui.validatedBy;
+  const rawN1FeedbackComment = initialSewo?.approvalComment?.trim() ?? "";
+  const n1FeedbackComment = isRejectedSewo && isValidationFeedbackText(rawN1FeedbackComment)
+    ? ""
+    : rawN1FeedbackComment;
+  const n1FeedbackClassName = isRejectedSewo
+    ? "border-rose-200 bg-rose-50 text-rose-700"
+    : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const n1FeedbackCommentClassName = isRejectedSewo ? "border-rose-100" : "border-emerald-100";
+  const associatedCommunicationSummary = selectedCommunication
+    ? `${selectedCommunication.eventDate} | ${selectedCommunication.typeLabel} | ${selectedCommunication.locationLabel}`
+    : communicationId
+      ? communicationId
+      : ui.manualWithoutCommunication;
+  const showAssociatedCommunicationSummary = Boolean(selectedCommunication || skipCommunicationSelection || initialSewo);
+
+  useEffect(() => {
+    setAssociatedCommunicationExpanded(!initialSewo);
+  }, [initialSewo]);
 
   useEffect(() => {
     if (!monthKeys.length) {
@@ -752,7 +783,11 @@ export function CreateSewoQuick({
       }
 
       setMessage(successMessage);
-      window.location.reload();
+      if (initialSewo) {
+        window.location.reload();
+      } else {
+        window.location.href = `/app/${plant}/sewo`;
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : fallbackErrorMessage);
     } finally {
@@ -813,13 +848,13 @@ export function CreateSewoQuick({
         <h3 className="text-lg font-semibold text-slate-900">{initialSewo ? ui.editSewoTitle : ui.investigationTitle}</h3>
       </div>
 
-      {isRejectedSewo || initialSewo?.approvalComment ? (
-        <section className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
-          <h4 className="text-sm font-semibold uppercase tracking-wide text-rose-700">{ui.rejectionFeedbackTitle}</h4>
+      {showN1Feedback ? (
+        <section className={`space-y-3 rounded-2xl border p-4 ${n1FeedbackClassName}`}>
+          <h4 className="text-sm font-semibold uppercase tracking-wide">{n1FeedbackTitle}</h4>
           <div className="grid gap-3 md:grid-cols-2">
             {initialSewo?.approvedByName ? (
               <p className="text-sm text-slate-700">
-                <span className="font-semibold text-slate-900">{ui.rejectedBy}:</span> {initialSewo.approvedByName}
+                <span className="font-semibold text-slate-900">{n1FeedbackActorLabel}:</span> {initialSewo.approvedByName}
               </p>
             ) : null}
             {initialSewo?.approvedAt ? (
@@ -828,9 +863,9 @@ export function CreateSewoQuick({
               </p>
             ) : null}
           </div>
-          {initialSewo?.approvalComment ? (
-            <p className="whitespace-pre-line rounded-xl border border-rose-100 bg-white px-4 py-3 text-sm text-slate-700">
-              {initialSewo.approvalComment}
+          {n1FeedbackComment ? (
+            <p className={`whitespace-pre-line rounded-xl border bg-white px-4 py-3 text-sm text-slate-700 ${n1FeedbackCommentClassName}`}>
+              {n1FeedbackComment}
             </p>
           ) : null}
         </section>
@@ -871,11 +906,28 @@ export function CreateSewoQuick({
               <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.associatedCommunication}</h4>
             </div>
             <div className="flex items-center gap-2">
-              {selectedCommunication ? (
-                <div className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-800">
-                  {selectedCommunication.eventDate} | {selectedCommunication.typeLabel} | {selectedCommunication.locationLabel}
+              {showAssociatedCommunicationSummary ? (
+                <div className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedCommunication ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-700"}`}>
+                  {associatedCommunicationSummary}
                 </div>
               ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setAssociatedCommunicationExpanded((current) => !current)}
+                title={associatedCommunicationExpanded ? ui.collapseSection : ui.expandSection}
+                className="gap-2"
+              >
+                {associatedCommunicationExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                <span>{associatedCommunicationExpanded ? ui.collapseSection : ui.expandSection}</span>
+              </Button>
+            </div>
+          </div>
+
+          {associatedCommunicationExpanded ? (
+          <div className={`space-y-3 ${skipCommunicationSelection ? "opacity-50" : ""}`}>
+            <div>
               <Button
                 type="button"
                 size="sm"
@@ -893,9 +945,7 @@ export function CreateSewoQuick({
                 <span>{skipCommunicationSelection ? ui.manualMode : ui.skipLink}</span>
               </Button>
             </div>
-          </div>
 
-          <div className={`space-y-3 ${skipCommunicationSelection ? "opacity-50" : ""}`}>
             {monthKeys.length > 1 ? (
               <div className="flex items-center gap-3">
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -972,6 +1022,7 @@ export function CreateSewoQuick({
               </div>
             </div>
           </div>
+          ) : null}
         </section>
 
       {canContinue ? (
@@ -1009,134 +1060,6 @@ export function CreateSewoQuick({
               )}
             </div>
           </section>
-
-          {showLinkedActionsSection ? (
-            <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                    {initialSewo ? ui.linkedActions : ui.openActionsFromCommunication}
-                  </h4>
-                </div>
-                {actionsMessage ? <p className="text-sm text-slate-700">{actionsMessage}</p> : null}
-              </div>
-              <div className="space-y-3">
-                {editableCommunicationActions.length ? editableCommunicationActions.map((action) => (
-                  <div key={action.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{action.title}</p>
-                        <p className="text-xs text-slate-500">{ui.actionStatusLabels[action.status] ?? action.status}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Link href={`/app/${plant}/actions/${action.id}`} className="text-sm font-medium text-teal-700 hover:underline">
-                          {ui.openAction}
-                        </Link>
-                        <Button type="button" size="sm" onClick={() => saveExistingAction(action.id)} disabled={savingActionId === action.id || !action.dirty}>
-                          {savingActionId === action.id ? ui.savingAction : ui.saveAction}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
-                        <input value={action.title} onChange={(event) => updateExistingAction(action.id, { title: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
-                        <select value={action.ownerUserId} onChange={(event) => updateExistingAction(action.id, { ownerUserId: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                          {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
-                        </select>
-                      </label>
-                    </div>
-
-                    <label className="mt-3 block space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
-                      <textarea value={action.description} onChange={(event) => updateExistingAction(action.id, { description: event.target.value })} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-                    </label>
-
-                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
-                        <select value={action.priority} onChange={(event) => updateExistingAction(action.id, { priority: event.target.value as ActionPriority })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                          <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
-                          <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
-                          <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
-                        </select>
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
-                        <select value={action.category} onChange={(event) => updateExistingAction(action.id, { category: event.target.value as ActionCategory })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                          <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
-                          <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
-                          <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
-                        </select>
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
-                        <input type="date" value={action.dueDate} onChange={(event) => updateExistingAction(action.id, { dueDate: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-                      </label>
-                    </div>
-                  </div>
-                )) : <p className="text-sm text-slate-500">{ui.noLinkedActions}</p>}
-              </div>
-
-              {showLinkedActionCreator ? (
-                <div className="space-y-3 rounded-xl border border-dashed border-[var(--brand-300)] bg-[var(--brand-50)] p-4">
-                  <h5 className="text-sm font-semibold text-slate-900">{ui.createLinkedAction}</h5>
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
-                      <input value={linkedActionDraft.title} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
-                      <select value={linkedActionDraft.category} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, category: event.target.value as ActionCategory }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                        <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
-                        <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
-                        <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <label className="space-y-1 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
-                    <textarea value={linkedActionDraft.description} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-                  </label>
-
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
-                      <select value={linkedActionDraft.ownerUserId} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, ownerUserId: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                        <option value="">{ui.selectOwner}</option>
-                        {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
-                      <select value={linkedActionDraft.priority} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, priority: event.target.value as ActionPriority }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                        <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
-                        <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
-                        <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
-                      <input type="date" value={linkedActionDraft.dueDate} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, dueDate: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
-                    </label>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <Button type="button" size="sm" onClick={() => void createLinkedAction()} disabled={creatingLinkedAction}>
-                      {creatingLinkedAction ? ui.savingAction : ui.createLinkedAction}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </section>
-          ) : null}
 
           <section className="grid gap-4 lg:grid-cols-3">
             <label className="space-y-1 text-sm">
@@ -1517,6 +1440,134 @@ export function CreateSewoQuick({
                 </div>
               ))}
             </div>
+            </section>
+          ) : null}
+
+          {showLinkedActionsSection ? (
+            <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    {initialSewo ? ui.linkedActions : ui.openActionsFromCommunication}
+                  </h4>
+                </div>
+                {actionsMessage ? <p className="text-sm text-slate-700">{actionsMessage}</p> : null}
+              </div>
+              <div className="space-y-3">
+                {editableCommunicationActions.length ? editableCommunicationActions.map((action) => (
+                  <div key={action.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{action.title}</p>
+                        <p className="text-xs text-slate-500">{ui.actionStatusLabels[action.status] ?? action.status}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/app/${plant}/actions/${action.id}`} className="text-sm font-medium text-teal-700 hover:underline">
+                          {ui.openAction}
+                        </Link>
+                        <Button type="button" size="sm" onClick={() => saveExistingAction(action.id)} disabled={savingActionId === action.id || !action.dirty}>
+                          {savingActionId === action.id ? ui.savingAction : ui.saveAction}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
+                        <input value={action.title} onChange={(event) => updateExistingAction(action.id, { title: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
+                        <select value={action.ownerUserId} onChange={(event) => updateExistingAction(action.id, { ownerUserId: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                          {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="mt-3 block space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
+                      <textarea value={action.description} onChange={(event) => updateExistingAction(action.id, { description: event.target.value })} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                    </label>
+
+                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
+                        <select value={action.priority} onChange={(event) => updateExistingAction(action.id, { priority: event.target.value as ActionPriority })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                          <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
+                          <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
+                          <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
+                        </select>
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
+                        <select value={action.category} onChange={(event) => updateExistingAction(action.id, { category: event.target.value as ActionCategory })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                          <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
+                          <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
+                          <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
+                        </select>
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
+                        <input type="date" value={action.dueDate} onChange={(event) => updateExistingAction(action.id, { dueDate: event.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                      </label>
+                    </div>
+                  </div>
+                )) : <p className="text-sm text-slate-500">{ui.noLinkedActions}</p>}
+              </div>
+
+              {showLinkedActionCreator ? (
+                <div className="space-y-3 rounded-xl border border-dashed border-[var(--brand-300)] bg-[var(--brand-50)] p-4">
+                  <h5 className="text-sm font-semibold text-slate-900">{ui.createLinkedAction}</h5>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.title}</span>
+                      <input value={linkedActionDraft.title} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, title: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.category}</span>
+                      <select value={linkedActionDraft.category} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, category: event.target.value as ActionCategory }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value={ActionCategory.CORRECTIVE}>{ui.categoryLabels.CORRECTIVE}</option>
+                        <option value={ActionCategory.PREVENTIVE}>{ui.categoryLabels.PREVENTIVE}</option>
+                        <option value={ActionCategory.IMPROVEMENT}>{ui.categoryLabels.IMPROVEMENT}</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="space-y-1 text-sm">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.description}</span>
+                    <textarea value={linkedActionDraft.description} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, description: event.target.value }))} rows={3} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  </label>
+
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.owner}</span>
+                      <select value={linkedActionDraft.ownerUserId} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, ownerUserId: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value="">{ui.selectOwner}</option>
+                        {actionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.priority}</span>
+                      <select value={linkedActionDraft.priority} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, priority: event.target.value as ActionPriority }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                        <option value={ActionPriority.LOW}>{ui.priorityLabels.LOW}</option>
+                        <option value={ActionPriority.MEDIUM}>{ui.priorityLabels.MEDIUM}</option>
+                        <option value={ActionPriority.HIGH}>{ui.priorityLabels.HIGH}</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.dueDate}</span>
+                      <input type="date" value={linkedActionDraft.dueDate} onChange={(event) => setLinkedActionDraft((current) => ({ ...current, dueDate: event.target.value }))} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="button" size="sm" onClick={() => void createLinkedAction()} disabled={creatingLinkedAction}>
+                      {creatingLinkedAction ? ui.savingAction : ui.createLinkedAction}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
