@@ -16,6 +16,7 @@ import {
   supportsUnsafeActType,
 } from "@/lib/communication-classification";
 import { DEFAULT_NEAR_MISS_TYPE_CODES } from "@/lib/defaults/near-miss-types";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { calculateLeaveFields, initialStatusForCommunicationCreation, nextStatusAfterValidation } from "@/lib/services/workflow";
 import { NotificationService } from "@/lib/services/notification-service";
@@ -32,6 +33,21 @@ const ALERT_TYPES: CommunicationType[] = [
 const REPORTER_REVIEW_REQUIRED_MESSAGE = "Open the communication and select a valid reporter before validating.";
 const CLASSIFICATION_REQUIRED_MESSAGE = "Complete the required classification fields before validating.";
 const OPEN_LINKED_ACTIONS_MESSAGE = "Cannot close this communication because linked actions are still open.";
+
+function runCommunicationSideEffect(
+  task: () => Promise<unknown>,
+  context: Record<string, unknown>,
+) {
+  void task().catch((error) => {
+    logger.error(
+      {
+        ...context,
+        error,
+      },
+      "communication_side_effect_failed",
+    );
+  });
+}
 
 export class CommunicationValidationError extends Error {
   constructor(
@@ -366,13 +382,26 @@ export const CommunicationService = {
       },
     });
 
+    const isPublicTokenReport = input.source === CommunicationSource.TOKEN_REPORT;
+
     if (ALERT_TYPES.includes(communication.type)) {
-      await NotificationService.notifyPlantRoles({
+      const notifyAlertRoles = () => NotificationService.notifyPlantRoles({
         plantId: input.plantId,
         roles: [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY],
         title: `${communication.type} reported`,
         body: `${communication.reporterName} submitted a ${communication.type} communication for plant alert handling.`,
       });
+
+      if (isPublicTokenReport) {
+        runCommunicationSideEffect(notifyAlertRoles, {
+          communicationId: communication.id,
+          plantId: input.plantId,
+          type: communication.type,
+          sideEffect: "alert_role_notification",
+        });
+      } else {
+        await notifyAlertRoles();
+      }
     }
 
     if (communication.status === CommunicationStatus.VALID_OPEN && ALERT_TYPES.includes(communication.type) && input.reporterUserId) {
@@ -386,7 +415,7 @@ export const CommunicationService = {
       });
     }
 
-    await RepeatabilityAlertService.processCommunication({
+    const processRepeatabilityAlerts = () => RepeatabilityAlertService.processCommunication({
       communicationId: communication.id,
       plantId: input.plantId,
       eventDatetime: communication.eventDatetime,
@@ -395,6 +424,17 @@ export const CommunicationService = {
       workstationId: communication.workstationId,
       type: communication.type,
     });
+
+    if (isPublicTokenReport) {
+      runCommunicationSideEffect(processRepeatabilityAlerts, {
+        communicationId: communication.id,
+        plantId: input.plantId,
+        type: communication.type,
+        sideEffect: "repeatability_alert_processing",
+      });
+    } else {
+      await processRepeatabilityAlerts();
+    }
 
     await writeAuditLog({
       entityType: "Communication",
