@@ -1,11 +1,10 @@
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
-const require = createRequire(import.meta.url);
-const PDFDocument = require("pdfkit");
-const pdfkitPackageRoot = dirname(require.resolve("pdfkit/package.json"));
-const pdfkitDataDirectory = join(pdfkitPackageRoot, "js", "data");
+const nodeRequire = createRequire(import.meta.url);
+const PDFDocument = nodeRequire("pdfkit");
+const pdfkitDataDirectory = join(process.cwd(), "node_modules", "pdfkit", "js", "data");
 
 function resolvePdfkitDataFile(pathInput: string) {
   const fileName = basename(pathInput);

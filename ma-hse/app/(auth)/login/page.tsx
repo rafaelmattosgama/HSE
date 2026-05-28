@@ -6,7 +6,10 @@ import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { MaSymbol } from "@/components/branding/ma-symbol";
 
-const buildCommit = process.env.NEXT_PUBLIC_BUILD_COMMIT?.trim() || "N/A";
+const buildCommit =
+  process.env.NEXT_PUBLIC_BUILD_COMMIT?.trim()
+  || process.env.NEXT_PUBLIC_GIT_COMMIT?.trim()
+  || "N/A";
 
 export default function LoginPage() {
   const search = useSearchParams();
