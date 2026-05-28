@@ -49,7 +49,7 @@ function pdfBufferFromText(lines: string[]) {
     const doc = createPdfDocument({ margin: 50 });
     const chunks: Buffer[] = [];
 
-    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
 
     doc.fontSize(20).text("EHS Safety Report", { underline: true });

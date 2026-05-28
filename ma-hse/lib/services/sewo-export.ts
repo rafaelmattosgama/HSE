@@ -20,6 +20,8 @@ import {
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { formatLocalizedSewoStatus, type SewoUi } from "@/lib/sewo-ui";
 
+type PdfDocument = ReturnType<typeof createPdfDocument>;
+
 const BRAND = "#002663";
 const INK = "#0f172a";
 const MUTED = "#64748b";
@@ -33,10 +35,10 @@ type ExportAttachment = {
   fileKey: string;
 };
 
-function pdfBufferFromDocument(doc: InstanceType<typeof PDFDocument>) {
+function pdfBufferFromDocument(doc: PdfDocument) {
   return new Promise<Buffer>((resolve) => {
     const chunks: Buffer[] = [];
-    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.end();
   });
@@ -80,7 +82,7 @@ async function loadAttachmentBuffers(attachments: ExportAttachment[]) {
   });
 }
 
-function drawSectionTitle(doc: InstanceType<typeof PDFDocument>, title: string) {
+function drawSectionTitle(doc: PdfDocument, title: string) {
   doc.moveDown(0.3);
   doc.roundedRect(40, doc.y, 515, 24, 8).fill(BRAND);
   doc
@@ -91,7 +93,7 @@ function drawSectionTitle(doc: InstanceType<typeof PDFDocument>, title: string) 
   doc.fillColor(INK);
 }
 
-function drawFieldGrid(doc: InstanceType<typeof PDFDocument>, entries: Array<[string, string]>, columns = 2) {
+function drawFieldGrid(doc: PdfDocument, entries: Array<[string, string]>, columns = 2) {
   const cardWidth = columns === 2 ? 248 : 515;
   const cardHeight = 52;
   let x = 40;
@@ -113,7 +115,7 @@ function drawFieldGrid(doc: InstanceType<typeof PDFDocument>, entries: Array<[st
   doc.fillColor(INK);
 }
 
-function drawParagraphCard(doc: InstanceType<typeof PDFDocument>, label: string, text: string) {
+function drawParagraphCard(doc: PdfDocument, label: string, text: string) {
   const startY = doc.y;
   const height = Math.max(78, doc.heightOfString(text || "-", { width: 487, align: "left" }) + 34);
   doc.roundedRect(40, startY, 515, height, 12).fillAndStroke(SOFT, PANEL);
@@ -157,7 +159,7 @@ function getSifPsifResultLabel(result: SifPsifResult, ui: SewoUi) {
   return ui.pendingResult;
 }
 
-function ensurePageSpace(doc: InstanceType<typeof PDFDocument>, height: number) {
+function ensurePageSpace(doc: PdfDocument, height: number) {
   const bottom = doc.page.height - doc.page.margins.bottom;
   if (doc.y + height > bottom) {
     doc.addPage();
@@ -165,7 +167,7 @@ function ensurePageSpace(doc: InstanceType<typeof PDFDocument>, height: number) 
   }
 }
 
-function drawSummaryHeader(doc: InstanceType<typeof PDFDocument>, input: {
+function drawSummaryHeader(doc: PdfDocument, input: {
   title: string;
   referenceLabel: string;
   reference: string;
@@ -249,7 +251,7 @@ function buildRootCauseText(input: {
   return formatted.length ? formatted.join("\n\n") : input.fallback;
 }
 
-function drawPhotoCard(doc: InstanceType<typeof PDFDocument>, input: {
+function drawPhotoCard(doc: PdfDocument, input: {
   title: string;
   imageBuffer: Buffer;
 }) {

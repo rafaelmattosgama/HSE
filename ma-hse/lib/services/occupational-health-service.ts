@@ -9,6 +9,8 @@ import {
 } from "@/lib/occupational-health-validity";
 import type { UpsertOccupationalHealthWorkerInput } from "@/lib/validation/dtos";
 
+type PdfDocument = ReturnType<typeof createPdfDocument>;
+
 type OccupationalHealthWorkerRow = {
   id: string;
   plantId: string;
@@ -53,10 +55,10 @@ export type OccupationalHealthWorkerView = {
   updatedAt: string;
 };
 
-function pdfBufferFromDocument(doc: InstanceType<typeof PDFDocument>) {
+function pdfBufferFromDocument(doc: PdfDocument) {
   return new Promise<Buffer>((resolve) => {
     const chunks: Buffer[] = [];
-    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.end();
   });

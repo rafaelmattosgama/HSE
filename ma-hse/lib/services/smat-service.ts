@@ -3,6 +3,8 @@ import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
 
+type PdfDocument = ReturnType<typeof createPdfDocument>;
+
 type ExportAttachment = {
   fileName: string;
   contentType: string;
@@ -35,10 +37,10 @@ async function loadAttachmentBuffers(attachments: ExportAttachment[]) {
   return loaded.filter((entry) => entry.buffer.length > 0);
 }
 
-function pdfBufferFromDocument(doc: InstanceType<typeof PDFDocument>) {
+function pdfBufferFromDocument(doc: PdfDocument) {
   return new Promise<Buffer>((resolve) => {
     const chunks: Buffer[] = [];
-    doc.on("data", (chunk) => chunks.push(chunk as Buffer));
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.end();
   });

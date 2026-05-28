@@ -33,11 +33,9 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
     plantLanguage: plant.defaultLanguage,
   });
 
-  const exported = reportType === "summary"
-    ? await SewoExportService.buildExternalSummaryExport(id, { locale })
-    : await SewoExportService.buildExport(id, { locale });
-
   if (reportType !== "summary" && (format === "xlsx" || format === "excel")) {
+    const exported = await SewoExportService.buildExport(id, { locale });
+
     return new Response(new Uint8Array(exported.xlsx), {
       status: 200,
       headers: {
@@ -47,6 +45,10 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
       },
     });
   }
+
+  const exported = reportType === "summary"
+    ? await SewoExportService.buildExternalSummaryExport(id, { locale })
+    : await SewoExportService.buildExport(id, { locale });
 
   return new Response(new Uint8Array(exported.pdf), {
     status: 200,
