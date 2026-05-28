@@ -270,11 +270,11 @@ model Role {
 model UserPlantRole {
   id        String   @id @default(uuid())
   userId    String
-  plantId   String
+  plantId   String?
   roleId    String
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plant     Plant?   @relation(fields: [plantId], references: [id], onDelete: Cascade)
   role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, plantId, roleId])

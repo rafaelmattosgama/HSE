@@ -11,8 +11,12 @@ import { approveSEWOInput } from "@/lib/validation/dtos";
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
 
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE]);
   if ("error" in auth) return auth.error;
+  const hasN1ValidationRole = auth.session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  if (!hasN1ValidationRole) {
+    return fail("FORBIDDEN", "S-EWO approval is restricted to N1 Corporate", 403);
+  }
 
   const parsed = await parseBody(request, approveSEWOInput);
   if ("error" in parsed) return parsed.error;

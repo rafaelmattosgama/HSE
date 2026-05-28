@@ -18,3 +18,9 @@ Teste finsl
 cd C:\HSE\ma-hse
 docker compose up -d
 npm run dev:all
+
+
+
+
+user: admin@maxsafety.com
+palavra-passe: maXSafety

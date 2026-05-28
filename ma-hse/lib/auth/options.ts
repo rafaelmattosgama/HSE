@@ -102,10 +102,10 @@ export const authOptions: NextAuthOptions = {
 
           session.user.language = dbUser?.language ?? "en";
           session.user.plantRoles = roles
-            .filter((entry) => entry.plant.isActive || entry.role.code === RoleCode.N0_ADMIN)
+            .filter((entry) => entry.role.code === RoleCode.N0_ADMIN || Boolean(entry.plant?.isActive))
             .map((entry) => ({
               plantId: entry.plantId,
-              plantCode: entry.plant.code,
+              plantCode: entry.plant?.code ?? null,
               role: entry.role.code,
               canSeeClinical:
                 entry.role.code === RoleCode.N0_ADMIN ||

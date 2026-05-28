@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RoleCode } from "@prisma/client";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -22,6 +22,7 @@ type CorporatePlantFormProps = {
   plants?: ManagedPlant[];
   selectedPlantId?: string | null;
   labels?: N0MasterDataUi;
+  showPlantSelector?: boolean;
 };
 
 function emptyCreateState() {
@@ -39,7 +40,12 @@ function emptyCreateState() {
   };
 }
 
-export function CorporatePlantForm({ plants = [], selectedPlantId = null, labels = getStaticN0MasterDataUi("en") }: CorporatePlantFormProps) {
+export function CorporatePlantForm({
+  plants = [],
+  selectedPlantId = null,
+  labels = getStaticN0MasterDataUi("en"),
+  showPlantSelector = true,
+}: CorporatePlantFormProps) {
   const router = useRouter();
   const selectedPlant = useMemo(
     () => plants.find((plant) => plant.id === selectedPlantId) ?? plants[0] ?? null,
@@ -60,6 +66,16 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null, labels
   const [editMessage, setEditMessage] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  useEffect(() => {
+    setEditingPlantId(selectedPlant?.id ?? null);
+    setEditCode(selectedPlant?.code ?? "");
+    setEditName(selectedPlant?.name ?? "");
+    setEditTimezone(selectedPlant?.timezone ?? "Europe/Lisbon");
+    setEditLanguage(selectedPlant?.defaultLanguage ?? "en");
+    setEditIsActive(selectedPlant?.isActive ?? true);
+    setEditMessage("");
+  }, [selectedPlant]);
 
   function selectPlant(plant: ManagedPlant) {
     setEditingPlantId(plant.id);
@@ -178,22 +194,31 @@ export function CorporatePlantForm({ plants = [], selectedPlantId = null, labels
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.managePlants}</h2>
           </header>
 
-          <div className="mb-4 flex flex-wrap gap-2">
-            {plants.map((plant) => (
-              <button
-                key={plant.id}
-                type="button"
-                className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                  plant.id === editingPlantId
-                    ? "border-teal-300 bg-teal-50 text-teal-900"
-                    : "border-slate-300 bg-white text-slate-700"
-                }`}
-                onClick={() => selectPlant(plant)}
-              >
-                {plant.name} {!plant.isActive ? `(${labels.inactive})` : ""}
-              </button>
-            ))}
-          </div>
+          {showPlantSelector ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {plants.map((plant) => (
+                <button
+                  key={plant.id}
+                  type="button"
+                  className={`rounded-full border px-4 py-2 text-sm font-medium ${
+                    plant.id === editingPlantId
+                      ? "border-teal-300 bg-teal-50 text-teal-900"
+                      : "border-slate-300 bg-white text-slate-700"
+                  }`}
+                  onClick={() => selectPlant(plant)}
+                >
+                  {plant.name} {!plant.isActive ? `(${labels.inactive})` : ""}
+                </button>
+              ))}
+            </div>
+          ) : selectedPlant ? (
+            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.selectedPlantTitle}</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {selectedPlant.name} {!selectedPlant.isActive ? `(${labels.inactive})` : ""}
+              </p>
+            </div>
+          ) : null}
 
           {editingPlantId ? (
             <form onSubmit={submitEdit} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">

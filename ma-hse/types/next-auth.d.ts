@@ -9,8 +9,8 @@ declare module "next-auth" {
       language: string;
       mustChangePassword: boolean;
       plantRoles: {
-        plantId: string;
-        plantCode: string;
+        plantId: string | null;
+        plantCode: string | null;
         role: RoleCode;
         canSeeClinical: boolean;
       }[];

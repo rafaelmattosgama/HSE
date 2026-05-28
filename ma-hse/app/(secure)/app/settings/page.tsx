@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
@@ -9,6 +8,7 @@ import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager
 import { PlantLanguageSettings } from "@/components/feature/plant-language-settings";
 import { ProfessionalRisksManager } from "@/components/feature/professional-risks-manager";
 import { ReportLayoutManager } from "@/components/feature/report-layout-manager";
+import { SettingsPlantSelector } from "@/components/feature/settings-plant-selector";
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { UserManager } from "@/components/feature/user-manager";
 import {
@@ -158,21 +158,15 @@ export default async function SettingsPage({
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{masterDataUi.n0Admin}</p>
             <h1 className="mt-2 text-3xl font-bold text-slate-900">{ui.modules.settings}</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {allPlants.map((plant) => (
-              <Link
-                key={plant.id}
-                href={`/app/settings?plant=${plant.code}`}
-                className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                  plant.code === selectedPlantCode
-                    ? "border-teal-300 bg-teal-50 text-teal-900"
-                    : "border-slate-300 bg-white text-slate-700"
-                }`}
-              >
-                {plant.name}
-              </Link>
-            ))}
-          </div>
+          <SettingsPlantSelector
+            plants={allPlants.map((plant) => ({
+              code: plant.code,
+              name: plant.name,
+              isActive: plant.isActive,
+            }))}
+            selectedPlantCode={selectedPlant?.code ?? selectedPlantCode}
+            labels={masterDataUi}
+          />
         </div>
       </section>
 
@@ -187,6 +181,7 @@ export default async function SettingsPage({
         }))}
         selectedPlantId={selectedPlant?.id ?? null}
         labels={masterDataUi}
+        showPlantSelector={false}
       />
 
       {selectedPlant ? (
@@ -200,40 +195,52 @@ export default async function SettingsPage({
             labels={masterDataUi}
           />
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <ModuleToggleManager
-              endpoint="/api/admin/modules"
-              title={masterDataUi.globalModulesTitle}
-              description={masterDataUi.globalModulesHelp}
-              saveLabel={masterDataUi.saveGlobalModules}
-              savingLabel={masterDataUi.saving}
-              successMessage={masterDataUi.moduleSettingsSaved}
-              errorMessage={masterDataUi.moduleSettingsError}
-              helpButtonLabel={masterDataUi.helpButton}
-              moduleLabels={moduleLabels}
-              initialModules={{
-                ...DEFAULT_MODULE_TOGGLES,
-                ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-              }}
-            />
+          <section className="space-y-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{masterDataUi.settingsSectionTitle}</p>
+                <h2 className="text-xl font-semibold text-slate-900">{masterDataUi.globalModulesTitle}</h2>
+              </div>
+              <span className="w-fit rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-semibold text-slate-700">
+                {selectedPlant.name}
+              </span>
+            </div>
 
-            <ModuleToggleManager
-              endpoint={`/api/plants/${selectedPlant.code}/admin/modules`}
-              title={formatMasterDataMessage(masterDataUi.plantModulesTitle, { plant: selectedPlant.name })}
-              description={masterDataUi.plantModulesHelp}
-              saveLabel={masterDataUi.savePlantModules}
-              savingLabel={masterDataUi.saving}
-              successMessage={masterDataUi.moduleSettingsSaved}
-              errorMessage={masterDataUi.moduleSettingsError}
-              helpButtonLabel={masterDataUi.helpButton}
-              moduleLabels={moduleLabels}
-              initialModules={{
-                ...DEFAULT_MODULE_TOGGLES,
-                ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-                ...((moduleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-              }}
-            />
-          </div>
+            <div className="grid gap-6 xl:grid-cols-2">
+              <ModuleToggleManager
+                endpoint="/api/admin/modules"
+                title={masterDataUi.globalModulesTitle}
+                description={masterDataUi.globalModulesHelp}
+                saveLabel={masterDataUi.saveGlobalModules}
+                savingLabel={masterDataUi.saving}
+                successMessage={masterDataUi.moduleSettingsSaved}
+                errorMessage={masterDataUi.moduleSettingsError}
+                helpButtonLabel={masterDataUi.helpButton}
+                moduleLabels={moduleLabels}
+                initialModules={{
+                  ...DEFAULT_MODULE_TOGGLES,
+                  ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
+                }}
+              />
+
+              <ModuleToggleManager
+                endpoint={`/api/plants/${selectedPlant.code}/admin/modules`}
+                title={formatMasterDataMessage(masterDataUi.plantModulesTitle, { plant: selectedPlant.name })}
+                description={masterDataUi.plantModulesHelp}
+                saveLabel={masterDataUi.savePlantModules}
+                savingLabel={masterDataUi.saving}
+                successMessage={masterDataUi.moduleSettingsSaved}
+                errorMessage={masterDataUi.moduleSettingsError}
+                helpButtonLabel={masterDataUi.helpButton}
+                moduleLabels={moduleLabels}
+                initialModules={{
+                  ...DEFAULT_MODULE_TOGGLES,
+                  ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
+                  ...((moduleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
+                }}
+              />
+            </div>
+          </section>
 
           <N0MasterDataManager
             key={selectedPlant.code}
