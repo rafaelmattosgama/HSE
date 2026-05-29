@@ -6,6 +6,18 @@ import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { MaSymbol } from "@/components/branding/ma-symbol";
 
+const LOGIN_ERROR_MESSAGES: Record<string, string> = {
+  CredentialsSignin: "Invalid email or password. Please try again.",
+  SessionRequired: "Your session has expired. Please sign in again.",
+  AccessDenied: "Access denied. You do not have permission.",
+  Default: "Authentication failed. Please try again.",
+};
+
+function friendlyLoginError(rawError?: string | null): string {
+  if (!rawError) return LOGIN_ERROR_MESSAGES.Default;
+  return LOGIN_ERROR_MESSAGES[rawError] ?? rawError;
+}
+
 const buildCommit =
   process.env.NEXT_PUBLIC_BUILD_COMMIT?.trim()
   || process.env.NEXT_PUBLIC_GIT_COMMIT?.trim()
@@ -36,7 +48,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        setError(friendlyLoginError(result.error));
         return;
       }
 
@@ -96,7 +108,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        setError(friendlyLoginError(result.error));
         return;
       }
 

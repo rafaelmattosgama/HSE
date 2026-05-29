@@ -6,6 +6,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
 import { ensureDefaultAdminUser } from "@/lib/auth/ensure-default-admin";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
@@ -25,6 +26,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials.password) {
+          logger.warn("login_attempt_missing_credentials");
           return null;
         }
 
@@ -35,14 +37,28 @@ export const authOptions: NextAuthOptions = {
           where: { email: normalizedEmail },
         });
 
-        if (!user || !user.passwordHash || !user.isActive) {
+        if (!user) {
+          logger.warn({ email: normalizedEmail }, "login_attempt_user_not_found");
+          return null;
+        }
+
+        if (!user.passwordHash) {
+          logger.warn({ email: normalizedEmail, userId: user.id }, "login_attempt_no_password_hash");
+          return null;
+        }
+
+        if (!user.isActive) {
+          logger.warn({ email: normalizedEmail, userId: user.id }, "login_attempt_inactive_user");
           return null;
         }
 
         const isValid = await compare(credentials.password, user.passwordHash);
         if (!isValid) {
+          logger.warn({ email: normalizedEmail, userId: user.id }, "login_attempt_invalid_password");
           return null;
         }
+
+        logger.info({ email: normalizedEmail, userId: user.id }, "login_success");
 
         return {
           id: user.id,
