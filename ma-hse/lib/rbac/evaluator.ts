@@ -1,8 +1,8 @@
 import { RoleCode } from "@prisma/client";
 
 type PlantRoleEntry = {
-  plantId: string;
-  plantCode: string;
+  plantId: string | null;
+  plantCode: string | null;
   role: RoleCode;
 };
 

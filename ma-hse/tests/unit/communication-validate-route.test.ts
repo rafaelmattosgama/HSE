@@ -62,9 +62,10 @@ describe("communication validate route", () => {
       session: {
         user: {
           id: "user-1",
+          plantRoles: [{ role: RoleCode.N1_CORPORATE }],
         },
       },
-      role: RoleCode.N3_SAFETY,
+      role: RoleCode.N1_CORPORATE,
       plantId: "plant-1",
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
@@ -98,7 +99,7 @@ describe("communication validate route", () => {
     expect(serviceMock.CommunicationService.validate).toHaveBeenCalledWith({
       communicationId: "comm-1",
       actorUserId: "user-1",
-      actorRole: RoleCode.N3_SAFETY,
+      actorRole: RoleCode.N1_CORPORATE,
       payload: {
         isValid: true,
         notes: "Reviewed by safety",
@@ -112,9 +113,10 @@ describe("communication validate route", () => {
       session: {
         user: {
           id: "user-1",
+          plantRoles: [{ role: RoleCode.N1_CORPORATE }],
         },
       },
-      role: RoleCode.N3_SAFETY,
+      role: RoleCode.N1_CORPORATE,
       plantId: "plant-1",
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
@@ -159,9 +161,10 @@ describe("communication validate route", () => {
       session: {
         user: {
           id: "user-1",
+          plantRoles: [{ role: RoleCode.N1_CORPORATE }],
         },
       },
-      role: RoleCode.N3_SAFETY,
+      role: RoleCode.N1_CORPORATE,
       plantId: "plant-1",
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });

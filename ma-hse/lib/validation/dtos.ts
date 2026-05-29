@@ -362,6 +362,9 @@ export const createPlantUserInput = z.object({
     z.string().min(8, "Password must be at least 8 characters").optional(),
   ),
   isActive: z.boolean().default(true),
+}).refine((data) => data.role !== RoleCode.N0_ADMIN, {
+  message: "N0_ADMIN role cannot be assigned through the application. N0 users can only be created via script.",
+  path: ["role"],
 });
 
 export const updatePlantUserInput = z.object({
@@ -374,6 +377,9 @@ export const updatePlantUserInput = z.object({
     z.string().min(8, "Password must be at least 8 characters").optional(),
   ),
   isActive: z.boolean().default(true),
+}).refine((data) => data.role !== RoleCode.N0_ADMIN, {
+  message: "N0_ADMIN role cannot be assigned through the application. N0 users can only be created via script.",
+  path: ["role"],
 });
 
 export const contractorRegisterInput = z.object({

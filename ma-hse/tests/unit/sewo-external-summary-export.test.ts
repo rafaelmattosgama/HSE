@@ -114,8 +114,8 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   }
 });
 
-vi.mock("pdfkit", () => ({
-  default: FakePdfDocument,
+vi.mock("@/lib/services/pdfkit-helper", () => ({
+  createPdfDocument: vi.fn(() => new FakePdfDocument()),
 }));
 
 vi.mock("@/lib/prisma", () => ({
