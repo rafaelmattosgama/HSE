@@ -26,6 +26,7 @@ import { DEFAULT_UNSAFE_CONDITION_TYPES, LEGACY_DEFAULT_UNSAFE_CONDITION_TYPES }
 const prisma = new PrismaClient();
 
 const SEED_DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD ?? "ChangeMe123!";
+const SEED_N0_ADMIN_EMAIL = process.env.N0_ADMIN_EMAIL ?? "admin@maxsafety.maportugal.com";
 const TOKEN_PEPPER = process.env.TOKEN_PEPPER ?? "dev-pepper-1234567890123456";
 const SEED_TAG = "[SEED-MVP]";
 
@@ -1375,7 +1376,7 @@ async function main() {
 
   const seedUsers: SeedUserDefinition[] = [
     {
-      email: "admin@maxsafety.maportugal.com",
+      email: SEED_N0_ADMIN_EMAIL,
       name: "Admin N0",
       language: "pt",
       roleBindings: [],
@@ -1821,7 +1822,7 @@ async function main() {
   console.log("Seed complete.");
   console.log(`Default password for credential users: ${SEED_DEFAULT_PASSWORD}`);
   console.log("Credential users by role:");
-  console.log("- N0: admin@maxsafety.maportugal.com");
+  console.log(`- N0: ${SEED_N0_ADMIN_EMAIL}`);
   console.log("- N1: corporate@ma-hse.local");
   console.log("- N2: manager.pl01@ma-hse.local, manager.pl02@ma-hse.local");
   console.log("- N3: safety.pl01@ma-hse.local, safety.pl02@ma-hse.local");

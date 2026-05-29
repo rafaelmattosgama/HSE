@@ -4,7 +4,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
-export const DEFAULT_ADMIN_EMAIL = env.N0_ADMIN_EMAIL ?? "admin@maxsafety.com";
+export const DEFAULT_ADMIN_EMAIL = env.N0_ADMIN_EMAIL ?? "admin@maxsafety.maportugal.com";
 
 const DEFAULT_ADMIN_NAME = "Admin N0";
 
