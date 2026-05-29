@@ -52,14 +52,13 @@ function toNonHazardousWasteTotal(
   return values.reduce((sum, value) => sum + value, 0);
 }
 
-function hasMonthlyInputAccess(roles: Array<{ plantCode: string; role: RoleCode }>, plantCode: string) {
+function hasMonthlyInputAccess(roles: Array<{ plantCode: string | null; role: RoleCode }>, plantCode: string) {
   return roles.some(
     (entry) =>
-      (entry.plantCode === plantCode || entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE) &&
-      (entry.role === RoleCode.N0_ADMIN ||
-        entry.role === RoleCode.N1_CORPORATE ||
-        entry.role === RoleCode.N2_PLANT_MANAGER ||
-        entry.role === RoleCode.N3_SAFETY),
+      entry.role === RoleCode.N0_ADMIN ||
+      entry.role === RoleCode.N1_CORPORATE ||
+      (entry.plantCode === plantCode &&
+        (entry.role === RoleCode.N2_PLANT_MANAGER || entry.role === RoleCode.N3_SAFETY)),
   );
 }
 

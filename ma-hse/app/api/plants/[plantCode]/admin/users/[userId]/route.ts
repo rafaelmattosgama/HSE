@@ -33,6 +33,10 @@ export async function PATCH(
     return fail("FORBIDDEN", "You cannot assign this role", 403);
   }
 
+  if (parsed.data.role === RoleCode.N0_ADMIN) {
+    return fail("FORBIDDEN", "N0_ADMIN role cannot be assigned through the application. N0 users can only be created via script.", 403);
+  }
+
   const plant = await getPlantByCode(plantCode);
   const plantRoleRow = await prisma.userPlantRole.findFirst({
     where: {

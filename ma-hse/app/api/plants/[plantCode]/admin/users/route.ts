@@ -99,6 +99,10 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       return fail("FORBIDDEN", "You cannot create users with this role", 403);
     }
 
+    if (targetRole === RoleCode.N0_ADMIN) {
+      return fail("FORBIDDEN", "N0_ADMIN role cannot be assigned through the application. N0 users can only be created via script.", 403);
+    }
+
     const plant = await getPlantByCode(plantCode);
     const normalizedEmail = normalizeEmail(parsed.data.email);
 

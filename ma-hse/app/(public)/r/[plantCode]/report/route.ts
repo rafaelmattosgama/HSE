@@ -273,11 +273,13 @@ function renderHtml(
       }
 
       function markSubmissionSuccess() {
-        submissionCompleted = true;
         msg.className = 'ok';
         msg.textContent = messages.success;
-        submitButton.textContent = messages.success;
-        setFormLocked(true);
+        form.reset();
+        workerCombo.clear();
+        injuryTypeCombo.clear();
+        syncWorkerVisibility();
+        syncEventDatetimeMax();
       }
 
       function normalize(value) {
