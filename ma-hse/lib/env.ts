@@ -6,6 +6,9 @@ const productionRequiredValues = {
   DATABASE_URL: "postgresql://ehs:ehs@localhost:5433/ehs",
   S3_ACCESS_KEY: "minio",
   S3_SECRET_KEY: "minio123",
+  NEXTAUTH_URL: "http://localhost:3000",
+  APP_URL: "http://localhost:3000",
+  NEXT_PUBLIC_APP_URL: "http://localhost:3000",
 } as const;
 
 function isProductionRuntime(nodeEnv: string) {
