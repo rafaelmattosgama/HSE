@@ -27,15 +27,6 @@ async function resolveN0PlantId(): Promise<string | null> {
 }
 
 async function bootstrapDefaultAdmin() {
-  const existingAdmin = await prisma.user.findUnique({
-    where: { email: DEFAULT_ADMIN_EMAIL },
-    select: { id: true },
-  });
-
-  if (existingAdmin) {
-    return;
-  }
-
   const passwordHash = await hash(env.SEED_DEFAULT_PASSWORD, 12);
 
   await prisma.$transaction(async (tx) => {
@@ -64,13 +55,19 @@ async function bootstrapDefaultAdmin() {
 
     const plantId = await resolveN0PlantId();
 
-    await tx.userPlantRole.create({
-      data: {
-        userId: user.id,
-        plantId,
-        roleId: role.id,
-      },
+    const existingUpr = await tx.userPlantRole.findFirst({
+      where: { userId: user.id, roleId: role.id, plantId },
     });
+
+    if (!existingUpr) {
+      await tx.userPlantRole.create({
+        data: {
+          userId: user.id,
+          plantId,
+          roleId: role.id,
+        },
+      });
+    }
   });
 }
 
