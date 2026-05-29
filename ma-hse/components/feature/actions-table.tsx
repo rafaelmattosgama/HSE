@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
@@ -37,9 +38,11 @@ function todayDateInputValue() {
 export function ActionsTable({
   plant,
   actions,
+  canDelete = false,
 }: {
   plant: string;
   actions: ActionRow[];
+  canDelete?: boolean;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -51,6 +54,7 @@ export function ActionsTable({
   const [rowFiles, setRowFiles] = useState<Record<string, File[]>>({});
   const [message, setMessage] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [localFilter, setLocalFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -177,6 +181,29 @@ export function ActionsTable({
       setMessage(error instanceof Error ? error.message : "Failed to close action");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function deleteAction(actionId: string) {
+    if (!window.confirm("Delete this action? This action cannot be undone.")) {
+      return;
+    }
+
+    setDeletingId(actionId);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/plants/${plant}/actions/${actionId}`, {
+        method: "DELETE",
+      });
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? "Failed to delete action");
+      }
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to delete action");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -307,6 +334,7 @@ export function ActionsTable({
               <th className="px-4 py-3">Owner</th>
               <th className="px-4 py-3">Due</th>
               <th className="px-4 py-3">Open</th>
+              {canDelete ? <th className="px-4 py-3">Delete</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -354,10 +382,23 @@ export function ActionsTable({
                         {isExpanded ? "Hide" : isOpen ? "Open / close" : "Open"}
                       </Button>
                     </td>
+                    <td className="px-4 py-3">
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => void deleteAction(row.id)}
+                          disabled={deletingId === row.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {deletingId === row.id ? "Deleting..." : "Delete"}
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
                   {isExpanded ? (
                     <tr className="border-t border-slate-100 bg-slate-50">
-                      <td colSpan={9} className="px-4 py-4">
+                      <td colSpan={canDelete ? 10 : 9} className="px-4 py-4">
                         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                           <div className="space-y-3">
                             <div>
@@ -421,7 +462,7 @@ export function ActionsTable({
             })}
             {filteredActions.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={canDelete ? 10 : 9} className="px-4 py-6 text-center text-sm text-slate-500">
                   No actions were found for the selected filters.
                 </td>
               </tr>

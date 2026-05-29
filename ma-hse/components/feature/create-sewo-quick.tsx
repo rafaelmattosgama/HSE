@@ -363,6 +363,7 @@ export function CreateSewoQuick({
   const [associatedCommunicationExpanded, setAssociatedCommunicationExpanded] = useState(!initialSewo);
   const [statusReason, setStatusReason] = useState("");
   const [changingStatus, setChangingStatus] = useState(false);
+  const [deletingSewo, setDeletingSewo] = useState(false);
   const [linkedActionDraft, setLinkedActionDraft] = useState<ActionPlanRow>(() => createActionPlanRow());
   const [editableCommunicationActions, setEditableCommunicationActions] = useState<EditableCommunicationAction[]>(
     () => initialSewo?.linkedActions.map((action) => ({ ...action, dirty: false })) ?? [],
@@ -837,6 +838,68 @@ export function CreateSewoQuick({
     }
   }
 
+  async function reopenSewo() {
+    if (!initialSewo) return;
+
+    const trimmedReason = statusReason.trim();
+
+    if (trimmedReason.length < 5) {
+      setMessage(ui.statusReasonRequired);
+      return;
+    }
+
+    setChangingStatus(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/sewo/${initialSewo.id}/reopen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: trimmedReason }),
+      });
+
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? ui.statusChangeFailed);
+      }
+
+      setMessage(ui.statusChangeSaved);
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : ui.statusChangeFailed);
+    } finally {
+      setChangingStatus(false);
+    }
+  }
+
+  async function deleteSewoRecord() {
+    if (!initialSewo) return;
+
+    if (!window.confirm("Delete this S-EWO record? This action cannot be undone.")) {
+      return;
+    }
+
+    setDeletingSewo(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/sewo/${initialSewo.id}`, {
+        method: "DELETE",
+      });
+
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? "Failed to delete S-EWO");
+      }
+
+      window.location.href = `/app/${plant}/sewo`;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to delete S-EWO");
+    } finally {
+      setDeletingSewo(false);
+    }
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     await saveSewo(!initialSewo || initialSewo.status === SEWOStatus.DRAFT || isRejectedSewo ? "submit" : "save");
@@ -900,7 +963,40 @@ export function CreateSewoQuick({
         </section>
       ) : null}
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      {initialSewo && initialSewo.status === SEWOStatus.CLOSED ? (
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.statusManagement}</h4>
+          <textarea
+            value={statusReason}
+            onChange={(event) => setStatusReason(event.target.value)}
+            rows={3}
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            placeholder={ui.statusChangeReason}
+            disabled={changingStatus}
+          />
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              size="sm"
+              disabled={changingStatus}
+              onClick={() => void reopenSewo()}
+            >
+              {changingStatus ? ui.savingAction : "Reopen S-EWO"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={deletingSewo}
+              onClick={() => void deleteSewoRecord()}
+            >
+              {deletingSewo ? "Deleting..." : "Delete S-EWO"}
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.associatedCommunication}</h4>

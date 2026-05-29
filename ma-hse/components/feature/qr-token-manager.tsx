@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlantAccessTokenType } from "@prisma/client";
 import { usePathname } from "next/navigation";
 import QRCode from "qrcode";
@@ -15,6 +15,10 @@ type GeneratedQr = {
   qrDataUrl: string;
 };
 
+function storageKey(plant: string, type: PlantAccessTokenType) {
+  return `ma-hse:qr:${plant}:${type}`;
+}
+
 export function QrTokenManager({
   labels = getStaticN0MasterDataUi("en"),
 }: {
@@ -26,6 +30,17 @@ export function QrTokenManager({
   const [generated, setGenerated] = useState<GeneratedQr | null>(null);
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey(plant, tokenType));
+    if (saved) {
+      try {
+        setGenerated(JSON.parse(saved) as GeneratedQr);
+      } catch {
+        localStorage.removeItem(storageKey(plant, tokenType));
+      }
+    }
+  }, [plant, tokenType]);
 
   const title = useMemo(() => {
     return tokenType === PlantAccessTokenType.REPORT ? labels.qr.reportToken : labels.qr.kioskToken;
@@ -65,12 +80,14 @@ export function QrTokenManager({
         },
       });
 
-      setGenerated({
+      const qr: GeneratedQr = {
         type: json.data.type as PlantAccessTokenType,
         token,
         publicUrl,
         qrDataUrl,
-      });
+      };
+      setGenerated(qr);
+      localStorage.setItem(storageKey(plant, qr.type), JSON.stringify(qr));
       setMessage(labels.qr.regenerated);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : labels.qr.failedRegenerate);

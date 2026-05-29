@@ -105,3 +105,34 @@ export async function PUT(request: Request, context: { params: Promise<{ plantCo
     return fail("INTERNAL_ERROR", error instanceof Error ? error.message : "Failed to update S-EWO", 500);
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ plantCode: string; id: string }> },
+) {
+  const { plantCode, id } = await context.params;
+
+  const auth = await requirePlantAccess(plantCode, [
+    RoleCode.N0_ADMIN,
+    RoleCode.N1_CORPORATE,
+    RoleCode.N3_SAFETY,
+  ]);
+  if ("error" in auth) return auth.error;
+
+  const plant = await getPlantByCode(plantCode);
+  const sewo = await prisma.sEWO.findFirst({
+    where: { id, plantId: plant.id },
+    select: { id: true },
+  });
+
+  if (!sewo) {
+    return fail("NOT_FOUND", "SEWO not found", 404);
+  }
+
+  const deleted = await SewaService.deleteSewo({
+    sewoId: id,
+    actorUserId: auth.session.user.id,
+  });
+
+  return ok(deleted);
+}

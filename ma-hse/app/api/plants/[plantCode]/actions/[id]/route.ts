@@ -40,3 +40,34 @@ export async function PATCH(request: Request, context: { params: Promise<{ plant
 
   return ok(updated);
 }
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ plantCode: string; id: string }> },
+) {
+  const { plantCode, id } = await context.params;
+
+  const auth = await requirePlantAccess(plantCode, [
+    RoleCode.N0_ADMIN,
+    RoleCode.N1_CORPORATE,
+    RoleCode.N3_SAFETY,
+  ]);
+  if ("error" in auth) return auth.error;
+
+  const plant = await getPlantByCode(plantCode);
+  const action = await prisma.action.findFirst({
+    where: { id, plantId: plant.id },
+    select: { id: true },
+  });
+
+  if (!action) {
+    return fail("NOT_FOUND", "Action not found", 404);
+  }
+
+  const deleted = await ActionService.deleteAction({
+    actionId: id,
+    actorUserId: auth.session.user.id,
+  });
+
+  return ok(deleted);
+}

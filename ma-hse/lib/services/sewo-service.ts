@@ -23,7 +23,7 @@ import {
   isSewoSubmitterRole,
 } from "@/lib/services/sewo-validation-service";
 import { getSewoStatusFromLinkedActions } from "@/lib/sewo-status";
-import type { ApproveSEWOInput, CreateSEWOInput, ManualCloseSewoInput, UpdateSEWOInput } from "@/lib/validation/dtos";
+import type { ApproveSEWOInput, CreateSEWOInput, ManualCloseSewoInput, ReopenActionInput, UpdateSEWOInput } from "@/lib/validation/dtos";
 
 type SewoApprovedExternalEmailCopy = {
   subject: string;
@@ -994,6 +994,103 @@ export const SewaService = {
     });
 
     return updated;
+  },
+
+  async reopen(input: {
+    sewoId: string;
+    actorUserId: string;
+    payload: ReopenActionInput;
+  }) {
+    const before = await prisma.sEWO.findUniqueOrThrow({
+      where: { id: input.sewoId },
+    });
+
+    if (before.status !== SEWOStatus.CLOSED) {
+      throw new SewoValidationError("SEWO_NOT_CLOSED", "Only closed S-EWO records can be reopened.", 400);
+    }
+
+    const reopenedStatus =
+      before.approvedAt || before.approvedByUserId
+        ? SEWOStatus.APPROVED
+        : SEWOStatus.DRAFT;
+
+    const updated = await prisma.sEWO.update({
+      where: { id: input.sewoId },
+      data: {
+        status: reopenedStatus,
+      },
+    });
+
+    await writeAuditLog({
+      entityType: "SEWO",
+      entityId: input.sewoId,
+      action: "REOPEN",
+      actorUserId: input.actorUserId,
+      plantId: updated.plantId,
+      diff: {
+        ...buildDiff(before as unknown as Record<string, unknown>, updated as unknown as Record<string, unknown>),
+        after: {
+          ...updated,
+          reopenReason: input.payload.reason,
+        } as unknown as Record<string, unknown>,
+      },
+    });
+
+    return updated;
+  },
+
+  async deleteSewo(input: {
+    sewoId: string;
+    actorUserId: string;
+  }) {
+    const before = await prisma.sEWO.findUniqueOrThrow({
+      where: { id: input.sewoId },
+      include: {
+        actions: { select: { id: true } },
+      },
+    });
+
+    const actionIds = before.actions.map((entry) => entry.id);
+
+    await prisma.$transaction(async (tx) => {
+      if (actionIds.length > 0) {
+        await tx.actionEvidenceAttachment.deleteMany({
+          where: { actionId: { in: actionIds } },
+        });
+        await tx.actionCoOwner.deleteMany({
+          where: { actionId: { in: actionIds } },
+        });
+        await tx.sEWOActionLink.deleteMany({ where: { sewoId: input.sewoId } });
+        await tx.action.deleteMany({
+          where: { id: { in: actionIds } },
+        });
+      }
+
+      await tx.sEWOActionLink.deleteMany({ where: { sewoId: input.sewoId } });
+      await tx.sEWOAttachment.deleteMany({ where: { sewoId: input.sewoId } });
+      await tx.sEWOCauseSelection.deleteMany({ where: { sewoId: input.sewoId } });
+      await tx.sEWO.delete({ where: { id: input.sewoId } });
+
+      await tx.auditLog.create({
+        data: {
+          entityType: "SEWO",
+          entityId: input.sewoId,
+          action: "DELETE",
+          actorUserId: input.actorUserId,
+          plantId: before.plantId,
+          diffJson: {
+            before,
+            after: null,
+            fieldsChanged: Object.keys(before),
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    });
+
+    return {
+      id: input.sewoId,
+      deletedLinkedActions: actionIds.length,
+    };
   },
 
   async syncStatusWithActions(sewoId: string) {
