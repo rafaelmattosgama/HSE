@@ -47,6 +47,7 @@ const envSchema = z
     RATE_LIMIT_WINDOW_SEC: z.coerce.number().int().positive().default(60),
     TOKEN_PEPPER: z.string().min(16).default(productionRequiredValues.TOKEN_PEPPER),
     SEED_DEFAULT_PASSWORD: z.string().default("ChangeMe123!"),
+    N0_ADMIN_EMAIL: z.string().email().optional(),
     N0_PLANT_CODE: z.string().optional(),
   })
   .superRefine((value, ctx) => {
