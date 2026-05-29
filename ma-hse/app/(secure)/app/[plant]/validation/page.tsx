@@ -22,8 +22,10 @@ export default async function ValidationPage({
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
 
-  const canUseValidation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  const canUseValidation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE || entry.role === RoleCode.N3_SAFETY);
   if (!canUseValidation) redirect("/app/corporate");
+
+  const isN1 = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
 
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
   const uiLocale = await getServerUiLocale({
@@ -53,10 +55,7 @@ export default async function ValidationPage({
     translateForViewer(uiLocale, pending.map((row) => row.description)),
     getLocalizedCommunicationUi(uiLocale),
     getLocalizedSewoUi(uiLocale),
-    getPendingSewoValidationRows({
-      userId: session.user.id,
-      plantCode: plant,
-    }),
+    isN1 ? getPendingSewoValidationRows({ userId: session.user.id, plantCode: plant }) : [],
   ]);
 
   return (
@@ -64,13 +63,15 @@ export default async function ValidationPage({
       <AppHero
         eyebrow={ui.modules.validation}
         title={ui.modules.validation}
-        description={sewoUiResult.ui.n1ValidationSubtitle}
+        description={sewoUiResult.ui.n1ValidationCommunicationSection}
       />
 
-      <section className="space-y-4">
-        <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
-        <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={false} />
-      </section>
+      {isN1 && (
+        <section className="space-y-4">
+          <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
+          <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={false} />
+        </section>
+      )}
 
       <section className="space-y-4">
         <AppSectionHeader title={sewoUiResult.ui.n1ValidationCommunicationSection} />

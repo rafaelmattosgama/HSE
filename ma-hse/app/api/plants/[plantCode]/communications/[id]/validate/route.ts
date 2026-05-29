@@ -10,11 +10,11 @@ import { validateCommunicationInput } from "@/lib/validation/dtos";
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
-  const hasN1ValidationRole = auth.session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
-  if (!hasN1ValidationRole) {
-    return fail("FORBIDDEN", "Validation is restricted to N1 Corporate", 403);
+  const hasValidationRole = auth.session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE || entry.role === RoleCode.N3_SAFETY);
+  if (!hasValidationRole) {
+    return fail("FORBIDDEN", "Validation is restricted to N1 Corporate or N3 Safety", 403);
   }
 
   const parsed = await parseBody(request, validateCommunicationInput);
@@ -38,7 +38,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         requestedCommunicationId: id,
         resolvedPlantId: plant.id,
         actorUserId: auth.session.user.id,
-        actorRole: hasN1ValidationRole ? RoleCode.N1_CORPORATE : "role" in auth ? auth.role : null,
+        actorRole: "role" in auth ? auth.role : null,
         scopedPlantId: "plantId" in auth ? auth.plantId : null,
         existingCommunication,
       },
@@ -51,7 +51,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     const updated = await CommunicationService.validate({
       communicationId: id,
       actorUserId: auth.session.user.id,
-      actorRole: RoleCode.N1_CORPORATE,
+      actorRole: "role" in auth ? auth.role : null,
       payload: parsed.data,
     });
 
