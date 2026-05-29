@@ -3,7 +3,7 @@ import { RoleCode } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
-export const DEFAULT_ADMIN_EMAIL = env.N0_ADMIN_EMAIL ?? "admin@maxsafety.maportugal.com";
+export const DEFAULT_ADMIN_EMAIL = env.N0_ADMIN_EMAIL ?? "admin@maxsafety.com";
 
 const DEFAULT_ADMIN_NAME = "Admin N0";
 
