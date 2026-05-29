@@ -1,4 +1,4 @@
-import { ActionPriority, ActionSourceType, ActionStatus, CommunicationStatus, SEWOStatus } from "@prisma/client";
+import { ActionPriority, ActionSourceType, ActionStatus, CommunicationStatus, Prisma, SEWOStatus } from "@prisma/client";
 import { addDays, differenceInCalendarDays } from "date-fns";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -188,6 +188,46 @@ export const ActionService = {
     await this.notifyAssignees(action.id);
 
     return action;
+  },
+
+  async deleteAction(input: {
+    actionId: string;
+    actorUserId: string;
+  }) {
+    const before = await prisma.action.findUniqueOrThrow({
+      where: { id: input.actionId },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.actionEvidenceAttachment.deleteMany({ where: { actionId: input.actionId } });
+      await tx.actionCoOwner.deleteMany({ where: { actionId: input.actionId } });
+      await tx.sEWOActionLink.deleteMany({ where: { actionId: input.actionId } });
+      await tx.smatAuditActionLink.deleteMany({ where: { actionId: input.actionId } });
+      await tx.action.delete({ where: { id: input.actionId } });
+
+      await tx.auditLog.create({
+        data: {
+          entityType: "Action",
+          entityId: input.actionId,
+          action: "DELETE",
+          actorUserId: input.actorUserId,
+          plantId: before.plantId,
+          diffJson: {
+            before,
+            after: null,
+            fieldsChanged: Object.keys(before),
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    });
+
+    await this.syncParentStatuses({
+      actionId: input.actionId,
+      communicationId: before.communicationId,
+      sewoId: before.sewoId,
+    });
+
+    return { id: input.actionId };
   },
 
   async close(input: {

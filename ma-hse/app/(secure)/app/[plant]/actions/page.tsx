@@ -1,3 +1,4 @@
+import { RoleCode } from "@prisma/client";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
 import { ActionsTable } from "@/components/feature/actions-table";
 import { authOptions } from "@/lib/auth/options";
@@ -6,6 +7,12 @@ import { getServerUiLocale } from "@/lib/server-ui-language";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerSession } from "next-auth";
+
+const DELETE_ACTION_ROLES: RoleCode[] = [
+  RoleCode.N0_ADMIN,
+  RoleCode.N1_CORPORATE,
+  RoleCode.N3_SAFETY,
+];
 
 export default async function ActionsPage({ params }: { params: Promise<{ plant: string }> }) {
   const { plant } = await params;
@@ -71,6 +78,13 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
       take: 100,
     }),
   ]);
+  const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN)
+    ? RoleCode.N0_ADMIN
+    : session?.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
+      ? RoleCode.N1_CORPORATE
+      : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role ?? null;
+  const canDeleteActions = Boolean(actorRole && DELETE_ACTION_ROLES.includes(actorRole));
+
   const translatedTitles = await translateForViewer(uiLocale, actions.map((action) => action.title));
 
   return (
@@ -92,6 +106,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
 
       <ActionsTable
         plant={plant}
+        canDelete={canDeleteActions}
         actions={actions.map((row, index) => ({
           id: row.id,
           sequenceNumber: row.sequenceNumber,
