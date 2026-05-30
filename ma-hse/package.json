@@ -19,6 +19,7 @@
     "db:repair:encoding": "node scripts/repair-db-mojibake.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "admin:ensure-n0": "tsx scripts/ensure-n0-admin.ts",
     "worker": "tsx jobs/worker.ts",
     "scheduler": "tsx jobs/scheduler.ts",
     "worker:dev": "tsx jobs/worker.ts",

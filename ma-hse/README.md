@@ -144,6 +144,7 @@ npm run dev -- --port 3000
 
 Senha padrao: valor de `SEED_DEFAULT_PASSWORD` (default `ChangeMe123!`).
 
+- `admin@maxsafety.com` (N0, global)
 - `corporate@ma-hse.local` (N1, cross-plant)
 - `manager.pl01@ma-hse.local` (N2, PL01)
 - `manager.pl02@ma-hse.local` (N2, PL02)

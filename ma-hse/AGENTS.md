@@ -92,7 +92,7 @@ npx prisma studio   # DB browser
 - Env vars Zod-validated in `lib/env.ts` — production rejects default dev values unless `ALLOW_DEV_DEFAULT_ENV=true`
 
 ## Recent Changes (Session 28 May 2026)
-1. **N0 plant-independent** — seed.ts + ensure-default-admin.ts: removed plant "pl1" creation for N0, removed UserPlantRole, changed email to admin@maxsafety.maportugal.com
+1. **N0 plant-independent** — seed.ts + ensure-default-admin.ts: default email is admin@maxsafety.com and the N0 role uses `plantId: null`
 2. **Safety Communication Alerts in N0 settings** — added after UserManager in settings/page.tsx
 3. **KPI sidebar sticky** — corporate-plant-manager.tsx: `sticky top-6 self-start` (was xl: prefixed)
 4. **S-EWO location priority** — sewo/page.tsx: `whereText || workstation?.name || area?.name`

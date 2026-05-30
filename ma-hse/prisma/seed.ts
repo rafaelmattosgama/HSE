@@ -26,7 +26,7 @@ import { DEFAULT_UNSAFE_CONDITION_TYPES, LEGACY_DEFAULT_UNSAFE_CONDITION_TYPES }
 const prisma = new PrismaClient();
 
 const SEED_DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD ?? "ChangeMe123!";
-const SEED_N0_ADMIN_EMAIL = process.env.N0_ADMIN_EMAIL ?? "admin@maxsafety.maportugal.com";
+const SEED_N0_ADMIN_EMAIL = process.env.N0_ADMIN_EMAIL ?? "admin@maxsafety.com";
 const TOKEN_PEPPER = process.env.TOKEN_PEPPER ?? "dev-pepper-1234567890123456";
 const SEED_TAG = "[SEED-MVP]";
 
@@ -35,7 +35,7 @@ type SeedUserDefinition = {
   name: string;
   language: string;
   roleBindings: Array<{
-    plantCode: "pl01" | "pl02" | "pl1";
+    plantCode: "pl01" | "pl02" | "pl1" | null;
     role: RoleCode;
   }>;
 };
@@ -684,17 +684,21 @@ async function upsertN6ReferenceUser(input: { name: string; language: string }) 
   });
 }
 
-async function ensureUserRole(input: { userId: string; plantId: string; roleId: string }) {
-  await prisma.userPlantRole.upsert({
+async function ensureUserRole(input: { userId: string; plantId: string | null; roleId: string }) {
+  const existing = await prisma.userPlantRole.findFirst({
     where: {
-      userId_plantId_roleId: {
-        userId: input.userId,
-        plantId: input.plantId,
-        roleId: input.roleId,
-      },
+      userId: input.userId,
+      plantId: input.plantId,
+      roleId: input.roleId,
     },
-    update: {},
-    create: {
+  });
+
+  if (existing) {
+    return;
+  }
+
+  await prisma.userPlantRole.create({
+    data: {
       userId: input.userId,
       plantId: input.plantId,
       roleId: input.roleId,
@@ -705,7 +709,7 @@ async function ensureUserRole(input: { userId: string; plantId: string; roleId: 
 async function syncUserRoles(
   userId: string,
   targetRoleBindings: Array<{
-    plantId: string;
+    plantId: string | null;
     roleId: string;
   }>,
 ) {
@@ -1379,7 +1383,7 @@ async function main() {
       email: SEED_N0_ADMIN_EMAIL,
       name: "Admin N0",
       language: "pt",
-      roleBindings: [],
+      roleBindings: [{ plantCode: null, role: RoleCode.N0_ADMIN }],
     },
     {
       email: "corporate@ma-hse.local",
@@ -1475,7 +1479,10 @@ async function main() {
   for (const userDef of seedUsers) {
     const user = requireValue(usersByEmail.get(userDef.email), `Missing user seed for ${userDef.email}`);
     const bindings = userDef.roleBindings.map((roleBinding) => ({
-      plantId: requireValue(plantByCode.get(roleBinding.plantCode), `Missing plant ${roleBinding.plantCode}`).id,
+      plantId:
+        roleBinding.plantCode === null
+          ? null
+          : requireValue(plantByCode.get(roleBinding.plantCode), `Missing plant ${roleBinding.plantCode}`).id,
       roleId: requireValue(roleLookup.get(roleBinding.role), `Missing role id for ${roleBinding.role}`),
     }));
     await syncUserRoles(user.id, bindings);

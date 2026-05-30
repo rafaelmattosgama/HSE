@@ -106,6 +106,7 @@ OPENAI_BASE_URL
 RATE_LIMIT_POINTS
 RATE_LIMIT_WINDOW_SEC
 SEED_DEFAULT_PASSWORD
+N0_ADMIN_EMAIL
 ```
 
 Em producao, nao usar defaults de desenvolvimento como:
@@ -143,6 +144,9 @@ Opcionalmente, para dados seed:
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml run --rm app npm run db:seed
 ```
+
+O seed cria o N0 definido por `N0_ADMIN_EMAIL` com a password
+`SEED_DEFAULT_PASSWORD`.
 
 Nao executes seed se vais importar o dump de dados, porque o dump ja contem
 utilizadores, plantas, roles, tokens e dados operacionais.
@@ -371,6 +375,19 @@ O endpoint `/api/health/ready` deve responder:
 
 Testar login com um utilizador importado e trocar as senhas padrao quando
 aplicavel.
+
+### Reparar/Criar O N0 De Producao
+
+Se o login N0 falhar apos importacao de dump ou deploy, repara explicitamente o
+N0 sem correr o seed completo:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm app npm run admin:ensure-n0
+```
+
+Este comando garante que `N0_ADMIN_EMAIL` existe, fica ativo, tem role
+`N0_ADMIN` com `plantId=null`, e atualiza a password para
+`SEED_DEFAULT_PASSWORD`.
 
 ## Reimportar Dump Em Ambiente Ja Inicializado
 
