@@ -102,6 +102,10 @@ async function hasAnyN0Admin(): Promise<boolean> {
   return upr !== null;
 }
 
+function isDefaultAdminEmail(email: string) {
+  return email.trim().toLowerCase() === DEFAULT_ADMIN_EMAIL.trim().toLowerCase();
+}
+
 export async function ensureDefaultAdminUser(email?: string) {
   if (!email) {
     return;
@@ -120,12 +124,22 @@ export async function ensureDefaultAdminUser(email?: string) {
       }
       return;
     }
+    if (isDefaultAdminEmail(email)) {
+      logger.warn({ email }, "default_admin_exists_without_n0_role_repairing");
+      await bootstrapDefaultAdmin(email);
+      return;
+    }
     logger.debug({ email }, "user_exists_without_n0_role_skipping");
     return;
   }
 
   const someN0Exists = await hasAnyN0Admin();
   if (someN0Exists) {
+    if (isDefaultAdminEmail(email)) {
+      logger.warn({ email }, "n0_admin_exists_with_different_email_repairing_default_admin");
+      await bootstrapDefaultAdmin(email);
+      return;
+    }
     logger.warn({ email }, "n0_admin_exists_with_different_email_not_creating");
     return;
   }
