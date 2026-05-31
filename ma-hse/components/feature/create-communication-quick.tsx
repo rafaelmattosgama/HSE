@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ActionPriority, CommunicationType } from "@prisma/client";
+import { ActionPriority, CommunicationType, type RecordLevel } from "@prisma/client";
 import { usePathname } from "next/navigation";
 import { formatCommunicationType } from "@/lib/helpers";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
@@ -9,6 +9,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { RECORD_LEVELS } from "@/lib/record-level";
 
 type Option = {
   id: string;
@@ -47,6 +48,7 @@ export function CreateCommunicationQuick({
 }) {
   const pathname = usePathname();
   const [type, setType] = useState<CommunicationType>("UNSAFE_CONDITION");
+  const [level, setLevel] = useState<RecordLevel | "">("");
   const [eventDatetime, setEventDatetime] = useState("");
   const [reporterEmployeeId, setReporterEmployeeId] = useState("");
   const [areaId, setAreaId] = useState("");
@@ -64,6 +66,7 @@ export function CreateCommunicationQuick({
   const [actionTitle, setActionTitle] = useState("");
   const [actionDescription, setActionDescription] = useState("");
   const [actionOwnerUserId, setActionOwnerUserId] = useState("");
+  const [actionLevel, setActionLevel] = useState<RecordLevel | "">("");
   const [actionPriority, setActionPriority] = useState<ActionPriority>("MEDIUM");
   const [actionDueDate, setActionDueDate] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
@@ -139,6 +142,7 @@ export function CreateCommunicationQuick({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type,
+          level: level || undefined,
           eventDatetime,
           reporterName: reporterEmployee?.name ?? "",
           reporterEmployeeNo: reporterEmployee?.employeeNo || undefined,
@@ -164,6 +168,7 @@ export function CreateCommunicationQuick({
                 title: actionTitle,
                 description: actionDescription,
                 ownerUserId: actionOwnerUserId,
+                level: actionLevel || undefined,
                 priority: actionPriority,
                 dueDate: actionDueDate || undefined,
               }
@@ -176,6 +181,7 @@ export function CreateCommunicationQuick({
 
       if (json.ok) {
         setType("UNSAFE_CONDITION");
+        setLevel("");
         setDescription("");
         setSuggestedAction("");
         setReporterEmployeeId("");
@@ -195,6 +201,7 @@ export function CreateCommunicationQuick({
         setActionTitle("");
         setActionDescription("");
         setActionOwnerUserId("");
+        setActionLevel("");
         setActionPriority("MEDIUM");
         setActionDueDate("");
         setPhotos([]);
@@ -214,6 +221,12 @@ export function CreateCommunicationQuick({
           <option key={option} value={option}>
             {formatCommunicationType(option)}
           </option>
+        ))}
+      </select>
+      <select value={level} onChange={(event) => setLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+        <option value="">Level</option>
+        {RECORD_LEVELS.map((option) => (
+          <option key={option} value={option}>{option}</option>
         ))}
       </select>
       <div className="grid gap-3 md:grid-cols-2">
@@ -331,6 +344,12 @@ export function CreateCommunicationQuick({
                 <option value="">Action owner</option>
                 {actionOwners.map((owner) => (
                   <option key={owner.id} value={owner.id}>{owner.name}</option>
+                ))}
+              </select>
+              <select value={actionLevel} onChange={(event) => setActionLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                <option value="">Level</option>
+                {RECORD_LEVELS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
                 ))}
               </select>
               <select value={actionPriority} onChange={(event) => setActionPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">

@@ -21,26 +21,7 @@ npm run dev:all
 
 
 
-
 user: admin@maxsafety.com
-palavra-passe: maXSafety
+palavra-passe: pNh68JBNTq
 
 
-Em produção, com N0_ADMIN_EMAIL=admin@maxsafety.com, 
-a ensureDefaultAdminUser reconhecerá o email do login e criará o utilizador automaticamente com a password de SEED_DEFAULT_PASSWORD
-
-# Seed defaults
-N0_ADMIN_EMAIL=admin@maxsafety.com
-SEED_DEFAULT_PASSWORD=ChangeMe123!
-
-
-
-N0_ADMIN_EMAIL	admin@maxsafety.com
-SEED_DEFAULT_PASSWORD	maXSafety
-
-
-
-- N0 na DB: admin@maxsafety.com (password: ChangeMe123! local / maXSafety produção)
-
-131/131 testes a passar, zero erros de tipo.
-Em produção, quando fizeres deploy, o seed vai criar o N0 com admin@maxsafety.com / maXSafety (desde que o .env.production esteja configurado com essas env vars).

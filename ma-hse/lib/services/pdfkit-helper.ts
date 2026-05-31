@@ -3,7 +3,8 @@ import fs from "node:fs";
 import { basename, join } from "node:path";
 
 const nodeRequire = createRequire(import.meta.url);
-const PDFDocument = nodeRequire("pdfkit");
+const pdfkitModule = nodeRequire("pdfkit");
+const PDFDocument = pdfkitModule.default ?? pdfkitModule;
 const pdfkitDataDirectory = join(process.cwd(), "node_modules", "pdfkit", "js", "data");
 
 function resolvePdfkitDataFile(pathInput: string) {

@@ -111,6 +111,8 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
           id: row.id,
           sequenceNumber: row.sequenceNumber,
           title: translatedTitles[index] ?? row.title,
+          description: row.description,
+          level: row.level,
           priority: row.priority,
           status: row.status,
           ownerName: row.ownerUser.name,

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
+import { formatRecordLevel, RECORD_LEVELS } from "@/lib/record-level";
 
 type EvidenceRow = {
   id: string;
@@ -16,6 +17,8 @@ type ActionRow = {
   id: string;
   sequenceNumber: number | null;
   title: string;
+  description: string;
+  level?: string | null;
   priority: string;
   status: string;
   ownerName: string;
@@ -33,6 +36,18 @@ type DateSortDirection = "asc" | "desc";
 
 function todayDateInputValue() {
   return new Date().toISOString().slice(0, 10);
+}
+
+async function readExportError(response: Response, fallback: string) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const json = await response.json().catch(() => null) as { message?: string } | null;
+    return json?.message ?? `${fallback} (${response.status})`;
+  }
+
+  const text = await response.text().catch(() => "");
+  const compactText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return compactText ? `${fallback} (${response.status}): ${compactText.slice(0, 180)}` : `${fallback} (${response.status})`;
 }
 
 export function ActionsTable({
@@ -56,11 +71,13 @@ export function ActionsTable({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [localFilter, setLocalFilter] = useState("all");
+  const [levelFilter, setLevelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
   const [dateSortDirection, setDateSortDirection] = useState<DateSortDirection>("asc");
+  const [exportingFormat, setExportingFormat] = useState<"xlsx" | "pdf" | null>(null);
 
   const localOptions = useMemo(
     () => Array.from(new Set(actions.map((action) => action.local).filter((value) => value && value !== "-"))).sort((a, b) => a.localeCompare(b)),
@@ -80,6 +97,7 @@ export function ActionsTable({
       actions
         .filter((action) => {
           if (localFilter !== "all" && action.local !== localFilter) return false;
+          if (levelFilter !== "all" && action.level !== levelFilter) return false;
           if (statusFilter !== "all" && action.status !== statusFilter) return false;
           if (ownerFilter !== "all" && action.ownerName !== ownerFilter) return false;
           if (dateFromFilter && action.dueDate < dateFromFilter) return false;
@@ -93,7 +111,7 @@ export function ActionsTable({
           if (dateComparison !== 0) return dateComparison;
           return left.title.localeCompare(right.title);
         }),
-    [actions, dateFromFilter, dateSortDirection, dateToFilter, localFilter, ownerFilter, statusFilter],
+    [actions, dateFromFilter, dateSortDirection, dateToFilter, levelFilter, localFilter, ownerFilter, statusFilter],
   );
 
   const openActions = useMemo(
@@ -251,6 +269,50 @@ export function ActionsTable({
     setSelectedIds((current) => (checked ? [...current, actionId] : current.filter((entry) => entry !== actionId)));
   }
 
+  async function exportFiltered(format: "xlsx" | "pdf") {
+    setExportingFormat(format);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/actions/export?format=${format}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          rows: filteredActions.map((action) => ({
+            action: `${formatActionCode(plant, action.sequenceNumber)} | ${action.title}`,
+            level: formatRecordLevel(action.level),
+            local: action.local,
+            source: action.sourceLabel,
+            priority: action.priority,
+            status: action.status,
+            owner: action.ownerName,
+            due: action.dueDate,
+            description: action.description,
+          })),
+        }),
+      });
+
+      const fallbackMessage = `Failed to export actions as ${format.toUpperCase()}.`;
+      if (!response.ok) {
+        throw new Error(await readExportError(response, fallbackMessage));
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `acoes_filtradas.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to export actions.");
+    } finally {
+      setExportingFormat(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -261,6 +323,15 @@ export function ActionsTable({
               <option value="all">All locations</option>
               {localOptions.map((local) => (
                 <option key={local} value={local}>{local}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Level</span>
+            <select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <option value="all">All levels</option>
+              {RECORD_LEVELS.map((level) => (
+                <option key={level} value={level}>{level}</option>
               ))}
             </select>
           </label>
@@ -322,11 +393,35 @@ export function ActionsTable({
       </section>
 
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <p className="text-sm text-slate-600">{filteredActions.length} action(s) shown. {openActions.length} open action(s).</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void exportFiltered("xlsx")}
+              disabled={exportingFormat !== null}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              {exportingFormat === "xlsx" ? "Exporting..." : "Export Excel"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportFiltered("pdf")}
+              disabled={exportingFormat !== null}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" />
+              {exportingFormat === "pdf" ? "Exporting..." : "Export PDF"}
+            </button>
+          </div>
+        </div>
         <table className="w-full min-w-[1040px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Select</th>
               <th className="px-4 py-3">Action</th>
+              <th className="px-4 py-3">Level</th>
               <th className="px-4 py-3">Local</th>
               <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Priority</th>
@@ -359,6 +454,7 @@ export function ActionsTable({
                         {row.title}
                       </Link>
                     </td>
+                    <td className="px-4 py-3">{formatRecordLevel(row.level)}</td>
                     <td className="px-4 py-3">{row.local}</td>
                     <td className="px-4 py-3">
                       {row.sourceHref ? (
@@ -382,8 +478,8 @@ export function ActionsTable({
                         {isExpanded ? "Hide" : isOpen ? "Open / close" : "Open"}
                       </Button>
                     </td>
-                    <td className="px-4 py-3">
-                      {canDelete ? (
+                    {canDelete ? (
+                      <td className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => void deleteAction(row.id)}
@@ -393,12 +489,12 @@ export function ActionsTable({
                           <Trash2 className="h-3.5 w-3.5" />
                           {deletingId === row.id ? "Deleting..." : "Delete"}
                         </button>
-                      ) : null}
-                    </td>
+                      </td>
+                    ) : null}
                   </tr>
                   {isExpanded ? (
                     <tr className="border-t border-slate-100 bg-slate-50">
-                      <td colSpan={canDelete ? 10 : 9} className="px-4 py-4">
+                      <td colSpan={canDelete ? 11 : 10} className="px-4 py-4">
                         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                           <div className="space-y-3">
                             <div>
@@ -462,7 +558,7 @@ export function ActionsTable({
             })}
             {filteredActions.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={canDelete ? 10 : 9} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={canDelete ? 11 : 10} className="px-4 py-6 text-center text-sm text-slate-500">
                   No actions were found for the selected filters.
                 </td>
               </tr>
@@ -472,7 +568,6 @@ export function ActionsTable({
       </section>
 
       <div className="text-sm text-slate-600">
-        <p>{filteredActions.length} action(s) shown. {openActions.length} open action(s).</p>
         {message ? <p className="mt-1 text-rose-700">{message}</p> : null}
       </div>
     </div>

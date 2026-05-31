@@ -2,11 +2,13 @@ import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationType
 import { z } from "zod";
 
 const optionalUuid = z.string().uuid().optional().nullable();
+const recordLevelInput = z.enum(["N1", "N2", "N3", "N4"]);
 const noDigits = /\d/;
 const futureCommunicationDatetimeMessage = "A data e hora da comunicação não podem ser posteriores ao momento atual.";
 
 const communicationInputShape = z.object({
     type: z.nativeEnum(CommunicationType),
+    level: recordLevelInput.optional().nullable(),
     eventDatetime: z.coerce.date(),
     reporterName: z.string().trim().min(2).refine((value) => !noDigits.test(value), {
       message: "Reporter name cannot contain numbers",
@@ -48,6 +50,7 @@ const communicationInputShape = z.object({
         title: z.string().min(3),
         description: z.string().min(5),
         ownerUserId: z.string().uuid(),
+        level: recordLevelInput.optional().nullable(),
         priority: z.nativeEnum(ActionPriority),
         dueDate: z.coerce.date().optional(),
       })
@@ -162,6 +165,7 @@ export const reopenEntityInput = z.object({
 
 export const createActionInput = z.object({
   sourceType: z.enum(["COMMUNICATION", "SEWO", "MANUAL"]),
+  level: recordLevelInput.optional().nullable(),
   communicationId: z.string().uuid().optional(),
   sewoId: z.string().uuid().optional(),
   category: z.nativeEnum(ActionCategory),
@@ -179,6 +183,7 @@ export const updateActionInput = z.object({
   ownerUserId: z.string().uuid(),
   priority: z.nativeEnum(ActionPriority),
   category: z.nativeEnum(ActionCategory),
+  level: recordLevelInput.optional().nullable(),
   dueDate: z.coerce.date().optional(),
 });
 
@@ -517,6 +522,33 @@ export const deleteMasterDataItemInput = z.object({
       message: "Item id is required when deleteAll is false",
     });
   }
+});
+
+export const communicationListExportInput = z.object({
+  rows: z.array(z.object({
+    event: z.string(),
+    level: z.string(),
+    type: z.string(),
+    status: z.string(),
+    reporter: z.string(),
+    department: z.string(),
+    location: z.string(),
+    description: z.string().optional().default(""),
+  })).max(200),
+});
+
+export const actionListExportInput = z.object({
+  rows: z.array(z.object({
+    action: z.string(),
+    level: z.string(),
+    local: z.string(),
+    source: z.string(),
+    priority: z.string(),
+    status: z.string(),
+    owner: z.string(),
+    due: z.string(),
+    description: z.string().optional().default(""),
+  })).max(200),
 });
 
 export const upsertProfessionalRiskInput = z.object({

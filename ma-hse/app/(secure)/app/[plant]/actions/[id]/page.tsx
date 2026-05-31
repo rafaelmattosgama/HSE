@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { formatRecordLevel } from "@/lib/record-level";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 
@@ -61,6 +62,7 @@ export default async function ActionDetailPage({
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-4"><dt>Title</dt><dd>{translatedTitle}</dd></div>
             <div className="flex justify-between gap-4"><dt>Status</dt><dd>{action.status}</dd></div>
+            <div className="flex justify-between gap-4"><dt>Level</dt><dd>{formatRecordLevel(action.level)}</dd></div>
             <div className="flex justify-between gap-4"><dt>Priority</dt><dd>{action.priority}</dd></div>
             <div className="flex justify-between gap-4"><dt>Category</dt><dd>{action.category}</dd></div>
             <div className="flex justify-between gap-4"><dt>Source type</dt><dd>{action.sourceType}</dd></div>

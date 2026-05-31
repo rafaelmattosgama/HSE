@@ -83,6 +83,13 @@ enum ActionStatus {
   CLOSED
 }
 
+enum RecordLevel {
+  N1
+  N2
+  N3
+  N4
+}
+
 enum SEWOStatus {
   DRAFT
   IN_APPROVAL
@@ -466,6 +473,7 @@ model Communication {
   id                               String                            @id @default(uuid())
   plantId                          String
   type                             CommunicationType
+  level                            RecordLevel?
   status                           CommunicationStatus               @default(SUBMITTED)
   source                           CommunicationSource               @default(BACKOFFICE)
   eventDatetime                    DateTime
@@ -555,6 +563,7 @@ model Action {
   plantId             String
   sequenceNumber      Int?
   sourceType          ActionSourceType
+  level               RecordLevel?
   communicationId     String?
   sewoId              String?
   category            ActionCategory

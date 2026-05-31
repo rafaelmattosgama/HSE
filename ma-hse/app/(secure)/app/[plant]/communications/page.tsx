@@ -142,11 +142,13 @@ export default async function CommunicationsPage({
           return {
             id: row.id,
             eventDatetime: row.eventDatetime.toISOString(),
+            level: row.level,
             type: row.type,
             status: row.status,
             reporterName: reporterEmployee ? `${reporterEmployee.employeeNo} - ${reporterEmployee.name}` : row.reporterName,
             department: row.area?.name ?? "-",
             location: row.workstation?.name ?? "-",
+            description: row.description,
             unsafeActType: canManageClassification ? row.unsafeActType?.name ?? "-" : undefined,
             unsafeConditionType: canManageClassification ? row.unsafeConditionType?.name ?? "-" : undefined,
             nearMissType: canManageClassification ? row.nearMissType?.name ?? "-" : undefined,
