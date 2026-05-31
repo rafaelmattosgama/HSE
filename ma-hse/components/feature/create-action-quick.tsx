@@ -1,10 +1,11 @@
 "use client";
 
-import { ActionCategory, ActionPriority, ActionSourceType } from "@prisma/client";
+import { ActionCategory, ActionPriority, ActionSourceType, type RecordLevel } from "@prisma/client";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
+import { RECORD_LEVELS } from "@/lib/record-level";
 
 type Option = {
   id: string;
@@ -35,6 +36,7 @@ export function CreateActionQuick({
   );
   const [communicationId, setCommunicationId] = useState(lockedCommunicationId ?? initialCommunicationId ?? "");
   const [category, setCategory] = useState<ActionCategory>(ActionCategory.CORRECTIVE);
+  const [level, setLevel] = useState<RecordLevel | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
@@ -53,6 +55,7 @@ export function CreateActionQuick({
         sourceType,
         communicationId: sourceType === ActionSourceType.COMMUNICATION ? communicationId : undefined,
         category,
+        level: level || undefined,
         priority,
         title,
         description,
@@ -109,6 +112,12 @@ export function CreateActionQuick({
           <option value={ActionCategory.CORRECTIVE}>{text.categoryLabels.CORRECTIVE}</option>
           <option value={ActionCategory.PREVENTIVE}>{text.categoryLabels.PREVENTIVE}</option>
           <option value={ActionCategory.IMPROVEMENT}>{text.categoryLabels.IMPROVEMENT}</option>
+        </select>
+        <select value={level} onChange={(event) => setLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+          <option value="">Level</option>
+          {RECORD_LEVELS.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
         </select>
         <select value={priority} onChange={(event) => setPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
           <option value={ActionPriority.LOW}>{text.priorityLabels.LOW}</option>

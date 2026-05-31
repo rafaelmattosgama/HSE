@@ -2,22 +2,37 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatCommunicationStatus, formatCommunicationType, getCommunicationStatusClasses, normalizeCommunicationStatus } from "@/lib/helpers";
+import { formatRecordLevel, RECORD_LEVELS } from "@/lib/record-level";
 
 type CommunicationRow = {
   id: string;
   eventDatetime: string;
+  level?: string | null;
   type: string;
   status: string;
   reporterName: string;
   department: string;
   location: string;
+  description: string;
   unsafeActType?: string;
   unsafeConditionType?: string;
   nearMissType?: string;
 };
+
+async function readExportError(response: Response, fallback: string) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const json = await response.json().catch(() => null) as { message?: string } | null;
+    return json?.message ?? `${fallback} (${response.status})`;
+  }
+
+  const text = await response.text().catch(() => "");
+  const compactText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return compactText ? `${fallback} (${response.status}): ${compactText.slice(0, 180)}` : `${fallback} (${response.status})`;
+}
 
 export function CommunicationsTable({
   plant,
@@ -33,6 +48,7 @@ export function CommunicationsTable({
   const router = useRouter();
   const [tableRows, setTableRows] = useState(rows);
   const [typeFilter, setTypeFilter] = useState("all");
+  const [levelFilter, setLevelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reporterFilter, setReporterFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
@@ -43,6 +59,7 @@ export function CommunicationsTable({
   const [unsafeConditionTypeFilter, setUnsafeConditionTypeFilter] = useState("all");
   const [nearMissTypeFilter, setNearMissTypeFilter] = useState("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<"xlsx" | "pdf" | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -75,6 +92,7 @@ export function CommunicationsTable({
       tableRows.filter((row) => {
         const eventDate = row.eventDatetime.slice(0, 10);
         if (typeFilter !== "all" && row.type !== typeFilter) return false;
+        if (levelFilter !== "all" && row.level !== levelFilter) return false;
         if (statusFilter !== "all" && normalizeCommunicationStatus(row.status) !== statusFilter) return false;
         if (reporterFilter && !row.reporterName.toLowerCase().includes(reporterFilter.toLowerCase())) return false;
         if (dateFromFilter && eventDate < dateFromFilter) return false;
@@ -86,8 +104,51 @@ export function CommunicationsTable({
         if (canViewClassification && nearMissTypeFilter !== "all" && row.nearMissType !== nearMissTypeFilter) return false;
         return true;
       }),
-    [canViewClassification, dateFromFilter, dateToFilter, departmentFilter, locationFilter, nearMissTypeFilter, reporterFilter, tableRows, statusFilter, typeFilter, unsafeActTypeFilter, unsafeConditionTypeFilter],
+    [canViewClassification, dateFromFilter, dateToFilter, departmentFilter, levelFilter, locationFilter, nearMissTypeFilter, reporterFilter, tableRows, statusFilter, typeFilter, unsafeActTypeFilter, unsafeConditionTypeFilter],
   );
+
+  async function exportFiltered(format: "xlsx" | "pdf") {
+    setExportingFormat(format);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/communications/export?format=${format}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          rows: filteredRows.map((row) => ({
+            event: row.eventDatetime.replace("T", " ").slice(0, 16),
+            level: formatRecordLevel(row.level),
+            type: formatCommunicationType(row.type),
+            status: formatCommunicationStatus(row.status),
+            reporter: row.reporterName,
+            department: row.department,
+            location: row.location,
+            description: row.description,
+          })),
+        }),
+      });
+
+      const fallbackMessage = `Failed to export communications as ${format.toUpperCase()}.`;
+      if (!response.ok) {
+        throw new Error(await readExportError(response, fallbackMessage));
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `comunicacoes_filtradas.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to export communications.");
+    } finally {
+      setExportingFormat(null);
+    }
+  }
 
   async function deleteCommunication(row: CommunicationRow) {
     if (!window.confirm(`Delete communication from ${row.eventDatetime.replace("T", " ").slice(0, 16)}? This action cannot be undone.`)) {
@@ -126,6 +187,15 @@ export function CommunicationsTable({
             <option value="all">All types</option>
             {Array.from(new Set(tableRows.map((row) => row.type))).map((type) => (
               <option key={type} value={type}>{formatCommunicationType(type)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Level</span>
+          <select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            <option value="all">All levels</option>
+            {RECORD_LEVELS.map((level) => (
+              <option key={level} value={level}>{level}</option>
             ))}
           </select>
         </label>
@@ -203,6 +273,30 @@ export function CommunicationsTable({
         ) : null}
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-600">{filteredRows.length} communication(s) shown.</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void exportFiltered("xlsx")}
+            disabled={exportingFormat !== null}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="h-4 w-4" />
+            {exportingFormat === "xlsx" ? "Exporting..." : "Export Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportFiltered("pdf")}
+            disabled={exportingFormat !== null}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Download className="h-4 w-4" />
+            {exportingFormat === "pdf" ? "Exporting..." : "Export PDF"}
+          </button>
+        </div>
+      </div>
+
       {message ? <p className="text-sm text-slate-700">{message}</p> : null}
 
       <div className="overflow-x-auto">
@@ -210,6 +304,7 @@ export function CommunicationsTable({
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Event</th>
+              <th className="px-4 py-3">Level</th>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Reporter</th>
@@ -223,6 +318,7 @@ export function CommunicationsTable({
             {filteredRows.map((row) => (
               <tr key={row.id} className="border-t border-slate-200">
                 <td className="px-4 py-3">{row.eventDatetime.replace("T", " ").slice(0, 16)}</td>
+                <td className="px-4 py-3">{formatRecordLevel(row.level)}</td>
                 <td className="px-4 py-3">{formatCommunicationType(row.type)}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getCommunicationStatusClasses(row.status)}`}>
@@ -254,7 +350,7 @@ export function CommunicationsTable({
             ))}
             {filteredRows.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={canDelete ? 8 : 7} className="px-4 py-6 text-center text-sm text-slate-500">No communications found for the selected filters.</td>
+                <td colSpan={canDelete ? 9 : 8} className="px-4 py-6 text-center text-sm text-slate-500">No communications found for the selected filters.</td>
               </tr>
             ) : null}
           </tbody>

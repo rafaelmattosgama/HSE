@@ -128,6 +128,7 @@ export const ActionService = {
           plantId: input.plantId,
           sequenceNumber: (latest?.sequenceNumber ?? 0) + 1,
           sourceType: input.payload.sourceType as ActionSourceType,
+          level: input.payload.level ?? null,
           communicationId: input.payload.communicationId,
           sewoId: input.payload.sewoId,
           category: input.payload.category,
@@ -293,6 +294,7 @@ export const ActionService = {
         ownerUserId: input.payload.ownerUserId,
         priority: input.payload.priority,
         category: input.payload.category,
+        level: input.payload.level ?? null,
         dueDate: input.payload.dueDate ?? before.dueDate,
       },
     });

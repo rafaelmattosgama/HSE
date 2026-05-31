@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionStatus, CommunicationStatus, CommunicationType } from "@prisma/client";
+import { ActionStatus, CommunicationStatus, CommunicationType, type RecordLevel } from "@prisma/client";
 import { useState } from "react";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
@@ -10,6 +10,7 @@ import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition
 import { Button } from "@/components/ui/button";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
+import { RECORD_LEVELS } from "@/lib/record-level";
 import type { BodyZonePickerLabels } from "@/lib/sewo-ui";
 
 type Option = {
@@ -28,6 +29,7 @@ type ActionOwnerOption = {
 type CommunicationRecord = {
   id: string;
   type: CommunicationType;
+  level: RecordLevel | null;
   status: CommunicationStatus;
   eventDatetime: string;
   reporterName: string;
@@ -102,6 +104,7 @@ export function CommunicationDetailEditor({
 }) {
   const text = labels ?? BASE_COMMUNICATION_UI.detailEditor;
   const [type, setType] = useState<CommunicationType>(communication.type);
+  const [level, setLevel] = useState<RecordLevel | "">(communication.level ?? "");
   const [eventDatetime, setEventDatetime] = useState(communication.eventDatetime.slice(0, 16));
   const [reporterEmployeeNo, setReporterEmployeeNo] = useState(communication.reporterEmployeeNo ?? "");
   const [reporterName, setReporterName] = useState(communication.reporterName);
@@ -151,6 +154,7 @@ export function CommunicationDetailEditor({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type,
+          level: level || undefined,
           eventDatetime,
           reporterName: selectedReporter?.name ?? reporterName,
           reporterEmployeeNo: reporterEmployeeNo || undefined,
@@ -291,10 +295,16 @@ export function CommunicationDetailEditor({
           </div>
         ) : null}
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
             {(["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS", "FIRST_AID", "ACCIDENT"] as CommunicationType[]).map((option) => (
               <option key={option} value={option}>{typeLabels[option] ?? option}</option>
+            ))}
+          </select>
+          <select value={level} onChange={(event) => setLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
+            <option value="">Level</option>
+            {RECORD_LEVELS.map((option) => (
+              <option key={option} value={option}>{option}</option>
             ))}
           </select>
           <input type="datetime-local" value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required />

@@ -198,6 +198,7 @@ export default async function CommunicationDetailPage({
         communication={{
           id: communication.id,
           type: communication.type,
+          level: communication.level,
           status: communication.status,
           eventDatetime: communication.eventDatetime.toISOString(),
           reporterName: communication.reporterName,

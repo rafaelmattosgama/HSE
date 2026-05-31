@@ -339,6 +339,7 @@ export const CommunicationService = {
       data: {
         plantId: input.plantId,
         type: input.payload.type,
+        level: input.payload.level ?? null,
         status: initialStatusForCommunicationCreation(input.actorRole),
         source: input.source ?? CommunicationSource.BACKOFFICE,
         eventDatetime: input.payload.eventDatetime,
@@ -901,6 +902,7 @@ export const CommunicationService = {
       where: { id: input.communicationId },
       data: {
         type: input.payload.type,
+        level: input.payload.level ?? null,
         eventDatetime: input.payload.eventDatetime,
         reporterName,
         reporterEmployeeNo,
