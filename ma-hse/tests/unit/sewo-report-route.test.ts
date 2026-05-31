@@ -47,7 +47,7 @@ describe("S-EWO report route", () => {
 
   it("returns PDF for summary reports and reuses external summary export logic", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
-      session: { user: { language: "en" } },
+      session: { user: { language: "en", name: "Ana Silva" } },
       role: RoleCode.N3_SAFETY,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "en" });
@@ -64,14 +64,14 @@ describe("S-EWO report route", () => {
     expect(exportMock.SewoExportService.buildExport).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
-    expect(response.headers.get("content-disposition")).toContain("sewo-pl1-sewo-1.pdf");
+    expect(response.headers.get("content-disposition")).toContain("s-ewo-sewo-1.pdf");
     const data = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(data)).toEqual([1, 2, 3]);
   });
 
   it("returns PDF for complete reports and uses the standard export logic", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
-      session: { user: { language: "pt" } },
+      session: { user: { language: "pt", name: "Ana Silva" } },
       role: RoleCode.N2_PLANT_MANAGER,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
@@ -84,18 +84,18 @@ describe("S-EWO report route", () => {
       routeContext(),
     ))!;
 
-    expect(exportMock.SewoExportService.buildExport).toHaveBeenCalledWith("sewo-1", { locale: "pt" });
+    expect(exportMock.SewoExportService.buildExport).toHaveBeenCalledWith("sewo-1", { locale: "pt", exportedBy: "Ana Silva" });
     expect(exportMock.SewoExportService.buildExternalSummaryExport).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
-    expect(response.headers.get("content-disposition")).toContain("sewo-pl1-sewo-1.pdf");
+    expect(response.headers.get("content-disposition")).toContain("s-ewo-sewo-1.pdf");
     const data = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(data)).toEqual([4, 5, 6]);
   });
 
   it("still supports Excel for the standard full export when requested", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
-      session: { user: { language: "en" } },
+      session: { user: { language: "en", name: "Ana Silva" } },
       role: RoleCode.N2_PLANT_MANAGER,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "en" });
@@ -108,9 +108,10 @@ describe("S-EWO report route", () => {
       routeContext(),
     ))!;
 
-    expect(exportMock.SewoExportService.buildExport).toHaveBeenCalledWith("sewo-1", { locale: "en" });
+    expect(exportMock.SewoExportService.buildExport).toHaveBeenCalledWith("sewo-1", { locale: "en", exportedBy: "Ana Silva" });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(response.headers.get("content-disposition")).toContain("s-ewo-sewo-1.xlsx");
     const data = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(data)).toEqual([11]);
   });

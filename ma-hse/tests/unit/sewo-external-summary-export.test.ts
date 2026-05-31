@@ -87,6 +87,10 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
     return Math.max(16, String(value).split("\n").length * 16);
   }
 
+  widthOfString(value: string) {
+    return String(value).length * 5;
+  }
+
   text(value: string, _x?: number, y?: number) {
     this.payload.texts.push(String(value));
     if (typeof y === "number") {
@@ -157,6 +161,67 @@ const ui = {
   dueDate: "Due date",
   tableStatus: "Status",
   summaryReportPhotoEvidenceSection: "5. Photo Evidence",
+  summaryTitle: "Summary",
+  summaryStatus: "Status",
+  tableDate: "Date",
+  summaryPerformedBy: "Performed by",
+  summaryCommunication: "Communication",
+  eventClassification: "Event classification",
+  area: "Area",
+  workstation: "Workstation",
+  shift: "Shift",
+  involvedPerson: "Involved person",
+  nature: "Nature",
+  usualJob: "Usual job",
+  whichOperation: "Which operation",
+  validatedBy: "Validated by",
+  reviewedAt: "Reviewed at",
+  howDidTheAccidentHappen: "How did the accident happen?",
+  immediateCorrectiveActionPlan: "Immediate corrective action plan",
+  analysis: "Analysis",
+  analysisText: "Analysis text",
+  previousDetected: "Have previous UA / UC been detected?",
+  previousDetectedDescription: "Describe previous detection",
+  fiveWhy: "5 Why",
+  noFiveWhyAnalysis: "No 5 Why analysis registered.",
+  whyLabel: "Why",
+  question: "Question",
+  answerLabel: "Answer",
+  sifPsifDecisionTree: "SIF / PSIF Decision Tree",
+  actualSifQuestion: "Was it an actual SIF event?",
+  sifPsifExposureQuestions: {
+    suspendedLoad: "Suspended load",
+    mobileEquipment: "Mobile equipment",
+    energyIsolation: "Energy isolation",
+    workAtHeight: "Work at height",
+    movingEquipment: "Moving equipment",
+    confinedSpace: "Confined space",
+    significantMassEnergy: "Significant mass or energy",
+  },
+  repeatedSifPotentialQuestion: "Repeated SIF potential",
+  oneWhatIfAwayQuestion: "One what-if away",
+  noPsifExplanation: "No PSIF explanation",
+  sifPsifResult: "SIF / PSIF result",
+  rootCauseAnalysis: "Root Cause Analysis",
+  rootCauses: "Root Causes",
+  rootCause: "Root cause",
+  noRootCauseDetails: "No root cause details registered.",
+  noLinkedActions: "No linked actions.",
+  title: "Title",
+  field: "Field",
+  value: "Value",
+  cause: "Cause",
+  comment: "Comment",
+  noRecordsShort: "No records",
+  yes: "Yes",
+  no: "No",
+  sewoStatusLabels: {
+    DRAFT: "Draft",
+    IN_APPROVAL: "Submitted",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    CLOSED: "Closed",
+  } as Record<string, string>,
   sifResult: "SIF",
   psifResult: "PSIF",
   noPsifResult: "No PSIF",
@@ -294,5 +359,136 @@ describe("SewoExportService.buildExternalSummaryExport", () => {
     expect(rendered.texts.filter((entry) => entry === "Not applicable").length).toBeGreaterThanOrEqual(4);
     expect(rendered.texts).toContain("Injury");
     expect(rendered.texts).toContain("Porto (PL2)");
+  });
+});
+
+describe("SewoExportService.buildExport", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("builds the complete report with analysis, causes, actions and photos", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    storageMock.StorageService.getObjectBuffer.mockResolvedValue(Buffer.from("image-1"));
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue({
+      id: "sewo-1",
+      plant: {
+        code: "pl1",
+        name: "Valenca",
+      },
+      communication: {
+        id: "comm-1",
+        area: {
+          name: "Press Shop",
+        },
+        workstation: {
+          name: "Line 2",
+        },
+        targetEmployee: null,
+      },
+      eventClassification: "Near Miss",
+      area: {
+        name: "Press Shop",
+      },
+      line: {
+        name: "Line 2",
+      },
+      shift: {
+        name: "Shift 1",
+      },
+      analysisDate: new Date("2026-05-20T08:00:00.000Z"),
+      performedBy: {
+        name: "Joao Costa",
+      },
+      approvedBy: {
+        name: "Ana Silva",
+      },
+      approvedAt: new Date("2026-05-21T08:00:00.000Z"),
+      status: "APPROVED",
+      whatText: "Hand contusion",
+      whereText: "Line 2",
+      whoText: "123 - Maria Lopes",
+      usualWorkYesNo: true,
+      whichText: "Normal press operation",
+      howText: "Operator slipped near the conveyor.",
+      immediateCorrectiveActionText: "Area isolated and cleaned.",
+      templateData: {
+        analysisText: "Floor contamination identified.",
+        previousDetected: "YES",
+        previousDetectedDescription: "Similar unsafe condition was reported last week.",
+        fiveWhys: [
+          {
+            why: "Why did the operator slip?",
+            answer: "Oil was present on the floor.",
+          },
+        ],
+        sifPsifDecision: {
+          actualSif: "NO",
+          exposures: {
+            suspendedLoad: "NO",
+            mobileEquipment: "YES",
+          },
+          repeatedSifPotential: "YES",
+          oneWhatIfAway: "NO",
+          noPsifExplanation: "",
+        },
+        rootCauseDetails: [
+          {
+            label: "6.2 Lack of maintenance",
+            comment: "Leak not fixed in time",
+            isRootCause: true,
+          },
+        ],
+      },
+      causeSelections: [],
+      actionLinks: [
+        {
+          action: {
+            title: "Repair leak",
+            description: "Replace damaged hydraulic hose",
+            dueDate: new Date("2026-06-01T00:00:00.000Z"),
+            status: "OPEN",
+            ownerUser: {
+              name: "Carlos Mendes",
+            },
+          },
+        },
+      ],
+      attachments: [
+        {
+          fileName: "floor.jpg",
+          contentType: "image/jpeg",
+          fileKey: "photo-1",
+        },
+        {
+          fileName: "notes.pdf",
+          contentType: "application/pdf",
+          fileKey: "doc-1",
+        },
+      ],
+    });
+
+    const exported = await SewoExportService.buildExport("sewo-1", { locale: "en", exportedBy: "Ana Silva" });
+    const rendered = JSON.parse(exported.pdf.toString()) as {
+      texts: string[];
+      imageCount: number;
+    };
+
+    expect(storageMock.StorageService.getObjectBuffer).toHaveBeenCalledWith({ key: "photo-1" });
+    expect(rendered.imageCount).toBe(1);
+    expect(exported.xlsx.length).toBeGreaterThan(0);
+    expect(rendered.texts).toContain("S-EWO Complete Report");
+    expect(rendered.texts).toContain("S-EWO Reference: sewo-1");
+    expect(rendered.texts).toContain("Exported by: Ana Silva");
+    expect(rendered.texts).toContain("Valenca (PL1)");
+    expect(rendered.texts).toContain("Operator slipped near the conveyor.");
+    expect(rendered.texts).toContain("Floor contamination identified.");
+    expect(rendered.texts).toContain("Why did the operator slip?");
+    expect(rendered.texts).toContain("6.2 Lack of maintenance");
+    expect(rendered.texts).toContain("Repair leak");
+    expect(rendered.texts).toContain("Replace damaged hydraulic hose");
+    expect(rendered.texts).toContain("floor.jpg");
+    expect(rendered.texts).toContain("notes.pdf");
   });
 });
