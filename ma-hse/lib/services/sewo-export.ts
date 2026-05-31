@@ -28,11 +28,19 @@ const MUTED = "#64748b";
 const PANEL = "#e2e8f0";
 const SOFT = "#f8fafc";
 const WHITE = "#ffffff";
+const SUCCESS = "#047857";
+const WARNING = "#d97706";
+const DANGER = "#b91c1c";
 
 type ExportAttachment = {
   fileName: string;
   contentType: string;
   fileKey: string;
+};
+
+type CompleteReportOptions = {
+  locale?: string;
+  exportedBy?: string | null;
 };
 
 function pdfBufferFromDocument(doc: PdfDocument) {
@@ -95,23 +103,37 @@ function drawSectionTitle(doc: PdfDocument, title: string) {
 
 function drawFieldGrid(doc: PdfDocument, entries: Array<[string, string]>, columns = 2) {
   const cardWidth = columns === 2 ? 248 : 515;
-  const cardHeight = 52;
-  let x = 40;
+  const rows: Array<Array<[string, string]>> = [];
+  for (let index = 0; index < entries.length; index += columns) {
+    rows.push(entries.slice(index, index + columns));
+  }
+
   let y = doc.y;
 
-  entries.forEach(([label, value], index) => {
-    if (index > 0 && index % columns === 0) {
-      x = 40;
-      y += cardHeight + 10;
-    }
+  rows.forEach((row) => {
+    const cardHeight = Math.max(
+      52,
+      ...row.map(([label, value]) => {
+        const labelHeight = doc.heightOfString(label.toUpperCase(), { width: cardWidth - 24 });
+        const valueHeight = doc.heightOfString(value || "-", { width: cardWidth - 24 });
+        return labelHeight + valueHeight + 28;
+      }),
+    );
+    ensurePageSpace(doc, cardHeight + 10);
+    y = doc.y;
+    let x = 40;
 
-    doc.roundedRect(x, y, cardWidth, cardHeight, 10).fillAndStroke(SOFT, PANEL);
-    doc.fillColor(MUTED).fontSize(8).text(label.toUpperCase(), x + 12, y + 10, { width: cardWidth - 24 });
-    doc.fillColor(INK).fontSize(11).text(value || "-", x + 12, y + 24, { width: cardWidth - 24 });
-    x += cardWidth + 18;
+    row.forEach(([label, value]) => {
+      const labelHeight = doc.heightOfString(label.toUpperCase(), { width: cardWidth - 24 });
+      doc.roundedRect(x, y, cardWidth, cardHeight, 10).fillAndStroke(SOFT, PANEL);
+      doc.fillColor(MUTED).fontSize(8).text(label.toUpperCase(), x + 12, y + 10, { width: cardWidth - 24 });
+      doc.fillColor(INK).fontSize(11).text(value || "-", x + 12, y + 16 + labelHeight, { width: cardWidth - 24 });
+      x += cardWidth + 18;
+    });
+
+    doc.y = y + cardHeight + 10;
   });
 
-  doc.y = y + cardHeight + 8;
   doc.fillColor(INK);
 }
 
@@ -181,6 +203,87 @@ function drawSummaryHeader(doc: PdfDocument, input: {
   doc.fontSize(10).text(input.plantLabel, 320, 60, { width: 217, align: "right" });
   doc.text(`${input.generatedOnLabel} ${formatDate(new Date())}`, 320, 104, { width: 217, align: "right" });
   doc.y = 146;
+  doc.fillColor(INK);
+}
+
+function drawBadge(doc: PdfDocument, label: string, x: number, y: number, fillColor = BRAND) {
+  const normalized = label.trim() || "-";
+  const width = Math.min(180, Math.max(58, doc.widthOfString(normalized) + 22));
+  doc.roundedRect(x, y, width, 20, 10).fill(fillColor);
+  doc.fillColor(WHITE).fontSize(8).text(normalized, x + 11, y + 6, { width: width - 22, align: "center" });
+  doc.fillColor(INK);
+  return width;
+}
+
+function drawCompleteHeader(doc: PdfDocument, input: {
+  title: string;
+  referenceLabel: string;
+  reference: string;
+  plant: string;
+  generatedOnLabel: string;
+  generatedOn: string;
+  exportedBy?: string | null;
+  status: string;
+  eventClassification: string;
+  sifPsifLabel: string;
+  sifPsifColor: string;
+}) {
+  doc.roundedRect(40, 36, 515, 118, 18).fill(BRAND);
+  doc.fillColor(WHITE).fontSize(11).text("MAx Safety", 58, 54);
+  doc.fontSize(24).text(input.title, 58, 72, { width: 310 });
+  doc.fontSize(9).text(`${input.referenceLabel}: ${input.reference}`, 58, 108, { width: 260 });
+  doc.text(input.plant, 320, 56, { width: 217, align: "right" });
+  doc.text(`${input.generatedOnLabel} ${input.generatedOn}`, 320, 106, { width: 217, align: "right" });
+  if (input.exportedBy?.trim()) {
+    doc.text(`Exported by: ${input.exportedBy.trim()}`, 320, 122, { width: 217, align: "right" });
+  }
+
+  doc.y = 170;
+  drawBadge(doc, input.status, 40, 164, SUCCESS);
+  drawBadge(doc, input.eventClassification, 40 + Math.min(180, Math.max(58, doc.widthOfString(input.status.trim() || "-") + 22)) + 8, 164, WARNING);
+  drawBadge(doc, input.sifPsifLabel, 430, 164, input.sifPsifColor);
+  doc.y = 196;
+  doc.fillColor(INK);
+}
+
+function drawCompactTable(doc: PdfDocument, input: {
+  headers: string[];
+  rows: string[][];
+  widths: number[];
+}) {
+  const x = 40;
+  const rowPadding = 8;
+  const headerHeight = 26;
+  const tableWidth = input.widths.reduce((sum, width) => sum + width, 0);
+
+  ensurePageSpace(doc, headerHeight + 34);
+  doc.roundedRect(x, doc.y, tableWidth, headerHeight, 8).fill(BRAND);
+  let cursorX = x;
+  input.headers.forEach((header, index) => {
+    doc.fillColor(WHITE).fontSize(8).text(header.toUpperCase(), cursorX + rowPadding, doc.y + 9, {
+      width: input.widths[index] - rowPadding * 2,
+    });
+    cursorX += input.widths[index];
+  });
+  doc.y += headerHeight;
+
+  input.rows.forEach((row, rowIndex) => {
+    const cellHeights = row.map((cell, index) => doc.heightOfString(cell || "-", {
+      width: input.widths[index] - rowPadding * 2,
+    }));
+    const rowHeight = Math.max(38, Math.max(...cellHeights) + rowPadding * 2);
+    ensurePageSpace(doc, rowHeight + 4);
+    const rowY = doc.y;
+    doc.roundedRect(x, rowY, tableWidth, rowHeight, 6).fillAndStroke(rowIndex % 2 === 0 ? SOFT : WHITE, PANEL);
+    cursorX = x;
+    row.forEach((cell, index) => {
+      doc.fillColor(INK).fontSize(9).text(cell || "-", cursorX + rowPadding, rowY + rowPadding, {
+        width: input.widths[index] - rowPadding * 2,
+      });
+      cursorX += input.widths[index];
+    });
+    doc.y = rowY + rowHeight + 4;
+  });
   doc.fillColor(INK);
 }
 
@@ -270,6 +373,37 @@ function drawPhotoCard(doc: PdfDocument, input: {
   doc.fillColor(INK);
 }
 
+function addPageFooters(doc: PdfDocument, input: {
+  generatedOnLabel: string;
+  generatedOn: string;
+  exportedBy?: string | null;
+}) {
+  const withBufferedPages = doc as PdfDocument & {
+    bufferedPageRange?: () => { start: number; count: number };
+    switchToPage?: (pageNumber: number) => void;
+  };
+
+  if (typeof withBufferedPages.bufferedPageRange !== "function" || typeof withBufferedPages.switchToPage !== "function") {
+    return;
+  }
+
+  const range = withBufferedPages.bufferedPageRange();
+  for (let index = range.start; index < range.start + range.count; index += 1) {
+    withBufferedPages.switchToPage(index);
+    const pageNumber = index - range.start + 1;
+    const footerParts = [
+      `${input.generatedOnLabel} ${input.generatedOn}`,
+      input.exportedBy?.trim() ? `Exported by: ${input.exportedBy.trim()}` : "",
+      `Page ${pageNumber}/${range.count}`,
+    ].filter(Boolean);
+    doc.fillColor(MUTED).fontSize(8).text(footerParts.join(" | "), 40, doc.page.height - 32, {
+      width: 515,
+      align: "center",
+    });
+  }
+  doc.fillColor(INK);
+}
+
 function readSifPsifDecision(value: unknown): SifPsifDecision | null {
   if (!isRecord(value)) return null;
 
@@ -288,7 +422,7 @@ function readSifPsifDecision(value: unknown): SifPsifDecision | null {
 }
 
 export const SewoExportService = {
-  async buildExport(sewoId: string, options: { locale?: string } = {}) {
+  async buildExport(sewoId: string, options: CompleteReportOptions = {}) {
     const locale = options.locale ?? "en";
     const { ui } = await getLocalizedSewoUi(locale);
     const sewo = await prisma.sEWO.findUniqueOrThrow({
@@ -298,9 +432,12 @@ export const SewoExportService = {
         communication: {
           include: {
             targetEmployee: true,
+            area: true,
+            workstation: true,
           },
         },
         performedBy: true,
+        approvedBy: true,
         attachments: true,
         causeSelections: {
           include: {
@@ -353,77 +490,119 @@ export const SewoExportService = {
     const translatedTexts = await translateForViewer(locale, translatableTexts);
     const translationByText = new Map(translatableTexts.map((text, index) => [text, translatedTexts[index] ?? text]));
     const translated = (text: unknown) => translationByText.get(getString(text)) ?? getString(text);
+    const display = (text: unknown) => {
+      const raw = getString(text);
+      if (raw === "-") return ui.summaryReportNotApplicable;
+      return getDisplayValue(translationByText.get(raw) ?? raw, ui.summaryReportNotApplicable);
+    };
     const yesNo = (value: unknown) => (value === "" || value === null || value === undefined ? "-" : isSewoRootCauseAffirmative(value) ? ui.yes : ui.no);
     const localizedStatus = formatLocalizedSewoStatus(sewo.status, ui);
+    const generatedOn = formatDate(new Date());
+    const plantLabel = `${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`;
+    const sifPsifLabel = sifPsifDecision ? getSifPsifResultLabel(sifPsifResult, ui) : ui.pendingResult;
+    const occurrenceLocation = getSummaryLocation(sewo, ui.summaryReportNotApplicable);
+    const photoAttachments = await loadAttachmentBuffers(sewo.attachments);
+    const nonImageAttachments = sewo.attachments.filter((attachment) => inferImageExtension(attachment) === null);
+    const orderedActions = [...sewo.actionLinks].sort(
+      (left, right) => left.action.dueDate.getTime() - right.action.dueDate.getTime(),
+    );
 
     const pdf = await (async () => {
-      const doc = createPdfDocument({ margin: 40, size: "A4" });
+      const doc = createPdfDocument({ margin: 40, size: "A4", bufferPages: true });
 
-      doc.roundedRect(40, 36, 515, 86, 18).fill(BRAND);
-      doc.fillColor("#ffffff").fontSize(24).text(ui.reportTitle, 58, 58);
-      doc.fontSize(10).text(`${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`, 58, 90);
-      doc.text(`${ui.generatedOn} ${formatDate(new Date())}`, 58, 106);
-      doc.y = 142;
-      doc.fillColor(INK);
+      drawCompleteHeader(doc, {
+        title: "S-EWO Complete Report",
+        referenceLabel: ui.summaryReportReference,
+        reference: sewo.id,
+        plant: plantLabel,
+        generatedOnLabel: ui.generatedOn,
+        generatedOn,
+        exportedBy: options.exportedBy,
+        status: localizedStatus,
+        eventClassification: display(sewo.eventClassification),
+        sifPsifLabel,
+        sifPsifColor: sifPsifResult === "SIF" ? DANGER : sifPsifResult === "PSIF" ? WARNING : BRAND,
+      });
 
       drawFieldGrid(
         doc,
         [
+          [ui.plant, plantLabel],
+          [ui.summaryReportReference, sewo.id],
           [ui.summaryStatus, localizedStatus],
           [ui.tableDate, formatDate(sewo.analysisDate)],
           [ui.summaryPerformedBy, sewo.performedBy.name],
           [ui.summaryCommunication, sewo.communication?.id ?? "-"],
+          [ui.validatedBy, sewo.approvedBy?.name ?? ui.summaryReportNotApplicable],
+          [ui.reviewedAt, sewo.approvedAt ? formatDate(sewo.approvedAt) : ui.summaryReportNotApplicable],
         ],
         2,
       );
 
-      drawSectionTitle(doc, ui.summaryTitle);
+      ensurePageSpace(doc, 230);
+      drawSectionTitle(doc, ui.summaryReportGeneralInfo);
       drawFieldGrid(
         doc,
         [
-          [ui.eventClassification, translated(sewo.eventClassification)],
-          [ui.area, sewo.area?.name ?? "-"],
-          [ui.workstation, sewo.whereText || sewo.line?.name || "-"],
-          [ui.shift, sewo.shift?.name ?? "-"],
-          [ui.involvedPerson, sewo.whoText],
-          [ui.nature, sewo.whatText],
+          [ui.eventClassification, display(sewo.eventClassification)],
+          [ui.area, sewo.area?.name ?? sewo.communication?.area?.name ?? ui.summaryReportNotApplicable],
+          [ui.workstation, occurrenceLocation],
+          [ui.shift, sewo.shift?.name ?? ui.summaryReportNotApplicable],
+          [ui.involvedPerson, getDisplayValue(sewo.whoText, ui.summaryReportNotApplicable)],
+          [ui.nature, getDisplayValue(sewo.whatText, ui.summaryReportNotApplicable)],
           [ui.usualJob, sewo.usualWorkYesNo ? ui.yes : ui.no],
-          [ui.whichOperation, translated(sewo.whichText)],
+          [ui.whichOperation, display(sewo.whichText)],
         ],
         2,
       );
 
-      drawSectionTitle(doc, ui.description);
-      drawParagraphCard(doc, ui.howDidTheAccidentHappen, translated(sewo.howText));
+      ensurePageSpace(doc, 190);
+      drawSectionTitle(doc, ui.summaryReportDescriptionSection);
+      drawParagraphCard(doc, ui.description, display(sewo.howText));
+      drawParagraphCard(doc, ui.howDidTheAccidentHappen, display(sewo.howText));
 
+      ensurePageSpace(doc, 190);
       drawSectionTitle(doc, ui.immediateCorrectiveActionPlan);
-      drawParagraphCard(doc, ui.immediateCorrectiveActionPlan, translated(sewo.immediateCorrectiveActionText));
+      drawParagraphCard(doc, ui.immediateCorrectiveActionPlan, display(sewo.immediateCorrectiveActionText));
 
+      ensurePageSpace(doc, 220);
       drawSectionTitle(doc, ui.analysis);
-      drawParagraphCard(doc, ui.analysisText, translated(templateData.analysisText));
+      drawParagraphCard(doc, ui.analysisText, display(templateData.analysisText));
+      drawFieldGrid(
+        doc,
+        [
+          [ui.previousDetected, yesNo(templateData.previousDetected)],
+          [ui.previousDetectedDescription, display(templateData.previousDetectedDescription)],
+        ],
+        1,
+      );
 
+      ensurePageSpace(doc, 150);
       drawSectionTitle(doc, ui.fiveWhy);
       if (fiveWhys.length === 0) {
         drawParagraphCard(doc, ui.fiveWhy, ui.noFiveWhyAnalysis);
       } else {
-        fiveWhys.forEach((entry, index) => {
-          drawParagraphCard(
-            doc,
+        drawCompactTable(doc, {
+          headers: [ui.whyLabel, ui.question, ui.answerLabel],
+          widths: [74, 216, 225],
+          rows: fiveWhys.map((entry, index) => [
             `${ui.whyLabel} ${index + 1}`,
-            `${ui.question}: ${translated(entry.why)}\n\n${ui.answerLabel}: ${translated(entry.answer)}`,
-          );
+            display(entry.why),
+            display(entry.answer),
+          ]),
         });
       }
 
+      ensurePageSpace(doc, 240);
       drawSectionTitle(doc, ui.sifPsifDecisionTree);
       if (!sifPsifDecision) {
         drawParagraphCard(doc, ui.sifPsifDecisionTree, ui.pendingResult);
       } else {
+        drawFieldGrid(doc, [[ui.sifPsifResult, sifPsifLabel]], 1);
         drawFieldGrid(
           doc,
           [
             [ui.actualSifQuestion, yesNo(sifPsifDecision.actualSif)],
-            [ui.sifPsifResult, getSifPsifResultLabel(sifPsifResult, ui)],
             ...SIF_PSIF_EXPOSURE_KEYS.map((key): [string, string] => [
               ui.sifPsifExposureQuestions[key],
               yesNo(sifPsifDecision.exposures[key]),
@@ -434,35 +613,74 @@ export const SewoExportService = {
           1,
         );
         if (sifPsifDecision.noPsifExplanation.trim()) {
-          drawParagraphCard(doc, ui.noPsifExplanation, translated(sifPsifDecision.noPsifExplanation));
+          drawParagraphCard(doc, ui.noPsifExplanation, display(sifPsifDecision.noPsifExplanation));
         }
       }
 
+      ensurePageSpace(doc, 160);
       drawSectionTitle(doc, ui.rootCauseAnalysis);
       if (rootCauseDetails.length === 0) {
         drawParagraphCard(doc, ui.rootCause, ui.noRootCauseDetails);
       } else {
-        rootCauseDetails.forEach((entry) => {
-          drawParagraphCard(
-            doc,
-            `${translated(entry.label)} | ${ui.rootCause}: ${yesNo(entry.isRootCause)}`,
-            translated(entry.comment),
-          );
+        drawCompactTable(doc, {
+          headers: [ui.cause, ui.rootCause, ui.comment],
+          widths: [230, 90, 195],
+          rows: rootCauseDetails.map((entry) => [
+            display(entry.label),
+            yesNo(entry.isRootCause),
+            display(entry.comment),
+          ]),
         });
       }
 
+      ensurePageSpace(doc, 160);
       drawSectionTitle(doc, ui.actionPlan);
-      if (sewo.actionLinks.length === 0) {
+      if (orderedActions.length === 0) {
         drawParagraphCard(doc, ui.actionPlan, ui.noLinkedActions);
       } else {
-        sewo.actionLinks.forEach((entry) => {
-          drawParagraphCard(
-            doc,
-            `${translated(entry.action.title)} | ${entry.action.status}`,
-            `${ui.owner}: ${entry.action.ownerUser.name}\n${ui.dueDate}: ${formatDate(entry.action.dueDate)}\n\n${translated(entry.action.description)}`,
-          );
+        drawCompactTable(doc, {
+          headers: [ui.title, ui.owner, ui.dueDate, ui.tableStatus, ui.description],
+          widths: [120, 105, 75, 75, 140],
+          rows: orderedActions.map((entry) => [
+            display(entry.action.title),
+            entry.action.ownerUser.name,
+            formatDate(entry.action.dueDate),
+            ui.actionStatusLabels[entry.action.status] ?? entry.action.status,
+            display(entry.action.description),
+          ]),
         });
       }
+
+      ensurePageSpace(doc, photoAttachments.length ? 300 : 120);
+      drawSectionTitle(doc, ui.summaryReportPhotoEvidenceSection);
+      if (!photoAttachments.length && !nonImageAttachments.length) {
+        drawParagraphCard(doc, ui.summaryReportPhotoEvidenceSection, ui.summaryReportNotApplicable);
+      } else {
+        photoAttachments.forEach((attachment) => {
+          try {
+            drawPhotoCard(doc, {
+              title: attachment.fileName,
+              imageBuffer: attachment.buffer,
+            });
+          } catch {
+            drawParagraphCard(doc, attachment.fileName, ui.summaryReportNotApplicable);
+          }
+        });
+
+        if (nonImageAttachments.length) {
+          drawParagraphCard(
+            doc,
+            ui.summaryReportPhotoEvidenceSection,
+            nonImageAttachments.map((attachment) => attachment.fileName).join("\n"),
+          );
+        }
+      }
+
+      addPageFooters(doc, {
+        generatedOnLabel: ui.generatedOn,
+        generatedOn,
+        exportedBy: options.exportedBy,
+      });
 
       return pdfBufferFromDocument(doc);
     })();

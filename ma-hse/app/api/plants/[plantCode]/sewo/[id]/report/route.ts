@@ -34,13 +34,13 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
   });
 
   if (reportType !== "summary" && (format === "xlsx" || format === "excel")) {
-    const exported = await SewoExportService.buildExport(id, { locale });
+    const exported = await SewoExportService.buildExport(id, { locale, exportedBy: auth.session.user.name });
 
     return new Response(new Uint8Array(exported.xlsx), {
       status: 200,
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename=\"sewo-${plantCode}-${id}.xlsx\"`,
+        "content-disposition": `attachment; filename=\"s-ewo-${id}.xlsx\"`,
         "cache-control": "no-store",
       },
     });
@@ -48,13 +48,13 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
 
   const exported = reportType === "summary"
     ? await SewoExportService.buildExternalSummaryExport(id, { locale })
-    : await SewoExportService.buildExport(id, { locale });
+    : await SewoExportService.buildExport(id, { locale, exportedBy: auth.session.user.name });
 
   return new Response(new Uint8Array(exported.pdf), {
     status: 200,
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename=\"sewo-${plantCode}-${id}.pdf\"`,
+      "content-disposition": `attachment; filename=\"s-ewo-${id}.pdf\"`,
       "cache-control": "no-store",
     },
   });
