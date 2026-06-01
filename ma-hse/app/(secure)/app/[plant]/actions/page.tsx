@@ -14,12 +14,6 @@ import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerSession } from "next-auth";
 
-type LocalizedAreaCandidate = {
-  id: string;
-  name: string;
-  code?: string | null;
-};
-
 const DELETE_ACTION_ROLES: RoleCode[] = [
   RoleCode.N0_ADMIN,
   RoleCode.N1_CORPORATE,
@@ -31,6 +25,10 @@ const LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
   CommunicationStatus.ONGOING,
   CommunicationStatus.CLOSED,
 ];
+
+function isPresent<T>(value: T): value is NonNullable<T> {
+  return value != null;
+}
 
 export default async function ActionsPage({ params }: { params: Promise<{ plant: string }> }) {
   const { plant } = await params;
@@ -116,7 +114,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
           action.communication?.area,
           action.sewo?.communication?.area,
         ])
-        .filter((area): area is LocalizedAreaCandidate => Boolean(area)),
+        .filter(isPresent),
       uiLocale,
     ),
     translateForViewer(

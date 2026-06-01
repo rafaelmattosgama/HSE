@@ -689,7 +689,7 @@ function sanitizeConfig(entry: unknown): MonthlyIndicatorConfig | null {
   const record = entry as Record<string, unknown>;
   if (typeof record.id !== "string" || typeof record.section !== "string" || typeof record.label !== "string") return null;
 
-  return normalizeMonthlyIndicatorSection({
+  const config: MonthlyIndicatorConfig = {
     id: record.id,
     section: record.section,
     subsection: typeof record.subsection === "string" ? record.subsection : null,
@@ -703,7 +703,9 @@ function sanitizeConfig(entry: unknown): MonthlyIndicatorConfig | null {
     col3Options: Array.isArray(record.col3Options) ? record.col3Options.filter((item): item is string => typeof item === "string") : [],
     distanceKm: typeof record.distanceKm === "string" ? record.distanceKm : null,
     valueMode: record.valueMode === "computed" ? "computed" : "manual",
-  });
+  };
+
+  return normalizeMonthlyIndicatorSection(config);
 }
 
 function sanitizeCustomRow(entry: unknown): CustomMonthlyRow | null {
@@ -717,7 +719,7 @@ function sanitizeCustomRow(entry: unknown): CustomMonthlyRow | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
   });
 
-  return normalizeMonthlyIndicatorSection({
+  const row: CustomMonthlyRow = {
     id: record.id,
     section: record.section,
     subsection: typeof record.subsection === "string" ? record.subsection : null,
@@ -731,7 +733,9 @@ function sanitizeCustomRow(entry: unknown): CustomMonthlyRow | null {
     distanceKm: typeof record.distanceKm === "string" ? record.distanceKm : null,
     valueMode: record.valueMode === "computed" ? "computed" : "manual",
     months,
-  });
+  };
+
+  return normalizeMonthlyIndicatorSection(row);
 }
 
 export function resolveMonthlyInputLayout(layoutRaw: unknown, customRowsRaw: unknown) {
