@@ -1,0 +1,11 @@
+-- RenameIndex
+ALTER INDEX "SafetyCommunicationAlertRecipient_plantId_departmentId_isActive" RENAME TO "SafetyCommunicationAlertRecipient_plantId_departmentId_isAc_idx";
+
+-- RenameIndex
+ALTER INDEX "SafetyCommunicationAlertRecipient_plantId_userId_departmentId_k" RENAME TO "SafetyCommunicationAlertRecipient_plantId_userId_department_key";
+
+-- RenameIndex
+ALTER INDEX "SafetyCommunicationNotification_communicationId_recipientUserId" RENAME TO "SafetyCommunicationNotification_communicationId_recipientUs_key";
+
+-- RenameIndex
+ALTER INDEX "SafetyCommunicationNotification_recipientUserId_status_createdA" RENAME TO "SafetyCommunicationNotification_recipientUserId_status_crea_idx";

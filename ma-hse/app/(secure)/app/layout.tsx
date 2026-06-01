@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 import { RoleCode } from "@prisma/client";
 import { MaSymbol } from "@/components/branding/ma-symbol";
 import { SewoApprovalFloatingAlert } from "@/components/feature/sewo-approval-floating-alert";
-import { LogoutButton } from "@/components/layout/logout-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
+import { UserMenu } from "@/components/layout/user-menu";
 import { authOptions } from "@/lib/auth/options";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
@@ -29,7 +29,12 @@ export default async function SecureAppLayout({
     redirect("/change-password");
   }
 
-  const homeHref = session.user.plantRoles.some((entry) => entry.role === "N0_ADMIN") ? "/app/settings" : "/app/corporate";
+  const primaryPlantCode = session.user.plantRoles.find((entry) => entry.plantCode)?.plantCode;
+  const homeHref = primaryPlantCode
+    ? `/app/${primaryPlantCode}/dashboards`
+    : session.user.plantRoles.some((entry) => entry.role === "N0_ADMIN")
+      ? "/app/settings"
+      : "/app/corporate";
   const uiLocale = await getServerUiLocale({ userLanguage: session.user.language });
   const ui = getUiDictionary(uiLocale);
   const theme = parseTheme(cookieStore.get(THEME_STORAGE_KEY)?.value);
@@ -56,8 +61,7 @@ export default async function SecureAppLayout({
               </Link>
             ) : null}
             <ThemeToggle initialTheme={theme} />
-            <div data-no-translate className="app-toolbar">{session.user.name}</div>
-            <LogoutButton />
+            <UserMenu userName={session.user.name ?? "User"} />
           </div>
         </div>
       </header>

@@ -670,6 +670,11 @@ export const changePasswordInput = z
     }
   });
 
+export const updateOwnProfileInput = z.object({
+  name: z.string().trim().min(2, "Name must be at least 2 characters").max(120, "Name is too long"),
+  language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+});
+
 const nullableMonthlyNumber = z
   .union([z.number().nonnegative(), z.null()])
   .optional()
@@ -787,4 +792,5 @@ export type CreateCorporatePlantInput = z.infer<typeof createCorporatePlantInput
 export type UpdateCorporatePlantLanguageInput = z.infer<typeof updateCorporatePlantLanguageInput>;
 export type UpdateCorporatePlantInput = z.infer<typeof updateCorporatePlantInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
+export type UpdateOwnProfileInput = z.infer<typeof updateOwnProfileInput>;
 export type UpdatePlantMonthlyInputsInput = z.infer<typeof updatePlantMonthlyInputsInput>;
