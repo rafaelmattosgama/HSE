@@ -10,6 +10,10 @@ import { DEFAULT_NEAR_MISS_TYPE_CODES } from "@/lib/defaults/near-miss-types";
 import { prisma } from "@/lib/prisma";
 import { localizeBodyPartRows, localizeInjuryTypeRows } from "@/lib/public-report";
 import { getServerUiLocale } from "@/lib/server-ui-language";
+import {
+  localizeCommunicationCatalogRows,
+  localizeCommunicationCategorizedCatalogRows,
+} from "@/lib/services/communication-catalog-localization";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
@@ -154,9 +158,25 @@ export default async function CommunicationDetailPage({
   ]);
 
   if (!communication) notFound();
-  const localizedBodyParts = localizeBodyPartRows(bodyParts, uiLocale);
-  const localizedInjuryTypes = localizeInjuryTypeRows(injuryTypes, uiLocale);
-  const [translatedActionTitles, communicationUi, { ui: sewoUi }] = await Promise.all([
+  const [
+    localizedAreas,
+    localizedRiskThemes,
+    localizedUnsafeActTypes,
+    localizedUnsafeConditionTypes,
+    localizedNearMissTypes,
+    localizedBodyParts,
+    localizedInjuryTypes,
+    translatedActionTitles,
+    communicationUi,
+    { ui: sewoUi },
+  ] = await Promise.all([
+    localizeCommunicationCatalogRows(areas, uiLocale),
+    localizeCommunicationCategorizedCatalogRows(riskThemes, uiLocale),
+    localizeCommunicationCategorizedCatalogRows(unsafeActTypes, uiLocale),
+    localizeCommunicationCategorizedCatalogRows(unsafeConditionTypes, uiLocale),
+    localizeCommunicationCatalogRows(nearMissTypes, uiLocale),
+    Promise.resolve(localizeBodyPartRows(bodyParts, uiLocale)),
+    Promise.resolve(localizeInjuryTypeRows(injuryTypes, uiLocale)),
     translateForViewer(uiLocale, communication.actions.map((action) => action.title)),
     getLocalizedCommunicationUi(uiLocale),
     getLocalizedSewoUi(uiLocale),
@@ -228,13 +248,13 @@ export default async function CommunicationDetailPage({
         canEdit={canEdit}
         canManageStatus={canManageStatus}
         canManageClassification={canManageClassification}
-        areas={areas.map((entry) => ({ id: entry.id, name: entry.name }))}
+        areas={localizedAreas.map((entry) => ({ id: entry.id, name: entry.name }))}
         workstations={workstations.map((entry) => ({ id: entry.id, name: entry.name }))}
         equipments={equipments.map((entry) => ({ id: entry.id, name: entry.name }))}
-        riskThemes={(canManageClassification || communication.type === "ACCIDENT" ? riskThemes : []).map((entry) => ({ id: entry.id, name: entry.name, code: entry.code, category: entry.category }))}
-        unsafeActTypes={unsafeActTypes.map((entry) => ({ id: entry.id, code: entry.code, category: entry.category, name: entry.name }))}
-        unsafeConditionTypes={(canManageClassification ? unsafeConditionTypes : []).map((entry) => ({ id: entry.id, code: entry.code, category: entry.category, name: entry.name }))}
-        nearMissTypes={(canManageClassification ? nearMissTypes : []).map((entry) => ({ id: entry.id, code: entry.code, name: entry.name }))}
+        riskThemes={(canManageClassification || communication.type === "ACCIDENT" ? localizedRiskThemes : []).map((entry) => ({ id: entry.id, name: entry.name, code: entry.code, category: entry.category }))}
+        unsafeActTypes={localizedUnsafeActTypes.map((entry) => ({ id: entry.id, code: entry.code, category: entry.category, name: entry.name }))}
+        unsafeConditionTypes={(canManageClassification ? localizedUnsafeConditionTypes : []).map((entry) => ({ id: entry.id, code: entry.code, category: entry.category, name: entry.name }))}
+        nearMissTypes={(canManageClassification ? localizedNearMissTypes : []).map((entry) => ({ id: entry.id, code: entry.code, name: entry.name }))}
         employees={employees.map((entry) => ({ id: entry.id, name: entry.name, employeeNo: entry.employeeNo }))}
         bodyParts={localizedBodyParts.map((entry) => ({ id: entry.id, code: entry.code ?? undefined, name: entry.name }))}
         injuryTypes={localizedInjuryTypes.map((entry) => ({ id: entry.id, code: entry.code ?? undefined, name: entry.name }))}

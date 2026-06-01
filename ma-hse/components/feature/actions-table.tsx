@@ -6,6 +6,12 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
+import {
+  BASE_ACTIONS_UI,
+  formatLocalizedActionPriority,
+  formatLocalizedActionStatus,
+  type ActionsUi,
+} from "@/lib/actions-ui";
 import { formatRecordLevel } from "@/lib/record-level";
 
 type EvidenceRow = {
@@ -54,11 +60,20 @@ export function ActionsTable({
   plant,
   actions,
   canDelete = false,
+  labels,
+  statusLabels,
+  priorityLabels,
 }: {
   plant: string;
   actions: ActionRow[];
   canDelete?: boolean;
+  labels?: ActionsUi["table"];
+  statusLabels?: ActionsUi["statusLabels"];
+  priorityLabels?: ActionsUi["priorityLabels"];
 }) {
+  const text = labels ?? BASE_ACTIONS_UI.table;
+  const localizedStatusLabels = statusLabels ?? BASE_ACTIONS_UI.statusLabels;
+  const localizedPriorityLabels = priorityLabels ?? BASE_ACTIONS_UI.priorityLabels;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bulkComment, setBulkComment] = useState("");
@@ -167,11 +182,11 @@ export function ActionsTable({
     const comment = rowComments[actionId] ?? "";
     const closedAt = rowClosedDates[actionId] ?? todayDateInputValue();
     if (comment.trim().length < 5) {
-      setMessage("Write at least 5 characters in the closure comment.");
+      setMessage(text.closureCommentMin);
       return;
     }
     if (!closedAt) {
-      setMessage("Select a closure date.");
+      setMessage(text.selectClosureDate);
       return;
     }
 
@@ -190,18 +205,18 @@ export function ActionsTable({
       });
       const json = await parseApiResponse(response);
       if (!response.ok || !json?.ok) {
-        throw new Error(json?.message ?? "Failed to close action");
+        throw new Error(text.closeFailed);
       }
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to close action");
+      setMessage(error instanceof Error ? error.message : text.closeFailed);
     } finally {
       setBusyId(null);
     }
   }
 
   async function deleteAction(actionId: string) {
-    if (!window.confirm("Delete this action? This action cannot be undone.")) {
+    if (!window.confirm(text.confirmDelete)) {
       return;
     }
 
@@ -213,11 +228,11 @@ export function ActionsTable({
       });
       const json = await parseApiResponse(response);
       if (!response.ok || !json?.ok) {
-        throw new Error(json?.message ?? "Failed to delete action");
+        throw new Error(text.deleteFailed);
       }
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to delete action");
+      setMessage(error instanceof Error ? error.message : text.deleteFailed);
     } finally {
       setDeletingId(null);
     }
@@ -225,15 +240,15 @@ export function ActionsTable({
 
   async function closeSelected() {
     if (!selectedIds.length) {
-      setMessage("Select at least one action.");
+      setMessage(text.selectAtLeastOne);
       return;
     }
     if (bulkComment.trim().length < 5) {
-      setMessage("Write at least 5 characters in the bulk closure comment.");
+      setMessage(text.bulkClosureCommentMin);
       return;
     }
     if (!bulkClosedAt) {
-      setMessage("Select a closure date.");
+      setMessage(text.selectClosureDate);
       return;
     }
 
@@ -253,11 +268,11 @@ export function ActionsTable({
       });
       const json = await parseApiResponse(response);
       if (!response.ok || !json?.ok) {
-        throw new Error(json?.message ?? "Failed to close selected actions");
+        throw new Error(text.bulkCloseFailed);
       }
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to close selected actions");
+      setMessage(error instanceof Error ? error.message : text.bulkCloseFailed);
     } finally {
       setBusyId(null);
     }
@@ -290,7 +305,7 @@ export function ActionsTable({
         }),
       });
 
-      const fallbackMessage = `Failed to export actions as ${format.toUpperCase()}.`;
+      const fallbackMessage = `${text.exportFailed} (${format.toUpperCase()})`;
       if (!response.ok) {
         throw new Error(await readExportError(response, fallbackMessage));
       }
@@ -305,7 +320,7 @@ export function ActionsTable({
       link.remove();
       window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to export actions.");
+      setMessage(error instanceof Error ? error.message : text.exportFailed);
     } finally {
       setExportingFormat(null);
     }
@@ -316,45 +331,45 @@ export function ActionsTable({
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Local</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.local}</span>
             <select value={localFilter} onChange={(event) => setLocalFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">All locations</option>
+              <option value="all">{text.allLocations}</option>
               {localOptions.map((local) => (
                 <option key={local} value={local}>{local}</option>
               ))}
             </select>
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.status}</span>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">All statuses</option>
+              <option value="all">{text.allStatuses}</option>
               {statusOptions.map((status) => (
-                <option key={status} value={status}>{status}</option>
+                <option key={status} value={status}>{formatLocalizedActionStatus(status, { statusLabels: localizedStatusLabels })}</option>
               ))}
             </select>
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Owner</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.owner}</span>
             <select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">All owners</option>
+              <option value="all">{text.allOwners}</option>
               {ownerOptions.map((owner) => (
                 <option key={owner} value={owner}>{owner}</option>
               ))}
             </select>
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Due from</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dueFrom}</span>
             <input type="date" value={dateFromFilter} onChange={(event) => setDateFromFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Due to</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dueTo}</span>
             <input type="date" value={dateToFilter} onChange={(event) => setDateToFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Date order</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dateOrder}</span>
             <select value={dateSortDirection} onChange={(event) => setDateSortDirection(event.target.value as DateSortDirection)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="asc">Due date ascending</option>
-              <option value="desc">Due date descending</option>
+              <option value="asc">{text.dueDateAscending}</option>
+              <option value="desc">{text.dueDateDescending}</option>
             </select>
           </label>
         </div>
@@ -363,27 +378,27 @@ export function ActionsTable({
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           <div className="flex-1">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Bulk closure comment</label>
-            <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="What was done to close the selected actions?" />
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.bulkClosureComment}</label>
+            <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={text.bulkClosurePlaceholder} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Closure date</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</label>
             <input type="date" value={bulkClosedAt} onChange={(event) => setBulkClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Photos / documents</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.photosDocuments}</label>
             <input type="file" multiple onChange={(event) => setBulkFiles(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
           </div>
           <Button type="button" size="sm" onClick={closeSelected} disabled={busyId === "bulk"}>
-            {busyId === "bulk" ? "Closing..." : "Close selected"}
+            {busyId === "bulk" ? text.closing : text.closeSelected}
           </Button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Select multiple actions in the list and close them together. Attachments are optional.</p>
+        <p className="mt-2 text-xs text-slate-500">{text.bulkHelp}</p>
       </section>
 
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <p className="text-sm text-slate-600">{filteredActions.length} action(s) shown. {openActions.length} open action(s).</p>
+          <p className="text-sm text-slate-600">{formatLabel(text.shownCount, { count: String(filteredActions.length), openCount: String(openActions.length) })}</p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -392,7 +407,7 @@ export function ActionsTable({
               className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
-              {exportingFormat === "xlsx" ? "Exporting..." : "Export Excel"}
+              {exportingFormat === "xlsx" ? text.exporting : text.exportExcel}
             </button>
             <button
               type="button"
@@ -401,23 +416,23 @@ export function ActionsTable({
               className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Download className="h-4 w-4" />
-              {exportingFormat === "pdf" ? "Exporting..." : "Export PDF"}
+              {exportingFormat === "pdf" ? text.exporting : text.exportPdf}
             </button>
           </div>
         </div>
         <table className="w-full min-w-[1040px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">Select</th>
-              <th className="px-4 py-3">Action</th>
-              <th className="px-4 py-3">Local</th>
-              <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3">Priority</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Owner</th>
-              <th className="px-4 py-3">Due</th>
-              <th className="px-4 py-3">Open</th>
-              {canDelete ? <th className="px-4 py-3">Delete</th> : null}
+              <th className="px-4 py-3">{text.select}</th>
+              <th className="px-4 py-3">{text.action}</th>
+              <th className="px-4 py-3">{text.local}</th>
+              <th className="px-4 py-3">{text.source}</th>
+              <th className="px-4 py-3">{text.priority}</th>
+              <th className="px-4 py-3">{text.status}</th>
+              <th className="px-4 py-3">{text.owner}</th>
+              <th className="px-4 py-3">{text.due}</th>
+              <th className="px-4 py-3">{text.open}</th>
+              {canDelete ? <th className="px-4 py-3">{text.delete}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -452,17 +467,17 @@ export function ActionsTable({
                         row.sourceLabel
                       )}
                     </td>
-                    <td className="px-4 py-3">{row.priority}</td>
+                    <td className="px-4 py-3">{formatLocalizedActionPriority(row.priority, { priorityLabels: localizedPriorityLabels })}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getActionStatusClasses(row.status)}`}>
-                        {row.status}
+                        {formatLocalizedActionStatus(row.status, { statusLabels: localizedStatusLabels })}
                       </span>
                     </td>
                     <td className="px-4 py-3">{row.ownerName}</td>
                     <td className="px-4 py-3">{row.dueDate}</td>
                     <td className="px-4 py-3">
                       <Button type="button" size="sm" variant="ghost" onClick={() => setExpandedId(isExpanded ? null : row.id)}>
-                        {isExpanded ? "Hide" : isOpen ? "Open / close" : "Open"}
+                        {isExpanded ? text.hide : isOpen ? text.openClose : text.openOnly}
                       </Button>
                     </td>
                     {canDelete ? (
@@ -474,7 +489,7 @@ export function ActionsTable({
                           className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                          {deletingId === row.id ? "Deleting..." : "Delete"}
+                          {deletingId === row.id ? text.deleting : text.delete}
                         </button>
                       </td>
                     ) : null}
@@ -485,17 +500,17 @@ export function ActionsTable({
                         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                           <div className="space-y-3">
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linked records</p>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.linkedRecords}</p>
                               <p className="mt-2 text-sm text-slate-700">
-                                Communication: {row.communicationId ?? "-"} | S-EWO: {row.sewoId ?? "-"}
+                                {text.communication}: {row.communicationId ?? "-"} | {text.sewo}: {row.sewoId ?? "-"}
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closure date</p>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</p>
                               <p className="mt-2 text-sm text-slate-700">{row.closedDate ?? "-"}</p>
                             </div>
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence already attached</p>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.evidenceAttached}</p>
                               <div className="mt-2 space-y-1 text-sm text-slate-700">
                                 {row.evidence.length ? row.evidence.map((item) => <p key={item.id}>{item.fileName}</p>) : <p>-</p>}
                               </div>
@@ -503,9 +518,9 @@ export function ActionsTable({
                           </div>
                           {isOpen ? (
                             <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                              <h3 className="text-sm font-semibold text-slate-900">Close action</h3>
+                              <h3 className="text-sm font-semibold text-slate-900">{text.closeAction}</h3>
                               <label className="space-y-1 text-sm">
-                                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Closure date</span>
+                                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</span>
                                 <input
                                   type="date"
                                   value={rowClosedDates[row.id] ?? todayDateInputValue()}
@@ -518,7 +533,7 @@ export function ActionsTable({
                                 value={rowComments[row.id] ?? ""}
                                 onChange={(event) => setRowComments((current) => ({ ...current, [row.id]: event.target.value }))}
                                 rows={3}
-                                placeholder="Describe what was done."
+                                placeholder={text.describeClosure}
                                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                               />
                               <input
@@ -528,12 +543,12 @@ export function ActionsTable({
                                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                               />
                               <Button type="button" size="sm" onClick={() => closeAction(row.id)} disabled={busyId === row.id}>
-                                {busyId === row.id ? "Closing..." : "Close action"}
+                                {busyId === row.id ? text.closing : text.closeAction}
                               </Button>
                             </div>
                           ) : (
                             <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                              This action is already closed.
+                              {text.alreadyClosed}
                             </div>
                           )}
                         </div>
@@ -546,7 +561,7 @@ export function ActionsTable({
             {filteredActions.length === 0 ? (
               <tr className="border-t border-slate-200">
                 <td colSpan={canDelete ? 10 : 9} className="px-4 py-6 text-center text-sm text-slate-500">
-                  No actions were found for the selected filters.
+                  {text.noRows}
                 </td>
               </tr>
             ) : null}
@@ -560,3 +575,9 @@ export function ActionsTable({
     </div>
   );
 }
+  function formatLabel(template: string, replacements: Record<string, string>) {
+    return Object.entries(replacements).reduce(
+      (result, [key, value]) => result.replaceAll(`{${key}}`, value),
+      template,
+    );
+  }

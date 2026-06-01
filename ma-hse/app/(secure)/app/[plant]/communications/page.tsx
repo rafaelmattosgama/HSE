@@ -8,6 +8,11 @@ import { DEFAULT_NEAR_MISS_TYPE_CODES } from "@/lib/defaults/near-miss-types";
 import { prisma } from "@/lib/prisma";
 import { localizeBodyPartRows, localizeInjuryTypeRows } from "@/lib/public-report";
 import { getServerUiLocale } from "@/lib/server-ui-language";
+import {
+  localizeCommunicationCatalogRows,
+  localizeCommunicationCategorizedCatalogRows,
+} from "@/lib/services/communication-catalog-localization";
+import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
@@ -108,8 +113,29 @@ export default async function CommunicationsPage({
       orderBy: { code: "asc" },
     }),
   ]);
-  const localizedBodyParts = localizeBodyPartRows(bodyParts, userLanguage);
-  const localizedInjuryTypes = localizeInjuryTypeRows(injuryTypes, userLanguage);
+  const [
+    localizedAreas,
+    localizedInjuryTypes,
+    localizedRiskThemes,
+    localizedUnsafeActTypes,
+    localizedUnsafeConditionTypes,
+    localizedNearMissTypes,
+    localizedBodyParts,
+    communicationUi,
+  ] = await Promise.all([
+    localizeCommunicationCatalogRows(areas, userLanguage),
+    Promise.resolve(localizeInjuryTypeRows(injuryTypes, userLanguage)),
+    localizeCommunicationCategorizedCatalogRows(riskThemes, userLanguage),
+    localizeCommunicationCategorizedCatalogRows(unsafeActTypes, userLanguage),
+    localizeCommunicationCategorizedCatalogRows(unsafeConditionTypes, userLanguage),
+    localizeCommunicationCatalogRows(nearMissTypes, userLanguage),
+    Promise.resolve(localizeBodyPartRows(bodyParts, userLanguage)),
+    getLocalizedCommunicationUi(uiLocale),
+  ]);
+  const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
+  const localizedUnsafeActTypeById = new Map(localizedUnsafeActTypes.map((type) => [type.id, type.name]));
+  const localizedUnsafeConditionTypeById = new Map(localizedUnsafeConditionTypes.map((type) => [type.id, type.name]));
+  const localizedNearMissTypeById = new Map(localizedNearMissTypes.map((type) => [type.id, type.name]));
   const employeeByNumber = new Map(employees.map((employee) => [employee.employeeNo, employee]));
 
   return (
@@ -119,24 +145,29 @@ export default async function CommunicationsPage({
       </header>
 
       <CreateCommunicationQuick
-        areas={areas.map((area) => ({ id: area.id, name: area.name }))}
+        areas={localizedAreas.map((area) => ({ id: area.id, name: area.name }))}
         workstations={workstations.map((workstation) => ({ id: workstation.id, name: workstation.name }))}
         actionOwners={plantUsers.map((entry) => ({ id: entry.user.id, name: entry.user.name }))}
         employees={employees.map((employee) => ({ id: employee.id, name: employee.name, employeeNo: employee.employeeNo }))}
         bodyParts={localizedBodyParts.map((bodyPart) => ({ id: bodyPart.id, code: bodyPart.code ?? undefined, name: bodyPart.name }))}
         injuryTypes={localizedInjuryTypes.map((injuryType) => ({ id: injuryType.id, code: injuryType.code ?? undefined, name: injuryType.name }))}
-        riskThemes={riskThemes.map((risk) => ({ id: risk.id, code: risk.code, category: risk.category, name: risk.name }))}
-        unsafeActTypes={unsafeActTypes.map((type) => ({ id: type.id, code: type.code, category: type.category, name: type.name }))}
-        unsafeConditionTypes={(canManageClassification ? unsafeConditionTypes : []).map((type) => ({ id: type.id, code: type.code, category: type.category, name: type.name }))}
-        nearMissTypes={(canManageClassification ? nearMissTypes : []).map((type) => ({ id: type.id, code: type.code, name: type.name }))}
+        riskThemes={localizedRiskThemes.map((risk) => ({ id: risk.id, code: risk.code, category: risk.category, name: risk.name }))}
+        unsafeActTypes={localizedUnsafeActTypes.map((type) => ({ id: type.id, code: type.code, category: type.category, name: type.name }))}
+        unsafeConditionTypes={(canManageClassification ? localizedUnsafeConditionTypes : []).map((type) => ({ id: type.id, code: type.code, category: type.category, name: type.name }))}
+        nearMissTypes={(canManageClassification ? localizedNearMissTypes : []).map((type) => ({ id: type.id, code: type.code, name: type.name }))}
         canLinkAction={actorRole ? LINKED_ACTION_ROLES.includes(actorRole) : false}
         canManageClassification={canManageClassification}
+        labels={communicationUi.createCommunicationQuick}
+        typeLabels={communicationUi.communicationTypeLabels}
       />
 
       <CommunicationsTable
         plant={plant}
         canDelete={canDeleteCommunications}
         canViewClassification={canManageClassification}
+        labels={communicationUi.communicationsTable}
+        typeLabels={communicationUi.communicationTypeLabels}
+        statusLabels={communicationUi.communicationStatusLabels}
         rows={communications.map((row) => {
           const reporterEmployee = employeeByNumber.get(row.reporterEmployeeNo ?? "");
           return {
@@ -146,12 +177,21 @@ export default async function CommunicationsPage({
             type: row.type,
             status: row.status,
             reporterName: reporterEmployee ? `${reporterEmployee.employeeNo} - ${reporterEmployee.name}` : row.reporterName,
-            department: row.area?.name ?? "-",
+            department: (row.areaId ? localizedAreaById.get(row.areaId) : null) ?? row.area?.name ?? "-",
             location: row.workstation?.name ?? "-",
             description: row.description,
-            unsafeActType: canManageClassification ? row.unsafeActType?.name ?? "-" : undefined,
-            unsafeConditionType: canManageClassification ? row.unsafeConditionType?.name ?? "-" : undefined,
-            nearMissType: canManageClassification ? row.nearMissType?.name ?? "-" : undefined,
+            unsafeActType:
+              canManageClassification
+                ? (row.unsafeActTypeId ? localizedUnsafeActTypeById.get(row.unsafeActTypeId) : null) ?? row.unsafeActType?.name ?? "-"
+                : undefined,
+            unsafeConditionType:
+              canManageClassification
+                ? (row.unsafeConditionTypeId ? localizedUnsafeConditionTypeById.get(row.unsafeConditionTypeId) : null) ?? row.unsafeConditionType?.name ?? "-"
+                : undefined,
+            nearMissType:
+              canManageClassification
+                ? (row.nearMissTypeId ? localizedNearMissTypeById.get(row.nearMissTypeId) : null) ?? row.nearMissType?.name ?? "-"
+                : undefined,
           };
         })}
       />

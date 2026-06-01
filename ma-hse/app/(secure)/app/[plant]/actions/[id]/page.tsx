@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
+import {
+  formatLocalizedActionCategory,
+  formatLocalizedActionPriority,
+  formatLocalizedActionSourceType,
+  formatLocalizedActionStatus,
+} from "@/lib/actions-ui";
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
-import { formatRecordLevel } from "@/lib/record-level";
 import { getServerUiLocale } from "@/lib/server-ui-language";
+import { getLocalizedActionsUi } from "@/lib/services/actions-ui-localization";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 
 export default async function ActionDetailPage({
@@ -43,6 +49,7 @@ export default async function ActionDetailPage({
   });
 
   if (!action) notFound();
+  const actionsUi = await getLocalizedActionsUi(uiLocale);
   const [translatedTitle, translatedDescription, translatedClosureComment, translatedReopenReason] = await translateForViewer(uiLocale, [
     action.title,
     action.description,
@@ -53,61 +60,60 @@ export default async function ActionDetailPage({
   return (
     <>
       <header className="rounded-2xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Action Detail</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{actionsUi.detail.title}</h1>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Main</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.main}</h2>
           <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-4"><dt>Title</dt><dd>{translatedTitle}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Status</dt><dd>{action.status}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Level</dt><dd>{formatRecordLevel(action.level)}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Priority</dt><dd>{action.priority}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Category</dt><dd>{action.category}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Source type</dt><dd>{action.sourceType}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Owner</dt><dd>{action.ownerUser.name}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Due date</dt><dd>{action.dueDate.toISOString().slice(0, 10)}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldTitle}</dt><dd>{translatedTitle}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldStatus}</dt><dd>{formatLocalizedActionStatus(action.status, actionsUi)}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldPriority}</dt><dd>{formatLocalizedActionPriority(action.priority, actionsUi)}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldCategory}</dt><dd>{formatLocalizedActionCategory(action.category, actionsUi)}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldSourceType}</dt><dd>{formatLocalizedActionSourceType(action.sourceType, actionsUi)}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldOwner}</dt><dd>{action.ownerUser.name}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldDueDate}</dt><dd>{action.dueDate.toISOString().slice(0, 10)}</dd></div>
           </dl>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Lifecycle</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.lifecycle}</h2>
           <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-4"><dt>Created at</dt><dd>{action.createdAt.toISOString()}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Updated at</dt><dd>{action.updatedAt.toISOString()}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Closure date</dt><dd>{action.closedAt?.toISOString().slice(0, 10) ?? "-"}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Closed at</dt><dd>{action.closedAt?.toISOString() ?? "-"}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Closed by</dt><dd>{action.closedByUser?.name ?? "-"}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Reopened at</dt><dd>{action.reopenedAt?.toISOString() ?? "-"}</dd></div>
-            <div className="flex justify-between gap-4"><dt>Reopened by</dt><dd>{action.reopenedByUser?.name ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldCreatedAt}</dt><dd>{action.createdAt.toISOString()}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldUpdatedAt}</dt><dd>{action.updatedAt.toISOString()}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldClosureDate}</dt><dd>{action.closedAt?.toISOString().slice(0, 10) ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldClosedAt}</dt><dd>{action.closedAt?.toISOString() ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldClosedBy}</dt><dd>{action.closedByUser?.name ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldReopenedAt}</dt><dd>{action.reopenedAt?.toISOString() ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldReopenedBy}</dt><dd>{action.reopenedByUser?.name ?? "-"}</dd></div>
           </dl>
         </article>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Description</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.description}</h2>
         <p className="mt-3 text-sm text-slate-800">{translatedDescription}</p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Linked records</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.linkedRecords}</h2>
           <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-4"><dt>Communication</dt><dd>{action.communicationId ?? "-"}</dd></div>
-            <div className="flex justify-between gap-4"><dt>S-EWO</dt><dd>{action.sewoId ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.communication}</dt><dd>{action.communicationId ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.sewo}</dt><dd>{action.sewoId ?? "-"}</dd></div>
           </dl>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Co-owners</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.coOwners}</h2>
           <div className="mt-3 space-y-2 text-sm">
             {action.coOwners.length > 0 ? action.coOwners.map((entry) => <p key={entry.id}>{entry.user.name}</p>) : <p>-</p>}
           </div>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Evidence</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.evidence}</h2>
           <div className="mt-3 space-y-2 text-sm">
             {action.evidenceAttachments.length > 0 ? (
               action.evidenceAttachments.map((entry) => <p key={entry.id}>{entry.fileName}</p>)
@@ -119,15 +125,15 @@ export default async function ActionDetailPage({
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Comments</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.comments}</h2>
         <dl className="mt-3 space-y-2 text-sm">
-          <div className="flex justify-between gap-4"><dt>Closure comment</dt><dd>{translatedClosureComment || "-"}</dd></div>
-          <div className="flex justify-between gap-4"><dt>Reopen reason</dt><dd>{translatedReopenReason || "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>{actionsUi.detail.closureComment}</dt><dd>{translatedClosureComment || "-"}</dd></div>
+          <div className="flex justify-between gap-4"><dt>{actionsUi.detail.reopenReason}</dt><dd>{translatedReopenReason || "-"}</dd></div>
         </dl>
       </section>
 
       <Link href={`/app/${plant}/actions`} className="inline-block text-sm font-semibold text-teal-700 hover:underline">
-        Back to actions
+        {actionsUi.detail.backToActions}
       </Link>
     </>
   );
