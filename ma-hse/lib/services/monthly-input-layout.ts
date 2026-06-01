@@ -3,6 +3,8 @@ import type { MonthlyInputRow } from "@/lib/services/monthly-inputs";
 type LegacyMetricKey = keyof Omit<MonthlyInputRow, "month">;
 type ValueMode = "manual" | "computed";
 
+const MONTHLY_INPUT_SECTION_ORDER = ["Core Inputs", "Scope 1", "Scope 2", "Scope 3", "Inbounds", "Outbounds", "Materials"] as const;
+
 export type MonthlyIndicatorConfig = {
   id: string;
   section: string;
@@ -45,6 +47,8 @@ const VEHICLE_TYPES = ["Carro", "Veiculo comercial ligeiro", "Mobile Crane", "Dr
 const VEHICLE_ENERGY_TYPES = ["Electric", "Gasoline", "LNG", "Diesel", "Propane/Butane", "Ethanol"];
 const DISPOSAL_TYPES = ["Disposal", "Recovery"];
 const WASTE_UNITS = ["Litros", "Toneladas", "Kg"];
+const TRANSPORT_TYPES = ["Lorry 7.5–16 ton", "Lorry 16–32 ton", "Lorry >32 ton", "Ship", "Plane"];
+const MASS_UNITS = ["Kg", "Ton"];
 
 const NON_HAZARDOUS_LER_CODES = [
   "150101 - Paper and cardboard packaging",
@@ -74,6 +78,76 @@ function emptyMonths() {
 
 function indicator(input: MonthlyIndicatorConfig): MonthlyIndicatorConfig {
   return input;
+}
+
+export function getMonthlyInputSectionOrder() {
+  return [...MONTHLY_INPUT_SECTION_ORDER];
+}
+
+export function isTransportMonthlySection(section: string) {
+  return section === "Inbounds" || section === "Outbounds";
+}
+
+export function isMaterialsMonthlySection(section: string) {
+  return section === "Materials";
+}
+
+export function usesFixedMonthlyIndicatorOptions(section: string) {
+  return isTransportMonthlySection(section) || isMaterialsMonthlySection(section);
+}
+
+export function createMonthlyIndicatorConfig(section: string, subsection: string | null, id: string): MonthlyIndicatorConfig {
+  if (isTransportMonthlySection(section)) {
+    return {
+      id,
+      section,
+      subsection,
+      label: "New supplier",
+      legacyKey: null,
+      enabled: true,
+      col2Label: "Transport type",
+      col2Value: TRANSPORT_TYPES[0] ?? null,
+      col2Options: [...TRANSPORT_TYPES],
+      col3Unit: MASS_UNITS[0] ?? null,
+      col3Options: [...MASS_UNITS],
+      distanceKm: null,
+      valueMode: "manual",
+    };
+  }
+
+  if (isMaterialsMonthlySection(section)) {
+    return {
+      id,
+      section,
+      subsection,
+      label: "New material",
+      legacyKey: null,
+      enabled: true,
+      col2Label: null,
+      col2Value: null,
+      col2Options: [],
+      col3Unit: MASS_UNITS[0] ?? null,
+      col3Options: [...MASS_UNITS],
+      distanceKm: null,
+      valueMode: "manual",
+    };
+  }
+
+  return {
+    id,
+    section,
+    subsection,
+    label: "New indicator",
+    legacyKey: null,
+    enabled: true,
+    col2Label: "Parameter",
+    col2Value: null,
+    col2Options: [],
+    col3Unit: null,
+    col3Options: [],
+    distanceKm: null,
+    valueMode: "manual",
+  };
 }
 
 export function getDefaultMonthlyIndicatorConfig(): MonthlyIndicatorConfig[] {
@@ -592,6 +666,10 @@ export function createCustomRowFromIndicator(config: MonthlyIndicatorConfig): Cu
     valueMode: config.valueMode,
     months: emptyMonths(),
   };
+}
+
+export function createMonthlyCustomRow(section: string, subsection: string | null, id: string) {
+  return createCustomRowFromIndicator(createMonthlyIndicatorConfig(section, subsection, id));
 }
 
 function sanitizeConfig(entry: unknown): MonthlyIndicatorConfig | null {

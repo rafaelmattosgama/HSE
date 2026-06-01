@@ -6,7 +6,7 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
-import { formatRecordLevel, RECORD_LEVELS } from "@/lib/record-level";
+import { formatRecordLevel } from "@/lib/record-level";
 
 type EvidenceRow = {
   id: string;
@@ -71,7 +71,6 @@ export function ActionsTable({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [localFilter, setLocalFilter] = useState("all");
-  const [levelFilter, setLevelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [dateFromFilter, setDateFromFilter] = useState("");
@@ -97,7 +96,6 @@ export function ActionsTable({
       actions
         .filter((action) => {
           if (localFilter !== "all" && action.local !== localFilter) return false;
-          if (levelFilter !== "all" && action.level !== levelFilter) return false;
           if (statusFilter !== "all" && action.status !== statusFilter) return false;
           if (ownerFilter !== "all" && action.ownerName !== ownerFilter) return false;
           if (dateFromFilter && action.dueDate < dateFromFilter) return false;
@@ -111,7 +109,7 @@ export function ActionsTable({
           if (dateComparison !== 0) return dateComparison;
           return left.title.localeCompare(right.title);
         }),
-    [actions, dateFromFilter, dateSortDirection, dateToFilter, levelFilter, localFilter, ownerFilter, statusFilter],
+    [actions, dateFromFilter, dateSortDirection, dateToFilter, localFilter, ownerFilter, statusFilter],
   );
 
   const openActions = useMemo(
@@ -327,15 +325,6 @@ export function ActionsTable({
             </select>
           </label>
           <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Level</span>
-            <select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">All levels</option>
-              {RECORD_LEVELS.map((level) => (
-                <option key={level} value={level}>{level}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
             <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
               <option value="all">All statuses</option>
@@ -421,7 +410,6 @@ export function ActionsTable({
             <tr>
               <th className="px-4 py-3">Select</th>
               <th className="px-4 py-3">Action</th>
-              <th className="px-4 py-3">Level</th>
               <th className="px-4 py-3">Local</th>
               <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Priority</th>
@@ -454,7 +442,6 @@ export function ActionsTable({
                         {row.title}
                       </Link>
                     </td>
-                    <td className="px-4 py-3">{formatRecordLevel(row.level)}</td>
                     <td className="px-4 py-3">{row.local}</td>
                     <td className="px-4 py-3">
                       {row.sourceHref ? (
@@ -494,7 +481,7 @@ export function ActionsTable({
                   </tr>
                   {isExpanded ? (
                     <tr className="border-t border-slate-100 bg-slate-50">
-                      <td colSpan={canDelete ? 11 : 10} className="px-4 py-4">
+                      <td colSpan={canDelete ? 10 : 9} className="px-4 py-4">
                         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                           <div className="space-y-3">
                             <div>
@@ -558,7 +545,7 @@ export function ActionsTable({
             })}
             {filteredActions.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={canDelete ? 11 : 10} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={canDelete ? 10 : 9} className="px-4 py-6 text-center text-sm text-slate-500">
                   No actions were found for the selected filters.
                 </td>
               </tr>

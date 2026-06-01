@@ -4,6 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, Save, Search, TableProperties } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { calculateTonKmMonths } from "@/lib/services/monthly-input-calculations";
+import {
+  createMonthlyCustomRow,
+  createMonthlyIndicatorConfig,
+  getMonthlyInputSectionOrder,
+  isMaterialsMonthlySection,
+  isTransportMonthlySection,
+  usesFixedMonthlyIndicatorOptions,
+} from "@/lib/services/monthly-input-layout";
 import type { CustomMonthlyRow, MonthlyIndicatorConfig } from "@/lib/services/monthly-input-layout";
 import type { MonthlyInputRow } from "@/lib/services/monthly-inputs";
 
@@ -31,7 +40,17 @@ function isIntegerLegacyKey(key: LegacyMetricKey | null) {
 }
 
 function showsDistance(row: MonthlyIndicatorConfig) {
-  return row.subsection === "Hazard waste" || row.subsection === "Non Hazardous waste";
+  return isTransportMonthlySection(row.section) || row.subsection === "Hazard waste" || row.subsection === "Non Hazardous waste";
+}
+
+function supportsTonKm(row: MonthlyIndicatorConfig) {
+  return isTransportMonthlySection(row.section);
+}
+
+function getPrimaryFieldLabel(row: MonthlyIndicatorConfig) {
+  if (isTransportMonthlySection(row.section)) return "Supplier name";
+  if (isMaterialsMonthlySection(row.section)) return "Material name";
+  return "Indicator name";
 }
 
 function getLegacyValues(months: MonthlyEntry[], key: LegacyMetricKey) {
@@ -78,7 +97,9 @@ function computeStandardHours(config: MonthlyIndicatorConfig[], customRows: Cust
 }
 
 function sortRows(config: MonthlyIndicatorConfig[]) {
-  const grouped = new Map<string, Map<string, MonthlyIndicatorConfig[]>>();
+  const grouped = new Map<string, Map<string, MonthlyIndicatorConfig[]>>(
+    getMonthlyInputSectionOrder().map((section) => [section, new Map<string, MonthlyIndicatorConfig[]>()]),
+  );
 
   config.forEach((row) => {
     const section = row.section;
@@ -146,6 +167,7 @@ export function PlantMonthlyInputsForm({
 
   const standardHours = useMemo(() => computeStandardHours(indicatorConfig, customRows), [indicatorConfig, customRows]);
   const sections = useMemo(() => sortRows(indicatorConfig), [indicatorConfig]);
+  const supportedSections = useMemo(() => new Set<string>(getMonthlyInputSectionOrder()), []);
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const visibleSections = useMemo(
     () =>
@@ -163,8 +185,8 @@ export function PlantMonthlyInputsForm({
             }))
             .filter((group) => group.rows.length > 0),
         }))
-        .filter((section) => section.groups.length > 0),
-    [normalizedSearch, sections, showInactive],
+        .filter((section) => section.groups.length > 0 || (!normalizedSearch && supportedSections.has(section.section))),
+    [normalizedSearch, sections, showInactive, supportedSections],
   );
 
   useEffect(() => {
@@ -180,6 +202,11 @@ export function PlantMonthlyInputsForm({
     if (row.id === "standard-hours") return standardHours;
     if (row.legacyKey) return getLegacyValues(months, row.legacyKey);
     return getCustomRow(customRows, row.id)?.months ?? emptyMonths();
+  }
+
+  function getTonKmValues(row: MonthlyIndicatorConfig) {
+    if (!supportsTonKm(row)) return emptyMonths();
+    return calculateTonKmMonths(getRowValues(row), row.col3Unit, row.distanceKm);
   }
 
   const editableRows = indicatorConfig.filter((row) => row.enabled && row.valueMode !== "computed");
@@ -251,37 +278,8 @@ export function PlantMonthlyInputsForm({
 
   function addIndicator(section: string, subsection: string | null) {
     const id = `custom-${slugify(section)}-${slugify(subsection ?? "row")}-${crypto.randomUUID()}`;
-    const newConfig: MonthlyIndicatorConfig = {
-      id,
-      section,
-      subsection,
-      label: "New indicator",
-      legacyKey: null,
-      enabled: true,
-      col2Label: "Parameter",
-      col2Value: null,
-      col2Options: [],
-      col3Unit: null,
-      col3Options: [],
-      distanceKm: null,
-      valueMode: "manual",
-    };
-
-    const newRow: CustomMonthlyRow = {
-      id,
-      section,
-      subsection,
-      label: "New indicator",
-      enabled: true,
-      col2Label: "Parameter",
-      col2Value: null,
-      col2Options: [],
-      col3Unit: null,
-      col3Options: [],
-      distanceKm: null,
-      valueMode: "manual",
-      months: emptyMonths(),
-    };
+    const newConfig = createMonthlyIndicatorConfig(section, subsection, id);
+    const newRow = createMonthlyCustomRow(section, subsection, id);
 
     setIndicatorConfig((current) => [...current, newConfig]);
     setCustomRows((current) => [...current, newRow]);
@@ -358,11 +356,13 @@ export function PlantMonthlyInputsForm({
 
   function renderRowEditor(row: MonthlyIndicatorConfig) {
     const hasDistance = showsDistance(row);
+    const isMaterialRow = isMaterialsMonthlySection(row.section);
+    const hasFixedOptions = usesFixedMonthlyIndicatorOptions(row.section);
 
     return (
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 lg:grid-cols-2">
         <label className="space-y-1 text-sm lg:col-span-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Indicator name</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{getPrimaryFieldLabel(row)}</span>
           <input
             value={row.label}
             onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, label: event.target.value }))}
@@ -370,30 +370,32 @@ export function PlantMonthlyInputsForm({
           />
         </label>
 
-        <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.col2Label ?? "Column 2"}</span>
-          {row.col2Options.length > 0 ? (
-            <select
-              value={row.col2Value ?? ""}
-              onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col2Value: event.target.value || null }))}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            >
-              <option value="">{row.col2Label ?? "Select"}</option>
-              {row.col2Options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={row.col2Value ?? ""}
-              onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col2Value: event.target.value || null }))}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-              placeholder={row.col2Label ?? "Column 2"}
-            />
-          )}
-        </label>
+        {!isMaterialRow ? (
+          <label className="space-y-1 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.col2Label ?? "Column 2"}</span>
+            {row.col2Options.length > 0 ? (
+              <select
+                value={row.col2Value ?? ""}
+                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col2Value: event.target.value || null }))}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="">{row.col2Label ?? "Select"}</option>
+                {row.col2Options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={row.col2Value ?? ""}
+                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col2Value: event.target.value || null }))}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                placeholder={row.col2Label ?? "Column 2"}
+              />
+            )}
+          </label>
+        ) : null}
 
         <label className="space-y-1 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unit</span>
@@ -432,37 +434,41 @@ export function PlantMonthlyInputsForm({
           </label>
         ) : null}
 
-        <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Column 2 options</span>
-          <textarea
-            value={row.col2Options.join("\n")}
-            onChange={(event) =>
-              applyRowMetaUpdate(row.id, (current) => ({
-                ...current,
-                col2Options: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
-              }))
-            }
-            rows={2}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            placeholder="One option per line"
-          />
-        </label>
+        {!hasFixedOptions ? (
+          <>
+            <label className="space-y-1 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Column 2 options</span>
+              <textarea
+                value={row.col2Options.join("\n")}
+                onChange={(event) =>
+                  applyRowMetaUpdate(row.id, (current) => ({
+                    ...current,
+                    col2Options: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
+                  }))
+                }
+                rows={2}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                placeholder="One option per line"
+              />
+            </label>
 
-        <label className="space-y-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unit options</span>
-          <textarea
-            value={row.col3Options.join("\n")}
-            onChange={(event) =>
-              applyRowMetaUpdate(row.id, (current) => ({
-                ...current,
-                col3Options: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
-              }))
-            }
-            rows={2}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            placeholder="One option per line"
-          />
-        </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unit options</span>
+              <textarea
+                value={row.col3Options.join("\n")}
+                onChange={(event) =>
+                  applyRowMetaUpdate(row.id, (current) => ({
+                    ...current,
+                    col3Options: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
+                  }))
+                }
+                rows={2}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                placeholder="One option per line"
+              />
+            </label>
+          </>
+        ) : null}
       </div>
     );
   }
@@ -472,6 +478,18 @@ export function PlantMonthlyInputsForm({
       return (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
           No indicators found for the selected filters.
+        </div>
+      );
+    }
+
+    if (activeSection.groups.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
+          <p className="text-sm font-medium text-slate-900">No indicators configured in {activeSection.section}.</p>
+          <p className="mt-1 text-sm text-slate-500">Create the first indicator to start entering monthly values.</p>
+          <Button type="button" className="mt-4" onClick={() => addIndicator(activeSection.section, null)}>
+            Add indicator
+          </Button>
         </div>
       );
     }
@@ -523,12 +541,14 @@ export function PlantMonthlyInputsForm({
             <div className="grid gap-3 xl:grid-cols-2">
               {group.rows.map((row) => {
                 const values = getRowValues(row);
+                const tonKmValues = getTonKmValues(row);
                 const integer = isIntegerLegacyKey(row.legacyKey);
                 const isEditing = editingRowId === row.id;
                 const isCustom = row.legacyKey === null;
                 const isDisabled = !row.enabled;
                 const filledMonths = values.filter((value) => value !== null).length;
                 const currentValue = values[activeMonthIndex];
+                const currentTonKm = tonKmValues[activeMonthIndex];
 
                 return (
                   <article
@@ -582,7 +602,14 @@ export function PlantMonthlyInputsForm({
                       </div>
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px] sm:items-end">
+                    <div
+                      className={cn(
+                        "mt-4 grid gap-3 sm:items-end",
+                        supportsTonKm(row)
+                          ? "sm:grid-cols-[minmax(0,1fr)_160px_180px]"
+                          : "sm:grid-cols-[minmax(0,1fr)_160px]",
+                      )}
+                    >
                       <label className="space-y-1 text-sm">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                           {MONTH_LABELS[activeMonthIndex]} value
@@ -607,6 +634,13 @@ export function PlantMonthlyInputsForm({
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Year total</p>
                         <p className="text-lg font-bold text-slate-900">{formatTotal(values, integer)}</p>
                       </div>
+                      {supportsTonKm(row) ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Ton/km</p>
+                          <p className="text-lg font-bold text-amber-950">{currentTonKm?.toFixed(2) ?? "-"}</p>
+                          <p className="text-[11px] text-amber-700">Auto calculated for {MONTH_LABELS[activeMonthIndex]}</p>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="mt-3">
@@ -656,12 +690,18 @@ export function PlantMonthlyInputsForm({
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">{section.section}</h3>
               </div>
-              {section.groups.length === 1 && !section.groups[0].subsection ? (
+              {section.groups.length <= 1 && (!section.groups[0] || !section.groups[0].subsection) ? (
                 <Button type="button" size="sm" variant="secondary" onClick={() => addIndicator(section.section, null)}>
                   Add indicator
                 </Button>
               ) : null}
             </div>
+
+            {section.groups.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                No indicators configured in this section yet.
+              </div>
+            ) : null}
 
             {section.groups.map((group) => (
               <div key={`${section.section}-${group.subsection ?? "root"}`} className="mb-5 last:mb-0">
@@ -677,11 +717,14 @@ export function PlantMonthlyInputsForm({
                 <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3">
                   {group.rows.map((row) => {
                     const values = getRowValues(row);
+                    const tonKmValues = getTonKmValues(row);
                     const integer = isIntegerLegacyKey(row.legacyKey);
                     const isEditing = editingRowId === row.id;
                     const isCustom = row.legacyKey === null;
                     const isDisabled = !row.enabled;
                     const hasDistance = showsDistance(row);
+                    const showTonKm = supportsTonKm(row);
+                    const showSecondaryField = !isMaterialsMonthlySection(row.section);
 
                     return (
                       <article
@@ -795,27 +838,34 @@ export function PlantMonthlyInputsForm({
                           )}
 
                           {values.map((value, monthIndex) => (
-                            <input
-                              key={`${row.id}-${monthIndex}`}
-                              type="number"
-                              inputMode="decimal"
-                              step={integer ? "1" : "0.01"}
-                              min="0"
-                              disabled={isDisabled || row.valueMode === "computed"}
-                              value={value ?? ""}
-                              onChange={(event) => updateMonthValue(row, monthIndex, event.target.value)}
-                              className={cn(
-                                "w-full rounded-lg border px-2 py-2 text-right text-xs",
-                                isDisabled || row.valueMode === "computed"
-                                  ? "border-slate-200 bg-slate-100 text-slate-500"
-                                  : "border-slate-300 bg-white text-slate-900",
-                              )}
-                              aria-label={`${row.label} ${MONTH_LABELS[monthIndex]}`}
-                            />
+                            <div key={`${row.id}-${monthIndex}`} className="space-y-1">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step={integer ? "1" : "0.01"}
+                                min="0"
+                                disabled={isDisabled || row.valueMode === "computed"}
+                                value={value ?? ""}
+                                onChange={(event) => updateMonthValue(row, monthIndex, event.target.value)}
+                                className={cn(
+                                  "w-full rounded-lg border px-2 py-2 text-right text-xs",
+                                  isDisabled || row.valueMode === "computed"
+                                    ? "border-slate-200 bg-slate-100 text-slate-500"
+                                    : "border-slate-300 bg-white text-slate-900",
+                                )}
+                                aria-label={`${row.label} ${MONTH_LABELS[monthIndex]}`}
+                              />
+                              {showTonKm ? (
+                                <div className="rounded-md bg-amber-50 px-1.5 py-1 text-right text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                  TKM {tonKmValues[monthIndex]?.toFixed(2) ?? "-"}
+                                </div>
+                              ) : null}
+                            </div>
                           ))}
 
-                          <div className="rounded-full bg-slate-100 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            {formatTotal(values, integer)}
+                          <div className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            <div>{formatTotal(values, integer)}</div>
+                            {showTonKm ? <div className="mt-1 text-[10px] text-amber-700">TKM {formatTotal(tonKmValues)}</div> : null}
                           </div>
                         </div>
 
@@ -843,13 +893,15 @@ export function PlantMonthlyInputsForm({
 
                           <div className="grid gap-3 md:grid-cols-4">
                             <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Indicator</p>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{getPrimaryFieldLabel(row)}</p>
                               <p className="text-sm text-slate-900">{row.label}</p>
                             </div>
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.col2Label ?? "Column 2"}</p>
-                              <p className="text-sm text-slate-700">{row.col2Value ?? "-"}</p>
-                            </div>
+                            {showSecondaryField ? (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.col2Label ?? "Column 2"}</p>
+                                <p className="text-sm text-slate-700">{row.col2Value ?? "-"}</p>
+                              </div>
+                            ) : null}
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unit</p>
                               <p className="text-sm text-slate-700">{row.col3Unit ?? "-"}</p>
@@ -881,6 +933,11 @@ export function PlantMonthlyInputsForm({
                                       : "border-slate-300 bg-white text-slate-900",
                                   )}
                                 />
+                                {showTonKm ? (
+                                  <span className="block text-right text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                    TKM {tonKmValues[monthIndex]?.toFixed(2) ?? "-"}
+                                  </span>
+                                ) : null}
                               </label>
                             ))}
                           </div>

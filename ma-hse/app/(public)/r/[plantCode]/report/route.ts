@@ -314,7 +314,7 @@ function renderHtml(
 
         function render() {
           const query = normalize(input.value);
-          const matches = (query ? rows.filter((row) => row.searchText.includes(query)) : rows).slice(0, 50);
+          const matches = query ? rows.filter((row) => row.searchText.includes(query)) : rows;
           list.replaceChildren();
 
           if (!matches.length) {

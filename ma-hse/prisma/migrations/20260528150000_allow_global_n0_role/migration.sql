@@ -1,3 +1,7 @@
+ALTER TABLE "UserPlantRole" DROP CONSTRAINT "UserPlantRole_plantId_fkey";
+ALTER TABLE "UserPlantRole" ALTER COLUMN "plantId" DROP NOT NULL;
+ALTER TABLE "UserPlantRole" ADD CONSTRAINT "UserPlantRole_plantId_fkey" FOREIGN KEY ("plantId") REFERENCES "Plant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 WITH duplicate_n0_roles AS (
   SELECT
     upr."id",
@@ -19,10 +23,6 @@ SET "plantId" = NULL
 FROM "Role" r
 WHERE upr."roleId" = r."id"
   AND r."code" = 'N0_ADMIN';
-
-ALTER TABLE "UserPlantRole" DROP CONSTRAINT "UserPlantRole_plantId_fkey";
-ALTER TABLE "UserPlantRole" ALTER COLUMN "plantId" DROP NOT NULL;
-ALTER TABLE "UserPlantRole" ADD CONSTRAINT "UserPlantRole_plantId_fkey" FOREIGN KEY ("plantId") REFERENCES "Plant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 CREATE UNIQUE INDEX "UserPlantRole_userId_roleId_global_key"
   ON "UserPlantRole"("userId", "roleId")

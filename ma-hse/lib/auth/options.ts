@@ -105,7 +105,7 @@ export const authOptions: NextAuthOptions = {
           const [dbUser, roles] = await prisma.$transaction([
             prisma.user.findUnique({
               where: { id: userId },
-              select: { forcePasswordChange: true, language: true },
+              select: { name: true, forcePasswordChange: true, language: true },
             }),
           prisma.userPlantRole.findMany({
             where: { userId },
@@ -116,6 +116,7 @@ export const authOptions: NextAuthOptions = {
           }),
           ]);
 
+          session.user.name = dbUser?.name ?? session.user.name;
           session.user.language = dbUser?.language ?? "en";
           session.user.plantRoles = roles
             .filter((entry) => entry.role.code === RoleCode.N0_ADMIN || Boolean(entry.plant?.isActive))
