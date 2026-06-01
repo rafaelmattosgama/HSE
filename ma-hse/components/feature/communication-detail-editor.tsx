@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionStatus, CommunicationStatus, CommunicationType, type RecordLevel } from "@prisma/client";
+import { ActionStatus, CommunicationStatus, CommunicationType } from "@prisma/client";
 import { useState } from "react";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
@@ -10,7 +10,6 @@ import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition
 import { Button } from "@/components/ui/button";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
-import { RECORD_LEVELS } from "@/lib/record-level";
 import type { BodyZonePickerLabels } from "@/lib/sewo-ui";
 
 type Option = {
@@ -29,7 +28,7 @@ type ActionOwnerOption = {
 type CommunicationRecord = {
   id: string;
   type: CommunicationType;
-  level: RecordLevel | null;
+  level: string | null;
   status: CommunicationStatus;
   eventDatetime: string;
   reporterName: string;
@@ -104,7 +103,6 @@ export function CommunicationDetailEditor({
 }) {
   const text = labels ?? BASE_COMMUNICATION_UI.detailEditor;
   const [type, setType] = useState<CommunicationType>(communication.type);
-  const [level, setLevel] = useState<RecordLevel | "">(communication.level ?? "");
   const [eventDatetime, setEventDatetime] = useState(communication.eventDatetime.slice(0, 16));
   const [reporterEmployeeNo, setReporterEmployeeNo] = useState(communication.reporterEmployeeNo ?? "");
   const [reporterName, setReporterName] = useState(communication.reporterName);
@@ -154,7 +152,6 @@ export function CommunicationDetailEditor({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type,
-          level: level || undefined,
           eventDatetime,
           reporterName: selectedReporter?.name ?? reporterName,
           reporterEmployeeNo: reporterEmployeeNo || undefined,
@@ -224,7 +221,7 @@ export function CommunicationDetailEditor({
         if (json?.errorCode === "COMMUNICATION_HAS_OPEN_ACTIONS") {
           throw new Error(text.cannotCloseWithOpenActions);
         }
-        throw new Error(json?.message ?? text.statusChangeFailed);
+        throw new Error(text.statusChangeFailed);
       }
 
       setStatusMessage(text.statusChangeSaved);
@@ -301,13 +298,7 @@ export function CommunicationDetailEditor({
               <option key={option} value={option}>{typeLabels[option] ?? option}</option>
             ))}
           </select>
-          <select value={level} onChange={(event) => setLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
-            <option value="">Level</option>
-            {RECORD_LEVELS.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <input type="datetime-local" value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required />
+          <input type="datetime-local" value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" disabled={!canEdit} required />
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
@@ -351,7 +342,7 @@ export function CommunicationDetailEditor({
               value={riskThemeId}
               onChange={setRiskThemeId}
               risks={riskThemes}
-              placeholder="Professional risk"
+              placeholder={text.professionalRisk}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               disabled={!canEdit}
               required

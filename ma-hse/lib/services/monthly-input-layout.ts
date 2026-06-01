@@ -3,7 +3,8 @@ import type { MonthlyInputRow } from "@/lib/services/monthly-inputs";
 type LegacyMetricKey = keyof Omit<MonthlyInputRow, "month">;
 type ValueMode = "manual" | "computed";
 
-const MONTHLY_INPUT_SECTION_ORDER = ["Core Inputs", "Scope 1", "Scope 2", "Scope 3", "Inbounds", "Outbounds", "Materials"] as const;
+const MONTHLY_INPUT_SECTION_ORDER = ["Core Inputs", "Standard hours", "Scope 1", "Scope 2", "Scope 3", "Inbounds", "Outbounds", "Materials"] as const;
+const STANDARD_HOURS_INDICATOR_IDS = new Set(["total-min-car", "volumes", "standard-hours"]);
 
 export type MonthlyIndicatorConfig = {
   id: string;
@@ -78,6 +79,17 @@ function emptyMonths() {
 
 function indicator(input: MonthlyIndicatorConfig): MonthlyIndicatorConfig {
   return input;
+}
+
+function normalizeMonthlyIndicatorSection<T extends { id: string; section: string }>(entry: T): T {
+  if (!STANDARD_HOURS_INDICATOR_IDS.has(entry.id)) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    section: "Standard hours",
+  };
 }
 
 export function getMonthlyInputSectionOrder() {
@@ -184,7 +196,7 @@ export function getDefaultMonthlyIndicatorConfig(): MonthlyIndicatorConfig[] {
     }),
     indicator({
       id: "total-min-car",
-      section: "Core Inputs",
+      section: "Standard hours",
       subsection: null,
       label: "Total min/car",
       legacyKey: null,
@@ -199,7 +211,7 @@ export function getDefaultMonthlyIndicatorConfig(): MonthlyIndicatorConfig[] {
     }),
     indicator({
       id: "volumes",
-      section: "Core Inputs",
+      section: "Standard hours",
       subsection: null,
       label: "Volumes",
       legacyKey: null,
@@ -214,7 +226,7 @@ export function getDefaultMonthlyIndicatorConfig(): MonthlyIndicatorConfig[] {
     }),
     indicator({
       id: "standard-hours",
-      section: "Core Inputs",
+      section: "Standard hours",
       subsection: null,
       label: "Standard hours",
       legacyKey: "standardHours",
@@ -677,7 +689,7 @@ function sanitizeConfig(entry: unknown): MonthlyIndicatorConfig | null {
   const record = entry as Record<string, unknown>;
   if (typeof record.id !== "string" || typeof record.section !== "string" || typeof record.label !== "string") return null;
 
-  return {
+  return normalizeMonthlyIndicatorSection({
     id: record.id,
     section: record.section,
     subsection: typeof record.subsection === "string" ? record.subsection : null,
@@ -691,7 +703,7 @@ function sanitizeConfig(entry: unknown): MonthlyIndicatorConfig | null {
     col3Options: Array.isArray(record.col3Options) ? record.col3Options.filter((item): item is string => typeof item === "string") : [],
     distanceKm: typeof record.distanceKm === "string" ? record.distanceKm : null,
     valueMode: record.valueMode === "computed" ? "computed" : "manual",
-  };
+  });
 }
 
 function sanitizeCustomRow(entry: unknown): CustomMonthlyRow | null {
@@ -705,7 +717,7 @@ function sanitizeCustomRow(entry: unknown): CustomMonthlyRow | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
   });
 
-  return {
+  return normalizeMonthlyIndicatorSection({
     id: record.id,
     section: record.section,
     subsection: typeof record.subsection === "string" ? record.subsection : null,
@@ -719,7 +731,7 @@ function sanitizeCustomRow(entry: unknown): CustomMonthlyRow | null {
     distanceKm: typeof record.distanceKm === "string" ? record.distanceKm : null,
     valueMode: record.valueMode === "computed" ? "computed" : "manual",
     months,
-  };
+  });
 }
 
 export function resolveMonthlyInputLayout(layoutRaw: unknown, customRowsRaw: unknown) {

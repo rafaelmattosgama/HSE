@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ActionPriority, CommunicationType, type RecordLevel } from "@prisma/client";
+import { ActionPriority, CommunicationType } from "@prisma/client";
 import { usePathname } from "next/navigation";
-import { formatCommunicationType } from "@/lib/helpers";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-select";
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
-import { RECORD_LEVELS } from "@/lib/record-level";
+import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
 
 type Option = {
   id: string;
@@ -32,6 +31,8 @@ export function CreateCommunicationQuick({
   nearMissTypes,
   canLinkAction,
   canManageClassification,
+  labels,
+  typeLabels,
 }: {
   areas: Option[];
   workstations: Option[];
@@ -45,10 +46,14 @@ export function CreateCommunicationQuick({
   nearMissTypes: Option[];
   canLinkAction: boolean;
   canManageClassification: boolean;
+  labels?: CommunicationUi["createCommunicationQuick"];
+  typeLabels?: CommunicationUi["communicationTypeLabels"];
 }) {
+  const text = labels ?? BASE_COMMUNICATION_UI.createCommunicationQuick;
+  const communicationTypeLabels =
+    typeLabels ?? BASE_COMMUNICATION_UI.communicationTypeLabels;
   const pathname = usePathname();
   const [type, setType] = useState<CommunicationType>("UNSAFE_CONDITION");
-  const [level, setLevel] = useState<RecordLevel | "">("");
   const [eventDatetime, setEventDatetime] = useState("");
   const [reporterEmployeeId, setReporterEmployeeId] = useState("");
   const [areaId, setAreaId] = useState("");
@@ -66,7 +71,6 @@ export function CreateCommunicationQuick({
   const [actionTitle, setActionTitle] = useState("");
   const [actionDescription, setActionDescription] = useState("");
   const [actionOwnerUserId, setActionOwnerUserId] = useState("");
-  const [actionLevel, setActionLevel] = useState<RecordLevel | "">("");
   const [actionPriority, setActionPriority] = useState<ActionPriority>("MEDIUM");
   const [actionDueDate, setActionDueDate] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
@@ -142,7 +146,6 @@ export function CreateCommunicationQuick({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type,
-          level: level || undefined,
           eventDatetime,
           reporterName: reporterEmployee?.name ?? "",
           reporterEmployeeNo: reporterEmployee?.employeeNo || undefined,
@@ -168,7 +171,6 @@ export function CreateCommunicationQuick({
                 title: actionTitle,
                 description: actionDescription,
                 ownerUserId: actionOwnerUserId,
-                level: actionLevel || undefined,
                 priority: actionPriority,
                 dueDate: actionDueDate || undefined,
               }
@@ -177,11 +179,10 @@ export function CreateCommunicationQuick({
       });
 
       const json = await response.json();
-      setMessage(json.ok ? "Communication created" : json.message ?? "Error creating communication");
+      setMessage(json.ok ? text.created : text.createFailed);
 
       if (json.ok) {
         setType("UNSAFE_CONDITION");
-        setLevel("");
         setDescription("");
         setSuggestedAction("");
         setReporterEmployeeId("");
@@ -201,13 +202,12 @@ export function CreateCommunicationQuick({
         setActionTitle("");
         setActionDescription("");
         setActionOwnerUserId("");
-        setActionLevel("");
         setActionPriority("MEDIUM");
         setActionDueDate("");
         setPhotos([]);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Error creating communication");
+      setMessage(error instanceof Error ? error.message : text.createFailed);
     } finally {
       setLoading(false);
     }
@@ -215,41 +215,35 @@ export function CreateCommunicationQuick({
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-900">Quick communication</h3>
+      <h3 className="text-sm font-semibold text-slate-900">{text.title}</h3>
       <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
         {(["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS", "FIRST_AID", "ACCIDENT"] as CommunicationType[]).map((option) => (
           <option key={option} value={option}>
-            {formatCommunicationType(option)}
+            {communicationTypeLabels[option] ?? option}
           </option>
-        ))}
-      </select>
-      <select value={level} onChange={(event) => setLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-        <option value="">Level</option>
-        {RECORD_LEVELS.map((option) => (
-          <option key={option} value={option}>{option}</option>
         ))}
       </select>
       <div className="grid gap-3 md:grid-cols-2">
         <select value={areaId} onChange={(event) => setAreaId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-          <option value="">Department</option>
+          <option value="">{text.department}</option>
           {areas.map((area) => (
             <option key={area.id} value={area.id}>{area.name}</option>
           ))}
         </select>
         <select value={workstationId} onChange={(event) => setWorkstationId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-          <option value="">Location</option>
+          <option value="">{text.location}</option>
           {workstations.map((workstation) => (
             <option key={workstation.id} value={workstation.id}>{workstation.name}</option>
           ))}
         </select>
       </div>
-      <input type="datetime-local" value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+      <input type="datetime-local" aria-label={text.eventDatetime} value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
       {needsProfessionalRisk ? (
         <ProfessionalRiskSelect
           value={riskThemeId}
           onChange={setRiskThemeId}
           risks={riskThemes}
-          placeholder="Professional risk"
+          placeholder={text.professionalRisk}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           required
         />
@@ -259,6 +253,7 @@ export function CreateCommunicationQuick({
           value={unsafeActTypeId}
           onChange={setUnsafeActTypeId}
           types={unsafeActTypes}
+          placeholder={text.unsafeActType}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           required
         />
@@ -268,14 +263,14 @@ export function CreateCommunicationQuick({
           value={unsafeConditionTypeId}
           onChange={setUnsafeConditionTypeId}
           types={unsafeConditionTypes}
-          placeholder="Unsafe condition type"
+          placeholder={text.unsafeConditionType}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           required
         />
       ) : null}
       {needsNearMissType ? (
         <select value={nearMissTypeId} onChange={(event) => setNearMissTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-          <option value="">Near miss type</option>
+          <option value="">{text.nearMissType}</option>
           {nearMissTypes.map((entry) => (
             <option key={entry.id} value={entry.id}>{entry.name}</option>
           ))}
@@ -283,16 +278,16 @@ export function CreateCommunicationQuick({
       ) : null}
       <div className="grid gap-3 md:grid-cols-2">
         <select value={reporterEmployeeId} onChange={(event) => setReporterEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-          <option value="">Reporter from plant workers</option>
+          <option value="">{text.reporterFromPlantWorkers}</option>
           {employees.map((employee) => (
             <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
           ))}
         </select>
-        <input value={reporterEmployee?.employeeNo ?? ""} placeholder="Reporter number" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-slate-50" readOnly />
+        <input value={reporterEmployee?.employeeNo ?? ""} placeholder={text.reporterNumber} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-slate-50" readOnly />
       </div>
       {needsInvolvedWorker ? (
         <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-          <option value="">Involved worker from plant workers</option>
+          <option value="">{text.involvedWorkerFromPlantWorkers}</option>
           {employees.map((employee) => (
             <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
           ))}
@@ -300,16 +295,16 @@ export function CreateCommunicationQuick({
       ) : null}
       {needsClinicalFields ? (
         <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-sm font-semibold text-slate-900">Clinical details</p>
+          <p className="text-sm font-semibold text-slate-900">{text.clinicalDetails}</p>
           <div className="grid gap-3 md:grid-cols-2">
             <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-              <option value="">Involved worker</option>
+              <option value="">{text.involvedWorker}</option>
               {employees.map((employee) => (
                 <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
               ))}
             </select>
             <select value={injuryTypeId} onChange={(event) => setInjuryTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-              <option value="">Injury type</option>
+              <option value="">{text.injuryType}</option>
               {injuryTypes.map((injuryType) => (
                 <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>
               ))}
@@ -319,43 +314,37 @@ export function CreateCommunicationQuick({
           {type === "ACCIDENT" ? (
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
-                <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder="Lost days" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder={text.lostDays} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
                 <input type="date" value={returnDate} onChange={(event) => setReturnDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={isFatal} onChange={(event) => setIsFatal(event.target.checked)} />
-                Fatal injury
+                {text.fatalInjury}
               </label>
             </div>
           ) : null}
         </div>
       ) : null}
       <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description" rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
-      <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} placeholder="Suggested action" rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+      <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={text.description} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+      <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} placeholder={text.suggestedAction} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
       {canLinkAction ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <h4 className="text-sm font-semibold text-slate-900">Linked action</h4>
+          <h4 className="text-sm font-semibold text-slate-900">{text.linkedAction}</h4>
           <div className="mt-3 space-y-3">
-            <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} placeholder="Action title" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-            <textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} placeholder="Action description" rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} placeholder={text.actionTitle} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+            <textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} placeholder={text.actionDescription} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
             <div className="grid gap-3 md:grid-cols-3">
               <select value={actionOwnerUserId} onChange={(event) => setActionOwnerUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required={shouldCreateAction}>
-                <option value="">Action owner</option>
+                <option value="">{text.actionOwner}</option>
                 {actionOwners.map((owner) => (
                   <option key={owner.id} value={owner.id}>{owner.name}</option>
                 ))}
               </select>
-              <select value={actionLevel} onChange={(event) => setActionLevel(event.target.value as RecordLevel | "")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Level</option>
-                {RECORD_LEVELS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
               <select value={actionPriority} onChange={(event) => setActionPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
+                <option value="LOW">{text.priorityLabels.LOW}</option>
+                <option value="MEDIUM">{text.priorityLabels.MEDIUM}</option>
+                <option value="HIGH">{text.priorityLabels.HIGH}</option>
               </select>
               <input type="date" value={actionDueDate} onChange={(event) => setActionDueDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
             </div>
@@ -363,7 +352,7 @@ export function CreateCommunicationQuick({
         </div>
       ) : null}
       <Button type="submit" size="sm" disabled={loading}>
-        {loading ? "Saving..." : "Create"}
+        {loading ? text.saving : text.create}
       </Button>
       {message ? <p className="text-xs text-slate-600">{message}</p> : null}
     </form>

@@ -1,11 +1,17 @@
-import { RoleCode } from "@prisma/client";
-import { ok } from "@/lib/api";
+import { CommunicationStatus, RoleCode } from "@prisma/client";
+import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { ActionService } from "@/lib/services/action-service";
 import { createActionInput } from "@/lib/validation/dtos";
 import { prisma } from "@/lib/prisma";
+
+const LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
+  CommunicationStatus.VALID_OPEN,
+  CommunicationStatus.ONGOING,
+  CommunicationStatus.CLOSED,
+];
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -57,6 +63,23 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
+  if (parsed.data.sourceType === "COMMUNICATION" && parsed.data.communicationId) {
+    const communication = await prisma.communication.findFirst({
+      where: {
+        id: parsed.data.communicationId,
+        plantId: plant.id,
+        status: {
+          in: LINKABLE_COMMUNICATION_STATUSES,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!communication) {
+      return fail("INVALID_COMMUNICATION", "Only validated communications can be linked to a new action", 422);
+    }
+  }
+
   const action = await ActionService.create({
     plantId: plant.id,
     actorUserId: auth.session.user.id,
