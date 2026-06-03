@@ -7,6 +7,16 @@ export const PUBLIC_REPORT_PHOTO_LIMITS = {
   maxTotalSizeBytes: 20 * 1024 * 1024,
 } as const;
 
+const heicBrands = new Set(["heic", "heix", "hevc", "hevx"]);
+const heifBrands = new Set(["mif1", "msf1"]);
+
+function getIsoBmffBrand(bytes: Uint8Array) {
+  if (bytes.length < 12) return null;
+  const signature = String.fromCharCode(...bytes.slice(4, 8));
+  if (signature !== "ftyp") return null;
+  return String.fromCharCode(...bytes.slice(8, 12));
+}
+
 const imageSignatures = [
   {
     contentType: "image/jpeg",
@@ -40,6 +50,22 @@ const imageSignatures = [
       bytes[9] === 0x45 &&
       bytes[10] === 0x42 &&
       bytes[11] === 0x50,
+  },
+  {
+    contentType: "image/heic",
+    extension: "heic",
+    matches: (bytes: Uint8Array) => {
+      const brand = getIsoBmffBrand(bytes);
+      return brand ? heicBrands.has(brand) : false;
+    },
+  },
+  {
+    contentType: "image/heif",
+    extension: "heif",
+    matches: (bytes: Uint8Array) => {
+      const brand = getIsoBmffBrand(bytes);
+      return brand ? heifBrands.has(brand) : false;
+    },
   },
 ] as const;
 
@@ -88,7 +114,7 @@ export async function validatePublicReportPhotoFiles(files: File[]) {
     const detected = detectAllowedImage(buffer);
 
     if (!detected) {
-      throw new CommunicationAttachmentValidationError("PHOTO_INVALID_TYPE", "Only JPG, PNG and WEBP photos are accepted");
+      throw new CommunicationAttachmentValidationError("PHOTO_INVALID_TYPE", "Only JPG, PNG, WEBP, HEIC and HEIF photos are accepted");
     }
 
     validated.push({

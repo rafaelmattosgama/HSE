@@ -88,6 +88,12 @@ function optionalId(value: string | null | undefined) {
   return value || null;
 }
 
+function getPhotoUploadFailedMessage(language: string | null | undefined) {
+  return language === "pt"
+    ? "Nao foi possivel guardar a fotografia. Tente novamente ou submeta sem fotografia."
+    : "The photo could not be saved. Try again or submit without a photo.";
+}
+
 function isFormFile(value: FormDataEntryValue): value is File {
   return typeof value === "object" && "arrayBuffer" in value && "size" in value && "name" in value;
 }
@@ -198,21 +204,23 @@ function renderHtml(
     locale === "pt"
       ? {
           attach: "Anexar fotografias",
-          help: "Pode anexar fotografias para documentar a situacao.",
+          help: "Pode tirar uma nova fotografia ou escolher imagens da galeria para documentar a situacao.",
           remove: "Remover",
-          invalidType: "Apenas imagens JPG, PNG ou WEBP sao aceites.",
+          invalidType: "Apenas imagens JPG, JPEG, PNG, WEBP, HEIC ou HEIF sao aceites.",
           tooLarge: "Cada fotografia pode ter no maximo 5 MB.",
           tooMany: "Pode anexar no maximo 5 fotografias.",
           totalTooLarge: "O total das fotografias nao pode exceder 20 MB.",
+          uploadFailed: "Nao foi possivel guardar a fotografia. Tente novamente ou submeta sem fotografia.",
         }
       : {
           attach: "Attach photos",
-          help: "You can attach photos to document the situation.",
+          help: "You can take a new photo or choose images from your gallery to document the situation.",
           remove: "Remove",
-          invalidType: "Only JPG, PNG or WEBP images are accepted.",
+          invalidType: "Only JPG, JPEG, PNG, WEBP, HEIC or HEIF images are accepted.",
           tooLarge: "Each photo can be at most 5 MB.",
           tooMany: "You can attach at most 5 photos.",
           totalTooLarge: "Photos cannot exceed 20 MB in total.",
+          uploadFailed: "The photo could not be saved. Try again or submit without a photo.",
         };
   const employeesJson = safeJson(
     options.employees.map((employee) => ({
@@ -332,7 +340,7 @@ function renderHtml(
 
           <label for="photos">${escapeHtml(photoText.attach)}</label>
           <p class="photo-help">${escapeHtml(photoText.help)}</p>
-          <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple />
+          <input id="photos" name="photos" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple />
           <div id="photo-preview" class="photo-grid"></div>
 
           <button type="submit">${escapeHtml(text.submit)}</button>
@@ -371,6 +379,7 @@ function renderHtml(
         photoTooLarge: ${safeJson(photoText.tooLarge)},
         photoTooMany: ${safeJson(photoText.tooMany)},
         photoTotalTooLarge: ${safeJson(photoText.totalTooLarge)},
+        photoUploadFailed: ${safeJson(photoText.uploadFailed)},
         photoRemove: ${safeJson(photoText.remove)},
       };
       const photoLimits = {
@@ -378,7 +387,23 @@ function renderHtml(
         maxFileSizeBytes: ${PUBLIC_REPORT_PHOTO_LIMITS.maxFileSizeBytes},
         maxTotalSizeBytes: ${PUBLIC_REPORT_PHOTO_LIMITS.maxTotalSizeBytes},
       };
-      const allowedPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+      const allowedPhotoTypes = new Set(['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+      const allowedPhotoExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']);
+
+      function getFileExtension(fileName) {
+        const parts = String(fileName || '').toLowerCase().split('.');
+        return parts.length > 1 ? parts[parts.length - 1] : '';
+      }
+
+      function isAllowedPhoto(photo) {
+        const type = String(photo.type || '').toLowerCase();
+        if (allowedPhotoTypes.has(type)) return true;
+
+        const extension = getFileExtension(photo.name);
+        if (!allowedPhotoExtensions.has(extension)) return false;
+
+        return !type || type.startsWith('image/');
+      }
 
       function setFormLocked(locked) {
         for (const control of formControls) {
@@ -596,7 +621,7 @@ function renderHtml(
         }
 
         for (const photo of files) {
-          if (!allowedPhotoTypes.has(photo.type)) {
+          if (!isAllowedPhoto(photo)) {
             setPhotoError(messages.photoInvalidType);
             photosInput.value = '';
             return;
@@ -922,7 +947,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
         );
         return fail(error.code, error.message, error.status);
       }
-      throw error;
+      logger.error(
+        {
+          plantCode,
+          route: "report-submit",
+          reason: "photo_upload_failed",
+          fileCount: parsed.files.length,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        },
+        "public report photo upload failed",
+      );
+      return fail("PHOTO_UPLOAD_FAILED", getPhotoUploadFailedMessage(plant.defaultLanguage), 502);
     }
   })();
   if (uploadedAttachments instanceof Response) return uploadedAttachments;
