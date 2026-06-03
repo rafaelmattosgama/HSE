@@ -8,6 +8,7 @@ import { EmailService } from "@/lib/services/email-service";
 import { NotificationService } from "@/lib/services/notification-service";
 import { SewoExportService } from "@/lib/services/sewo-export";
 import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
+import { sendSewoAlertEmail } from "@/src/email/systemEmailHelpers.js";
 import {
   SEWO_APPROVED_CHANNEL,
   SEWO_N1_APPROVAL_CHANNEL,
@@ -151,7 +152,6 @@ async function notifySewoSubmitted(input: {
   await NotificationService.notify({
     plantId: sewo.plantId,
     userIds: recipients.userIds,
-    emailTo: recipients.emails,
     title,
     body,
     html: buildSewoEmailHtml({
@@ -165,6 +165,22 @@ async function notifySewoSubmitted(input: {
     }),
     channel: SEWO_N1_APPROVAL_CHANNEL,
   });
+
+  if (recipients.emails.length) {
+    const detailUrl = new URL(`/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`, env.APP_URL).toString();
+    await sendSewoAlertEmail({
+      to: recipients.emails,
+      tipoAlerta: "S-EWO pending N1 approval",
+      descricao: summary.occurrenceType,
+      prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
+      dataHora: sewo.analysisDate,
+      recipientName: "N1 Corporate",
+      sewoCode: sewo.id,
+      plantName: summary.plantLabel,
+      sewoStatus: "Submitted",
+      sewoUrl: detailUrl,
+    });
+  }
 }
 
 async function notifySewoApproved(sewoId: string) {

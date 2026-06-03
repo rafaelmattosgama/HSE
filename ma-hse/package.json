@@ -24,6 +24,7 @@
     "scheduler": "tsx jobs/scheduler.ts",
     "worker:dev": "tsx jobs/worker.ts",
     "scheduler:dev": "tsx jobs/scheduler.ts",
+    "email:test": "tsx scripts/test-system-emails.mjs",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:watch": "vitest",

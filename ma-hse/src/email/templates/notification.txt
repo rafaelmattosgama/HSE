@@ -1,0 +1,9 @@
+Hello {{recipient_name}},
+
+{{notification_title}}
+
+{{notification_message}}
+
+Date/time: {{data_hora}}
+Plant: {{plant_name}}
+View details: {{action_url}}

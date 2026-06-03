@@ -1,0 +1,13 @@
+Hello {{recipient_name}},
+
+A S-EWO alert requires attention.
+
+Alert type: {{tipo_alerta}}
+Description: {{descricao}}
+Priority: {{prioridade}}
+Date/time: {{data_hora}}
+Code: {{sewo_code}}
+Plant: {{plant_name}}
+Status: {{sewo_status}}
+
+Open the record: {{sewo_url}}

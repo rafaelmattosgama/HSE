@@ -1,6 +1,7 @@
 import { NotificationStatus, RoleCode } from "@prisma/client";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { EmailService } from "@/lib/services/email-service";
+import { sendNotificationEmail } from "@/src/email/systemEmailHelpers.js";
 
 export const NotificationService = {
   async notify(input: {
@@ -31,13 +32,26 @@ export const NotificationService = {
     }
 
     if (input.emailTo?.length) {
-      await EmailService.sendMail({
-        to: input.emailTo,
-        subject: input.title,
-        html: input.html ?? `<p>${input.body}</p>`,
-        text: input.body,
-        attachments: input.attachments,
-      });
+      try {
+        await sendNotificationEmail({
+          to: input.emailTo,
+          tituloNotificacao: input.title,
+          mensagem: input.body,
+          dataHora: new Date(),
+          plantName: input.plantId ?? "-",
+          attachments: input.attachments,
+        });
+      } catch (error) {
+        logger.error(
+          {
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            plantId: input.plantId,
+            channel: input.channel,
+            recipientCount: input.emailTo.length,
+          },
+          "notification_email_send_failed_non_blocking",
+        );
+      }
     }
   },
 

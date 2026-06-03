@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { canCreateRole, getCreatableRoles } from "@/lib/rbac/user-management";
 import { EmailService } from "@/lib/services/email-service";
+import { hashSensitiveValue } from "@/lib/security";
 import { createPlantUserInput } from "@/lib/validation/dtos";
 
 function normalizeEmail(email: string) {
@@ -246,8 +247,8 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         manualPassword = generatedPassword;
         logger.error(
           {
-            error,
-            email: result.user.email,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            emailHash: hashSensitiveValue(result.user.email),
             userId: result.user.id,
             plantCode,
           },
