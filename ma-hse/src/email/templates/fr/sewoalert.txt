@@ -1,0 +1,13 @@
+Bonjour {{recipient_name}},
+
+Une alerte S-EWO requiert votre attention.
+
+Type d'alerte: {{tipo_alerta}}
+Description: {{descricao}}
+Priorite: {{prioridade}}
+Date/heure: {{data_hora}}
+Code: {{sewo_code}}
+Usine: {{plant_name}}
+Statut: {{sewo_status}}
+
+Ouvrir l'enregistrement: {{sewo_url}}

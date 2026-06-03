@@ -1,0 +1,9 @@
+Bonjour {{recipient_name}},
+
+{{titulo_notificacao}}
+
+{{mensagem}}
+
+Date/heure: {{data_hora}}
+Usine: {{plant_name}}
+Voir les details: {{action_url}}

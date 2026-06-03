@@ -44,12 +44,14 @@ export const EmailService = {
     userName: string;
     temporaryPassword: string;
     loginUrl: string;
+    language?: string | null;
   }) {
     await sendCredentialsEmail({
       to: input.to,
-      utilizador: {
+      user: {
         name: input.userName,
         email: input.to,
+        language: input.language,
       },
       palavraPasse: input.temporaryPassword,
       linkAcesso: input.loginUrl,

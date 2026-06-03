@@ -1,0 +1,9 @@
+Hola {{recipient_name}},
+
+{{titulo_notificacao}}
+
+{{mensagem}}
+
+Fecha/hora: {{data_hora}}
+Planta: {{plant_name}}
+Ver detalles: {{action_url}}

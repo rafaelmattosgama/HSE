@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-PT">
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+    <main style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:24px;">
+      <h1 style="margin:0 0 16px;font-size:22px;color:#061a52;">Alerta do Sistema</h1>
+      <p>Ola {{recipient_name}},</p>
+      <p>Existe um alerta S-EWO que requer atencao.</p>
+      <p><strong>Tipo de alerta:</strong> {{tipo_alerta}}</p>
+      <p><strong>Descricao:</strong> {{descricao}}</p>
+      <p><strong>Prioridade:</strong> {{prioridade}}</p>
+      <p><strong>Data/hora:</strong> {{data_hora}}</p>
+      <p><strong>Codigo:</strong> {{sewo_code}}</p>
+      <p><strong>Planta:</strong> {{plant_name}}</p>
+      <p><strong>Estado:</strong> {{sewo_status}}</p>
+      <p>
+        Abrir registo:
+        <a href="{{sewo_url}}" style="color:#0a4dff;">{{sewo_url}}</a>
+      </p>
+    </main>
+  </body>
+</html>
