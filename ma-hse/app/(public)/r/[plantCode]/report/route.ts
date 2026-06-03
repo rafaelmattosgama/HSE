@@ -1,21 +1,6 @@
-import { PlantAccessTokenType, CommunicationSource, CommunicationType, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { fail, ok } from "@/lib/api";
-import { buildRateLimitKey } from "@/lib/helpers";
-import { logger } from "@/lib/logger";
-import { findPlantByCode } from "@/lib/plant";
-import { prisma } from "@/lib/prisma";
-import { consumeRateLimit } from "@/lib/rate-limit";
-import { verifyPlantToken } from "@/lib/auth/plant-token";
-import {
-  dedupeCatalogRows,
-  getLocalizedBodyPartName,
-  getLocalizedInjuryTypeName,
-  getLocalizedShiftName,
-  getPublicReportText,
-} from "@/lib/public-report";
+import type { CommunicationSource, CommunicationType } from "@prisma/client";
 import type { CreateCommunicationInput } from "@/lib/validation/dtos";
-import { ensureDefaultShifts } from "@/lib/services/shift-service";
 
 const PUBLIC_REPORT_DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
 const PUBLIC_REPORT_PHOTO_LIMITS = {
@@ -29,8 +14,25 @@ type PublicReportParseResult =
   | { error: Response };
 
 function isMissingDatabaseObjectError(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
     && (error.code === "P2021" || error.code === "P2022");
+}
+
+function ok<T>(data: T, init?: ResponseInit) {
+  return NextResponse.json({ ok: true, data }, init);
+}
+
+function fail(errorCode: string, message: string, status = 400) {
+  return NextResponse.json(
+    {
+      ok: false,
+      errorCode,
+      message,
+    },
+    { status },
+  );
 }
 
 function escapeHtml(value: string) {
@@ -136,11 +138,18 @@ async function parsePublicReportRequest(request: NextRequest): Promise<PublicRep
   }
 }
 
-async function findRecentDuplicatePublicReport(plantId: string, payload: CreateCommunicationInput) {
+async function findRecentDuplicatePublicReport(
+  plantId: string,
+  payload: CreateCommunicationInput,
+  sourceType: CommunicationSource,
+  firstAidType: CommunicationType,
+) {
+  const { prisma } = await import("@/lib/prisma");
+
   return prisma.communication.findFirst({
     where: {
       plantId,
-      source: CommunicationSource.TOKEN_REPORT,
+      source: sourceType,
       type: payload.type,
       eventDatetime: payload.eventDatetime,
       reporterEmployeeNo: optionalText(payload.reporterEmployeeNo),
@@ -148,8 +157,8 @@ async function findRecentDuplicatePublicReport(plantId: string, payload: CreateC
       areaId: optionalId(payload.areaId),
       workstationId: optionalId(payload.workstationId),
       targetEmployeeId: optionalId(payload.targetEmployeeId),
-      bodyPartId: payload.type === CommunicationType.FIRST_AID ? optionalId(payload.bodyPartId) : null,
-      injuryTypeId: payload.type === CommunicationType.FIRST_AID ? optionalId(payload.injuryTypeId) : null,
+      bodyPartId: payload.type === firstAidType ? optionalId(payload.bodyPartId) : null,
+      injuryTypeId: payload.type === firstAidType ? optionalId(payload.injuryTypeId) : null,
       description: payload.description,
       suggestedAction: optionalText(payload.suggestedAction),
       createdAt: {
@@ -174,7 +183,6 @@ function optionMarkup(rows: Array<{ id: string; name: string; employeeNo?: strin
 function renderHtml(
   plantCode: string,
   token: string,
-  language: string,
   options: {
     areas: Array<{ id: string; name: string }>;
     workstations: Array<{ id: string; name: string }>;
@@ -183,8 +191,9 @@ function renderHtml(
     bodyParts: Array<{ id: string; name: string }>;
     injuryTypes: Array<{ id: string; name: string }>;
   },
+  reportCopy: { locale: string; text: Record<string, string> },
 ) {
-  const { locale, text } = getPublicReportText(language);
+  const { locale, text } = reportCopy;
   const photoText =
     locale === "pt"
       ? {
@@ -705,6 +714,34 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     return fail("TOKEN_REQUIRED", "Query token is required", 401);
   }
 
+  const [
+    { PlantAccessTokenType },
+    { buildRateLimitKey },
+    { logger },
+    { findPlantByCode },
+    { prisma },
+    { consumeRateLimit },
+    { verifyPlantToken },
+    {
+      dedupeCatalogRows,
+      getLocalizedBodyPartName,
+      getLocalizedInjuryTypeName,
+      getLocalizedShiftName,
+      getPublicReportText,
+    },
+    { ensureDefaultShifts },
+  ] = await Promise.all([
+    import("@prisma/client"),
+    import("@/lib/helpers"),
+    import("@/lib/logger"),
+    import("@/lib/plant"),
+    import("@/lib/prisma"),
+    import("@/lib/rate-limit"),
+    import("@/lib/auth/plant-token"),
+    import("@/lib/public-report"),
+    import("@/lib/services/shift-service"),
+  ]);
+
   const plant = await findPlantByCode(plantCode);
   if (!plant) {
     logger.warn({ plantCode, route: "report", reason: "plant_not_found" }, "public report access denied");
@@ -763,8 +800,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
       name: getLocalizedInjuryTypeName(row, plant.defaultLanguage),
     }))
     .sort(compareByName(getPublicReportText(plant.defaultLanguage).locale));
+  const reportCopy = getPublicReportText(plant.defaultLanguage);
 
-  return new NextResponse(renderHtml(plantCode, token, plant.defaultLanguage, { areas, workstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes }), {
+  return new NextResponse(renderHtml(plantCode, token, { areas, workstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes }, reportCopy), {
     status: 200,
     headers: {
       "content-type": "text/html; charset=utf-8",
@@ -780,6 +818,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
   if (!token) {
     return fail("TOKEN_REQUIRED", "Access token is required", 401);
   }
+
+  const [
+    { CommunicationSource, CommunicationType, PlantAccessTokenType },
+    { buildRateLimitKey },
+    { logger },
+    { findPlantByCode },
+    { consumeRateLimit },
+    { verifyPlantToken },
+  ] = await Promise.all([
+    import("@prisma/client"),
+    import("@/lib/helpers"),
+    import("@/lib/logger"),
+    import("@/lib/plant"),
+    import("@/lib/rate-limit"),
+    import("@/lib/auth/plant-token"),
+  ]);
 
   const plant = await findPlantByCode(plantCode);
   if (!plant) {
@@ -825,7 +879,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
   }
 
-  const duplicateCommunication = await findRecentDuplicatePublicReport(plant.id, parsed.data);
+  const duplicateCommunication = await findRecentDuplicatePublicReport(
+    plant.id,
+    parsed.data,
+    CommunicationSource.TOKEN_REPORT,
+    CommunicationType.FIRST_AID,
+  );
   if (duplicateCommunication) {
     logger.info(
       {
