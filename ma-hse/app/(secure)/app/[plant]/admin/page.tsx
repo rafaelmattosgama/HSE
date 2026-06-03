@@ -1,5 +1,6 @@
 import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import { notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
 import { getCreatableRoles } from "@/lib/rbac/user-management";
 import { UserManager } from "@/components/feature/user-manager";
@@ -13,6 +14,7 @@ import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
+import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { canManageSafetyCommunicationAlertRecipients } from "@/lib/rbac/safety-communication-alerts";
 import { getServerUiLocale } from "@/lib/server-ui-language";
@@ -32,7 +34,10 @@ export default async function AdminPage({
 }) {
   const { plant } = await params;
   const session = await getServerSession(authOptions);
-  const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const plantRow = await findPlantByCode(plant);
+  if (!plantRow) {
+    notFound();
+  }
   await Promise.all([
     ensureDefaultNearMissTypes(plantRow.id),
     ensureDefaultUnsafeActTypes(plantRow.id),

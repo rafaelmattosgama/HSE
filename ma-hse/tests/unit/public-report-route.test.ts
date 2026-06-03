@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import { NextRequest } from "next/server";
 
 const plantMock = vi.hoisted(() => ({
+  findPlantByCode: vi.fn(),
   getPlantByCode: vi.fn(),
 }));
 
@@ -111,7 +112,7 @@ describe("public report route", () => {
   });
 
   function mockSubmitDependencies() {
-    plantMock.getPlantByCode.mockResolvedValue({
+    plantMock.findPlantByCode.mockResolvedValue({
       id: "plant-1",
       code: "maap",
       defaultLanguage: "en",
@@ -144,7 +145,7 @@ describe("public report route", () => {
       employeeNo: String(index + 1).padStart(3, "0"),
     }));
 
-    plantMock.getPlantByCode.mockResolvedValue({
+    plantMock.findPlantByCode.mockResolvedValue({
       id: "plant-1",
       code: "maap",
       defaultLanguage: "en",

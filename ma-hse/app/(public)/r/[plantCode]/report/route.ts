@@ -1,10 +1,10 @@
-import { PlantAccessTokenType, CommunicationSource, CommunicationType } from "@prisma/client";
+import { PlantAccessTokenType, CommunicationSource, CommunicationType, Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { fail, ok } from "@/lib/api";
 import { buildRateLimitKey } from "@/lib/helpers";
 import { parseBody } from "@/lib/http";
 import { logger } from "@/lib/logger";
-import { getPlantByCode } from "@/lib/plant";
+import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { verifyPlantToken } from "@/lib/auth/plant-token";
@@ -30,6 +30,11 @@ const PUBLIC_REPORT_DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
 type PublicReportParseResult =
   | { data: CreateCommunicationInput; files: File[] }
   | { error: Response };
+
+function isMissingDatabaseObjectError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    && (error.code === "P2021" || error.code === "P2022");
+}
 
 function escapeHtml(value: string) {
   return value
@@ -699,17 +704,35 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     return fail("TOKEN_REQUIRED", "Query token is required", 401);
   }
 
-  const plant = await getPlantByCode(plantCode);
+  const plant = await findPlantByCode(plantCode);
+  if (!plant) {
+    logger.warn({ plantCode, route: "report", reason: "plant_not_found" }, "public report access denied");
+    return fail("PLANT_NOT_FOUND", "Plant not found", 404);
+  }
+
   const limit = await consumeRateLimit(buildRateLimitKey(request, ["report", plant.code]));
   if (!limit.allowed) {
     return fail("RATE_LIMITED", "Too many attempts", 429);
   }
 
-  const tokenRecord = await verifyPlantToken({
-    plantId: plant.id,
-    type: PlantAccessTokenType.REPORT,
-    token,
-  });
+  const tokenRecord = await (async () => {
+    try {
+      return await verifyPlantToken({
+        plantId: plant.id,
+        type: PlantAccessTokenType.REPORT,
+        token,
+      });
+    } catch (error) {
+      if (isMissingDatabaseObjectError(error)) {
+        logger.error({ plantCode, route: "report", reason: "database_migration_required" }, "public report token storage unavailable");
+        return "migration-required" as const;
+      }
+      throw error;
+    }
+  })();
+  if (tokenRecord === "migration-required") {
+    return fail("DATABASE_MIGRATION_REQUIRED", "QR token storage is not available.", 503);
+  }
 
   if (!tokenRecord) {
     logger.warn({ plantCode, route: "report", reason: "invalid_token" }, "public report access denied");
@@ -757,17 +780,35 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     return fail("TOKEN_REQUIRED", "Access token is required", 401);
   }
 
-  const plant = await getPlantByCode(plantCode);
+  const plant = await findPlantByCode(plantCode);
+  if (!plant) {
+    logger.warn({ plantCode, route: "report-submit", reason: "plant_not_found" }, "public report submit denied");
+    return fail("PLANT_NOT_FOUND", "Plant not found", 404);
+  }
+
   const limit = await consumeRateLimit(buildRateLimitKey(request, ["report-submit", plant.code]));
   if (!limit.allowed) {
     return fail("RATE_LIMITED", "Too many submissions", 429);
   }
 
-  const tokenRecord = await verifyPlantToken({
-    plantId: plant.id,
-    type: PlantAccessTokenType.REPORT,
-    token,
-  });
+  const tokenRecord = await (async () => {
+    try {
+      return await verifyPlantToken({
+        plantId: plant.id,
+        type: PlantAccessTokenType.REPORT,
+        token,
+      });
+    } catch (error) {
+      if (isMissingDatabaseObjectError(error)) {
+        logger.error({ plantCode, route: "report-submit", reason: "database_migration_required" }, "public report token storage unavailable");
+        return "migration-required" as const;
+      }
+      throw error;
+    }
+  })();
+  if (tokenRecord === "migration-required") {
+    return fail("DATABASE_MIGRATION_REQUIRED", "QR token storage is not available.", 503);
+  }
 
   if (!tokenRecord) {
     logger.warn({ plantCode, route: "report-submit", reason: "invalid_token" }, "public report submit denied");
