@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   CommunicationStatus,
   NotificationStatus,
+  Prisma,
   RoleCode,
   SafetyCommunicationNotificationDeliveryStatus,
   SafetyCommunicationNotificationType,
@@ -117,6 +118,21 @@ function logMissingSafetyCommunicationDelegate(
 
 function hasSafetyCommunicationAlertRecipientDelegate() {
   return Boolean(getSafetyCommunicationRuntimeClient().safetyCommunicationAlertRecipient);
+}
+
+function isMissingDatabaseObjectError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    && (error.code === "P2021" || error.code === "P2022");
+}
+
+function logMissingSafetyCommunicationDatabaseObject(error: unknown, context: string) {
+  logger.error(
+    {
+      context,
+      code: error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined,
+    },
+    "safety_communication_database_object_unavailable",
+  );
 }
 
 function toIsoString(value: Date | string) {
@@ -775,63 +791,72 @@ export const SafetyCommunicationAlertService = {
   },
 
   async listRecipients(plantId: string) {
-    const recipientModel = getSafetyCommunicationAlertRecipientDelegate({
-      allowMissing: true,
-      context: "listRecipients",
-    });
-    if (!recipientModel) {
-      return listRecipientsWithRawSql(plantId);
-    }
+    try {
+      const recipientModel = getSafetyCommunicationAlertRecipientDelegate({
+        allowMissing: true,
+        context: "listRecipients",
+      });
+      if (!recipientModel) {
+        return await listRecipientsWithRawSql(plantId);
+      }
 
-    const rows = await recipientModel.findMany({
-      where: {
-        plantId,
-        isActive: true,
-        user: {
+      const rows = await recipientModel.findMany({
+        where: {
+          plantId,
           isActive: true,
-          plantRoles: {
-            some: {
-              plantId,
-              role: {
-                code: RoleCode.N4_SUPERVISOR,
+          user: {
+            isActive: true,
+            plantRoles: {
+              some: {
+                plantId,
+                role: {
+                  code: RoleCode.N4_SUPERVISOR,
+                },
               },
             },
           },
         },
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          department: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
           },
         },
-        department: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: [
-        { department: { name: "asc" } },
-        { user: { name: "asc" } },
-      ],
-    });
+        orderBy: [
+          { department: { name: "asc" } },
+          { user: { name: "asc" } },
+        ],
+      });
 
-    return rows.map((row): SafetyCommunicationAlertRecipientRow => ({
-      id: row.id,
-      userId: row.user.id,
-      userName: row.user.name,
-      userEmail: row.user.email,
-      departmentId: row.department.id,
-      departmentCode: row.department.code,
-      departmentName: row.department.name,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    }));
+      return rows.map((row): SafetyCommunicationAlertRecipientRow => ({
+        id: row.id,
+        userId: row.user.id,
+        userName: row.user.name,
+        userEmail: row.user.email,
+        departmentId: row.department.id,
+        departmentCode: row.department.code,
+        departmentName: row.department.name,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      }));
+    } catch (error) {
+      if (isMissingDatabaseObjectError(error)) {
+        logMissingSafetyCommunicationDatabaseObject(error, "listRecipients");
+        return [];
+      }
+
+      throw error;
+    }
   },
 
   async listRecipientOptions(plantId: string) {
