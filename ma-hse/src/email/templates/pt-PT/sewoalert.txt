@@ -1,0 +1,13 @@
+Ola {{recipient_name}},
+
+Existe um alerta S-EWO que requer atencao.
+
+Tipo de alerta: {{tipo_alerta}}
+Descricao: {{descricao}}
+Prioridade: {{prioridade}}
+Data/hora: {{data_hora}}
+Codigo: {{sewo_code}}
+Planta: {{plant_name}}
+Estado: {{sewo_status}}
+
+Abrir registo: {{sewo_url}}

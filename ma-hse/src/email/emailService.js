@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import { hashSensitiveValue } from "../../lib/security";
-import { getEmailTemplate, SYSTEM_EMAIL_TYPES } from "./emailTemplates.js";
+import { DEFAULT_EMAIL_LANGUAGE, getEmailTemplate, SYSTEM_EMAIL_TYPES } from "./emailTemplates.js";
 import { renderTemplate } from "./emailRenderer.js";
 
 const transporter = nodemailer.createTransport({
@@ -26,13 +26,16 @@ function hashRecipients(to) {
     .map((recipient) => hashSensitiveValue(String(recipient).trim().toLowerCase()));
 }
 
-export async function sendSystemEmail({ type, to, data = {}, attachments }) {
-  const template = getEmailTemplate(type);
-  const subject = renderTemplate(template.subject, data);
-  const html = renderTemplate(template.htmlTemplate, data);
-  const text = renderTemplate(template.textTemplate, data);
+export async function sendSystemEmail({ type, to, language = DEFAULT_EMAIL_LANGUAGE, data = {}, attachments }) {
+  let resolvedLanguage = language;
 
   try {
+    const template = getEmailTemplate(type, language);
+    resolvedLanguage = template.language;
+    const subject = renderTemplate(template.subject, data);
+    const html = renderTemplate(template.htmlTemplate, data);
+    const text = renderTemplate(template.textTemplate, data);
+
     await transporter.sendMail({
       from: env.SMTP_FROM,
       to,
@@ -45,6 +48,7 @@ export async function sendSystemEmail({ type, to, data = {}, attachments }) {
     logger.info(
       {
         type,
+        language: resolvedLanguage,
         recipients: hashRecipients(to),
       },
       "system_email_sent",
@@ -54,6 +58,7 @@ export async function sendSystemEmail({ type, to, data = {}, attachments }) {
     logger.error(
       {
         type,
+        language: resolvedLanguage,
         recipients: hashRecipients(to),
         errorName: error instanceof Error ? error.name : "UnknownError",
         errorCode: deliveryError.code,
@@ -67,9 +72,21 @@ export async function sendSystemEmail({ type, to, data = {}, attachments }) {
 }
 
 export const systemEmailExamples = Object.freeze({
-  credentials: {
+  credentialsPt: {
     type: SYSTEM_EMAIL_TYPES.CREDENTIALS,
     to: "user@example.com",
+    language: "pt-PT",
+    data: {
+      user_name: "Utilizador Exemplo",
+      user_email: "user@example.com",
+      temporary_password: "{{temporary_password}}",
+      login_url: "https://example.com/login",
+    },
+  },
+  credentialsEn: {
+    type: SYSTEM_EMAIL_TYPES.CREDENTIALS,
+    to: "user@example.com",
+    language: "en",
     data: {
       user_name: "Example User",
       user_email: "user@example.com",
@@ -77,25 +94,56 @@ export const systemEmailExamples = Object.freeze({
       login_url: "https://example.com/login",
     },
   },
+  notificationWithoutLanguage: {
+    type: SYSTEM_EMAIL_TYPES.NOTIFICATION,
+    to: "operator@example.com",
+    data: {
+      recipient_name: "Example Recipient",
+      titulo_notificacao: "Operational notification",
+      mensagem: "A new item requires your attention.",
+      data_hora: "2026-06-03T10:00:00.000Z",
+      plant_name: "Example Plant",
+      action_url: "https://example.com/app/pl01/notifications",
+    },
+  },
+  notificationUnsupportedLanguage: {
+    type: SYSTEM_EMAIL_TYPES.NOTIFICATION,
+    to: "operator@example.com",
+    language: "de",
+    data: {
+      recipient_name: "Example Recipient",
+      titulo_notificacao: "Unsupported language fallback",
+      mensagem: "This example falls back to pt-PT.",
+      data_hora: "2026-06-03T10:00:00.000Z",
+      plant_name: "Example Plant",
+      action_url: "https://example.com/app/pl01/notifications",
+    },
+  },
   sewoAlert: {
     type: SYSTEM_EMAIL_TYPES.SEWOALERT,
     to: ["safety@example.com"],
+    language: "en",
     data: {
       recipient_name: "Safety Team",
+      tipo_alerta: "S-EWO pending N1 approval",
+      descricao: "Example S-EWO summary.",
+      prioridade: "Normal",
+      data_hora: "2026-06-03T10:00:00.000Z",
       sewo_code: "SEWO-0001",
       plant_name: "Example Plant",
       sewo_status: "Pending approval",
-      sewo_summary: "Example S-EWO summary.",
       sewo_url: "https://example.com/app/pl01/sewo/SEWO-0001",
     },
   },
   notification: {
     type: SYSTEM_EMAIL_TYPES.NOTIFICATION,
     to: "operator@example.com",
+    language: "en",
     data: {
       recipient_name: "Example Recipient",
-      notification_title: "New safety notification",
-      notification_message: "A new item requires your attention.",
+      titulo_notificacao: "New safety notification",
+      mensagem: "A new item requires your attention.",
+      data_hora: "2026-06-03T10:00:00.000Z",
       plant_name: "Example Plant",
       action_url: "https://example.com/app/pl01/notifications",
     },
@@ -110,6 +158,7 @@ Example calls:
 await sendSystemEmail({
   type: SYSTEM_EMAIL_TYPES.CREDENTIALS,
   to: "user@example.com",
+  language: "pt-PT",
   data: {
     user_name: "Example User",
     user_email: "user@example.com",
@@ -121,12 +170,16 @@ await sendSystemEmail({
 await sendSystemEmail({
   type: SYSTEM_EMAIL_TYPES.SEWOALERT,
   to: ["safety@example.com"],
+  language: "en",
   data: {
     recipient_name: "Safety Team",
+    tipo_alerta: "S-EWO pending N1 approval",
+    descricao: "Example S-EWO summary.",
+    prioridade: "Normal",
+    data_hora: "2026-06-03T10:00:00.000Z",
     sewo_code: "SEWO-0001",
     plant_name: "Example Plant",
     sewo_status: "Pending approval",
-    sewo_summary: "Example S-EWO summary.",
     sewo_url: "https://example.com/app/pl01/sewo/SEWO-0001",
   },
 });
@@ -134,10 +187,12 @@ await sendSystemEmail({
 await sendSystemEmail({
   type: SYSTEM_EMAIL_TYPES.NOTIFICATION,
   to: "operator@example.com",
+  language: "en",
   data: {
     recipient_name: "Example Recipient",
-    notification_title: "New safety notification",
-    notification_message: "A new item requires your attention.",
+    titulo_notificacao: "New safety notification",
+    mensagem: "A new item requires your attention.",
+    data_hora: "2026-06-03T10:00:00.000Z",
     plant_name: "Example Plant",
     action_url: "https://example.com/app/pl01/notifications",
   },

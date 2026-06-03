@@ -137,7 +137,7 @@ async function notifySewoSubmitted(input: {
     },
   });
   const recipients = await getRoleRecipients(sewo.plantId, [RoleCode.N1_CORPORATE]);
-  if (!recipients.userIds.length && !recipients.emails.length) return;
+  if (!recipients.userIds.length && !recipients.emailRecipients.length) return;
 
   const summary = buildSewoNotificationSummary(sewo);
   const priorityPrefix = summary.isPriority ? `[${summary.sifPsifLabel}] ` : "";
@@ -166,20 +166,23 @@ async function notifySewoSubmitted(input: {
     channel: SEWO_N1_APPROVAL_CHANNEL,
   });
 
-  if (recipients.emails.length) {
+  if (recipients.emailRecipients.length) {
     const detailUrl = new URL(`/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`, env.APP_URL).toString();
-    await sendSewoAlertEmail({
-      to: recipients.emails,
-      tipoAlerta: "S-EWO pending N1 approval",
-      descricao: summary.occurrenceType,
-      prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
-      dataHora: sewo.analysisDate,
-      recipientName: "N1 Corporate",
-      sewoCode: sewo.id,
-      plantName: summary.plantLabel,
-      sewoStatus: "Submitted",
-      sewoUrl: detailUrl,
-    });
+    await Promise.allSettled(
+      recipients.emailRecipients.map((recipient) =>
+        sendSewoAlertEmail({
+          user: recipient,
+          tipoAlerta: "S-EWO pending N1 approval",
+          descricao: summary.occurrenceType,
+          prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
+          dataHora: sewo.analysisDate,
+          sewoCode: sewo.id,
+          plantName: summary.plantLabel,
+          sewoStatus: "Submitted",
+          sewoUrl: detailUrl,
+        }),
+      ),
+    );
   }
 }
 
@@ -196,12 +199,12 @@ async function notifySewoApproved(sewoId: string) {
     getRoleRecipients(sewo.plantId, [...SEWO_STAKEHOLDER_ROLES]),
     listSewoReportRecipients(sewo.plantId),
   ]);
-  if (!recipients.userIds.length && !recipients.emails.length && !externalRecipients.length) return;
+  if (!recipients.userIds.length && !recipients.emailRecipients.length && !externalRecipients.length) return;
 
   const summary = buildSewoNotificationSummary(sewo);
   const notificationTasks: Promise<unknown>[] = [];
 
-  if (recipients.userIds.length || recipients.emails.length) {
+  if (recipients.userIds.length || recipients.emailRecipients.length) {
     notificationTasks.push((async () => {
   const title = `S-EWO aprovado e partilhado: ${summary.occurrenceType}`;
   const body = [
@@ -217,7 +220,7 @@ async function notifySewoApproved(sewoId: string) {
   await NotificationService.notify({
     plantId: sewo.plantId,
     userIds: recipients.userIds,
-    emailTo: recipients.emails,
+    emailRecipients: recipients.emailRecipients,
     title,
     body,
     html: buildSewoEmailHtml({
@@ -294,7 +297,7 @@ async function notifySewoRejected(input: {
     }),
   ]);
   const recipients = await getRoleRecipients(sewo.plantId, [RoleCode.N3_SAFETY]);
-  if (!recipients.userIds.length && !recipients.emails.length) return;
+  if (!recipients.userIds.length && !recipients.emailRecipients.length) return;
 
   const summary = buildSewoNotificationSummary(sewo);
   const detailPath = `/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`;
@@ -316,7 +319,7 @@ async function notifySewoRejected(input: {
   await NotificationService.notify({
     plantId: sewo.plantId,
     userIds: recipients.userIds,
-    emailTo: recipients.emails,
+    emailRecipients: recipients.emailRecipients,
     title,
     body,
     html: buildSewoRejectedEmailHtml({
@@ -462,7 +465,20 @@ async function getRoleRecipients(plantId: string, roles: RoleCode[]) {
 
   return {
     userIds: Array.from(new Set(recipients.map((entry) => entry.userId))),
-    emails: Array.from(new Set(recipients.flatMap((entry) => (entry.user.email ? [entry.user.email] : [])))),
+    emailRecipients: Array.from(
+      new Map(
+        recipients
+          .filter((entry) => entry.user.email)
+          .map((entry) => [
+            entry.user.email!,
+            {
+              email: entry.user.email!,
+              name: entry.user.name,
+              language: entry.user.language,
+            },
+          ]),
+      ).values(),
+    ),
   };
 }
 

@@ -1,4 +1,25 @@
 import { sendSystemEmail, SYSTEM_EMAIL_TYPES } from "./emailService.js";
+import { DEFAULT_EMAIL_LANGUAGE, normalizeEmailLanguage } from "./emailTemplates.js";
+
+/**
+ * @typedef {Object} EmailUser
+ * @property {string=} email
+ * @property {string=} userEmail
+ * @property {string=} name
+ * @property {string=} nome
+ * @property {string=} userName
+ * @property {string | null=} language
+ * @property {string | null=} locale
+ * @property {string | null=} preferredLanguage
+ * @property {{ language?: string | null }=} settings
+ */
+
+/**
+ * @typedef {Object} EmailAttachment
+ * @property {string} filename
+ * @property {Buffer} content
+ * @property {string} contentType
+ */
 
 function displayDateTime(value) {
   if (!value) return new Date().toISOString();
@@ -6,44 +27,79 @@ function displayDateTime(value) {
   return String(value);
 }
 
-function displayUserName(utilizador) {
-  return utilizador?.name ?? utilizador?.nome ?? utilizador?.userName ?? "User";
+function displayUserName(user) {
+  return user?.name ?? user?.nome ?? user?.userName ?? "User";
 }
 
-function displayUserEmail(utilizador, fallbackEmail) {
-  return utilizador?.email ?? utilizador?.userEmail ?? fallbackEmail ?? "";
+function displayUserEmail(user, fallbackEmail) {
+  return user?.email ?? user?.userEmail ?? fallbackEmail ?? "";
 }
 
-export async function sendCredentialsEmail({ to, utilizador, palavraPasse, linkAcesso }) {
+function displayUserLanguage(user, fallbackLanguage) {
+  return normalizeEmailLanguage(
+    user?.language ??
+    user?.locale ??
+    user?.preferredLanguage ??
+    user?.settings?.language ??
+    fallbackLanguage ??
+    DEFAULT_EMAIL_LANGUAGE,
+  );
+}
+
+function resolveRecipient(input) {
+  return {
+    to: input.user?.email ?? input.to,
+    language: displayUserLanguage(input.user, input.language),
+  };
+}
+
+/**
+ * @param {{ user?: EmailUser | null, utilizador?: EmailUser | null, to?: string | string[], language?: string | null, palavraPasse: string, linkAcesso: string }} input
+ */
+export async function sendCredentialsEmail(input) {
+  const { user = null, utilizador = null, to = undefined, language = undefined, palavraPasse, linkAcesso } = input;
+  const emailUser = user ?? utilizador;
+  const recipient = resolveRecipient({ user: emailUser, to, language });
+
   return sendSystemEmail({
     type: SYSTEM_EMAIL_TYPES.CREDENTIALS,
-    to,
+    to: recipient.to,
+    language: recipient.language,
     data: {
-      user_name: displayUserName(utilizador),
-      user_email: displayUserEmail(utilizador, to),
+      user_name: displayUserName(emailUser),
+      user_email: displayUserEmail(emailUser, recipient.to),
       temporary_password: palavraPasse,
       login_url: linkAcesso,
     },
   });
 }
 
-export async function sendSewoAlertEmail({
-  to,
-  tipoAlerta,
-  descricao,
-  prioridade,
-  dataHora,
-  recipientName = "Safety Team",
-  sewoCode = "-",
-  plantName = "-",
-  sewoStatus = "-",
-  sewoUrl = "",
-}) {
+/**
+ * @param {{ user?: EmailUser | null, to?: string | string[], language?: string | null, tipoAlerta: string, descricao: string, prioridade: string, dataHora?: Date | string | null, recipientName?: string, sewoCode?: string, plantName?: string, sewoStatus?: string, sewoUrl?: string }} input
+ */
+export async function sendSewoAlertEmail(input) {
+  const {
+    user = null,
+    to = undefined,
+    language = undefined,
+    tipoAlerta,
+    descricao,
+    prioridade,
+    dataHora,
+    recipientName = undefined,
+    sewoCode = "-",
+    plantName = "-",
+    sewoStatus = "-",
+    sewoUrl = "",
+  } = input;
+  const recipient = resolveRecipient({ user, to, language });
+
   return sendSystemEmail({
     type: SYSTEM_EMAIL_TYPES.SEWOALERT,
-    to,
+    to: recipient.to,
+    language: recipient.language,
     data: {
-      recipient_name: recipientName,
+      recipient_name: recipientName ?? displayUserName(user),
       tipo_alerta: tipoAlerta,
       descricao,
       prioridade,
@@ -56,23 +112,32 @@ export async function sendSewoAlertEmail({
   });
 }
 
-export async function sendNotificationEmail({
-  to,
-  tituloNotificacao,
-  mensagem,
-  dataHora,
-  recipientName = "User",
-  plantName = "-",
-  actionUrl = "",
-  attachments,
-}) {
+/**
+ * @param {{ user?: EmailUser | null, to?: string | string[], language?: string | null, tituloNotificacao: string, mensagem: string, dataHora?: Date | string | null, recipientName?: string, plantName?: string, actionUrl?: string, attachments?: EmailAttachment[] }} input
+ */
+export async function sendNotificationEmail(input) {
+  const {
+    user = null,
+    to = undefined,
+    language = undefined,
+    tituloNotificacao,
+    mensagem,
+    dataHora,
+    recipientName = undefined,
+    plantName = "-",
+    actionUrl = "",
+    attachments = undefined,
+  } = input;
+  const recipient = resolveRecipient({ user, to, language });
+
   return sendSystemEmail({
     type: SYSTEM_EMAIL_TYPES.NOTIFICATION,
-    to,
+    to: recipient.to,
+    language: recipient.language,
     data: {
-      recipient_name: recipientName,
-      notification_title: tituloNotificacao,
-      notification_message: mensagem,
+      recipient_name: recipientName ?? displayUserName(user),
+      titulo_notificacao: tituloNotificacao,
+      mensagem,
       data_hora: displayDateTime(dataHora),
       plant_name: plantName,
       action_url: actionUrl,
@@ -81,4 +146,4 @@ export async function sendNotificationEmail({
   });
 }
 
-export { SYSTEM_EMAIL_TYPES };
+export { DEFAULT_EMAIL_LANGUAGE, SYSTEM_EMAIL_TYPES };
