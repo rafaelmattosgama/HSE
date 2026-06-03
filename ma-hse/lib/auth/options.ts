@@ -5,6 +5,13 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
 import { ensureDefaultAdminUser } from "@/lib/auth/ensure-default-admin";
+import {
+  getAuthRequestMetadata,
+  getCredentialsLoginBlock,
+  normalizeLoginIdentifier,
+  recordFailedCredentialsLogin,
+  resetCredentialsLoginLimit,
+} from "@/lib/auth/hardening";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -24,13 +31,30 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) {
-          logger.warn("login_attempt_missing_credentials");
+      async authorize(credentials, request) {
+        const headers = request.headers ?? {};
+        const metadata = getAuthRequestMetadata(headers);
+        const normalizedEmail = normalizeLoginIdentifier(credentials?.email);
+
+        if (!normalizedEmail || !credentials?.password) {
+          await recordFailedCredentialsLogin(headers, normalizedEmail, "missing_credentials");
           return null;
         }
 
-        const normalizedEmail = credentials.email.trim().toLowerCase();
+        const blocked = await getCredentialsLoginBlock(headers, normalizedEmail);
+        if (blocked) {
+          logger.warn(
+            {
+              ip: metadata.ip,
+              userAgent: metadata.userAgent,
+              origin: metadata.origin,
+              retryAfter: blocked.retryAfter,
+            },
+            "login_rate_limited_inside_authorize",
+          );
+          return null;
+        }
+
         await ensureDefaultAdminUser(normalizedEmail);
 
         const user = await prisma.user.findUnique({
@@ -38,27 +62,37 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) {
-          logger.warn({ email: normalizedEmail }, "login_attempt_user_not_found");
+          await recordFailedCredentialsLogin(headers, normalizedEmail, "user_not_found");
           return null;
         }
 
         if (!user.passwordHash) {
-          logger.warn({ email: normalizedEmail, userId: user.id }, "login_attempt_no_password_hash");
+          await recordFailedCredentialsLogin(headers, normalizedEmail, "no_password_hash");
           return null;
         }
 
         if (!user.isActive) {
-          logger.warn({ email: normalizedEmail, userId: user.id }, "login_attempt_inactive_user");
+          await recordFailedCredentialsLogin(headers, normalizedEmail, "inactive_user");
           return null;
         }
 
         const isValid = await compare(credentials.password, user.passwordHash);
         if (!isValid) {
-          logger.warn({ email: normalizedEmail, userId: user.id }, "login_attempt_invalid_password");
+          await recordFailedCredentialsLogin(headers, normalizedEmail, "invalid_password");
           return null;
         }
 
-        logger.info({ email: normalizedEmail, userId: user.id }, "login_success");
+        await resetCredentialsLoginLimit(headers, normalizedEmail);
+
+        logger.info(
+          {
+            ip: metadata.ip,
+            userAgent: metadata.userAgent,
+            origin: metadata.origin,
+            userId: user.id,
+          },
+          "login_success",
+        );
 
         return {
           id: user.id,
