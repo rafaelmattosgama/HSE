@@ -49,6 +49,7 @@ const loggerMock = vi.hoisted(() => ({
   logger: {
     warn: vi.fn(),
     info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -258,5 +259,39 @@ describe("public report route", () => {
         }),
       }),
     );
+  });
+
+  it("returns a clear response when photo storage fails", async () => {
+    mockSubmitDependencies();
+    attachmentServiceMock.uploadPublicReportPhotos.mockRejectedValue(new Error("storage unavailable"));
+
+    const formData = new FormData();
+    formData.set("payload", JSON.stringify(validPayload));
+    formData.append("photos", new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], "photo.jpg", { type: "image/jpeg" }));
+
+    const response = await POST(
+      new NextRequest("http://localhost/r/maap/report?t=qr-token", {
+        method: "POST",
+        body: formData,
+      }),
+      routeContext(),
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      errorCode: "PHOTO_UPLOAD_FAILED",
+      message: "The photo could not be saved. Try again or submit without a photo.",
+    });
+    expect(response.status).toBe(502);
+    expect(loggerMock.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plantCode: "maap",
+        route: "report-submit",
+        reason: "photo_upload_failed",
+        fileCount: 1,
+      }),
+      "public report photo upload failed",
+    );
+    expect(communicationServiceMock.CommunicationService.create).not.toHaveBeenCalled();
   });
 });
