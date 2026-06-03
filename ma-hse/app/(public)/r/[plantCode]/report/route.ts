@@ -2,7 +2,6 @@ import { PlantAccessTokenType, CommunicationSource, CommunicationType, Prisma } 
 import { NextRequest, NextResponse } from "next/server";
 import { fail, ok } from "@/lib/api";
 import { buildRateLimitKey } from "@/lib/helpers";
-import { parseBody } from "@/lib/http";
 import { logger } from "@/lib/logger";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
@@ -15,17 +14,15 @@ import {
   getLocalizedShiftName,
   getPublicReportText,
 } from "@/lib/public-report";
-import { createPublicReportCommunicationInput, type CreateCommunicationInput } from "@/lib/validation/dtos";
-import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
-import {
-  CommunicationAttachmentValidationError,
-  deleteUploadedCommunicationAttachments,
-  PUBLIC_REPORT_PHOTO_LIMITS,
-  uploadPublicReportPhotos,
-} from "@/lib/services/communication-attachment-service";
+import type { CreateCommunicationInput } from "@/lib/validation/dtos";
 import { ensureDefaultShifts } from "@/lib/services/shift-service";
 
 const PUBLIC_REPORT_DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
+const PUBLIC_REPORT_PHOTO_LIMITS = {
+  maxFiles: 5,
+  maxFileSizeBytes: 5 * 1024 * 1024,
+  maxTotalSizeBytes: 20 * 1024 * 1024,
+} as const;
 
 type PublicReportParseResult =
   | { data: CreateCommunicationInput; files: File[] }
@@ -94,6 +91,10 @@ function isFormFile(value: FormDataEntryValue): value is File {
 }
 
 async function parsePublicReportRequest(request: NextRequest): Promise<PublicReportParseResult> {
+  const [{ parseBody }, { createPublicReportCommunicationInput }] = await Promise.all([
+    import("@/lib/http"),
+    import("@/lib/validation/dtos"),
+  ]);
   const contentType = request.headers.get("content-type") ?? "";
 
   if (!contentType.toLowerCase().includes("multipart/form-data")) {
@@ -818,6 +819,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
   const parsed = await parsePublicReportRequest(request);
   if ("error" in parsed) return parsed.error;
 
+  const { CommunicationService, CommunicationValidationError } = await import("@/lib/services/communication-service");
+
   if (!CommunicationService.isN6AllowedType(parsed.data.type)) {
     return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
   }
@@ -834,6 +837,12 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     );
     return ok(duplicateCommunication);
   }
+
+  const {
+    CommunicationAttachmentValidationError,
+    deleteUploadedCommunicationAttachments,
+    uploadPublicReportPhotos,
+  } = await import("@/lib/services/communication-attachment-service");
 
   const uploadedAttachments = await (async () => {
     try {
