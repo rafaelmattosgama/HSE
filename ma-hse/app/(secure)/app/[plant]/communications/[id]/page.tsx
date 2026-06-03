@@ -278,10 +278,43 @@ export default async function CommunicationDetailPage({
       <section className="grid gap-4 md:grid-cols-2">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{communicationUi.detailPage.attachments}</h2>
-          <div className="mt-3 space-y-2 text-sm text-slate-700">
-            {communication.attachments.length ? communication.attachments.map((attachment) => (
-              <p key={attachment.id}>{attachment.fileName}</p>
-            )) : <p>{communicationUi.detailPage.noAttachments}</p>}
+          <div className="mt-3 text-sm text-slate-700">
+            {communication.attachments.length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {communication.attachments.map((attachment) => {
+                  const attachmentHref = `/api/plants/${plant}/communications/${communication.id}/attachments/${attachment.id}`;
+                  const isImage = attachment.contentType.startsWith("image/");
+
+                  return (
+                    <a
+                      key={attachment.id}
+                      href={attachmentHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group block overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                    >
+                      {isImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={attachmentHref}
+                          alt={attachment.fileName}
+                          className="aspect-square w-full object-cover transition group-hover:opacity-90"
+                        />
+                      ) : (
+                        <div className="flex aspect-square items-center justify-center px-3 text-center text-xs font-semibold text-slate-600">
+                          {attachment.fileName}
+                        </div>
+                      )}
+                      <div className="truncate border-t border-slate-200 px-2 py-1.5 text-xs text-slate-600">
+                        {attachment.fileName}
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+            ) : (
+              <p>{communicationUi.detailPage.noAttachments}</p>
+            )}
           </div>
         </article>
 

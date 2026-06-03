@@ -1,6 +1,7 @@
 import createNextIntlPlugin from "next-intl/plugin";
 import type { NextConfig } from "next";
 import { execSync } from "node:child_process";
+import { securityHeaders } from "./lib/security-headers";
 
 const withNextIntl = createNextIntlPlugin("./lib/i18n/request.ts");
 
@@ -23,8 +24,17 @@ function resolveBuildCommit() {
 }
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   env: {
     NEXT_PUBLIC_BUILD_COMMIT: resolveBuildCommit(),
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [...securityHeaders],
+      },
+    ];
   },
   webpack(config, { isServer }) {
     if (isServer) {

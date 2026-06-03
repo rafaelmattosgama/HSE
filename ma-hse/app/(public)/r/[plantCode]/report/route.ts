@@ -17,9 +17,19 @@ import {
 } from "@/lib/public-report";
 import { createPublicReportCommunicationInput, type CreateCommunicationInput } from "@/lib/validation/dtos";
 import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
+import {
+  CommunicationAttachmentValidationError,
+  deleteUploadedCommunicationAttachments,
+  PUBLIC_REPORT_PHOTO_LIMITS,
+  uploadPublicReportPhotos,
+} from "@/lib/services/communication-attachment-service";
 import { ensureDefaultShifts } from "@/lib/services/shift-service";
 
 const PUBLIC_REPORT_DUPLICATE_WINDOW_MS = 30 * 60 * 1000;
+
+type PublicReportParseResult =
+  | { data: CreateCommunicationInput; files: File[] }
+  | { error: Response };
 
 function escapeHtml(value: string) {
   return value
@@ -74,6 +84,52 @@ function optionalId(value: string | null | undefined) {
   return value || null;
 }
 
+function isFormFile(value: FormDataEntryValue): value is File {
+  return typeof value === "object" && "arrayBuffer" in value && "size" in value && "name" in value;
+}
+
+async function parsePublicReportRequest(request: NextRequest): Promise<PublicReportParseResult> {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (!contentType.toLowerCase().includes("multipart/form-data")) {
+    const parsed = await parseBody(request, createPublicReportCommunicationInput);
+    if ("error" in parsed && parsed.error) {
+      return { error: parsed.error };
+    }
+    return { data: parsed.data, files: [] };
+  }
+
+  try {
+    const formData = await request.formData();
+    const payloadRaw = formData.get("payload");
+    if (typeof payloadRaw !== "string") {
+      return {
+        error: fail("INVALID_INPUT", "Invalid report payload", 422),
+      };
+    }
+
+    const payload = JSON.parse(payloadRaw);
+    const parsed = createPublicReportCommunicationInput.safeParse(payload);
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0];
+      const field = firstIssue?.path?.join(".");
+      const detail = firstIssue?.message ?? "Invalid payload";
+      return {
+        error: fail("INVALID_INPUT", field ? `${field}: ${detail}` : detail, 422),
+      };
+    }
+
+    return {
+      data: parsed.data,
+      files: formData.getAll("photos").filter((value): value is File => isFormFile(value) && value.size > 0),
+    };
+  } catch {
+    return {
+      error: fail("INVALID_INPUT", "Invalid report payload", 422),
+    };
+  }
+}
+
 async function findRecentDuplicatePublicReport(plantId: string, payload: CreateCommunicationInput) {
   return prisma.communication.findFirst({
     where: {
@@ -123,6 +179,26 @@ function renderHtml(
   },
 ) {
   const { locale, text } = getPublicReportText(language);
+  const photoText =
+    locale === "pt"
+      ? {
+          attach: "Anexar fotografias",
+          help: "Pode anexar fotografias para documentar a situacao.",
+          remove: "Remover",
+          invalidType: "Apenas imagens JPG, PNG ou WEBP sao aceites.",
+          tooLarge: "Cada fotografia pode ter no maximo 5 MB.",
+          tooMany: "Pode anexar no maximo 5 fotografias.",
+          totalTooLarge: "O total das fotografias nao pode exceder 20 MB.",
+        }
+      : {
+          attach: "Attach photos",
+          help: "You can attach photos to document the situation.",
+          remove: "Remove",
+          invalidType: "Only JPG, PNG or WEBP images are accepted.",
+          tooLarge: "Each photo can be at most 5 MB.",
+          tooMany: "You can attach at most 5 photos.",
+          totalTooLarge: "Photos cannot exceed 20 MB in total.",
+        };
   const employeesJson = safeJson(
     options.employees.map((employee) => ({
       id: employee.id,
@@ -153,6 +229,11 @@ function renderHtml(
       input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
       button { margin-top: 14px; background: #0f766e; color: white; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; }
       button:disabled { opacity: 0.65; cursor: not-allowed; }
+      .photo-help { margin: 4px 0 8px; color: #475569; font-size: 13px; }
+      .photo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 10px; margin-top: 10px; }
+      .photo-card { border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #f8fafc; }
+      .photo-card img { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
+      .photo-card button { width: 100%; margin: 0; border-radius: 0; background: #991b1b; padding: 8px; font-size: 12px; }
       .combo { position: relative; }
       .combo-list { position: absolute; z-index: 20; left: 0; right: 0; max-height: 240px; overflow-y: auto; margin-top: 4px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16); }
       .combo-option { width: 100%; margin: 0; border: 0; border-radius: 0; background: white; color: #0f172a; padding: 9px 10px; text-align: left; font-weight: 500; }
@@ -234,6 +315,11 @@ function renderHtml(
           <label>${escapeHtml(text.suggestedAction)}</label>
           <textarea name="suggestedAction" rows="3"></textarea>
 
+          <label for="photos">${escapeHtml(photoText.attach)}</label>
+          <p class="photo-help">${escapeHtml(photoText.help)}</p>
+          <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple />
+          <div id="photo-preview" class="photo-grid"></div>
+
           <button type="submit">${escapeHtml(text.submit)}</button>
           <p id="msg"></p>
         </form>
@@ -247,10 +333,13 @@ function renderHtml(
       const workerWrap = document.getElementById('worker-wrap');
       const clinicalWrap = document.getElementById('clinical-wrap');
       const eventDatetimeInput = document.getElementById('eventDatetime');
+      const photosInput = document.getElementById('photos');
+      const photoPreview = document.getElementById('photo-preview');
       const submitButton = form.querySelector('button[type="submit"]');
       const originalSubmitText = submitButton.textContent;
       const formControls = Array.from(form.elements).filter((element) => element !== submitButton);
       let submissionCompleted = false;
+      let selectedPhotos = [];
       const bodyPartSelect = form.elements.bodyPartId;
       const reportData = {
         employees: ${employeesJson},
@@ -263,7 +352,18 @@ function renderHtml(
         selectInvolvedWorker: ${safeJson(text.selectInvolvedWorker)},
         selectNature: ${safeJson(text.selectNature)},
         selectBodyPart: ${safeJson(text.selectBodyPart)},
+        photoInvalidType: ${safeJson(photoText.invalidType)},
+        photoTooLarge: ${safeJson(photoText.tooLarge)},
+        photoTooMany: ${safeJson(photoText.tooMany)},
+        photoTotalTooLarge: ${safeJson(photoText.totalTooLarge)},
+        photoRemove: ${safeJson(photoText.remove)},
       };
+      const photoLimits = {
+        maxFiles: ${PUBLIC_REPORT_PHOTO_LIMITS.maxFiles},
+        maxFileSizeBytes: ${PUBLIC_REPORT_PHOTO_LIMITS.maxFileSizeBytes},
+        maxTotalSizeBytes: ${PUBLIC_REPORT_PHOTO_LIMITS.maxTotalSizeBytes},
+      };
+      const allowedPhotoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
       function setFormLocked(locked) {
         for (const control of formControls) {
@@ -276,6 +376,8 @@ function renderHtml(
         msg.className = 'ok';
         msg.textContent = messages.success;
         form.reset();
+        selectedPhotos = [];
+        renderPhotoPreview();
         workerCombo.clear();
         injuryTypeCombo.clear();
         syncWorkerVisibility();
@@ -429,6 +531,74 @@ function renderHtml(
         return true;
       }
 
+      function setPhotoError(message) {
+        msg.className = 'err';
+        msg.textContent = message;
+      }
+
+      function renderPhotoPreview() {
+        photoPreview.replaceChildren();
+
+        for (const [index, photo] of selectedPhotos.entries()) {
+          const card = document.createElement('div');
+          card.className = 'photo-card';
+
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(photo);
+          img.alt = photo.name;
+          img.onload = () => URL.revokeObjectURL(img.src);
+          card.appendChild(img);
+
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.textContent = messages.photoRemove;
+          remove.addEventListener('click', () => {
+            selectedPhotos.splice(index, 1);
+            renderPhotoPreview();
+          });
+          card.appendChild(remove);
+
+          photoPreview.appendChild(card);
+        }
+      }
+
+      function addSelectedPhotos(files) {
+        msg.textContent = '';
+        msg.className = '';
+
+        const nextPhotos = [...selectedPhotos, ...files];
+        if (nextPhotos.length > photoLimits.maxFiles) {
+          setPhotoError(messages.photoTooMany);
+          photosInput.value = '';
+          return;
+        }
+
+        const totalSize = nextPhotos.reduce((sum, photo) => sum + photo.size, 0);
+        if (totalSize > photoLimits.maxTotalSizeBytes) {
+          setPhotoError(messages.photoTotalTooLarge);
+          photosInput.value = '';
+          return;
+        }
+
+        for (const photo of files) {
+          if (!allowedPhotoTypes.has(photo.type)) {
+            setPhotoError(messages.photoInvalidType);
+            photosInput.value = '';
+            return;
+          }
+
+          if (photo.size > photoLimits.maxFileSizeBytes) {
+            setPhotoError(messages.photoTooLarge);
+            photosInput.value = '';
+            return;
+          }
+        }
+
+        selectedPhotos = nextPhotos;
+        photosInput.value = '';
+        renderPhotoPreview();
+      }
+
       function syncWorkerVisibility() {
         const clinicalVisible = typeSelect.value === 'FIRST_AID';
         workerWrap.style.display = 'block';
@@ -445,6 +615,7 @@ function renderHtml(
       typeSelect.addEventListener('change', syncWorkerVisibility);
       eventDatetimeInput.addEventListener('focus', syncEventDatetimeMax);
       eventDatetimeInput.addEventListener('input', validateEventDatetime);
+      photosInput.addEventListener('change', () => addSelectedPhotos(Array.from(photosInput.files || [])));
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -486,10 +657,15 @@ function renderHtml(
         submitButton.textContent = originalSubmitText;
 
         try {
+          const requestBody = new FormData();
+          requestBody.set('payload', JSON.stringify(payload));
+          for (const photo of selectedPhotos) {
+            requestBody.append('photos', photo, photo.name);
+          }
+
           const response = await fetch('/r/${plantCode}/report?t=${token}', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: requestBody,
           });
 
           const json = await response.json().catch(() => null);
@@ -598,7 +774,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     return fail("INVALID_TOKEN", "Token invalid or revoked", 401);
   }
 
-  const parsed = await parseBody(request, createPublicReportCommunicationInput);
+  const parsed = await parsePublicReportRequest(request);
   if ("error" in parsed) return parsed.error;
 
   if (!CommunicationService.isN6AllowedType(parsed.data.type)) {
@@ -618,12 +794,37 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
     return ok(duplicateCommunication);
   }
 
+  const uploadedAttachments = await (async () => {
+    try {
+      return await uploadPublicReportPhotos({
+        plantCode: plant.code,
+        files: parsed.files,
+      });
+    } catch (error) {
+      if (error instanceof CommunicationAttachmentValidationError) {
+        logger.warn(
+          {
+            plantCode,
+            route: "report-submit",
+            reason: error.code,
+            fileCount: parsed.files.length,
+          },
+          "public report photo rejected",
+        );
+        return fail(error.code, error.message, error.status);
+      }
+      throw error;
+    }
+  })();
+  if (uploadedAttachments instanceof Response) return uploadedAttachments;
+
   const communication = await (async () => {
     try {
       return await CommunicationService.create({
         plantId: plant.id,
         payload: {
           ...parsed.data,
+          attachments: uploadedAttachments,
           riskThemeId: undefined,
           unsafeActTypeId: undefined,
           unsafeConditionTypeId: undefined,
@@ -633,8 +834,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
       });
     } catch (error) {
       if (error instanceof CommunicationValidationError) {
+        await deleteUploadedCommunicationAttachments(uploadedAttachments);
         return fail(error.code, error.message, error.status);
       }
+      await deleteUploadedCommunicationAttachments(uploadedAttachments);
       throw error;
     }
   })();

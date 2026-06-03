@@ -549,7 +549,9 @@ model CommunicationAttachment {
   communicationId  String
   fileKey          String
   fileName         String
+  originalName     String?
   contentType      String
+  size             Int?
   createdAt        DateTime      @default(now())
   uploadedByUserId String?
   communication    Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)

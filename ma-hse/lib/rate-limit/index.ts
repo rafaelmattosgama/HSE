@@ -96,6 +96,55 @@ export async function consumeRateLimit(key: string, points = env.RATE_LIMIT_POIN
   };
 }
 
+export async function getRateLimitState(key: string, points = env.RATE_LIMIT_POINTS) {
+  const redisClient = await getConnectedRedisClient();
+
+  if (redisClient) {
+    const redisKey = `rl:${key}`;
+    const [countResult, ttlResult] = await Promise.all([redisClient.get(redisKey), redisClient.pttl(redisKey)]);
+    const count = Number(countResult ?? 0);
+    const ttl = Number(ttlResult ?? -1);
+    const resetAt = ttl > 0 ? Date.now() + ttl : null;
+
+    return {
+      count,
+      allowed: count < points,
+      remaining: Math.max(0, points - count),
+      resetAt,
+    };
+  }
+
+  const now = Date.now();
+  const existing = memoryStore.get(key);
+  if (!existing || existing.resetAt <= now) {
+    memoryStore.delete(key);
+    return {
+      count: 0,
+      allowed: true,
+      remaining: points,
+      resetAt: null,
+    };
+  }
+
+  return {
+    count: existing.count,
+    allowed: existing.count < points,
+    remaining: Math.max(0, points - existing.count),
+    resetAt: existing.resetAt,
+  };
+}
+
+export async function resetRateLimit(key: string) {
+  const redisClient = await getConnectedRedisClient();
+
+  if (redisClient) {
+    await redisClient.del(`rl:${key}`);
+    return;
+  }
+
+  memoryStore.delete(key);
+}
+
 export function getRedisClient() {
   return createRedisClient();
 }

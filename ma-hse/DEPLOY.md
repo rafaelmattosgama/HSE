@@ -105,6 +105,9 @@ OPENAI_TRANSLATION_MODEL
 OPENAI_BASE_URL
 RATE_LIMIT_POINTS
 RATE_LIMIT_WINDOW_SEC
+AUTH_LOGIN_RATE_LIMIT_POINTS
+AUTH_LOGIN_RATE_LIMIT_WINDOW_SEC
+AUTH_LOGIN_RATE_LIMIT_BURST
 SEED_DEFAULT_PASSWORD
 N0_ADMIN_EMAIL
 ```
@@ -525,6 +528,8 @@ Antes de atualizar este guia, foi validado localmente:
 - Trocar senhas de utilizadores importados apos o primeiro acesso.
 - Proteger `.env.production`; ele contem segredos de producao.
 - Nao versionar dumps reais nem `.env.production`.
+- O formulario publico via QR Code permite anexar fotografias. Ver
+  `docs/public-report-photo-uploads.md` para limites, storage e validacao.
 - `npm audit` ainda reporta `nodemailer` via `next-auth` v4. O codigo nao usa
   as opcoes vulneraveis `name` ou `envelope.size`, mas a dependencia deve ser
   revista quando houver versao compativel do NextAuth/Auth.js.

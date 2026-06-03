@@ -41,7 +41,9 @@ const communicationInputShape = z.object({
         z.object({
           fileKey: z.string().min(3),
           fileName: z.string().min(1),
+          originalName: z.string().min(1).optional(),
           contentType: z.string().min(3),
+          size: z.number().int().nonnegative().optional(),
         }),
       )
       .optional(),
