@@ -20,9 +20,14 @@ function normalizeRecipients(to) {
   return Array.isArray(to) ? to : [to];
 }
 
-function hashRecipients(to) {
+function cleanRecipients(to) {
   return normalizeRecipients(to)
-    .filter(Boolean)
+    .map((recipient) => String(recipient || "").trim())
+    .filter(Boolean);
+}
+
+function hashRecipients(to) {
+  return cleanRecipients(to)
     .map((recipient) => hashSensitiveValue(String(recipient).trim().toLowerCase()));
 }
 
@@ -30,6 +35,18 @@ export async function sendSystemEmail({ type, to, language = DEFAULT_EMAIL_LANGU
   let resolvedLanguage = language;
 
   try {
+    const recipients = cleanRecipients(to);
+    if (!recipients.length) {
+      logger.warn(
+        {
+          type,
+          language,
+        },
+        "system_email_skipped_missing_recipients",
+      );
+      return;
+    }
+
     const template = getEmailTemplate(type, language);
     resolvedLanguage = template.language;
     const subject = renderTemplate(template.subject, data);
@@ -38,7 +55,7 @@ export async function sendSystemEmail({ type, to, language = DEFAULT_EMAIL_LANGU
 
     await transporter.sendMail({
       from: env.SMTP_FROM,
-      to,
+      to: recipients,
       subject,
       html,
       text,

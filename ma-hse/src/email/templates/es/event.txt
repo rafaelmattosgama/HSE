@@ -1,0 +1,12 @@
+Hola {{recipient_name}},
+
+{{event_title}}
+
+{{event_intro}}
+
+Planta: {{plant_name}}
+Fecha/hora: {{data_hora}}
+Referencia: {{reference_code}}
+{{description}}
+
+Abrir: {{action_url}}

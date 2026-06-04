@@ -3,8 +3,8 @@ import { ok } from "@/lib/api";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { prisma } from "@/lib/prisma";
-import { EmailService } from "@/lib/services/email-service";
 import { REQUIRED_COMPANY_DOCUMENTS, REQUIRED_WORKER_DOCUMENTS } from "@/lib/services/external-company-service";
+import { sendContractorDocumentationFollowupEmail } from "@/src/email/systemEmailHelpers.js";
 
 export async function POST(_request: Request, context: { params: Promise<{ plantCode: string; companyId: string }> }) {
   const { plantCode, companyId } = await context.params;
@@ -55,20 +55,17 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
     ...workerIssues.map((issue) => `Worker issue: ${issue}`),
   ];
 
-  const htmlList = bulletLines.length
-    ? `<ul>${bulletLines.map((line) => `<li>${line}</li>`).join("")}</ul>`
-    : "<p>All required documents are currently approved.</p>";
-
-  await EmailService.sendMail({
+  await sendContractorDocumentationFollowupEmail({
     to: company.email,
-    subject: `${plant.name} - contractor documentation follow-up`,
-    html: `<p>Hello ${company.contactName},</p><p>Please review the current documentation status for ${company.companyName}.</p>${htmlList}<p>Access the platform to upload the missing or corrected files.</p>`,
-    text: [
+    user: {
+      name: company.contactName,
+      email: company.email,
+    },
+    plantName: plant.name,
+    mensagem: [
       `Hello ${company.contactName},`,
-      "",
       `Please review the current documentation status for ${company.companyName}.`,
-      ...bulletLines,
-      "",
+      ...(bulletLines.length ? bulletLines : ["All required documents are currently approved."]),
       "Access the platform to upload the missing or corrected files.",
     ].join("\n"),
   });

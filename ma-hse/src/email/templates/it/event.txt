@@ -1,0 +1,12 @@
+Ciao {{recipient_name}},
+
+{{event_title}}
+
+{{event_intro}}
+
+Stabilimento: {{plant_name}}
+Data/ora: {{data_hora}}
+Riferimento: {{reference_code}}
+{{description}}
+
+Apri: {{action_url}}

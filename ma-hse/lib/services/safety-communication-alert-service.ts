@@ -10,12 +10,12 @@ import {
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { EmailService } from "@/lib/services/email-service";
 import {
   formatSewoOccurrenceType,
   getSifPsifDisplayLabel,
   getSifPsifResultFromTemplateData,
 } from "@/lib/services/sewo-validation-service";
+import { sendNotificationEmail } from "@/src/email/systemEmailHelpers.js";
 
 export const SAFETY_COMMUNICATION_APPROVED_CHANNEL = "SAFETY_COMMUNICATION_APPROVED";
 
@@ -595,10 +595,11 @@ async function sendEmailNotification(input: {
   communicationId: string;
   recipientUserId: string;
   recipientEmail: string | null;
+  recipientName?: string | null;
+  recipientLanguage?: string | null;
   departmentId: string;
   title: string;
   body: string;
-  html: string;
 }) {
   const notificationModel = getSafetyCommunicationNotificationDelegate();
   const notification = await notificationModel.upsert({
@@ -645,11 +646,16 @@ async function sendEmailNotification(input: {
   }
 
   try {
-    await EmailService.sendMail({
-      to: input.recipientEmail,
-      subject: input.title,
-      html: input.html,
-      text: input.body,
+    await sendNotificationEmail({
+      user: {
+        email: input.recipientEmail,
+        name: input.recipientName ?? undefined,
+        language: input.recipientLanguage ?? undefined,
+      },
+      tituloNotificacao: input.title,
+      mensagem: input.body,
+      dataHora: new Date(),
+      plantName: input.plantId,
     });
 
     await notificationModel.update({
@@ -1277,6 +1283,7 @@ export const SafetyCommunicationAlertService = {
             id: true,
             name: true,
             email: true,
+            language: true,
           },
         },
       },
@@ -1321,10 +1328,11 @@ export const SafetyCommunicationAlertService = {
             communicationId: communication.id,
             recipientUserId: recipient.user.id,
             recipientEmail: recipient.user.email,
+            recipientName: recipient.user.name,
+            recipientLanguage: recipient.user.language,
             departmentId: department.id,
             title: content.title,
             body: content.body,
-            html: content.html,
           }),
           sendFloatingAlertNotification({
             plantId: communication.plantId,

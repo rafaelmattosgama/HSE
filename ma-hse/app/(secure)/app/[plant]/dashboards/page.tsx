@@ -27,6 +27,7 @@ import { getServerUiLocale } from "@/lib/server-ui-language";
 import { buildSafetyDaysSummary } from "@/lib/safety-days";
 import { getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
 import { AppCard, AppHero, AppKpiCard } from "@/components/ui/app-surface";
+import { isDashboardOpenAction, isDashboardOverdueAction } from "@/lib/dashboard-actions";
 
 function buildPyramidCounts(
   rows: Array<{
@@ -312,16 +313,15 @@ export default async function DashboardsPage({
   const pyramidCounts = buildPyramidCounts(validCommunications);
   const pendingValidation = communicationRows.filter((entry) => ["SUBMITTED", "PENDING_VALIDATION"].includes(entry.status)).length;
   const openCommunications = communicationRows.filter((entry) => ["VALID_OPEN", "ONGOING"].includes(entry.status)).length;
+  const dashboardReferenceDate = new Date();
   const myOpenActions = actionRows.filter(
-    (entry) => entry.ownerUserId === session?.user.id && (entry.status === "OPEN" || entry.status === "ONGOING"),
+    (entry) => entry.ownerUserId === session?.user.id && isDashboardOpenAction(entry),
   ).length;
   const clinicalCases = communicationRows.filter((entry) => entry.type === "FIRST_AID" || entry.type === "ACCIDENT").length;
-  const overdue = actionRows.filter(
-    (entry) => (entry.status === "OPEN" || entry.status === "ONGOING") && entry.dueDate.getTime() < period.to.getTime(),
-  ).length;
+  const overdue = actionRows.filter((entry) => isDashboardOverdueAction(entry, dashboardReferenceDate)).length;
   const openActionsCount = actionRows.filter((entry) => entry.status === "OPEN").length;
   const closedActions = actionRows.filter((entry) => entry.status === "CLOSED").length;
-  const actionsToClose = actionRows.filter((entry) => entry.status === "OPEN" || entry.status === "ONGOING").length;
+  const actionsToClose = actionRows.filter(isDashboardOpenAction).length;
   const totalActions = actionRows.length;
   const validCommunicationsCount = validCommunications.length;
   const nearMissCount = validCommunications.filter((entry) => entry.type === "NEAR_MISS").length;

@@ -4,11 +4,14 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
-import { EmailService } from "@/lib/services/email-service";
 import { NotificationService } from "@/lib/services/notification-service";
 import { SewoExportService } from "@/lib/services/sewo-export";
 import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
-import { sendSewoAlertEmail } from "@/src/email/systemEmailHelpers.js";
+import {
+  sendSewoSubmittedForValidationEmail,
+  sendSewoValidatedDistributionEmail,
+  sendSewoValidatedSubmitterEmail,
+} from "@/src/email/systemEmailHelpers.js";
 import {
   SEWO_APPROVED_CHANNEL,
   SEWO_N1_APPROVAL_CHANNEL,
@@ -170,9 +173,9 @@ async function notifySewoSubmitted(input: {
     const detailUrl = new URL(`/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`, env.APP_URL).toString();
     await Promise.allSettled(
       recipients.emailRecipients.map((recipient) =>
-        sendSewoAlertEmail({
+        sendSewoSubmittedForValidationEmail({
           user: recipient,
-          tipoAlerta: "S-EWO pending N1 approval",
+          tipoAlerta: "S-EWO submitted for N1 validation",
           descricao: summary.occurrenceType,
           prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
           dataHora: sewo.analysisDate,
@@ -193,18 +196,20 @@ async function notifySewoApproved(sewoId: string) {
       plant: true,
       communication: true,
       line: true,
+      performedBy: true,
     },
   });
   const [recipients, externalRecipients] = await Promise.all([
     getRoleRecipients(sewo.plantId, [...SEWO_STAKEHOLDER_ROLES]),
     listSewoReportRecipients(sewo.plantId),
   ]);
-  if (!recipients.userIds.length && !recipients.emailRecipients.length && !externalRecipients.length) return;
+  const hasSubmitterEmail = Boolean(sewo.performedBy.email);
+  if (!recipients.userIds.length && !recipients.emailRecipients.length && !externalRecipients.length && !hasSubmitterEmail) return;
 
   const summary = buildSewoNotificationSummary(sewo);
   const notificationTasks: Promise<unknown>[] = [];
 
-  if (recipients.userIds.length || recipients.emailRecipients.length) {
+  if (recipients.userIds.length || recipients.emailRecipients.length || hasSubmitterEmail) {
     notificationTasks.push((async () => {
   const title = `S-EWO aprovado e partilhado: ${summary.occurrenceType}`;
   const body = [
@@ -220,7 +225,6 @@ async function notifySewoApproved(sewoId: string) {
   await NotificationService.notify({
     plantId: sewo.plantId,
     userIds: recipients.userIds,
-    emailRecipients: recipients.emailRecipients,
     title,
     body,
     html: buildSewoEmailHtml({
@@ -243,6 +247,21 @@ async function notifySewoApproved(sewoId: string) {
         ]
       : undefined,
   });
+
+  if (sewo.performedBy.email) {
+    const detailUrl = new URL(`/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`, env.APP_URL).toString();
+    await sendSewoValidatedSubmitterEmail({
+      user: sewo.performedBy,
+      tipoAlerta: "S-EWO validated by N1",
+      descricao: summary.occurrenceType,
+      prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
+      dataHora: sewo.approvedAt ?? new Date(),
+      sewoCode: sewo.id,
+      plantName: summary.plantLabel,
+      sewoStatus: "Approved",
+      sewoUrl: detailUrl,
+    });
+  }
     })());
   }
 
@@ -611,11 +630,21 @@ async function sendSewoApprovedExternalReports(input: {
       isPriority: input.summary.isPriority,
     });
 
-    await EmailService.sendMail({
+    await sendSewoValidatedDistributionEmail({
       to: recipient.email,
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
+      user: {
+        name: recipient.name,
+        email: recipient.email,
+        language: recipient.language,
+      },
+      tipoAlerta: email.subject,
+      descricao: input.summary.occurrenceType,
+      prioridade: input.summary.isPriority ? input.summary.sifPsifLabel : "Normal",
+      dataHora: new Date(),
+      sewoCode: input.sewo.id,
+      plantName: input.summary.plantLabel,
+      sewoStatus: "Approved",
+      sewoUrl: "",
       attachments: [
         {
           filename: `sewo-summary-${input.sewo.plant.code}-${input.sewo.id}.pdf`,

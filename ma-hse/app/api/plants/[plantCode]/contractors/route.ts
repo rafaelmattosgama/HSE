@@ -6,8 +6,8 @@ import { env } from "@/lib/env";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { prisma } from "@/lib/prisma";
-import { EmailService } from "@/lib/services/email-service";
 import { contractorInvitationInput } from "@/lib/validation/dtos";
+import { sendContractorInvitationEmail } from "@/src/email/systemEmailHelpers.js";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -53,11 +53,11 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   });
 
   const link = `${env.APP_URL}/contractors/register?t=${invitationToken}`;
-  await EmailService.sendMail({
+  await sendContractorInvitationEmail({
     to: parsed.data.email,
-    subject: `${plant.name} - external company documentation request`,
-    html: `<p>A documentation request was created for your company.</p><p>Required documents: ${parsed.data.requiredDocuments.join(", ")}</p><p>Access the platform here: <a href="${link}">${link}</a></p>`,
-    text: `Required documents: ${parsed.data.requiredDocuments.join(", ")}\nAccess the platform here: ${link}`,
+    plantName: plant.name,
+    mensagem: `A documentation request was created for your company. Required documents: ${parsed.data.requiredDocuments.join(", ")}`,
+    actionUrl: link,
   });
 
   return ok(invitation, { status: 201 });
