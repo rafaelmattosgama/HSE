@@ -36,9 +36,9 @@ const exportMock = vi.hoisted(() => ({
 }));
 
 const emailMock = vi.hoisted(() => ({
-  EmailService: {
-    sendMail: vi.fn(),
-  },
+  sendSewoSubmittedForValidationEmail: vi.fn(),
+  sendSewoValidatedDistributionEmail: vi.fn(),
+  sendSewoValidatedSubmitterEmail: vi.fn(),
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -74,7 +74,7 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/audit", () => auditMock);
 vi.mock("@/lib/services/notification-service", () => notificationMock);
 vi.mock("@/lib/services/sewo-export", () => exportMock);
-vi.mock("@/lib/services/email-service", () => emailMock);
+vi.mock("@/src/email/systemEmailHelpers.js", () => emailMock);
 vi.mock("@/lib/logger", () => loggerMock);
 vi.mock("@/jobs/queues", () => queuesMock);
 vi.mock("@/lib/services/sewo-validation-service", () => validationMock);
@@ -150,7 +150,8 @@ describe("SewaService approval notifications", () => {
     expect(notificationMock.NotificationService.notify).not.toHaveBeenCalled();
     expect(exportMock.SewoExportService.buildExport).not.toHaveBeenCalled();
     expect(exportMock.SewoExportService.buildExternalSummaryExport).not.toHaveBeenCalled();
-    expect(emailMock.EmailService.sendMail).not.toHaveBeenCalled();
+    expect(emailMock.sendSewoValidatedDistributionEmail).not.toHaveBeenCalled();
+    expect(emailMock.sendSewoValidatedSubmitterEmail).not.toHaveBeenCalled();
     expect(result.status).toBe(SEWOStatus.APPROVED);
   });
 
@@ -163,6 +164,12 @@ describe("SewaService approval notifications", () => {
       whereText: "Workstation A",
       communication: { type: "NEAR_MISS" },
       line: { name: "Line 4" },
+      performedBy: {
+        id: "submitter-1",
+        name: "Submitter",
+        email: null,
+        language: "pt",
+      },
       plant: {
         code: "pl1",
         name: "Plant 1",
@@ -201,28 +208,24 @@ describe("SewaService approval notifications", () => {
     expect(exportMock.SewoExportService.buildExternalSummaryExport).toHaveBeenCalledTimes(2);
     expect(exportMock.SewoExportService.buildExternalSummaryExport).toHaveBeenNthCalledWith(1, "sewo-1", { locale: "pt" });
     expect(exportMock.SewoExportService.buildExternalSummaryExport).toHaveBeenNthCalledWith(2, "sewo-1", { locale: "en" });
-    expect(emailMock.EmailService.sendMail).toHaveBeenCalledTimes(3);
+    expect(emailMock.sendSewoValidatedDistributionEmail).toHaveBeenCalledTimes(3);
 
-    const ptEmail = emailMock.EmailService.sendMail.mock.calls.find((call) => call[0].to === "maria@example.com")?.[0];
-    const enEmail = emailMock.EmailService.sendMail.mock.calls.find((call) => call[0].to === "john@example.com")?.[0];
+    const ptEmail = emailMock.sendSewoValidatedDistributionEmail.mock.calls.find((call) => call[0].to === "maria@example.com")?.[0];
+    const enEmail = emailMock.sendSewoValidatedDistributionEmail.mock.calls.find((call) => call[0].to === "john@example.com")?.[0];
 
     expect(ptEmail).toEqual(expect.objectContaining({
       to: "maria@example.com",
-      subject: "Relatorio S-EWO aprovado",
-      text: expect.stringContaining("Plant 1 (PL1)"),
+      tipoAlerta: "Relatorio S-EWO aprovado",
+      plantName: "Plant 1 (PL1)",
     }));
-    expect(ptEmail?.text).toContain("Workstation A");
-    expect(ptEmail?.text).toContain("Near Miss");
-    expect(ptEmail?.text).toContain("SIF");
     expect(ptEmail?.attachments?.[0]?.filename).toBe("sewo-summary-pl1-sewo-1.pdf");
 
     expect(enEmail).toEqual(expect.objectContaining({
       to: "john@example.com",
-      subject: "Approved S-EWO report",
-      text: expect.stringContaining("Plant 1 (PL1)"),
+      tipoAlerta: "Approved S-EWO report",
+      plantName: "Plant 1 (PL1)",
     }));
-    expect(enEmail?.text).toContain("Workstation A");
-    expect(enEmail?.text).toContain("Near Miss");
-    expect(enEmail?.text).toContain("SIF");
+    expect(enEmail?.descricao).toBe("Near Miss");
+    expect(enEmail?.prioridade).toBe("SIF");
   });
 });

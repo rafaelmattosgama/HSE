@@ -1,0 +1,12 @@
+Bonjour {{recipient_name}},
+
+{{event_title}}
+
+{{event_intro}}
+
+Usine: {{plant_name}}
+Date/heure: {{data_hora}}
+Reference: {{reference_code}}
+{{description}}
+
+Ouvrir: {{action_url}}

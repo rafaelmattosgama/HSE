@@ -241,6 +241,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
           temporaryPassword: generatedPassword,
           loginUrl,
           language: result.user.language,
+          scenario: result.created ? "create" : "reset",
         });
         passwordDelivery = "TEMP_EMAILED";
       } catch (error) {

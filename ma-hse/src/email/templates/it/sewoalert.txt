@@ -1,0 +1,13 @@
+Ciao {{recipient_name}},
+
+Un allarme S-EWO richiede attenzione.
+
+Tipo allarme: {{tipo_alerta}}
+Descrizione: {{descricao}}
+Priorita: {{prioridade}}
+Data/ora: {{data_hora}}
+Codice: {{sewo_code}}
+Stabilimento: {{plant_name}}
+Stato: {{sewo_status}}
+
+Apri il record: {{sewo_url}}

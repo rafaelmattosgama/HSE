@@ -1,0 +1,9 @@
+Ciao {{recipient_name}},
+
+{{titulo_notificacao}}
+
+{{mensagem}}
+
+Data/ora: {{data_hora}}
+Stabilimento: {{plant_name}}
+Vedi dettagli: {{action_url}}

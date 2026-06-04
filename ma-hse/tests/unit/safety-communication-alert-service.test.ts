@@ -41,9 +41,7 @@ const prismaMock = vi.hoisted(() => ({
 }));
 
 const emailMock = vi.hoisted(() => ({
-  EmailService: {
-    sendMail: vi.fn(),
-  },
+  sendNotificationEmail: vi.fn(),
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -61,7 +59,7 @@ const validationMock = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
-vi.mock("@/lib/services/email-service", () => emailMock);
+vi.mock("@/src/email/systemEmailHelpers.js", () => emailMock);
 vi.mock("@/lib/logger", () => loggerMock);
 vi.mock("@/lib/services/sewo-validation-service", () => validationMock);
 vi.mock("@/lib/env", () => ({
@@ -178,20 +176,20 @@ describe("SafetyCommunicationAlertService", () => {
       }),
     );
 
-    expect(emailMock.EmailService.sendMail).toHaveBeenCalledTimes(2);
-    expect(emailMock.EmailService.sendMail).toHaveBeenNthCalledWith(
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledTimes(2);
+    expect(emailMock.sendNotificationEmail).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        to: "sup1@example.com",
-        subject: "Comunicacao de Seguranca - Injury",
-        text: expect.stringContaining("Descricao: Worker slipped near the conveyor guard."),
+        user: expect.objectContaining({ email: "sup1@example.com" }),
+        tituloNotificacao: "Comunicacao de Seguranca - Injury",
+        mensagem: expect.stringContaining("Descricao: Worker slipped near the conveyor guard."),
       }),
     );
-    expect(emailMock.EmailService.sendMail).toHaveBeenNthCalledWith(
+    expect(emailMock.sendNotificationEmail).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        to: "sup2@example.com",
-        text: expect.stringContaining("Trabalhador envolvido: Ana Silva"),
+        user: expect.objectContaining({ email: "sup2@example.com" }),
+        mensagem: expect.stringContaining("Trabalhador envolvido: Ana Silva"),
       }),
     );
 

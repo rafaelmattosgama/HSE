@@ -1,5 +1,5 @@
 import { CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
   employeeDirectory: {
@@ -7,9 +7,13 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
   },
   communication: {
+    findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
     create: vi.fn(),
+  },
+  userPlantRole: {
+    findMany: vi.fn(),
   },
   riskTheme: {
     findFirst: vi.fn(),
@@ -21,6 +25,7 @@ const prismaMock = vi.hoisted(() => ({
 
 const notificationServiceMock = vi.hoisted(() => ({
   NotificationService: {
+    notify: vi.fn(),
     notifyPlantRoles: vi.fn(),
   },
 }));
@@ -48,16 +53,31 @@ const auditMock = vi.hoisted(() => ({
   buildDiff: vi.fn(() => ({})),
 }));
 
+const emailMock = vi.hoisted(() => ({
+  sendSafetyCommunicationReportedEmail: vi.fn(),
+}));
+
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/services/notification-service", () => notificationServiceMock);
 vi.mock("@/lib/services/sewo-service", () => sewoServiceMock);
 vi.mock("@/lib/services/repeatability-alert-service", () => repeatabilityAlertMock);
 vi.mock("@/lib/services/safety-communication-alert-service", () => safetyCommunicationAlertServiceMock);
 vi.mock("@/lib/audit", () => auditMock);
+vi.mock("@/src/email/systemEmailHelpers.js", () => emailMock);
+vi.mock("@/lib/env", () => ({
+  env: {
+    APP_URL: "http://localhost:3000",
+  },
+}));
 
 import { CommunicationService } from "@/lib/services/communication-service";
 
 describe("CommunicationService approved communication alerts", () => {
+  beforeEach(() => {
+    prismaMock.communication.findUnique.mockResolvedValue(null);
+    prismaMock.userPlantRole.findMany.mockResolvedValue([]);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });

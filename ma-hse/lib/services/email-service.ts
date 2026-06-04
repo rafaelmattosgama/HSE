@@ -45,6 +45,7 @@ export const EmailService = {
     temporaryPassword: string;
     loginUrl: string;
     language?: string | null;
+    scenario?: "create" | "reset";
   }) {
     await sendCredentialsEmail({
       to: input.to,
@@ -55,6 +56,7 @@ export const EmailService = {
       },
       palavraPasse: input.temporaryPassword,
       linkAcesso: input.loginUrl,
+      scenario: input.scenario ?? "create",
     });
   },
 };

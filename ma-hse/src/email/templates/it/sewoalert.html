@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="it">
+  <body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
+    <main style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:24px;">
+      <h1 style="margin:0 0 16px;font-size:22px;color:#061a52;">Allarme S-EWO</h1>
+      <p>Ciao {{recipient_name}},</p>
+      <p>Un allarme S-EWO richiede attenzione.</p>
+      <p><strong>Tipo allarme:</strong> {{tipo_alerta}}</p>
+      <p><strong>Descrizione:</strong> {{descricao}}</p>
+      <p><strong>Priorita:</strong> {{prioridade}}</p>
+      <p><strong>Data/ora:</strong> {{data_hora}}</p>
+      <p><strong>Codice:</strong> {{sewo_code}}</p>
+      <p><strong>Stabilimento:</strong> {{plant_name}}</p>
+      <p><strong>Stato:</strong> {{sewo_status}}</p>
+      <p>Apri il record: <a href="{{sewo_url}}" style="color:#0a4dff;">{{sewo_url}}</a></p>
+    </main>
+  </body>
+</html>
