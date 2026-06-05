@@ -14,7 +14,7 @@ const workerMap: [string, (data: unknown) => Promise<void>][] = [
   [QUEUE_NAMES.DIGEST_WEEKLY, () => handleWeeklyDigest()],
   [QUEUE_NAMES.REPORT_MONTHLY, () => handleMonthlyReport()],
   [QUEUE_NAMES.REPORT_ANNUAL, () => handleAnnualReport()],
-  [QUEUE_NAMES.ACTIONS_OVERDUE, () => handleOverdueActions()],
+  [QUEUE_NAMES.ACTIONS_OVERDUE, (data) => handleOverdueActions(data as { plantId?: string })],
   [QUEUE_NAMES.ALERTS_REPETITIVE, (data) => handleRepetitiveAlerts(data as { plantId: string })],
   [QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, (data) => handleSewoApprovedNotification(data as SewoApprovedNotificationJob)],
 ];

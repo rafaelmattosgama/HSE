@@ -6,6 +6,7 @@ import {
   reportAnnualQueue,
   reportMonthlyQueue,
 } from "@/jobs/queues";
+import { ACTION_ALERT_TIMEZONE } from "@/lib/services/action-alert-service";
 
 async function upsertPlantJobs() {
   const plants = await prisma.plant.findMany({
@@ -39,7 +40,7 @@ async function upsertPlantJobs() {
   for (const plant of plants) {
     await actionsOverdueQueue.upsertJobScheduler(`overdue-${plant.id}`, {
       pattern: "0 8 * * *",
-      tz: plant.timezone,
+      tz: ACTION_ALERT_TIMEZONE,
     }, {
       name: "actions-overdue",
       data: { plantId: plant.id },

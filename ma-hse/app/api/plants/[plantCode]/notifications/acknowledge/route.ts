@@ -32,7 +32,7 @@ export async function POST(
       userId: auth.session.user.id,
       plantId: plant.id,
       channel: {
-        in: ["REPEATABILITY_ALERT", "SEWO_SUBMITTED", "SEWO_REJECTED", "SAFETY_COMMUNICATION_APPROVED"],
+        in: ["REPEATABILITY_ALERT", "SEWO_SUBMITTED", "SEWO_REJECTED", "SAFETY_COMMUNICATION_APPROVED", "ACTION_ALERT"],
       },
       status: "UNREAD",
     },

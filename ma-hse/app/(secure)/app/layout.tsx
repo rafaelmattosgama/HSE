@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { RoleCode } from "@prisma/client";
 import { MaSymbol } from "@/components/branding/ma-symbol";
+import { ActionFloatingAlert } from "@/components/feature/action-floating-alert";
 import { SewoApprovalFloatingAlert } from "@/components/feature/sewo-approval-floating-alert";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
@@ -65,6 +66,7 @@ export default async function SecureAppLayout({
           </div>
         </div>
       </header>
+      <ActionFloatingAlert enabled={true} />
       <SewoApprovalFloatingAlert enabled={hasN1Validation} />
       <div className="app-content">{children}</div>
     </div>
