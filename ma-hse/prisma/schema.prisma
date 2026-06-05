@@ -83,6 +83,17 @@ enum ActionStatus {
   CLOSED
 }
 
+enum ActionAlertType {
+  NEW_ACTION
+  THREE_DAYS_BEFORE_DUE_DATE
+  OVERDUE_ACTION
+}
+
+enum ActionAlertChannel {
+  SOFTWARE
+  EMAIL
+}
+
 enum RecordLevel {
   N1
   N2
@@ -247,6 +258,7 @@ model User {
   actionReopened                            Action[]                            @relation("ActionReopenedBy")
   actionClosed                              Action[]                            @relation("ActionClosedBy")
   actionCoOwned                             ActionCoOwner[]
+  actionAlertDeliveries                     ActionAlertDelivery[]
   notifications                             Notification[]
   safetyCommunicationAlertRecipients        SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientUser")
   createdSafetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientCreatedBy")
@@ -591,6 +603,7 @@ model Action {
   reopenedByUser      User?                      @relation("ActionReopenedBy", fields: [reopenedBy], references: [id])
   coOwners            ActionCoOwner[]
   evidenceAttachments ActionEvidenceAttachment[]
+  alertDeliveries     ActionAlertDelivery[]
   sewoLinks           SEWOActionLink[]
   smatLinks           SmatAuditActionLink[]
 
@@ -853,6 +866,24 @@ model ActionCoOwner {
   @@unique([actionId, userId])
 }
 
+model ActionAlertDelivery {
+  id             String             @id @default(uuid())
+  actionId       String
+  userId         String
+  alertType      ActionAlertType
+  channel        ActionAlertChannel
+  notificationId String?
+  sentAt         DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+  action         Action             @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification?      @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+
+  @@unique([actionId, userId, alertType, channel])
+  @@index([userId, alertType, sentAt])
+  @@index([notificationId])
+}
+
 model ActionEvidenceAttachment {
   id           String   @id @default(uuid())
   actionId     String
@@ -1105,6 +1136,7 @@ model Notification {
   user                            User?                            @relation(fields: [userId], references: [id], onDelete: Cascade)
   plant                           Plant?                           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   safetyCommunicationNotification SafetyCommunicationNotification?
+  actionAlertDeliveries           ActionAlertDelivery[]
 
   @@index([userId, status, createdAt])
   @@index([plantId, createdAt])

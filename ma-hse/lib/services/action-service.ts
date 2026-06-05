@@ -1,14 +1,12 @@
 import { ActionPriority, ActionSourceType, ActionStatus, CommunicationStatus, Prisma, SEWOStatus } from "@prisma/client";
-import { addDays, differenceInCalendarDays } from "date-fns";
+import { addDays } from "date-fns";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
-import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { ActionAlertService } from "@/lib/services/action-alert-service";
 import { CommunicationService } from "@/lib/services/communication-service";
-import { NotificationService } from "@/lib/services/notification-service";
 import { getSlaConfig } from "@/lib/services/parameter-service";
 import { SewaService } from "@/lib/services/sewo-service";
-import { sendActionAssignedEmail, sendActionDueSoonEmail } from "@/src/email/systemEmailHelpers.js";
 import type { BulkCloseActionInput, CloseActionInput, CreateActionInput, ReopenActionInput, UpdateActionInput } from "@/lib/validation/dtos";
 
 function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriority, number>, inputDueDate?: Date) {
@@ -49,53 +47,13 @@ export const ActionService = {
   },
 
   async notifyAssignees(actionId: string) {
-    const action = await prisma.action.findUniqueOrThrow({
-      where: { id: actionId },
-      include: {
-        plant: true,
-        ownerUser: true,
-        coOwners: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
-
     try {
-      const recipientUsers = Array.from(
-        new Map(
-          [action.ownerUser, ...action.coOwners.map((entry) => entry.user)]
-            .map((user) => [user.id, user]),
-        ).values(),
-      );
-
-      await NotificationService.notify({
-        plantId: action.plantId,
-        userIds: recipientUsers.map((user) => user.id),
-        title: `New action assigned: ${action.title}`,
-        body: `A new action was assigned to you with due date ${action.dueDate.toISOString().slice(0, 10)}.`,
-      });
-
-      const actionUrl = new URL(`/app/${action.plant.code}/actions/${action.id}`, env.APP_URL).toString();
-      await Promise.allSettled(
-        recipientUsers.map((user) =>
-          sendActionAssignedEmail({
-            user,
-            actionTitle: action.title,
-            description: action.description,
-            dueDate: action.dueDate,
-            plantName: action.plant.name,
-            actionUrl,
-          }),
-        ),
-      );
+      await ActionAlertService.sendNewActionAlerts(actionId);
     } catch (error) {
       logger.error(
         {
           error,
           actionId,
-          plantId: action.plantId,
         },
         "failed_to_notify_action_assignees",
       );
@@ -411,76 +369,10 @@ export const ActionService = {
   },
 
   async sendOverdueNotifications() {
-    const overdue = await this.findOverdueActions();
-
-    for (const action of overdue) {
-      await NotificationService.notify({
-        plantId: action.plantId,
-        userIds: [action.ownerUserId, ...action.coOwners.map((co) => co.userId)],
-        title: `Action overdue: ${action.title}`,
-        body: `Action ${action.title} is overdue since ${action.dueDate.toISOString().slice(0, 10)}.`,
-      });
-    }
-
-    return overdue.length;
+    return ActionAlertService.sendOverdueActionAlerts();
   },
 
   async sendDueDateNotifications(referenceDate = new Date()) {
-    const actions = await prisma.action.findMany({
-      where: {
-        status: {
-          in: [ActionStatus.OPEN, ActionStatus.ONGOING],
-        },
-      },
-      include: {
-        plant: true,
-        ownerUser: true,
-        coOwners: {
-          include: {
-            user: true,
-          },
-        },
-      },
-    });
-
-    let notified = 0;
-
-    for (const action of actions) {
-      const daysUntilDue = differenceInCalendarDays(action.dueDate, referenceDate);
-      if (daysUntilDue !== 5 && daysUntilDue !== 0) {
-        continue;
-      }
-
-      const recipientUsers = Array.from(
-        new Map(
-          [action.ownerUser, ...action.coOwners.map((entry) => entry.user)]
-            .map((user) => [user.id, user]),
-        ).values(),
-      );
-
-      const whenText = daysUntilDue === 5 ? "in 5 days" : "today";
-      await NotificationService.notify({
-        plantId: action.plantId,
-        userIds: recipientUsers.map((user) => user.id),
-        title: `Action deadline reminder: ${action.title}`,
-        body: `Action ${action.title} is due ${whenText} (${action.dueDate.toISOString().slice(0, 10)}).`,
-      });
-      const actionUrl = new URL(`/app/${action.plant.code}/actions/${action.id}`, env.APP_URL).toString();
-      await Promise.allSettled(
-        recipientUsers.map((user) =>
-          sendActionDueSoonEmail({
-            user,
-            actionTitle: action.title,
-            dueDate: action.dueDate,
-            daysUntilDue,
-            plantName: action.plant.name,
-            actionUrl,
-          }),
-        ),
-      );
-      notified += 1;
-    }
-
-    return notified;
+    return ActionAlertService.sendThreeDaysBeforeDueDateAlerts({ referenceDate });
   },
 };
