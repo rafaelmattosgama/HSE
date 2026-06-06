@@ -2,6 +2,8 @@ import {
   CommunicationStatus,
   CommunicationType,
   NotificationStatus,
+  RoleCode,
+  SafetyCommunicationAlertType,
   SafetyCommunicationNotificationDeliveryStatus,
 } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +24,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   userPlantRole: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
   },
   safetyCommunicationAlertRecipient: {
     findMany: vi.fn(),
@@ -274,5 +277,302 @@ describe("SafetyCommunicationAlertService", () => {
     } finally {
       prismaMock.safetyCommunicationAlertRecipient = recipientDelegate;
     }
+  });
+
+  it("sends N3 email and floating software alerts for a near miss with the required communication fields", async () => {
+    prismaMock.communication.findUnique.mockResolvedValue({
+      id: "comm-near-miss",
+      plantId: "plant-1",
+      type: CommunicationType.NEAR_MISS,
+      description: "Forklift passed close to a pedestrian.",
+      eventDatetime: new Date("2026-06-06T08:30:00.000Z"),
+      reporterName: "Operator One",
+      targetText: null,
+      targetEmployeeNo: null,
+      plant: {
+        id: "plant-1",
+        code: "pl1",
+        name: "Plant 1",
+      },
+      area: {
+        name: "Assembly",
+      },
+      line: {
+        name: "Line 2",
+      },
+      workstation: {
+        name: "WS-7",
+      },
+      equipment: null,
+      targetEmployee: {
+        name: "Worker Two",
+        employeeNo: "2002",
+      },
+    });
+    prismaMock.userPlantRole.findMany.mockResolvedValue([
+      {
+        userId: "n3-1",
+        user: {
+          id: "n3-1",
+          name: "Safety User",
+          email: "n3@example.com",
+          language: "pt",
+        },
+      },
+    ]);
+    prismaMock.safetyCommunicationNotification.upsert
+      .mockResolvedValueOnce({
+        id: "email-log-1",
+        status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
+      })
+      .mockResolvedValueOnce({
+        id: "floating-log-1",
+        status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
+      });
+    prismaMock.notification.findUnique.mockResolvedValue(null);
+    prismaMock.notification.create.mockResolvedValue({
+      id: "notification-1",
+      status: NotificationStatus.UNREAD,
+    });
+
+    await SafetyCommunicationAlertService.dispatchN3CommunicationCreatedAlerts({
+      communicationId: "comm-near-miss",
+    });
+
+    expect(prismaMock.userPlantRole.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          plantId: "plant-1",
+          role: { code: RoleCode.N3_SAFETY },
+          user: { isActive: true },
+        }),
+      }),
+    );
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user: expect.objectContaining({ email: "n3@example.com" }),
+        tituloNotificacao: "Nova comunicacao registada - Quase Acidente",
+        mensagem: expect.stringContaining("Tipo de comunicacao: Quase Acidente"),
+        actionUrl: "http://localhost:3000/app/pl1/communications/comm-near-miss",
+      }),
+    );
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mensagem: expect.stringContaining("Local: Assembly / Line 2 / WS-7"),
+      }),
+    );
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mensagem: expect.stringContaining("Reporter: Operator One"),
+      }),
+    );
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mensagem: expect.stringContaining("Pessoa envolvida: Worker Two"),
+      }),
+    );
+    expect(prismaMock.safetyCommunicationNotification.upsert).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: {
+          communicationId_recipientUserId_alertType_notificationType: {
+            communicationId: "comm-near-miss",
+            recipientUserId: "n3-1",
+            alertType: SafetyCommunicationAlertType.N3_COMMUNICATION_EMAIL_ALERT,
+            notificationType: "EMAIL",
+          },
+        },
+      }),
+    );
+    expect(prismaMock.safetyCommunicationNotification.upsert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          communicationId_recipientUserId_alertType_notificationType: {
+            communicationId: "comm-near-miss",
+            recipientUserId: "n3-1",
+            alertType: SafetyCommunicationAlertType.N3_NEAR_MISS_SOFTWARE_ALERT,
+            notificationType: "FLOATING_ALERT",
+          },
+        },
+      }),
+    );
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "n3-1",
+          plantId: "plant-1",
+          title: "Alerta N3 - Quase Acidente",
+          body: expect.stringContaining("Descricao: Forklift passed close to a pedestrian."),
+          channel: "SAFETY_COMMUNICATION_N3_ALERT",
+        }),
+      }),
+    );
+  });
+
+  it("sends N3 email and first aid software alerts for first aid communications", async () => {
+    prismaMock.communication.findUnique.mockResolvedValue({
+      id: "comm-first-aid",
+      plantId: "plant-1",
+      type: CommunicationType.FIRST_AID,
+      description: "Small cut treated on site.",
+      eventDatetime: new Date("2026-06-06T09:15:00.000Z"),
+      reporterName: "Operator One",
+      targetText: "Visitor",
+      targetEmployeeNo: null,
+      plant: {
+        id: "plant-1",
+        code: "pl1",
+        name: "Plant 1",
+      },
+      area: null,
+      line: null,
+      workstation: null,
+      equipment: null,
+      targetEmployee: null,
+    });
+    prismaMock.userPlantRole.findMany.mockResolvedValue([
+      {
+        userId: "n3-1",
+        user: {
+          id: "n3-1",
+          name: "Safety User",
+          email: "n3@example.com",
+          language: "pt",
+        },
+      },
+    ]);
+    prismaMock.safetyCommunicationNotification.upsert
+      .mockResolvedValueOnce({
+        id: "email-log-1",
+        status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
+      })
+      .mockResolvedValueOnce({
+        id: "floating-log-1",
+        status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
+      });
+    prismaMock.notification.create.mockResolvedValue({
+      id: "notification-1",
+      status: NotificationStatus.UNREAD,
+    });
+
+    await SafetyCommunicationAlertService.dispatchN3CommunicationCreatedAlerts({
+      communicationId: "comm-first-aid",
+    });
+
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tituloNotificacao: "Nova comunicacao registada - Primeiros Socorros",
+        mensagem: expect.stringContaining("Pessoa envolvida: Visitor"),
+      }),
+    );
+    expect(prismaMock.safetyCommunicationNotification.upsert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          communicationId_recipientUserId_alertType_notificationType: expect.objectContaining({
+            alertType: SafetyCommunicationAlertType.N3_FIRST_AID_SOFTWARE_ALERT,
+          }),
+        },
+      }),
+    );
+  });
+
+  it("sends only N3 email alerts for other communication types", async () => {
+    prismaMock.communication.findUnique.mockResolvedValue({
+      id: "comm-unsafe-condition",
+      plantId: "plant-1",
+      type: CommunicationType.UNSAFE_CONDITION,
+      description: "Guard missing from machine.",
+      eventDatetime: new Date("2026-06-06T10:00:00.000Z"),
+      reporterName: "Operator One",
+      targetText: null,
+      targetEmployeeNo: null,
+      plant: {
+        id: "plant-1",
+        code: "pl1",
+        name: "Plant 1",
+      },
+      area: null,
+      line: null,
+      workstation: {
+        name: "WS-9",
+      },
+      equipment: null,
+      targetEmployee: null,
+    });
+    prismaMock.userPlantRole.findMany.mockResolvedValue([
+      {
+        userId: "n3-1",
+        user: {
+          id: "n3-1",
+          name: "Safety User",
+          email: "n3@example.com",
+          language: "pt",
+        },
+      },
+    ]);
+    prismaMock.safetyCommunicationNotification.upsert.mockResolvedValueOnce({
+      id: "email-log-1",
+      status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
+    });
+
+    await SafetyCommunicationAlertService.dispatchN3CommunicationCreatedAlerts({
+      communicationId: "comm-unsafe-condition",
+    });
+
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledTimes(1);
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+    expect(prismaMock.safetyCommunicationNotification.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not resend already delivered N3 communication alerts", async () => {
+    prismaMock.communication.findUnique.mockResolvedValue({
+      id: "comm-duplicate",
+      plantId: "plant-1",
+      type: CommunicationType.NEAR_MISS,
+      description: "Already delivered alert.",
+      eventDatetime: new Date("2026-06-06T11:00:00.000Z"),
+      reporterName: "Operator One",
+      targetText: null,
+      targetEmployeeNo: null,
+      plant: {
+        id: "plant-1",
+        code: "pl1",
+        name: "Plant 1",
+      },
+      area: null,
+      line: null,
+      workstation: null,
+      equipment: null,
+      targetEmployee: null,
+    });
+    prismaMock.userPlantRole.findMany.mockResolvedValue([
+      {
+        userId: "n3-1",
+        user: {
+          id: "n3-1",
+          name: "Safety User",
+          email: "n3@example.com",
+          language: "pt",
+        },
+      },
+    ]);
+    prismaMock.safetyCommunicationNotification.upsert
+      .mockResolvedValueOnce({
+        id: "email-log-1",
+        status: SafetyCommunicationNotificationDeliveryStatus.SENT,
+      })
+      .mockResolvedValueOnce({
+        id: "floating-log-1",
+        status: SafetyCommunicationNotificationDeliveryStatus.SENT,
+      });
+
+    await SafetyCommunicationAlertService.dispatchN3CommunicationCreatedAlerts({
+      communicationId: "comm-duplicate",
+    });
+
+    expect(emailMock.sendNotificationEmail).not.toHaveBeenCalled();
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
   });
 });

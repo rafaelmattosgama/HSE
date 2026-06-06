@@ -131,6 +131,13 @@ enum SafetyCommunicationNotificationType {
   FLOATING_ALERT
 }
 
+enum SafetyCommunicationAlertType {
+  N4_APPROVED_COMMUNICATION
+  N3_NEAR_MISS_SOFTWARE_ALERT
+  N3_FIRST_AID_SOFTWARE_ALERT
+  N3_COMMUNICATION_EMAIL_ALERT
+}
+
 enum SafetyCommunicationNotificationDeliveryStatus {
   PENDING
   SENT
@@ -1168,7 +1175,8 @@ model SafetyCommunicationNotification {
   communicationId  String
   recipientUserId  String
   recipientEmail   String?
-  departmentId     String
+  departmentId     String?
+  alertType        SafetyCommunicationAlertType                  @default(N4_APPROVED_COMMUNICATION)
   notificationType SafetyCommunicationNotificationType
   status           SafetyCommunicationNotificationDeliveryStatus @default(PENDING)
   notificationId   String?                                       @unique
@@ -1179,12 +1187,12 @@ model SafetyCommunicationNotification {
   updatedAt        DateTime                                      @updatedAt
   communication    Communication                                 @relation(fields: [communicationId], references: [id], onDelete: Cascade)
   recipientUser    User                                          @relation("SafetyCommunicationNotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
-  department       Area                                          @relation("SafetyCommunicationNotificationDepartment", fields: [departmentId], references: [id], onDelete: Cascade)
+  department       Area?                                         @relation("SafetyCommunicationNotificationDepartment", fields: [departmentId], references: [id], onDelete: Cascade)
   notification     Notification?                                 @relation(fields: [notificationId], references: [id], onDelete: SetNull)
   plant            Plant?                                        @relation(fields: [plantId], references: [id])
   plantId          String?
 
-  @@unique([communicationId, recipientUserId, notificationType])
+  @@unique([communicationId, recipientUserId, alertType, notificationType])
   @@index([recipientUserId, status, createdAt])
   @@index([communicationId, createdAt])
   @@index([departmentId, createdAt])

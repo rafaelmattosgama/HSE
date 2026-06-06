@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
+  CommunicationType,
   CommunicationStatus,
   NotificationStatus,
   Prisma,
   RoleCode,
+  SafetyCommunicationAlertType,
   SafetyCommunicationNotificationDeliveryStatus,
   SafetyCommunicationNotificationType,
 } from "@prisma/client";
@@ -18,6 +20,7 @@ import {
 import { sendNotificationEmail } from "@/src/email/systemEmailHelpers.js";
 
 export const SAFETY_COMMUNICATION_APPROVED_CHANNEL = "SAFETY_COMMUNICATION_APPROVED";
+export const SAFETY_COMMUNICATION_N3_CHANNEL = "SAFETY_COMMUNICATION_N3_ALERT";
 
 export class SafetyCommunicationAlertRecipientError extends Error {
   constructor(
@@ -496,6 +499,69 @@ function buildApprovedAlertContent(input: {
   };
 }
 
+function formatCommunicationTypeLabel(type: CommunicationType) {
+  if (type === CommunicationType.UNSAFE_ACT) return "Ato inseguro";
+  if (type === CommunicationType.UNSAFE_CONDITION) return "Condicao perigosa";
+  if (type === CommunicationType.NEAR_MISS) return "Quase Acidente";
+  if (type === CommunicationType.FIRST_AID) return "Primeiros Socorros";
+  if (type === CommunicationType.ACCIDENT) return "Acidente";
+  return type;
+}
+
+function getN3SoftwareAlertType(type: CommunicationType) {
+  if (type === CommunicationType.NEAR_MISS) {
+    return SafetyCommunicationAlertType.N3_NEAR_MISS_SOFTWARE_ALERT;
+  }
+
+  if (type === CommunicationType.FIRST_AID) {
+    return SafetyCommunicationAlertType.N3_FIRST_AID_SOFTWARE_ALERT;
+  }
+
+  return null;
+}
+
+function joinLocationParts(parts: Array<string | null | undefined>) {
+  const location = parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" / ");
+
+  return location || "-";
+}
+
+function buildN3CommunicationAlertContent(input: {
+  plantCode: string;
+  communicationId: string;
+  communicationType: CommunicationType;
+  location: string;
+  occurredAt: Date;
+  description: string;
+  reporterName: string;
+  involvedPerson: string;
+}) {
+  const typeLabel = formatCommunicationTypeLabel(input.communicationType);
+  const { relativePath, absoluteUrl } = buildCommunicationDetailPaths({
+    plantCode: input.plantCode,
+    communicationId: input.communicationId,
+  });
+  const lines = [
+    `Tipo de comunicacao: ${typeLabel}`,
+    `Local: ${input.location}`,
+    `Data: ${formatDate(input.occurredAt)}`,
+    `Descricao: ${input.description.trim() || "-"}`,
+    `Reporter: ${input.reporterName.trim() || "-"}`,
+    `Pessoa envolvida: ${input.involvedPerson.trim() || "-"}`,
+  ];
+
+  return {
+    title: `Alerta N3 - ${typeLabel}`,
+    emailTitle: `Nova comunicacao registada - ${typeLabel}`,
+    body: lines.join("\n"),
+    actionUrl: relativePath,
+    absoluteUrl,
+  };
+}
+
 async function resolveDepartmentByWorkerDept(input: {
   plantId: string;
   workerDept: string;
@@ -590,23 +656,93 @@ async function loadApprovedCommunicationContext(communicationId: string) {
   };
 }
 
+async function loadCreatedCommunicationContext(communicationId: string) {
+  const communication = await prisma.communication.findUnique({
+    where: { id: communicationId },
+    include: {
+      plant: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      area: {
+        select: {
+          name: true,
+        },
+      },
+      line: {
+        select: {
+          name: true,
+        },
+      },
+      workstation: {
+        select: {
+          name: true,
+        },
+      },
+      equipment: {
+        select: {
+          name: true,
+        },
+      },
+      targetEmployee: {
+        select: {
+          name: true,
+          employeeNo: true,
+        },
+      },
+    },
+  });
+
+  if (!communication) {
+    return null;
+  }
+
+  let targetEmployee = communication.targetEmployee;
+  if (!targetEmployee && communication.targetEmployeeNo) {
+    targetEmployee = await prisma.employeeDirectory.findUnique({
+      where: {
+        plantId_employeeNo: {
+          plantId: communication.plantId,
+          employeeNo: communication.targetEmployeeNo,
+        },
+      },
+      select: {
+        name: true,
+        employeeNo: true,
+      },
+    });
+  }
+
+  return {
+    communication,
+    targetEmployee,
+  };
+}
+
 async function sendEmailNotification(input: {
   plantId: string;
+  plantName?: string;
   communicationId: string;
   recipientUserId: string;
   recipientEmail: string | null;
   recipientName?: string | null;
   recipientLanguage?: string | null;
-  departmentId: string;
+  departmentId?: string | null;
+  alertType: SafetyCommunicationAlertType;
   title: string;
   body: string;
+  actionUrl?: string;
 }) {
   const notificationModel = getSafetyCommunicationNotificationDelegate();
   const notification = await notificationModel.upsert({
     where: {
-      communicationId_recipientUserId_notificationType: {
+      communicationId_recipientUserId_alertType_notificationType: {
         communicationId: input.communicationId,
         recipientUserId: input.recipientUserId,
+        alertType: input.alertType,
         notificationType: SafetyCommunicationNotificationType.EMAIL,
       },
     },
@@ -615,14 +751,15 @@ async function sendEmailNotification(input: {
       communicationId: input.communicationId,
       recipientUserId: input.recipientUserId,
       recipientEmail: input.recipientEmail,
-      departmentId: input.departmentId,
+      departmentId: input.departmentId ?? null,
+      alertType: input.alertType,
       notificationType: SafetyCommunicationNotificationType.EMAIL,
       status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
     },
     update: {
       plantId: input.plantId,
       recipientEmail: input.recipientEmail,
-      departmentId: input.departmentId,
+      departmentId: input.departmentId ?? null,
       errorMessage: null,
     },
   });
@@ -655,7 +792,8 @@ async function sendEmailNotification(input: {
       tituloNotificacao: input.title,
       mensagem: input.body,
       dataHora: new Date(),
-      plantName: input.plantId,
+      plantName: input.plantName ?? input.plantId,
+      actionUrl: input.actionUrl,
     });
 
     await notificationModel.update({
@@ -690,16 +828,19 @@ async function sendFloatingAlertNotification(input: {
   communicationId: string;
   recipientUserId: string;
   recipientEmail: string | null;
-  departmentId: string;
+  departmentId?: string | null;
+  alertType: SafetyCommunicationAlertType;
   title: string;
   body: string;
+  channel?: string;
 }) {
   const notificationModel = getSafetyCommunicationNotificationDelegate();
   const notificationLog = await notificationModel.upsert({
     where: {
-      communicationId_recipientUserId_notificationType: {
+      communicationId_recipientUserId_alertType_notificationType: {
         communicationId: input.communicationId,
         recipientUserId: input.recipientUserId,
+        alertType: input.alertType,
         notificationType: SafetyCommunicationNotificationType.FLOATING_ALERT,
       },
     },
@@ -708,14 +849,15 @@ async function sendFloatingAlertNotification(input: {
       communicationId: input.communicationId,
       recipientUserId: input.recipientUserId,
       recipientEmail: input.recipientEmail,
-      departmentId: input.departmentId,
+      departmentId: input.departmentId ?? null,
+      alertType: input.alertType,
       notificationType: SafetyCommunicationNotificationType.FLOATING_ALERT,
       status: SafetyCommunicationNotificationDeliveryStatus.PENDING,
     },
     update: {
       plantId: input.plantId,
       recipientEmail: input.recipientEmail,
-      departmentId: input.departmentId,
+      departmentId: input.departmentId ?? null,
       errorMessage: null,
     },
   });
@@ -758,7 +900,7 @@ async function sendFloatingAlertNotification(input: {
         plantId: input.plantId,
         title: input.title,
         body: input.body,
-        channel: SAFETY_COMMUNICATION_APPROVED_CHANNEL,
+        channel: input.channel ?? SAFETY_COMMUNICATION_APPROVED_CHANNEL,
         status: NotificationStatus.UNREAD,
       },
     });
@@ -1097,6 +1239,7 @@ export const SafetyCommunicationAlertService = {
   async listUnreadFloatingAlerts(input: {
     plantId: string;
     userId: string;
+    channels?: string[];
   }) {
     const notificationModel = getSafetyCommunicationNotificationDelegate({
       allowMissing: true,
@@ -1113,7 +1256,11 @@ export const SafetyCommunicationAlertService = {
         notification: {
           plantId: input.plantId,
           userId: input.userId,
-          channel: SAFETY_COMMUNICATION_APPROVED_CHANNEL,
+          channel: {
+            in: input.channels?.length
+              ? input.channels
+              : [SAFETY_COMMUNICATION_APPROVED_CHANNEL, SAFETY_COMMUNICATION_N3_CHANNEL],
+          },
           status: NotificationStatus.UNREAD,
         },
       },
@@ -1152,6 +1299,157 @@ export const SafetyCommunicationAlertService = {
         }).relativePath,
       }];
     });
+  },
+
+  async safeDispatchN3CommunicationCreatedAlerts(input: {
+    communicationId: string;
+  }) {
+    try {
+      await this.dispatchN3CommunicationCreatedAlerts(input);
+    } catch (error) {
+      logger.error(
+        {
+          error,
+          communicationId: input.communicationId,
+        },
+        "failed_to_dispatch_n3_communication_created_alerts",
+      );
+    }
+  },
+
+  async dispatchN3CommunicationCreatedAlerts(input: {
+    communicationId: string;
+  }) {
+    const notificationModel = getSafetyCommunicationNotificationDelegate({
+      allowMissing: true,
+      context: "dispatchN3CommunicationCreatedAlerts.notifications",
+    });
+    if (!notificationModel) {
+      return;
+    }
+
+    const context = await loadCreatedCommunicationContext(input.communicationId);
+    if (!context) {
+      logger.warn(
+        { communicationId: input.communicationId },
+        "n3_communication_alert_skipped_communication_not_found",
+      );
+      return;
+    }
+
+    const { communication, targetEmployee } = context;
+    const recipients = await prisma.userPlantRole.findMany({
+      where: {
+        plantId: communication.plantId,
+        role: {
+          code: RoleCode.N3_SAFETY,
+        },
+        user: {
+          isActive: true,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            language: true,
+          },
+        },
+      },
+      orderBy: {
+        user: {
+          name: "asc",
+        },
+      },
+    });
+
+    const users = Array.from(
+      new Map(recipients.map((entry) => [entry.userId, entry.user])).values(),
+    );
+
+    if (!users.length) {
+      logger.warn(
+        {
+          communicationId: communication.id,
+          plantId: communication.plantId,
+          role: RoleCode.N3_SAFETY,
+        },
+        "n3_communication_alert_skipped_no_recipients",
+      );
+      return;
+    }
+
+    const involvedPerson = targetEmployee?.name
+      ?? communication.targetText
+      ?? communication.targetEmployeeNo
+      ?? "-";
+    const content = buildN3CommunicationAlertContent({
+      plantCode: communication.plant.code,
+      communicationId: communication.id,
+      communicationType: communication.type,
+      location: joinLocationParts([
+        communication.area?.name,
+        communication.line?.name,
+        communication.workstation?.name,
+        communication.equipment?.name,
+      ]),
+      occurredAt: communication.eventDatetime,
+      description: communication.description,
+      reporterName: communication.reporterName,
+      involvedPerson,
+    });
+    const softwareAlertType = getN3SoftwareAlertType(communication.type);
+
+    await Promise.all(
+      users.map(async (user) => {
+        const deliveries = [
+          sendEmailNotification({
+            plantId: communication.plantId,
+            plantName: communication.plant.name,
+            communicationId: communication.id,
+            recipientUserId: user.id,
+            recipientEmail: user.email,
+            recipientName: user.name,
+            recipientLanguage: user.language,
+            departmentId: null,
+            alertType: SafetyCommunicationAlertType.N3_COMMUNICATION_EMAIL_ALERT,
+            title: content.emailTitle,
+            body: content.body,
+            actionUrl: content.absoluteUrl,
+          }),
+        ];
+
+        if (softwareAlertType) {
+          deliveries.push(
+            sendFloatingAlertNotification({
+              plantId: communication.plantId,
+              communicationId: communication.id,
+              recipientUserId: user.id,
+              recipientEmail: user.email,
+              departmentId: null,
+              alertType: softwareAlertType,
+              title: content.title,
+              body: content.body,
+              channel: SAFETY_COMMUNICATION_N3_CHANNEL,
+            }),
+          );
+        }
+
+        await Promise.all(deliveries);
+      }),
+    );
+
+    logger.info(
+      {
+        communicationId: communication.id,
+        plantId: communication.plantId,
+        recipients: users.map((user) => user.id),
+        softwareAlertType,
+      },
+      "dispatched_n3_communication_created_alerts",
+    );
   },
 
   async safeDispatchApprovedCommunicationAlerts(input: {
@@ -1325,14 +1623,17 @@ export const SafetyCommunicationAlertService = {
         await Promise.all([
           sendEmailNotification({
             plantId: communication.plantId,
+            plantName: communication.plant.name,
             communicationId: communication.id,
             recipientUserId: recipient.user.id,
             recipientEmail: recipient.user.email,
             recipientName: recipient.user.name,
             recipientLanguage: recipient.user.language,
             departmentId: department.id,
+            alertType: SafetyCommunicationAlertType.N4_APPROVED_COMMUNICATION,
             title: content.title,
             body: content.body,
+            actionUrl: content.absoluteUrl,
           }),
           sendFloatingAlertNotification({
             plantId: communication.plantId,
@@ -1340,6 +1641,7 @@ export const SafetyCommunicationAlertService = {
             recipientUserId: recipient.user.id,
             recipientEmail: recipient.user.email,
             departmentId: department.id,
+            alertType: SafetyCommunicationAlertType.N4_APPROVED_COMMUNICATION,
             title: content.title,
             body: content.body,
           }),
