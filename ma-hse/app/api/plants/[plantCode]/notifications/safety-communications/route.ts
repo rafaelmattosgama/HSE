@@ -14,7 +14,8 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
-  const channels = auth.role === RoleCode.N3_SAFETY
+  const actorRole = "role" in auth ? auth.role : null;
+  const channels = actorRole === RoleCode.N3_SAFETY
     ? [SAFETY_COMMUNICATION_N3_CHANNEL]
     : [SAFETY_COMMUNICATION_APPROVED_CHANNEL];
   const alerts = await SafetyCommunicationAlertService.listUnreadFloatingAlerts({
