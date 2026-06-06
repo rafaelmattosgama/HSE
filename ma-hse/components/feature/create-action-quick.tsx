@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionCategory, ActionPriority, ActionSourceType } from "@prisma/client";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
@@ -45,6 +45,7 @@ export function CreateActionQuick({
   const [message, setMessage] = useState("");
   const [messageIsError, setMessageIsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   function resetForm() {
     setSourceType(initialSourceType);
@@ -59,8 +60,9 @@ export function CreateActionQuick({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (submitting || isRefreshing) return;
+    if (submittingRef.current || submitting || isRefreshing) return;
 
+    submittingRef.current = true;
     setMessage("");
     setMessageIsError(false);
     setSubmitting(true);
@@ -89,14 +91,18 @@ export function CreateActionQuick({
       }
 
       resetForm();
-      setMessage(text.actionCreated);
+      setMessage(json.data?.idempotency?.reusedExistingAction ? text.existingActionReused : text.actionCreated);
       startTransition(() => {
         router.refresh();
       });
     } catch {
       setMessageIsError(true);
-      setMessage(text.failedCreatingAction);
+      setMessage(text.createActionStateUnknown);
+      startTransition(() => {
+        router.refresh();
+      });
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }

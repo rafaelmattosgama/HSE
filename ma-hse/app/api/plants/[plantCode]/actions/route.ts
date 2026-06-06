@@ -86,5 +86,5 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     payload: parsed.data,
   });
 
-  return ok(action, { status: 201 });
+  return ok(action, { status: action.idempotency.reusedExistingAction ? 200 : 201 });
 }

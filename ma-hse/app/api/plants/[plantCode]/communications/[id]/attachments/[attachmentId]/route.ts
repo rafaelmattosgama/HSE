@@ -34,6 +34,7 @@ export async function GET(
     },
     select: {
       fileKey: true,
+      fileName: true,
       contentType: true,
     },
   });
@@ -42,14 +43,16 @@ export async function GET(
     return fail("NOT_FOUND", "Attachment not found", 404);
   }
 
-  const url = await StorageService.getPresignedDownloadUrl({
+  const buffer = await StorageService.getObjectBuffer({
     key: attachment.fileKey,
-    expiresInSec: 300,
   });
+  const safeFileName = attachment.fileName.replace(/[\r\n"]/g, "");
 
-  return NextResponse.redirect(url, {
+  return new NextResponse(buffer, {
     headers: {
       "cache-control": "private, no-store",
+      "content-disposition": `inline; filename="${safeFileName}"`,
+      "content-type": attachment.contentType,
       "x-content-type-options": "nosniff",
     },
   });

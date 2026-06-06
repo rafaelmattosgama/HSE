@@ -149,7 +149,9 @@ export const BASE_COMMUNICATION_UI = {
     createAction: "Create action",
     creatingAction: "Creating action...",
     actionCreated: "Action created successfully.",
+    existingActionReused: "An open action already exists for this communication.",
     failedCreatingAction: "Failed to create action.",
+    createActionStateUnknown: "The request could not be confirmed. Refreshing the communication to recover the action status.",
     categoryLabels: {
       CORRECTIVE: "Corrective",
       PREVENTIVE: "Preventive",

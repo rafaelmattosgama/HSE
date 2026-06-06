@@ -156,7 +156,9 @@ const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
     createAction: "Criar acao",
     creatingAction: "A criar acao...",
     actionCreated: "Acao criada com sucesso.",
+    existingActionReused: "Ja existe uma acao aberta para esta comunicacao.",
     failedCreatingAction: "Falha ao criar acao.",
+    createActionStateUnknown: "Nao foi possivel confirmar o pedido. A comunicacao sera atualizada para recuperar o estado da acao.",
     categoryLabels: {
       CORRECTIVE: "Corretiva",
       PREVENTIVE: "Preventiva",
