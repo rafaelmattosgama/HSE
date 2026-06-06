@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, Save, Search, TableProperties } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Download, LayoutGrid, Save, Search, TableProperties, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { calculateTonKmMonths } from "@/lib/services/monthly-input-calculations";
@@ -163,7 +163,9 @@ export function PlantMonthlyInputsForm({
   const [showInactive, setShowInactive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const standardHours = useMemo(() => computeStandardHours(indicatorConfig, customRows), [indicatorConfig, customRows]);
   const sections = useMemo(() => sortRows(indicatorConfig), [indicatorConfig]);
@@ -471,6 +473,76 @@ export function PlantMonthlyInputsForm({
         ) : null}
       </div>
     );
+  }
+
+  function exportExcel(templateOnly = false) {
+    const params = new URLSearchParams({
+      year: String(year),
+    });
+    if (templateOnly) params.set("template", "1");
+    window.location.href = `/api/plants/${plantCode}/monthly-inputs/excel?${params.toString()}`;
+  }
+
+  function summarizeImport(summary: {
+    year: number;
+    indicatorsCreated: number;
+    indicatorsUpdated: number;
+    monthlyValuesCreated: number;
+    monthlyValuesUpdated: number;
+    rowsIgnored: number;
+    errors?: Array<{ sheet: string; row: number; column: string; message: string }>;
+    warnings?: Array<{ sheet: string; row: number; column: string; message: string }>;
+  }) {
+    const parts = [
+      `Import ${summary.year}`,
+      `${summary.indicatorsCreated} indicators created`,
+      `${summary.indicatorsUpdated} updated`,
+      `${summary.monthlyValuesCreated} monthly values created`,
+      `${summary.monthlyValuesUpdated} updated`,
+      `${summary.rowsIgnored} rows ignored`,
+    ];
+    if (summary.warnings?.length) parts.push(`${summary.warnings.length} warnings`);
+    return `${parts.join(" | ")}.`;
+  }
+
+  async function importExcel(file: File) {
+    setImporting(true);
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const response = await fetch(`/api/plants/${plantCode}/monthly-inputs/excel`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = await response.json();
+      const summary = json.data as
+        | {
+            year: number;
+            indicatorsCreated: number;
+            indicatorsUpdated: number;
+            monthlyValuesCreated: number;
+            monthlyValuesUpdated: number;
+            rowsIgnored: number;
+            errors: Array<{ sheet: string; row: number; column: string; message: string }>;
+            warnings: Array<{ sheet: string; row: number; column: string; message: string }>;
+          }
+        | undefined;
+
+      if (!response.ok || !json.ok || !summary) {
+        const firstError = summary?.errors?.[0];
+        throw new Error(firstError ? `${firstError.sheet} row ${firstError.row} ${firstError.column}: ${firstError.message}` : json.message ?? "Failed to import Excel");
+      }
+
+      await loadYear(summary.year);
+      setMessage(summarizeImport(summary));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to import Excel");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   function renderMonthFocus() {
@@ -996,6 +1068,28 @@ export function PlantMonthlyInputsForm({
                 <Save className="h-4 w-4" />
                 {saving ? "Saving..." : "Save"}
               </Button>
+              <Button type="button" variant="secondary" onClick={() => exportExcel(true)}>
+                <Download className="h-4 w-4" />
+                Template
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => exportExcel(false)}>
+                <Download className="h-4 w-4" />
+                Export Excel
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                <Upload className="h-4 w-4" />
+                {importing ? "Importing..." : "Import Excel"}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importExcel(file);
+                }}
+              />
             </div>
           </div>
         </div>
