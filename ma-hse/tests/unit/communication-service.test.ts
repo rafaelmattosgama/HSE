@@ -44,6 +44,7 @@ const repeatabilityAlertMock = vi.hoisted(() => ({
 
 const safetyCommunicationAlertServiceMock = vi.hoisted(() => ({
   SafetyCommunicationAlertService: {
+    safeDispatchN3CommunicationCreatedAlerts: vi.fn(),
     safeDispatchApprovedCommunicationAlerts: vi.fn(),
   },
 }));
@@ -53,17 +54,12 @@ const auditMock = vi.hoisted(() => ({
   buildDiff: vi.fn(() => ({})),
 }));
 
-const emailMock = vi.hoisted(() => ({
-  sendSafetyCommunicationReportedEmail: vi.fn(),
-}));
-
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/services/notification-service", () => notificationServiceMock);
 vi.mock("@/lib/services/sewo-service", () => sewoServiceMock);
 vi.mock("@/lib/services/repeatability-alert-service", () => repeatabilityAlertMock);
 vi.mock("@/lib/services/safety-communication-alert-service", () => safetyCommunicationAlertServiceMock);
 vi.mock("@/lib/audit", () => auditMock);
-vi.mock("@/src/email/systemEmailHelpers.js", () => emailMock);
 vi.mock("@/lib/env", () => ({
   env: {
     APP_URL: "http://localhost:3000",
@@ -185,6 +181,11 @@ describe("CommunicationService approved communication alerts", () => {
     });
 
     expect(communication.id).toBe("comm-2");
+    expect(
+      safetyCommunicationAlertServiceMock.SafetyCommunicationAlertService.safeDispatchN3CommunicationCreatedAlerts,
+    ).toHaveBeenCalledWith({
+      communicationId: "comm-2",
+    });
     expect(sewoServiceMock.SewaService.createProvisionalFromCommunication).toHaveBeenCalledWith({
       communicationId: "comm-2",
       actorUserId: "user-1",
@@ -247,6 +248,11 @@ describe("CommunicationService approved communication alerts", () => {
       actorRole: RoleCode.N4_SUPERVISOR,
     });
 
+    expect(
+      safetyCommunicationAlertServiceMock.SafetyCommunicationAlertService.safeDispatchN3CommunicationCreatedAlerts,
+    ).toHaveBeenCalledWith({
+      communicationId: "comm-3",
+    });
     expect(sewoServiceMock.SewaService.createProvisionalFromCommunication).not.toHaveBeenCalled();
     expect(
       safetyCommunicationAlertServiceMock.SafetyCommunicationAlertService.safeDispatchApprovedCommunicationAlerts,

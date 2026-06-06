@@ -71,7 +71,7 @@ export default async function PlantLayout({
     : session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
       ? RoleCode.N1_CORPORATE
       : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
-  const hasSafetyCommunicationAlerts = plantRole === RoleCode.N4_SUPERVISOR;
+  const hasSafetyCommunicationAlerts = plantRole === RoleCode.N3_SAFETY || plantRole === RoleCode.N4_SUPERVISOR;
   const [plantRecord, globalModuleParameter] = await prisma.$transaction([
     prisma.plant.findUnique({
       where: { code: plant },

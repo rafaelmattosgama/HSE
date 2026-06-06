@@ -1,7 +1,6 @@
 import { ActionPriority, CommunicationSource, CommunicationStatus, CommunicationType, Prisma, RoleCode } from "@prisma/client";
 import { addDays } from "date-fns";
 import { writeAuditLog, buildDiff } from "@/lib/audit";
-import { env } from "@/lib/env";
 import { OPEN_LINKED_ACTION_STATUSES } from "@/lib/communication-status";
 import type { CreateCommunicationInput, ManualCloseCommunicationInput, ReopenActionInput, UpdateCommunicationInput, ValidateCommunicationInput } from "@/lib/validation/dtos";
 import {
@@ -24,7 +23,6 @@ import { NotificationService } from "@/lib/services/notification-service";
 import { RepeatabilityAlertService } from "@/lib/services/repeatability-alert-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
 import { SewaService } from "@/lib/services/sewo-service";
-import { sendSafetyCommunicationReportedEmail } from "@/src/email/systemEmailHelpers.js";
 
 const ALERT_TYPES: CommunicationType[] = [
   CommunicationType.NEAR_MISS,
@@ -269,76 +267,6 @@ async function resolveCommunicationClassification(input: {
   };
 }
 
-async function notifyN3SafetyCommunicationReported(input: {
-  communicationId: string;
-  plantId: string;
-}) {
-  const [communication, recipients] = await Promise.all([
-    prisma.communication.findUnique({
-      where: { id: input.communicationId },
-      include: {
-        plant: true,
-      },
-    }),
-    prisma.userPlantRole.findMany({
-      where: {
-        plantId: input.plantId,
-        role: {
-          code: RoleCode.N3_SAFETY,
-        },
-        user: {
-          isActive: true,
-        },
-      },
-      include: {
-        user: true,
-      },
-    }),
-  ]);
-
-  if (!communication) return;
-
-  const users = Array.from(
-    new Map(recipients.map((entry) => [entry.userId, entry.user])).values(),
-  );
-
-  if (!users.length) {
-    logger.warn(
-      {
-        communicationId: input.communicationId,
-        plantId: input.plantId,
-        role: RoleCode.N3_SAFETY,
-      },
-      "safety_communication_email_skipped_no_n3_recipients",
-    );
-    return;
-  }
-
-  await NotificationService.notify({
-    plantId: input.plantId,
-    userIds: users.map((user) => user.id),
-    title: `${communication.type} reported`,
-    body: `${communication.reporterName} submitted a ${communication.type} communication.`,
-    channel: "SAFETY_COMMUNICATION_REPORTED",
-  });
-
-  const actionUrl = new URL(`/app/${communication.plant.code}/communications/${communication.id}`, env.APP_URL).toString();
-  await Promise.allSettled(
-    users.map((user) =>
-      sendSafetyCommunicationReportedEmail({
-        user,
-        communicationType: communication.type,
-        reporterName: communication.reporterName,
-        description: communication.description,
-        plantName: communication.plant.name,
-        occurredAt: communication.eventDatetime,
-        communicationId: communication.id,
-        actionUrl,
-      }),
-    ),
-  );
-}
-
 export const CommunicationService = {
   async create(input: {
     plantId: string;
@@ -456,9 +384,8 @@ export const CommunicationService = {
     });
 
     const isPublicTokenReport = input.source === CommunicationSource.TOKEN_REPORT;
-    const notifySafetyCommunicationReported = () => notifyN3SafetyCommunicationReported({
+    const notifySafetyCommunicationReported = () => SafetyCommunicationAlertService.safeDispatchN3CommunicationCreatedAlerts({
       communicationId: communication.id,
-      plantId: input.plantId,
     });
 
     if (isPublicTokenReport) {

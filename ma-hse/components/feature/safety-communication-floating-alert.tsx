@@ -87,7 +87,7 @@ export function SafetyCommunicationFloatingAlert({
               <BellRing className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Comunicacoes de seguranca aprovadas</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Alertas de comunicacoes de seguranca</h2>
             </div>
           </div>
         </div>
