@@ -17,6 +17,12 @@ function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriori
   return addDays(new Date(), slaDays[priority]);
 }
 
+const OPEN_LINKED_ACTION_STATUSES = [ActionStatus.OPEN, ActionStatus.ONGOING] as const;
+
+async function lockCommunicationActionCreation(tx: Prisma.TransactionClient, communicationId: string) {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`action:communication:${communicationId}`}))`;
+}
+
 export const ActionService = {
   async syncParentStatuses(input: {
     actionId?: string | null;
@@ -85,7 +91,33 @@ export const ActionService = {
     payload: CreateActionInput;
   }) {
     const sla = await getSlaConfig(input.plantId);
+    let reusedExistingAction = false;
     const action = await prisma.$transaction(async (tx) => {
+      if (input.payload.sourceType === ActionSourceType.COMMUNICATION && input.payload.communicationId) {
+        await lockCommunicationActionCreation(tx, input.payload.communicationId);
+
+        const existingAction = await tx.action.findFirst({
+          where: {
+            plantId: input.plantId,
+            communicationId: input.payload.communicationId,
+            status: {
+              in: [...OPEN_LINKED_ACTION_STATUSES],
+            },
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+          include: {
+            coOwners: true,
+          },
+        });
+
+        if (existingAction) {
+          reusedExistingAction = true;
+          return existingAction;
+        }
+      }
+
       const latest = await tx.action.findFirst({
         where: {
           plantId: input.plantId,
@@ -129,18 +161,20 @@ export const ActionService = {
       });
     });
 
-    await writeAuditLog({
-      entityType: "Action",
-      entityId: action.id,
-      action: "CREATE",
-      actorUserId: input.actorUserId,
-      plantId: input.plantId,
-      diff: {
-        before: null,
-        after: action as unknown as Record<string, unknown>,
-        fieldsChanged: Object.keys(action),
-      },
-    });
+    if (!reusedExistingAction) {
+      await writeAuditLog({
+        entityType: "Action",
+        entityId: action.id,
+        action: "CREATE",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: {
+          before: null,
+          after: action as unknown as Record<string, unknown>,
+          fieldsChanged: Object.keys(action),
+        },
+      });
+    }
 
     if (action.communicationId) {
       await prisma.communication.update({
@@ -164,9 +198,16 @@ export const ActionService = {
       sewoId: action.sewoId,
     });
 
-    await this.notifyAssignees(action.id);
+    if (!reusedExistingAction) {
+      void this.notifyAssignees(action.id);
+    }
 
-    return action;
+    return {
+      ...action,
+      idempotency: {
+        reusedExistingAction,
+      },
+    };
   },
 
   async deleteAction(input: {

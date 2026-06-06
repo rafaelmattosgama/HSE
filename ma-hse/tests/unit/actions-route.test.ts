@@ -56,7 +56,7 @@ describe("actions route", () => {
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     prismaMock.prisma.communication.findFirst.mockResolvedValue(null);
 
-    const response = await POST(
+    const response = (await POST(
       new Request("http://localhost/api/plants/maap/actions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -71,7 +71,7 @@ describe("actions route", () => {
         }),
       }),
       routeContext(),
-    );
+    )) as Response;
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
@@ -109,9 +109,12 @@ describe("actions route", () => {
     actionServiceMock.ActionService.create.mockResolvedValue({
       id: "action-1",
       communicationId: "11111111-1111-4111-8111-111111111111",
+      idempotency: {
+        reusedExistingAction: false,
+      },
     });
 
-    const response = await POST(
+    const response = (await POST(
       new Request("http://localhost/api/plants/maap/actions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -126,7 +129,7 @@ describe("actions route", () => {
         }),
       }),
       routeContext(),
-    );
+    )) as Response;
 
     expect(response.status).toBe(201);
     expect(actionServiceMock.ActionService.create).toHaveBeenCalledWith({
@@ -136,6 +139,54 @@ describe("actions route", () => {
         sourceType: ActionSourceType.COMMUNICATION,
         communicationId: "11111111-1111-4111-8111-111111111111",
       }),
+    });
+  });
+
+  it("returns ok without creating a duplicate when the action service reuses an existing communication action", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N4_SUPERVISOR,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.prisma.communication.findFirst.mockResolvedValue({ id: "11111111-1111-4111-8111-111111111111" });
+    actionServiceMock.ActionService.create.mockResolvedValue({
+      id: "action-existing",
+      communicationId: "11111111-1111-4111-8111-111111111111",
+      idempotency: {
+        reusedExistingAction: true,
+      },
+    });
+
+    const response = (await POST(
+      new Request("http://localhost/api/plants/maap/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: ActionSourceType.COMMUNICATION,
+          communicationId: "11111111-1111-4111-8111-111111111111",
+          category: ActionCategory.CORRECTIVE,
+          priority: ActionPriority.MEDIUM,
+          title: "Nova acao",
+          description: "Criada a partir do modulo de acoes.",
+          ownerUserId: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+      routeContext(),
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      data: {
+        id: "action-existing",
+        idempotency: {
+          reusedExistingAction: true,
+        },
+      },
     });
   });
 });

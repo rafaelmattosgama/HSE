@@ -81,6 +81,78 @@ describe("CreateActionQuick", () => {
     expect(dueDateInput.value).toBe("");
   });
 
+  it("does not submit twice while the first creation request is pending", async () => {
+    const request = deferred<{ ok: boolean; json: () => Promise<{ ok: boolean }> }>();
+    vi.mocked(fetch).mockReturnValue(request.promise as never);
+
+    const { container } = render(createElement(CreateActionQuick, {
+      owners: [{ id: "owner-1", label: "Rafael Goncalves" }],
+      communicationOptions: [],
+      lockedCommunicationId: "comm-1",
+      lockedCommunicationLabel: "Linked communication: comm-1",
+    }));
+
+    const titleInput = screen.getByPlaceholderText("Title") as HTMLInputElement;
+    const descriptionInput = screen.getByPlaceholderText("Description") as HTMLTextAreaElement;
+    const selects = container.querySelectorAll("select");
+    const ownerSelect = selects[2] as HTMLSelectElement;
+    const submitButton = screen.getByRole("button", { name: "Create action" }) as HTMLButtonElement;
+
+    fireEvent.change(titleInput, { target: { value: "Nova acao" } });
+    fireEvent.change(descriptionInput, { target: { value: "Descricao da nova acao." } });
+    fireEvent.change(ownerSelect, { target: { value: "owner-1" } });
+    fireEvent.click(submitButton);
+    fireEvent.click(submitButton);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    request.resolve({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    await waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("shows a clear message when an existing communication action is reused", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        data: {
+          idempotency: {
+            reusedExistingAction: true,
+          },
+        },
+      }),
+    } as never);
+
+    const { container } = render(createElement(CreateActionQuick, {
+      owners: [{ id: "owner-1", label: "Rafael Goncalves" }],
+      communicationOptions: [],
+      lockedCommunicationId: "comm-1",
+      lockedCommunicationLabel: "Linked communication: comm-1",
+    }));
+
+    const titleInput = screen.getByPlaceholderText("Title") as HTMLInputElement;
+    const descriptionInput = screen.getByPlaceholderText("Description") as HTMLTextAreaElement;
+    const selects = container.querySelectorAll("select");
+    const ownerSelect = selects[2] as HTMLSelectElement;
+    const submitButton = screen.getByRole("button", { name: "Create action" });
+
+    fireEvent.change(titleInput, { target: { value: "Nova acao" } });
+    fireEvent.change(descriptionInput, { target: { value: "Descricao da nova acao." } });
+    fireEvent.change(ownerSelect, { target: { value: "owner-1" } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("An open action already exists for this communication.")).toBeTruthy();
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the entered data and shows an error message when the request fails", async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,
