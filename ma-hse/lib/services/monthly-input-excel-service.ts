@@ -15,6 +15,36 @@ import { buildMonthlyInputRows, type MonthlyInputRow } from "@/lib/services/mont
 
 type LegacyMetricKey = keyof Omit<MonthlyInputRow, "month">;
 
+const LEGACY_METRIC_KEYS = [
+  "workerCount",
+  "hoursWorked",
+  "standardHours",
+  "spillsNumber",
+  "electricityFromGridMwh",
+  "selfProducedEnergyMwh",
+  "heatingM3",
+  "waterConsumedNetworkM3",
+  "waterConsumedCapturedM3",
+  "compressedAirConsumedM3",
+  "compressedAirConsumedMwh",
+  "ewc150101PaperCardboardPackagingTons",
+  "ewc150102PlasticPackagingTons",
+  "ewc150103WoodTons",
+  "ewc160117FerrousMetalsTons",
+  "ewc160118NonFerrousMetalsCopperTons",
+  "ewc170117ConstructionWasteTons",
+  "ewc200111Tons",
+  "ewc200136ElectricalElectronicEquipmentTons",
+  "ewc200139PlasticTons",
+  "ewc200301UnsortedUrbanWasteTons",
+  "hazardousWasteTons",
+  "recycledWasteTons",
+] as const satisfies readonly LegacyMetricKey[];
+
+function isLegacyMetricKey(value: string): value is LegacyMetricKey {
+  return (LEGACY_METRIC_KEYS as readonly string[]).includes(value);
+}
+
 type ImportIssue = {
   sheet: string;
   row: number;
@@ -535,7 +565,7 @@ function parseImportedIndicator(input: {
       section: category,
       subsection: textCell(getCell(input.row, input.headerMap, "Subcategory")) || null,
       label,
-      legacyKey: code || null,
+      legacyKey: isLegacyMetricKey(code) ? code : null,
       enabled: boolCell(getCell(input.row, input.headerMap, "Enabled"), true),
       col2Label: textCell(getCell(input.row, input.headerMap, "Column 2 label")) || (formula ? "Formula" : null),
       col2Value: textCell(getCell(input.row, input.headerMap, "Column 2 value")) || formula,
@@ -764,8 +794,9 @@ export const MonthlyInputExcelService = {
         indicator ??= parsed.code ? byCode.get(normalizeKey(parsed.code)) : undefined;
         indicator ??= bySectionLabel.get(indicatorMatchKey(parsed.config));
 
-        const isNew = !indicator;
-        if (isNew) {
+        let isNew = false;
+        if (!indicator) {
+          isNew = true;
           const id = parsed.id || `custom-${normalizeKey(parsed.config.section).replaceAll(" ", "-")}-${randomUUID()}`;
           indicator = {
             ...parsed.config,
@@ -792,8 +823,11 @@ export const MonthlyInputExcelService = {
           if (JSON.stringify(indicator) !== before) summary.indicatorsUpdated += 1;
         }
 
+        const activeIndicator = indicator;
+        if (!activeIndicator) continue;
+
         const existingValueCount = countExistingMonthlyValues({
-          indicator,
+          indicator: activeIndicator,
           existingMonths,
           existingCustomRows,
         });
@@ -807,11 +841,11 @@ export const MonthlyInputExcelService = {
             return;
           }
           if (parsedValue === null) return;
-          if (isIntegerLegacyKey(indicator!.legacyKey) && !Number.isInteger(parsedValue)) {
+          if (isIntegerLegacyKey(activeIndicator.legacyKey) && !Number.isInteger(parsedValue)) {
             summary.errors.push(createIssue(sheet.name, rowNumber, month.label, "This indicator requires an integer value."));
             return;
           }
-          if (updateMonthlyValue({ months: existingMonths, customRows, indicator: indicator!, monthIndex, value: parsedValue })) {
+          if (updateMonthlyValue({ months: existingMonths, customRows, indicator: activeIndicator, monthIndex, value: parsedValue })) {
             importedValueCount += 1;
           }
         });
