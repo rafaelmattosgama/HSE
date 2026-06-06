@@ -9,7 +9,8 @@ ALTER TABLE "SafetyCommunicationNotification"
   ADD COLUMN "alertType" "SafetyCommunicationAlertType" NOT NULL DEFAULT 'N4_APPROVED_COMMUNICATION',
   ALTER COLUMN "departmentId" DROP NOT NULL;
 
-DROP INDEX "SafetyCommunicationNotification_communicationId_recipientUserId_notificationType_key";
+DROP INDEX IF EXISTS "SafetyCommunicationNotification_communicationId_recipientUserId_notificationType_key";
+DROP INDEX IF EXISTS "SafetyCommunicationNotification_communicationId_recipientUs_key";
 
 CREATE UNIQUE INDEX "SafetyCommunicationNotification_communicationId_recipientUserId_alertType_notificationType_key"
   ON "SafetyCommunicationNotification"("communicationId", "recipientUserId", "alertType", "notificationType");
