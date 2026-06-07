@@ -6,10 +6,12 @@ import { RoleCode } from "@prisma/client";
 import { MaSymbol } from "@/components/branding/ma-symbol";
 import { ActionFloatingAlert } from "@/components/feature/action-floating-alert";
 import { SewoApprovalFloatingAlert } from "@/components/feature/sewo-approval-floating-alert";
+import { ProfileAlertsButton } from "@/components/layout/profile-alerts-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
 import { UserMenu } from "@/components/layout/user-menu";
 import { authOptions } from "@/lib/auth/options";
+import { ProfileAlertService } from "@/lib/services/profile-alert-service";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 import { getUiDictionary } from "@/lib/ui-language";
@@ -40,6 +42,9 @@ export default async function SecureAppLayout({
   const ui = getUiDictionary(uiLocale);
   const theme = parseTheme(cookieStore.get(THEME_STORAGE_KEY)?.value);
   const hasN1Validation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  const hasProfileAlerts = ProfileAlertService.canUseAlerts(session.user);
+  const profileAlertScopeLabel = ProfileAlertService.getScopeLabel(session.user);
+  const unreadProfileAlertCount = hasProfileAlerts ? await ProfileAlertService.countUnreadForUser(session.user) : 0;
 
   return (
     <div className="app-shell">
@@ -62,6 +67,12 @@ export default async function SecureAppLayout({
               </Link>
             ) : null}
             <ThemeToggle initialTheme={theme} />
+            {hasProfileAlerts ? (
+              <ProfileAlertsButton
+                initialUnreadCount={unreadProfileAlertCount}
+                scopeLabel={profileAlertScopeLabel}
+              />
+            ) : null}
             <UserMenu userName={session.user.name ?? "User"} />
           </div>
         </div>
