@@ -33,6 +33,7 @@ const validationMock = vi.hoisted(() => ({
 const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   y = 40;
   page = {
+    width: 595,
     height: 842,
     margins: {
       top: 40,
@@ -57,6 +58,54 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
     return this;
   }
 
+  rect() {
+    return this;
+  }
+
+  circle() {
+    return this;
+  }
+
+  polygon() {
+    return this;
+  }
+
+  moveTo() {
+    return this;
+  }
+
+  lineTo() {
+    return this;
+  }
+
+  strokeColor() {
+    return this;
+  }
+
+  lineWidth() {
+    return this;
+  }
+
+  stroke() {
+    return this;
+  }
+
+  fillOpacity() {
+    return this;
+  }
+
+  save() {
+    return this;
+  }
+
+  rotate() {
+    return this;
+  }
+
+  restore() {
+    return this;
+  }
+
   fill() {
     return this;
   }
@@ -70,6 +119,10 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   }
 
   fontSize() {
+    return this;
+  }
+
+  font() {
     return this;
   }
 
@@ -478,16 +531,19 @@ describe("SewoExportService.buildExport", () => {
     expect(storageMock.StorageService.getObjectBuffer).toHaveBeenCalledWith({ key: "photo-1" });
     expect(rendered.imageCount).toBe(1);
     expect(exported.xlsx.length).toBeGreaterThan(0);
-    expect(rendered.texts).toContain("S-EWO Complete Report");
-    expect(rendered.texts).toContain("S-EWO Reference: sewo-1");
+    expect(rendered.texts).toContain("SAFETY EWO - COMPLETE REPORT");
+    expect(rendered.texts).toContain("SAFETY EWO - ANALYSIS");
+    expect(rendered.texts).toContain("SAFETY EWO - ROOT CAUSE & ACTION PLAN");
+    expect(rendered.texts).toContain("S-EWO REFERENCE");
+    expect(rendered.texts).toContain("sewo-1");
     expect(rendered.texts).toContain("Exported by: Ana Silva");
     expect(rendered.texts).toContain("Valenca (PL1)");
     expect(rendered.texts).toContain("Operator slipped near the conveyor.");
     expect(rendered.texts).toContain("Floor contamination identified.");
     expect(rendered.texts).toContain("Why did the operator slip?");
     expect(rendered.texts).toContain("6.2 Lack of maintenance");
-    expect(rendered.texts).toContain("Repair leak");
-    expect(rendered.texts).toContain("Replace damaged hydraulic hose");
+    expect(rendered.texts.some((entry) => entry.includes("Repair leak"))).toBe(true);
+    expect(rendered.texts.some((entry) => entry.includes("Replace damaged hydraulic hose"))).toBe(true);
     expect(rendered.texts).toContain("floor.jpg");
     expect(rendered.texts).toContain("notes.pdf");
   });

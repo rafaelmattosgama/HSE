@@ -114,14 +114,7 @@ describe("ActionService", () => {
     expect(transactionMock.action.create).not.toHaveBeenCalled();
     expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
     expect(actionAlertServiceMock.ActionAlertService.sendNewActionAlerts).not.toHaveBeenCalled();
-    expect(prismaMock.prisma.communication.update).toHaveBeenCalledWith({
-      where: { id: "communication-1" },
-      data: {
-        status: "ONGOING",
-        manuallyClosedBy: null,
-        manuallyClosedAt: null,
-        manualCloseReason: null,
-      },
-    });
+    expect(prismaMock.prisma.communication.update).not.toHaveBeenCalled();
+    expect(communicationServiceMock.CommunicationService.syncStatusWithActions).toHaveBeenCalledWith("communication-1");
   });
 });

@@ -1,19 +1,40 @@
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 const nodeRequire = createRequire(import.meta.url);
 const pdfkitModule = nodeRequire("pdfkit");
 const PDFDocument = pdfkitModule.default ?? pdfkitModule;
-const pdfkitDataDirectory = join(process.cwd(), "node_modules", "pdfkit", "js", "data");
+const pdfkitDataDirectories = [
+  join(dirname(nodeRequire.resolve("pdfkit")), "data"),
+  join(process.cwd(), "node_modules", "pdfkit", "js", "data"),
+  process.env.INIT_CWD ? join(process.env.INIT_CWD, "node_modules", "pdfkit", "js", "data") : null,
+].filter((directory): directory is string => Boolean(directory));
+
+let pdfkitFontFallbackInstalled = false;
 
 function resolvePdfkitDataFile(pathInput: string) {
   const fileName = basename(pathInput);
-  const candidate = join(pdfkitDataDirectory, fileName);
-  return fs.existsSync(candidate) ? candidate : null;
+  if (!fileName.endsWith(".afm")) {
+    return null;
+  }
+
+  for (const directory of pdfkitDataDirectories) {
+    const candidate = join(directory, fileName);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
-export function createPdfDocument(options: ConstructorParameters<typeof PDFDocument>[0] = {}) {
+function installPdfkitFontFallback() {
+  if (pdfkitFontFallbackInstalled) {
+    return;
+  }
+
+  pdfkitFontFallbackInstalled = true;
   const originalReadFileSync = fs.readFileSync;
 
   fs.readFileSync = function readFileSyncPatched(
@@ -30,10 +51,9 @@ export function createPdfDocument(options: ConstructorParameters<typeof PDFDocum
 
     return originalReadFileSync.call(this, path, options);
   } as typeof fs.readFileSync;
+}
 
-  try {
-    return new PDFDocument(options);
-  } finally {
-    fs.readFileSync = originalReadFileSync;
-  }
+export function createPdfDocument(options: ConstructorParameters<typeof PDFDocument>[0] = {}) {
+  installPdfkitFontFallback();
+  return new PDFDocument(options);
 }

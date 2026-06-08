@@ -2,13 +2,22 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
 import { generateCorporateReportAction } from "@/app/(secure)/app/corporate/reports/actions";
+import { CorporateReportGeneratorForm } from "@/components/feature/corporate-report-generator-form";
 
 type ReportFileKeys = {
   scope?: string;
+  scopeLabel?: string;
+  plantCode?: string | null;
+  plantName?: string | null;
   pdfKey?: string;
-  xlsxKey?: string;
   pdfFileName?: string;
-  xlsxFileName?: string;
+};
+
+const ERROR_MESSAGES: Record<string, string> = {
+  forbidden: "Only N1 Corporate users can generate corporate reports.",
+  "invalid-input": "Report type, report scope, period start and period end are required.",
+  "missing-factory": "Factory is required when Report Scope is Factory.",
+  "invalid-period": "Period start must be before or equal to period end.",
 };
 
 function getFileKeys(value: unknown): ReportFileKeys {
@@ -25,23 +34,51 @@ export default async function CorporateReportsPage({
   searchParams?: Promise<{ generated?: string; error?: string }>;
 }) {
   const params = (await searchParams) ?? {};
-  const reportRuns = await prisma.reportRun.findMany({
-    where: {
-      plantId: null,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 100,
-  });
+  const [plants, reportRuns] = await Promise.all([
+    prisma.plant.findMany({
+      where: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+    prisma.reportRun.findMany({
+      include: {
+        plant: {
+          select: {
+            code: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 100,
+    }),
+  ]);
 
   const reports = await Promise.all(
     reportRuns.map(async (run) => {
       const fileKeys = getFileKeys(run.fileKeys);
+      const plantCode = run.plant?.code ?? fileKeys.plantCode ?? null;
+      const plantName = run.plant?.name ?? fileKeys.plantName ?? null;
+      const isFactoryReport = Boolean(run.plantId);
+      const factoryLabel = isFactoryReport
+        ? `${plantCode ? `${plantCode.toUpperCase()} - ` : ""}${plantName ?? "Selected factory"}`
+        : "All factories";
 
       return {
         id: run.id,
         type: run.type,
+        scopeLabel: isFactoryReport ? "Factory" : "Global",
+        factoryLabel,
         status: run.status,
         periodStart: run.periodStart.toISOString().slice(0, 10),
         periodEnd: run.periodEnd.toISOString().slice(0, 10),
@@ -49,9 +86,7 @@ export default async function CorporateReportsPage({
         completedAt: run.completedAt?.toISOString() ?? "-",
         recipientsCount: Array.isArray(run.recipients) ? run.recipients.length : 0,
         pdfFileName: fileKeys.pdfFileName ?? "report.pdf",
-        xlsxFileName: fileKeys.xlsxFileName ?? "report.xlsx",
         pdfUrl: fileKeys.pdfKey ? await StorageService.getPresignedDownloadUrl({ key: fileKeys.pdfKey }) : null,
-        xlsxUrl: fileKeys.xlsxKey ? await StorageService.getPresignedDownloadUrl({ key: fileKeys.xlsxKey }) : null,
       };
     }),
   );
@@ -71,13 +106,13 @@ export default async function CorporateReportsPage({
 
       {params.generated ? (
         <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Corporate report generated and shared automatically with N2 and N3.
+          Report generated and shared automatically with the configured recipients.
         </div>
       ) : null}
 
       {params.error ? (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          Unable to generate the report. Please review the selected inputs.
+          {ERROR_MESSAGES[params.error] ?? "Unable to generate the report. Please review the selected inputs."}
         </div>
       ) : null}
 
@@ -86,32 +121,7 @@ export default async function CorporateReportsPage({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Generate Corporate Report</h2>
         </div>
 
-        <form action={generateCorporateReportAction} className="mt-4 grid gap-3 md:grid-cols-4">
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Report type</span>
-            <select name="reportType" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700" defaultValue="MONTHLY">
-              <option value="WEEKLY_DIGEST">Weekly digest</option>
-              <option value="MONTHLY">Monthly</option>
-              <option value="ANNUAL">Annual</option>
-            </select>
-          </label>
-
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Period start</span>
-            <input name="periodStart" type="date" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700" required />
-          </label>
-
-          <label className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Period end</span>
-            <input name="periodEnd" type="date" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700" required />
-          </label>
-
-          <div className="flex items-end">
-            <button type="submit" className="w-full rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:opacity-90">
-              Generate and share
-            </button>
-          </div>
-        </form>
+        <CorporateReportGeneratorForm action={generateCorporateReportAction} plants={plants} />
       </section>
 
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -119,19 +129,22 @@ export default async function CorporateReportsPage({
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Type</th>
+              <th className="px-4 py-3">Scope</th>
+              <th className="px-4 py-3">Factory</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Period</th>
               <th className="px-4 py-3">Created</th>
               <th className="px-4 py-3">Completed</th>
               <th className="px-4 py-3">Recipients</th>
               <th className="px-4 py-3">PDF</th>
-              <th className="px-4 py-3">XLSX</th>
             </tr>
           </thead>
           <tbody>
             {reports.map((report) => (
               <tr key={report.id} className="border-t border-slate-200">
                 <td className="px-4 py-3 font-semibold text-slate-900">{report.type}</td>
+                <td className="px-4 py-3">{report.scopeLabel}</td>
+                <td className="px-4 py-3">{report.factoryLabel}</td>
                 <td className="px-4 py-3">{report.status}</td>
                 <td className="px-4 py-3">
                   {report.periodStart} to {report.periodEnd}
@@ -148,20 +161,11 @@ export default async function CorporateReportsPage({
                     "-"
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  {report.xlsxUrl ? (
-                    <a href={report.xlsxUrl} target="_blank" rel="noreferrer" className="font-semibold text-teal-700 hover:underline">
-                      {report.xlsxFileName}
-                    </a>
-                  ) : (
-                    "-"
-                  )}
-                </td>
               </tr>
             ))}
             {reports.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
                   No corporate reports have been generated yet.
                 </td>
               </tr>

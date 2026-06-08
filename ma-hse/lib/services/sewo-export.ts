@@ -28,8 +28,6 @@ const MUTED = "#64748b";
 const PANEL = "#e2e8f0";
 const SOFT = "#f8fafc";
 const WHITE = "#ffffff";
-const SUCCESS = "#047857";
-const WARNING = "#d97706";
 const DANGER = "#b91c1c";
 
 type ExportAttachment = {
@@ -206,85 +204,437 @@ function drawSummaryHeader(doc: PdfDocument, input: {
   doc.fillColor(INK);
 }
 
-function drawBadge(doc: PdfDocument, label: string, x: number, y: number, fillColor = BRAND) {
-  const normalized = label.trim() || "-";
-  const width = Math.min(180, Math.max(58, doc.widthOfString(normalized) + 22));
-  doc.roundedRect(x, y, width, 20, 10).fill(fillColor);
-  doc.fillColor(WHITE).fontSize(8).text(normalized, x + 11, y + 6, { width: width - 22, align: "center" });
-  doc.fillColor(INK);
-  return width;
+const GREEN = "#4d9f35";
+const TEAL = "#008577";
+const BLUE = "#0070b8";
+const YELLOW = "#f2b705";
+
+function fitText(value: unknown, maxLength = 420) {
+  const text = getDisplayValue(value, "-").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
 }
 
-function drawCompleteHeader(doc: PdfDocument, input: {
-  title: string;
-  referenceLabel: string;
-  reference: string;
+function drawPortraitHeader(doc: PdfDocument, input: {
   plant: string;
-  generatedOnLabel: string;
+  title: string;
   generatedOn: string;
   exportedBy?: string | null;
-  status: string;
-  eventClassification: string;
-  sifPsifLabel: string;
-  sifPsifColor: string;
+  pageLabel: string;
 }) {
-  doc.roundedRect(40, 36, 515, 118, 18).fill(BRAND);
-  doc.fillColor(WHITE).fontSize(11).text("MAx Safety", 58, 54);
-  doc.fontSize(24).text(input.title, 58, 72, { width: 310 });
-  doc.fontSize(9).text(`${input.referenceLabel}: ${input.reference}`, 58, 108, { width: 260 });
-  doc.text(input.plant, 320, 56, { width: 217, align: "right" });
-  doc.text(`${input.generatedOnLabel} ${input.generatedOn}`, 320, 106, { width: 217, align: "right" });
-  if (input.exportedBy?.trim()) {
-    doc.text(`Exported by: ${input.exportedBy.trim()}`, 320, 122, { width: 217, align: "right" });
-  }
+  doc.rect(0, 0, doc.page.width, 56).fill(BRAND);
+  doc.fillColor(WHITE).fontSize(10).font("Helvetica-Bold").text(`PLANT: ${input.plant}`, 24, 17, { width: 128 });
+  doc.fontSize(15).text(input.title.toUpperCase(), 150, 14, { width: 290, align: "center" });
+  doc.fontSize(7.5).font("Helvetica").text(`Generated: ${input.generatedOn}`, 440, 13, { width: 132, align: "right" });
+  doc.text(`Exported by: ${input.exportedBy?.trim() || "-"}`, 440, 27, { width: 132, align: "right" });
+  doc.fillColor(INK).font("Helvetica");
+}
 
-  doc.y = 170;
-  drawBadge(doc, input.status, 40, 164, SUCCESS);
-  drawBadge(doc, input.eventClassification, 40 + Math.min(180, Math.max(58, doc.widthOfString(input.status.trim() || "-") + 22)) + 8, 164, WARNING);
-  drawBadge(doc, input.sifPsifLabel, 430, 164, input.sifPsifColor);
-  doc.y = 196;
+function drawPortraitFooter(doc: PdfDocument, input: {
+  generatedOn: string;
+  exportedBy?: string | null;
+  pageLabel: string;
+}) {
+  const footer = [
+    "MA Srl",
+    "S-EWO_MA_CLN Group",
+    `Generated: ${input.generatedOn}`,
+    `Exported by: ${input.exportedBy?.trim() || "-"}`,
+  ].join("  |  ");
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica").text(footer, 54, 812, { width: 430, align: "center" });
+  doc.text(input.pageLabel, 520, 812, { width: 44, align: "right" });
   doc.fillColor(INK);
 }
 
-function drawCompactTable(doc: PdfDocument, input: {
+function drawPortraitPanel(doc: PdfDocument, input: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  title: string;
+  color: string;
+}) {
+  drawPanel(doc, input);
+}
+
+function drawPortraitFieldGrid(doc: PdfDocument, input: {
+  x: number;
+  y: number;
+  columns: number;
+  cellWidth: number;
+  cellHeight: number;
+  gapX: number;
+  gapY: number;
+  entries: Array<[string, string]>;
+}) {
+  input.entries.forEach(([label, value], index) => {
+    const column = index % input.columns;
+    const row = Math.floor(index / input.columns);
+    drawMiniField(doc, {
+      label,
+      value,
+      x: input.x + column * (input.cellWidth + input.gapX),
+      y: input.y + row * (input.cellHeight + input.gapY),
+      width: input.cellWidth,
+      height: input.cellHeight,
+    });
+  });
+}
+
+function drawPortraitPhaseBand(doc: PdfDocument, label: string, y: number, height: number, color: string) {
+  drawSideBand(doc, label, 16, y, height, color);
+}
+
+function drawSignatureLine(doc: PdfDocument, label: string, x: number, y: number, width: number) {
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text(label.toUpperCase(), x, y, { width });
+  doc.moveTo(x + 48, y + 10).lineTo(x + width, y + 10).strokeColor("#cbd5e1").lineWidth(0.8).stroke();
+  doc.fillColor(INK).strokeColor(INK).font("Helvetica");
+}
+
+function drawCauseCategoryBoxes(doc: PdfDocument, input: {
+  x: number;
+  y: number;
+  width: number;
+  rowHeight: number;
+  categories: Array<{ number: number; title: string; items: string[] }>;
+  fallback: string;
+}) {
+  const gap = 6;
+  const boxWidth = (input.width - gap * 2) / 3;
+  input.categories.forEach((category, index) => {
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const x = input.x + column * (boxWidth + gap);
+    const y = input.y + row * (input.rowHeight + gap);
+    doc.rect(x, y, boxWidth, input.rowHeight).fillAndStroke(WHITE, "#c5ceda");
+    doc.rect(x, y, boxWidth, 18).fill(category.number <= 5 ? GREEN : BLUE);
+    doc.fillColor(WHITE).fontSize(7).font("Helvetica-Bold").text(`${category.number}  ${category.title}`.toUpperCase(), x + 6, y + 5, {
+      width: boxWidth - 12,
+    });
+    const text = category.items.length ? category.items.join("\n") : input.fallback;
+    doc.fillColor(INK).fontSize(6.4).font("Helvetica").text(fitText(text, 240), x + 6, y + 24, {
+      width: boxWidth - 12,
+      height: input.rowHeight - 30,
+    });
+  });
+  doc.fillColor(INK).font("Helvetica");
+}
+
+function isInjuryClassification(input: {
+  communicationType: string;
+  eventClassification: string;
+  pyramidLevel: number | null;
+}) {
+  if (input.communicationType === "FIRST_AID" || input.communicationType === "ACCIDENT") return true;
+  if (input.pyramidLevel !== null && input.pyramidLevel <= 4) return true;
+  const normalized = input.eventClassification.toLowerCase();
+  return ["first aid", "injury", "serious", "minor", "fatal", "accident"].some((term) => normalized.includes(term));
+}
+
+function drawSideBand(doc: PdfDocument, label: string, x: number, y: number, height: number, color: string) {
+  doc.rect(x, y, 20, height).fill(color);
+  doc.save();
+  doc.rotate(-90, { origin: [x + 10, y + height / 2] });
+  doc.fillColor(WHITE).fontSize(13).font("Helvetica-Bold").text(label.toUpperCase(), x - height / 2, y + height / 2 - 5, {
+    width: height,
+    align: "center",
+  });
+  doc.restore();
+  doc.fillColor(INK).font("Helvetica");
+}
+
+function drawPanel(doc: PdfDocument, input: { x: number; y: number; width: number; height: number; title: string; color: string }) {
+  doc.roundedRect(input.x, input.y, input.width, input.height, 6).fillAndStroke(WHITE, "#b8c4d2");
+  doc.roundedRect(input.x, input.y, input.width, 22, 5).fill(input.color);
+  doc.fillColor(WHITE).fontSize(9).font("Helvetica-Bold").text(input.title, input.x + 10, input.y + 7, { width: input.width - 20 });
+  doc.fillColor(INK).font("Helvetica");
+}
+
+function drawMiniField(doc: PdfDocument, input: {
+  label: string;
+  value: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
+  doc.rect(input.x, input.y, input.width, input.height).fillAndStroke(SOFT, "#c5ceda");
+  doc.fillColor(MUTED).fontSize(6.5).font("Helvetica-Bold").text(input.label.toUpperCase(), input.x + 6, input.y + 6, { width: input.width - 12 });
+  doc.fillColor(INK).fontSize(8).font("Helvetica").text(fitText(input.value, 110), input.x + 6, input.y + 18, {
+    width: input.width - 12,
+    height: input.height - 22,
+  });
+}
+
+function drawLinedTextBox(doc: PdfDocument, input: {
+  label: string;
+  value: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maxLength?: number;
+}) {
+  doc.rect(input.x, input.y, input.width, input.height).fillAndStroke(WHITE, "#c5ceda");
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text(input.label.toUpperCase(), input.x + 7, input.y + 7, {
+    width: input.width - 14,
+  });
+  doc.fillColor(INK).fontSize(8).font("Helvetica").text(fitText(input.value, input.maxLength ?? 260), input.x + 7, input.y + 20, {
+    width: input.width - 14,
+    height: input.height - 25,
+  });
+
+  const lineStart = input.y + 36;
+  for (let y = lineStart; y < input.y + input.height - 8; y += 14) {
+    doc.moveTo(input.x + 7, y).lineTo(input.x + input.width - 7, y).strokeColor("#e2e8f0").stroke();
+  }
+  doc.strokeColor(INK).fillColor(INK);
+}
+
+function drawCheckbox(doc: PdfDocument, input: { x: number; y: number; checked: boolean; label: string; highlight?: boolean }) {
+  doc.rect(input.x, input.y, 10, 10).strokeColor(input.highlight ? BRAND : "#94a3b8").lineWidth(input.highlight ? 1.5 : 1).stroke();
+  if (input.checked) {
+    doc.moveTo(input.x + 2, input.y + 5).lineTo(input.x + 4.5, input.y + 8).lineTo(input.x + 9, input.y + 2).strokeColor(BRAND).lineWidth(1.6).stroke();
+  }
+  doc.fillColor(input.highlight ? INK : "#334155").fontSize(8).font(input.highlight ? "Helvetica-Bold" : "Helvetica").text(input.label, input.x + 16, input.y, {
+    width: 145,
+  });
+  doc.strokeColor(INK).fillColor(INK).font("Helvetica");
+}
+
+function getPyramidLevel(input: {
+  communicationType?: string | null;
+  classification?: string | null;
+  lostDays?: number | null;
+  isFatal?: boolean | null;
+}) {
+  if (input.communicationType === "ACCIDENT") {
+    if (input.isFatal || input.classification === "FATAL") return 1;
+    if (input.classification === "SERIOUS" || (input.lostDays ?? 0) > 30) return 2;
+    return 3;
+  }
+  if (input.communicationType === "FIRST_AID") return 4;
+  if (input.communicationType === "NEAR_MISS") return 5;
+  if (input.communicationType === "UNSAFE_CONDITION") return 6;
+  if (input.communicationType === "UNSAFE_ACT") return 7;
+  return null;
+}
+
+function drawPyramid(doc: PdfDocument, input: {
+  x: number;
+  y: number;
+  width: number;
+  selectedLevel: number | null;
+}) {
+  const levels = [
+    { level: 1, label: "Fatal accident", color: "#d72828" },
+    { level: 2, label: "Serious Injury (> 30 days)", color: "#f05a24" },
+    { level: 3, label: "Minor Injury (<=30 days)", color: "#f4b000" },
+    { level: 4, label: "First Aid", color: "#f2d900" },
+    { level: 5, label: "Near misses", color: "#88c63f" },
+    { level: 6, label: "Unsafe condition", color: "#39a94b" },
+    { level: 7, label: "Unsafe action", color: "#00964b" },
+  ];
+  const segmentH = 17;
+  const centerX = input.x + 100;
+  const topY = input.y + 12;
+  const maxW = 145;
+
+  levels.forEach((entry, index) => {
+    const y = topY + index * segmentH;
+    const topWidth = 34 + index * 16;
+    const bottomWidth = Math.min(maxW, topWidth + 16);
+    const points = [
+      [centerX - topWidth / 2, y],
+      [centerX + topWidth / 2, y],
+      [centerX + bottomWidth / 2, y + segmentH],
+      [centerX - bottomWidth / 2, y + segmentH],
+    ];
+    doc.polygon(...points).fillAndStroke(entry.color, WHITE);
+    doc.fillColor(WHITE).fontSize(9).font("Helvetica-Bold").text(String(entry.level), centerX - 8, y + 4, { width: 16, align: "center" });
+
+    const checked = input.selectedLevel === entry.level;
+    drawCheckbox(doc, {
+      x: input.x + 205,
+      y: y + 4,
+      checked,
+      label: entry.label,
+      highlight: checked,
+    });
+  });
+  doc.fillColor(INK).font("Helvetica");
+}
+
+function normalizeBodyPartName(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function getBodyMarker(input: { code?: string | null; name?: string | null }) {
+  const code = input.code?.toUpperCase();
+  const name = normalizeBodyPartName(input.name ?? "");
+  const byCode: Record<string, { side: "front" | "back"; x: number; y: number; radius: number }> = {
+    BP01: { side: "front", x: 55, y: 18, radius: 13 },
+    BP02: { side: "front", x: 48, y: 22, radius: 7 },
+    BP03: { side: "front", x: 62, y: 22, radius: 7 },
+    BP04: { side: "front", x: 34, y: 52, radius: 12 },
+    BP05: { side: "front", x: 76, y: 52, radius: 12 },
+    BP06: { side: "front", x: 24, y: 84, radius: 14 },
+    BP07: { side: "front", x: 86, y: 84, radius: 14 },
+    BP08: { side: "front", x: 16, y: 122, radius: 12 },
+    BP09: { side: "front", x: 94, y: 122, radius: 12 },
+    BP10: { side: "front", x: 55, y: 62, radius: 17 },
+    BP11: { side: "back", x: 55, y: 62, radius: 18 },
+    BP12: { side: "back", x: 55, y: 92, radius: 17 },
+    BP13: { side: "front", x: 55, y: 92, radius: 16 },
+    BP14: { side: "front", x: 43, y: 113, radius: 12 },
+    BP15: { side: "front", x: 67, y: 113, radius: 12 },
+    BP16: { side: "front", x: 43, y: 151, radius: 14 },
+    BP17: { side: "front", x: 67, y: 151, radius: 14 },
+    BP18: { side: "front", x: 43, y: 175, radius: 12 },
+    BP19: { side: "front", x: 67, y: 175, radius: 12 },
+    BP20: { side: "front", x: 40, y: 218, radius: 13 },
+    BP21: { side: "front", x: 70, y: 218, radius: 13 },
+  };
+  if (code && byCode[code]) return byCode[code];
+  if (name.includes("head") || name.includes("cabeca") || name.includes("cabeça")) return byCode.BP01;
+  if (name.includes("eye") || name.includes("olho")) return byCode.BP02;
+  if (name.includes("shoulder") || name.includes("ombro")) return byCode.BP04;
+  if (name.includes("arm") || name.includes("braco") || name.includes("braço")) return byCode.BP06;
+  if (name.includes("hand") || name.includes("mao") || name.includes("mão")) return byCode.BP08;
+  if (name.includes("chest") || name.includes("torax") || name.includes("tórax")) return byCode.BP10;
+  if (name.includes("back") || name.includes("costas")) return byCode.BP11;
+  if (name.includes("abdomen")) return byCode.BP13;
+  if (name.includes("hip") || name.includes("anca")) return byCode.BP14;
+  if (name.includes("knee") || name.includes("joelho")) return byCode.BP18;
+  if (name.includes("foot") || name.includes("pe") || name.includes("pé")) return byCode.BP20;
+  if (name.includes("leg") || name.includes("perna")) return byCode.BP16;
+  return null;
+}
+
+function drawHumanFigure(doc: PdfDocument, x: number, y: number, label: string, marker: ReturnType<typeof getBodyMarker> | null, side: "front" | "back") {
+  doc.fillColor("#f4c27a").circle(x + 55, y + 20, 13).fill();
+  doc.roundedRect(x + 38, y + 42, 34, 58, 8).fill("#8dd2c9");
+  doc.roundedRect(x + 23, y + 48, 12, 55, 6).fill("#7fb4d6");
+  doc.roundedRect(x + 75, y + 48, 12, 55, 6).fill("#7fb4d6");
+  doc.roundedRect(x + 39, y + 100, 13, 72, 6).fill("#f6a64b");
+  doc.roundedRect(x + 58, y + 100, 13, 72, 6).fill("#f6a64b");
+  doc.roundedRect(x + 35, y + 171, 18, 14, 5).fill("#64748b");
+  doc.roundedRect(x + 57, y + 171, 18, 14, 5).fill("#64748b");
+  doc.strokeColor("#64748b").lineWidth(0.8).circle(x + 55, y + 20, 13).stroke();
+  doc.roundedRect(x + 38, y + 42, 34, 58, 8).stroke();
+
+  if (marker && marker.side === side) {
+    doc.circle(x + marker.x, y + marker.y, marker.radius).fillOpacity(0.22).fill(DANGER).fillOpacity(1);
+    doc.circle(x + marker.x, y + marker.y, marker.radius + 3).strokeColor(DANGER).lineWidth(2).stroke();
+  }
+
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text(label.toUpperCase(), x, y + 192, { width: 110, align: "center" });
+  doc.strokeColor(INK).fillColor(INK).font("Helvetica");
+}
+
+function drawAnatomyPanel(doc: PdfDocument, input: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  bodyPart: string;
+  bodyPartCode?: string | null;
+  injuryType: string;
+  required: boolean;
+}) {
+  doc.rect(input.x, input.y, input.width, input.height).fillAndStroke(SOFT, "#c5ceda");
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text("PART OF THE BODY", input.x + 10, input.y + 9, {
+    width: input.width - 20,
+    align: "center",
+  });
+  if (!input.required) {
+    doc.fillColor(INK).fontSize(8).font("Helvetica").text("Anatomical model not required for this event type.", input.x + 16, input.y + 45, {
+      width: input.width - 32,
+      align: "center",
+    });
+    doc.fillColor(MUTED).fontSize(7).text(`Body part: ${input.bodyPart || "-"}`, input.x + 16, input.y + 86, { width: input.width - 32, align: "center" });
+    return;
+  }
+
+  const marker = getBodyMarker({ code: input.bodyPartCode, name: input.bodyPart });
+  if (input.height < 180) {
+    const drawCompactFigure = (figureX: number, figureY: number, label: string, side: "front" | "back") => {
+      doc.fillColor("#f4c27a").circle(figureX + 25, figureY + 9, 6).fill();
+      doc.roundedRect(figureX + 18, figureY + 20, 14, 28, 4).fill("#8dd2c9");
+      doc.roundedRect(figureX + 11, figureY + 23, 5, 25, 3).fill("#7fb4d6");
+      doc.roundedRect(figureX + 34, figureY + 23, 5, 25, 3).fill("#7fb4d6");
+      doc.roundedRect(figureX + 18, figureY + 48, 6, 30, 3).fill("#f6a64b");
+      doc.roundedRect(figureX + 27, figureY + 48, 6, 30, 3).fill("#f6a64b");
+      if (marker && marker.side === side) {
+        const markerX = figureX + Math.max(7, Math.min(43, marker.x * 0.45));
+        const markerY = figureY + Math.max(5, Math.min(78, marker.y * 0.36));
+        doc.circle(markerX, markerY, Math.max(4, marker.radius * 0.34)).fillOpacity(0.22).fill(DANGER).fillOpacity(1);
+        doc.circle(markerX, markerY, Math.max(6, marker.radius * 0.34 + 2)).strokeColor(DANGER).lineWidth(1.2).stroke();
+      }
+      doc.fillColor(MUTED).fontSize(6).font("Helvetica-Bold").text(label.toUpperCase(), figureX, figureY + 82, { width: 50, align: "center" });
+    };
+    drawCompactFigure(input.x + 18, input.y + 26, "Front", "front");
+    drawCompactFigure(input.x + input.width - 68, input.y + 26, "Back", "back");
+    doc.fillColor(INK).fontSize(6.5).font("Helvetica-Bold").text(`Affected zone: ${input.bodyPart || "-"}`, input.x + 8, input.y + input.height - 26, {
+      width: input.width - 16,
+      align: "center",
+    });
+    doc.fillColor(MUTED).fontSize(6).font("Helvetica").text(`Nature: ${input.injuryType || "-"}`, input.x + 8, input.y + input.height - 15, {
+      width: input.width - 16,
+      align: "center",
+    });
+    doc.fillColor(INK).font("Helvetica");
+    return;
+  }
+  drawHumanFigure(doc, input.x + 24, input.y + 28, "Front", marker, "front");
+  drawHumanFigure(doc, input.x + 132, input.y + 28, "Back", marker, "back");
+  doc.fillColor(INK).fontSize(8).font("Helvetica-Bold").text(`Affected zone: ${input.bodyPart || "-"}`, input.x + 10, input.y + input.height - 34, {
+    width: input.width - 20,
+    align: "center",
+  });
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica").text(`Nature: ${input.injuryType || "-"}`, input.x + 10, input.y + input.height - 20, {
+    width: input.width - 20,
+    align: "center",
+  });
+}
+
+function drawLandscapeTable(doc: PdfDocument, input: {
+  x: number;
+  y: number;
+  widths: number[];
+  rowHeight: number;
   headers: string[];
   rows: string[][];
-  widths: number[];
+  maxRows?: number;
 }) {
-  const x = 40;
-  const rowPadding = 8;
-  const headerHeight = 26;
   const tableWidth = input.widths.reduce((sum, width) => sum + width, 0);
-
-  ensurePageSpace(doc, headerHeight + 34);
-  doc.roundedRect(x, doc.y, tableWidth, headerHeight, 8).fill(BRAND);
-  let cursorX = x;
+  doc.rect(input.x, input.y, tableWidth, 24).fillAndStroke(SOFT, "#c5ceda");
+  let cursorX = input.x;
   input.headers.forEach((header, index) => {
-    doc.fillColor(WHITE).fontSize(8).text(header.toUpperCase(), cursorX + rowPadding, doc.y + 9, {
-      width: input.widths[index] - rowPadding * 2,
+    doc.fillColor(INK).fontSize(7).font("Helvetica-Bold").text(header.toUpperCase(), cursorX + 6, input.y + 8, {
+      width: input.widths[index] - 12,
+      align: "center",
     });
     cursorX += input.widths[index];
+    doc.moveTo(cursorX, input.y).lineTo(cursorX, input.y + 24 + input.rowHeight * Math.max(1, Math.min(input.rows.length, input.maxRows ?? input.rows.length))).strokeColor("#c5ceda").stroke();
   });
-  doc.y += headerHeight;
 
-  input.rows.forEach((row, rowIndex) => {
-    const cellHeights = row.map((cell, index) => doc.heightOfString(cell || "-", {
-      width: input.widths[index] - rowPadding * 2,
-    }));
-    const rowHeight = Math.max(38, Math.max(...cellHeights) + rowPadding * 2);
-    ensurePageSpace(doc, rowHeight + 4);
-    const rowY = doc.y;
-    doc.roundedRect(x, rowY, tableWidth, rowHeight, 6).fillAndStroke(rowIndex % 2 === 0 ? SOFT : WHITE, PANEL);
-    cursorX = x;
+  const visibleRows = input.rows.slice(0, input.maxRows ?? input.rows.length);
+  if (visibleRows.length === 0) visibleRows.push(input.headers.map(() => "-"));
+
+  visibleRows.forEach((row, rowIndex) => {
+    const y = input.y + 24 + rowIndex * input.rowHeight;
+    doc.rect(input.x, y, tableWidth, input.rowHeight).fillAndStroke(rowIndex % 2 === 0 ? WHITE : SOFT, "#dbe3ee");
+    cursorX = input.x;
     row.forEach((cell, index) => {
-      doc.fillColor(INK).fontSize(9).text(cell || "-", cursorX + rowPadding, rowY + rowPadding, {
-        width: input.widths[index] - rowPadding * 2,
+      doc.fillColor(INK).fontSize(7).font("Helvetica").text(fitText(cell, 140), cursorX + 6, y + 7, {
+        width: input.widths[index] - 12,
+        height: input.rowHeight - 10,
       });
       cursorX += input.widths[index];
     });
-    doc.y = rowY + rowHeight + 4;
   });
-  doc.fillColor(INK);
+  doc.fillColor(INK).strokeColor(INK).font("Helvetica");
 }
 
 function getSummaryLocation(input: {
@@ -373,37 +723,6 @@ function drawPhotoCard(doc: PdfDocument, input: {
   doc.fillColor(INK);
 }
 
-function addPageFooters(doc: PdfDocument, input: {
-  generatedOnLabel: string;
-  generatedOn: string;
-  exportedBy?: string | null;
-}) {
-  const withBufferedPages = doc as PdfDocument & {
-    bufferedPageRange?: () => { start: number; count: number };
-    switchToPage?: (pageNumber: number) => void;
-  };
-
-  if (typeof withBufferedPages.bufferedPageRange !== "function" || typeof withBufferedPages.switchToPage !== "function") {
-    return;
-  }
-
-  const range = withBufferedPages.bufferedPageRange();
-  for (let index = range.start; index < range.start + range.count; index += 1) {
-    withBufferedPages.switchToPage(index);
-    const pageNumber = index - range.start + 1;
-    const footerParts = [
-      `${input.generatedOnLabel} ${input.generatedOn}`,
-      input.exportedBy?.trim() ? `Exported by: ${input.exportedBy.trim()}` : "",
-      `Page ${pageNumber}/${range.count}`,
-    ].filter(Boolean);
-    doc.fillColor(MUTED).fontSize(8).text(footerParts.join(" | "), 40, doc.page.height - 32, {
-      width: 515,
-      align: "center",
-    });
-  }
-  doc.fillColor(INK);
-}
-
 function readSifPsifDecision(value: unknown): SifPsifDecision | null {
   if (!isRecord(value)) return null;
 
@@ -433,7 +752,11 @@ export const SewoExportService = {
           include: {
             targetEmployee: true,
             area: true,
+            line: true,
+            shift: true,
             workstation: true,
+            bodyPart: true,
+            injuryType: true,
           },
         },
         performedBy: true,
@@ -506,27 +829,86 @@ export const SewoExportService = {
     const orderedActions = [...sewo.actionLinks].sort(
       (left, right) => left.action.dueDate.getTime() - right.action.dueDate.getTime(),
     );
+    const communicationType = getDisplayValue(
+      sewo.communication?.type ?? templateData.eventType ?? sewo.whichText,
+      "",
+    );
+    const bodyPartName = getDisplayValue(
+      sewo.communication?.bodyPart?.name ?? templateData.bodyPart,
+      ui.summaryReportNotApplicable,
+    );
+    const injuryTypeName = getDisplayValue(
+      sewo.communication?.injuryType?.name ?? sewo.whatText,
+      ui.summaryReportNotApplicable,
+    );
+    const lostDays = typeof templateData.lostDays === "number"
+      ? templateData.lostDays
+      : sewo.communication?.lostDays ?? null;
+    const selectedPyramidLevel = getPyramidLevel({
+      communicationType,
+      classification: sewo.communication?.classification ?? getDisplayValue(templateData.classification, ""),
+      lostDays,
+      isFatal: sewo.communication?.isFatal ?? Boolean(templateData.isFatal),
+    });
 
     const pdf = await (async () => {
-      const doc = createPdfDocument({ margin: 40, size: "A4", bufferPages: true });
+      const doc = createPdfDocument({ margin: 0, size: "A4", bufferPages: true });
+      const pageCount = 3;
+      const anatomyRequired = isInjuryClassification({
+        communicationType,
+        eventClassification: display(sewo.eventClassification),
+        pyramidLevel: selectedPyramidLevel,
+      });
+      const bodyLocationText = anatomyRequired && bodyPartName === ui.summaryReportNotApplicable
+        ? "Body location not specified"
+        : bodyPartName;
 
-      drawCompleteHeader(doc, {
-        title: "S-EWO Complete Report",
-        referenceLabel: ui.summaryReportReference,
-        reference: sewo.id,
-        plant: plantLabel,
-        generatedOnLabel: ui.generatedOn,
+      drawPortraitHeader(doc, {
+        plant: sewo.plant.code.toUpperCase(),
+        title: "SAFETY EWO - COMPLETE REPORT",
         generatedOn,
         exportedBy: options.exportedBy,
-        status: localizedStatus,
-        eventClassification: display(sewo.eventClassification),
-        sifPsifLabel,
-        sifPsifColor: sifPsifResult === "SIF" ? DANGER : sifPsifResult === "PSIF" ? WARNING : BRAND,
+        pageLabel: `1/${pageCount}`,
+      });
+      drawPortraitPhaseBand(doc, "PLAN", 68, 720, GREEN);
+
+      drawPortraitPanel(doc, { x: 46, y: 72, width: 503, height: 150, title: "Event classification / communication type", color: GREEN });
+      drawPyramid(doc, { x: 54, y: 92, width: 284, selectedLevel: selectedPyramidLevel });
+      drawMiniField(doc, {
+        label: "Lost days",
+        value: getDisplayValue(lostDays, ui.summaryReportNotApplicable),
+        x: 376,
+        y: 108,
+        width: 70,
+        height: 38,
+      });
+      drawMiniField(doc, {
+        label: "1st prognosis",
+        value: getDisplayValue(templateData.initialLostDays, ui.summaryReportNotApplicable),
+        x: 456,
+        y: 108,
+        width: 78,
+        height: 38,
+      });
+      drawMiniField(doc, {
+        label: "Communication type",
+        value: communicationType || ui.summaryReportNotApplicable,
+        x: 376,
+        y: 158,
+        width: 158,
+        height: 38,
       });
 
-      drawFieldGrid(
-        doc,
-        [
+      drawPortraitPanel(doc, { x: 46, y: 232, width: 503, height: 178, title: "General information", color: BRAND });
+      drawPortraitFieldGrid(doc, {
+        x: 56,
+        y: 262,
+        columns: 4,
+        cellWidth: 116,
+        cellHeight: 31,
+        gapX: 6,
+        gapY: 6,
+        entries: [
           [ui.plant, plantLabel],
           [ui.summaryReportReference, sewo.id],
           [ui.summaryStatus, localizedStatus],
@@ -535,73 +917,95 @@ export const SewoExportService = {
           [ui.summaryCommunication, sewo.communication?.id ?? "-"],
           [ui.validatedBy, sewo.approvedBy?.name ?? ui.summaryReportNotApplicable],
           [ui.reviewedAt, sewo.approvedAt ? formatDate(sewo.approvedAt) : ui.summaryReportNotApplicable],
-        ],
-        2,
-      );
-
-      ensurePageSpace(doc, 230);
-      drawSectionTitle(doc, ui.summaryReportGeneralInfo);
-      drawFieldGrid(
-        doc,
-        [
           [ui.eventClassification, display(sewo.eventClassification)],
           [ui.area, sewo.area?.name ?? sewo.communication?.area?.name ?? ui.summaryReportNotApplicable],
           [ui.workstation, occurrenceLocation],
-          [ui.shift, sewo.shift?.name ?? ui.summaryReportNotApplicable],
+          [ui.shift, sewo.shift?.name ?? sewo.communication?.shift?.name ?? ui.summaryReportNotApplicable],
           [ui.involvedPerson, getDisplayValue(sewo.whoText, ui.summaryReportNotApplicable)],
-          [ui.nature, getDisplayValue(sewo.whatText, ui.summaryReportNotApplicable)],
+          [ui.nature, injuryTypeName],
           [ui.usualJob, sewo.usualWorkYesNo ? ui.yes : ui.no],
           [ui.whichOperation, display(sewo.whichText)],
         ],
-        2,
-      );
+      });
 
-      ensurePageSpace(doc, 190);
-      drawSectionTitle(doc, ui.summaryReportDescriptionSection);
-      drawParagraphCard(doc, ui.description, display(sewo.howText));
-      drawParagraphCard(doc, ui.howDidTheAccidentHappen, display(sewo.howText));
+      drawPortraitPanel(doc, { x: 46, y: 420, width: 244, height: 208, title: "Analysis - event description", color: TEAL });
+      drawLinedTextBox(doc, { label: "WHAT - nature and body location", value: `${injuryTypeName} | ${bodyLocationText}`, x: 56, y: 450, width: 224, height: 36, maxLength: 130 });
+      drawLinedTextBox(doc, { label: "WHERE - workplace, machine, press, line, etc.", value: occurrenceLocation, x: 56, y: 492, width: 224, height: 36, maxLength: 130 });
+      drawLinedTextBox(doc, { label: "WHO - usual job of the injured person", value: getDisplayValue(sewo.whoText, ui.summaryReportNotApplicable), x: 56, y: 534, width: 224, height: 36, maxLength: 130 });
+      drawLinedTextBox(doc, { label: "HOW - how did the accident happen", value: display(sewo.howText), x: 56, y: 576, width: 224, height: 42, maxLength: 190 });
 
-      ensurePageSpace(doc, 190);
-      drawSectionTitle(doc, ui.immediateCorrectiveActionPlan);
-      drawParagraphCard(doc, ui.immediateCorrectiveActionPlan, display(sewo.immediateCorrectiveActionText));
+      drawPortraitPanel(doc, { x: 302, y: 420, width: 247, height: 208, title: "Immediate action and classification", color: BLUE });
+      drawAnatomyPanel(doc, {
+        x: 312,
+        y: 450,
+        width: 112,
+        height: 126,
+        bodyPart: bodyLocationText,
+        bodyPartCode: sewo.communication?.bodyPart?.code ?? null,
+        injuryType: injuryTypeName,
+        required: anatomyRequired,
+      });
+      drawLinedTextBox(doc, {
+        label: "Immediate action description",
+        value: display(sewo.immediateCorrectiveActionText),
+        x: 432,
+        y: 450,
+        width: 106,
+        height: 126,
+        maxLength: 210,
+      });
+      drawLandscapeTable(doc, {
+        x: 312,
+        y: 584,
+        widths: [70, 112, 46],
+        rowHeight: 18,
+        headers: ["Category", "Check possible causes", "Root cause"],
+        rows: rootCauseDetails.slice(0, 2).map((entry) => [display(entry.label), display(entry.comment), yesNo(entry.isRootCause)]),
+        maxRows: 2,
+      });
 
-      ensurePageSpace(doc, 220);
-      drawSectionTitle(doc, ui.analysis);
-      drawParagraphCard(doc, ui.analysisText, display(templateData.analysisText));
-      drawFieldGrid(
-        doc,
-        [
-          [ui.previousDetected, yesNo(templateData.previousDetected)],
-          [ui.previousDetectedDescription, display(templateData.previousDetectedDescription)],
-        ],
-        1,
-      );
+      drawPortraitPanel(doc, { x: 46, y: 640, width: 503, height: 54, title: "UC / UA related to the event", color: GREEN });
+      doc.fillColor(INK).fontSize(7.5).text("Have any UA/UC related to the dynamic and root causes been previously detected?", 58, 669, { width: 280 });
+      drawCheckbox(doc, { x: 345, y: 667, checked: isSewoRootCauseAffirmative(templateData.previousDetected), label: ui.yes });
+      drawCheckbox(doc, { x: 400, y: 667, checked: templateData.previousDetected === "NO" || templateData.previousDetected === false, label: ui.no });
+      doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text("Description:", 58, 684, { width: 70 });
+      doc.fillColor(INK).fontSize(7).font("Helvetica").text(fitText(display(templateData.previousDetectedDescription), 180), 132, 684, { width: 390 });
+      drawPortraitFooter(doc, { generatedOn, exportedBy: options.exportedBy, pageLabel: `1/${pageCount}` });
 
-      ensurePageSpace(doc, 150);
-      drawSectionTitle(doc, ui.fiveWhy);
-      if (fiveWhys.length === 0) {
-        drawParagraphCard(doc, ui.fiveWhy, ui.noFiveWhyAnalysis);
-      } else {
-        drawCompactTable(doc, {
-          headers: [ui.whyLabel, ui.question, ui.answerLabel],
-          widths: [74, 216, 225],
-          rows: fiveWhys.map((entry, index) => [
-            `${ui.whyLabel} ${index + 1}`,
-            display(entry.why),
-            display(entry.answer),
-          ]),
-        });
-      }
+      doc.addPage({ margin: 0, size: "A4" });
+      drawPortraitHeader(doc, {
+        plant: sewo.plant.code.toUpperCase(),
+        title: "SAFETY EWO - ANALYSIS",
+        generatedOn,
+        exportedBy: options.exportedBy,
+        pageLabel: `2/${pageCount}`,
+      });
+      drawPortraitPhaseBand(doc, "PLAN", 68, 720, GREEN);
 
-      ensurePageSpace(doc, 240);
-      drawSectionTitle(doc, ui.sifPsifDecisionTree);
-      if (!sifPsifDecision) {
-        drawParagraphCard(doc, ui.sifPsifDecisionTree, ui.pendingResult);
-      } else {
-        drawFieldGrid(doc, [[ui.sifPsifResult, sifPsifLabel]], 1);
-        drawFieldGrid(
-          doc,
-          [
+      drawPortraitPanel(doc, { x: 46, y: 72, width: 503, height: 154, title: "Occurrence description", color: GREEN });
+      drawLinedTextBox(doc, { label: "Description", value: display(sewo.whatText), x: 56, y: 102, width: 156, height: 96, maxLength: 260 });
+      drawLinedTextBox(doc, { label: "How did the accident happen?", value: display(sewo.howText), x: 220, y: 102, width: 156, height: 96, maxLength: 260 });
+      drawLinedTextBox(doc, { label: "Immediate corrective action plan", value: display(sewo.immediateCorrectiveActionText), x: 384, y: 102, width: 154, height: 96, maxLength: 260 });
+
+      drawPortraitPanel(doc, { x: 46, y: 238, width: 503, height: 92, title: "Analysis", color: TEAL });
+      drawLinedTextBox(doc, { label: "Analysis text", value: display(templateData.analysisText), x: 56, y: 268, width: 260, height: 48, maxLength: 220 });
+      drawMiniField(doc, { label: "Have previous UA / UC been detected?", value: yesNo(templateData.previousDetected), x: 326, y: 268, width: 96, height: 48 });
+      drawLinedTextBox(doc, { label: "Describe previous detection", value: display(templateData.previousDetectedDescription), x: 430, y: 268, width: 108, height: 48, maxLength: 100 });
+
+      drawPortraitPanel(doc, { x: 46, y: 342, width: 503, height: 118, title: "5 Why", color: BLUE });
+      drawLandscapeTable(doc, {
+        x: 56,
+        y: 372,
+        widths: [58, 210, 213],
+        rowHeight: 18,
+        headers: [ui.whyLabel, ui.question, ui.answerLabel],
+        rows: fiveWhys.map((entry, index) => [`${ui.whyLabel} ${index + 1}`, display(entry.why), display(entry.answer)]),
+        maxRows: 4,
+      });
+
+      const sifRows = sifPsifDecision
+        ? [
+            [ui.sifPsifResult, sifPsifLabel],
             [ui.actualSifQuestion, yesNo(sifPsifDecision.actualSif)],
             ...SIF_PSIF_EXPOSURE_KEYS.map((key): [string, string] => [
               ui.sifPsifExposureQuestions[key],
@@ -609,78 +1013,139 @@ export const SewoExportService = {
             ]),
             [ui.repeatedSifPotentialQuestion, yesNo(sifPsifDecision.repeatedSifPotential)],
             [ui.oneWhatIfAwayQuestion, yesNo(sifPsifDecision.oneWhatIfAway)],
-          ],
-          1,
-        );
-        if (sifPsifDecision.noPsifExplanation.trim()) {
-          drawParagraphCard(doc, ui.noPsifExplanation, display(sifPsifDecision.noPsifExplanation));
-        }
-      }
+            [ui.noPsifExplanation, display(sifPsifDecision.noPsifExplanation)],
+          ]
+        : [[ui.sifPsifDecisionTree, ui.pendingResult]];
+      drawPortraitPanel(doc, { x: 46, y: 472, width: 503, height: 222, title: "SIF / PSIF decision tree", color: BRAND });
+      drawLandscapeTable(doc, {
+        x: 56,
+        y: 502,
+        widths: [358, 123],
+        rowHeight: 16,
+        headers: [ui.field, ui.value],
+        rows: sifRows,
+        maxRows: 10,
+      });
+      drawPortraitFooter(doc, { generatedOn, exportedBy: options.exportedBy, pageLabel: `2/${pageCount}` });
 
-      ensurePageSpace(doc, 160);
-      drawSectionTitle(doc, ui.rootCauseAnalysis);
-      if (rootCauseDetails.length === 0) {
-        drawParagraphCard(doc, ui.rootCause, ui.noRootCauseDetails);
-      } else {
-        drawCompactTable(doc, {
-          headers: [ui.cause, ui.rootCause, ui.comment],
-          widths: [230, 90, 195],
-          rows: rootCauseDetails.map((entry) => [
-            display(entry.label),
-            yesNo(entry.isRootCause),
-            display(entry.comment),
-          ]),
-        });
-      }
-
-      ensurePageSpace(doc, 160);
-      drawSectionTitle(doc, ui.actionPlan);
-      if (orderedActions.length === 0) {
-        drawParagraphCard(doc, ui.actionPlan, ui.noLinkedActions);
-      } else {
-        drawCompactTable(doc, {
-          headers: [ui.title, ui.owner, ui.dueDate, ui.tableStatus, ui.description],
-          widths: [120, 105, 75, 75, 140],
-          rows: orderedActions.map((entry) => [
-            display(entry.action.title),
-            entry.action.ownerUser.name,
-            formatDate(entry.action.dueDate),
-            ui.actionStatusLabels[entry.action.status] ?? entry.action.status,
-            display(entry.action.description),
-          ]),
-        });
-      }
-
-      ensurePageSpace(doc, photoAttachments.length ? 300 : 120);
-      drawSectionTitle(doc, ui.summaryReportPhotoEvidenceSection);
-      if (!photoAttachments.length && !nonImageAttachments.length) {
-        drawParagraphCard(doc, ui.summaryReportPhotoEvidenceSection, ui.summaryReportNotApplicable);
-      } else {
-        photoAttachments.forEach((attachment) => {
-          try {
-            drawPhotoCard(doc, {
-              title: attachment.fileName,
-              imageBuffer: attachment.buffer,
-            });
-          } catch {
-            drawParagraphCard(doc, attachment.fileName, ui.summaryReportNotApplicable);
-          }
-        });
-
-        if (nonImageAttachments.length) {
-          drawParagraphCard(
-            doc,
-            ui.summaryReportPhotoEvidenceSection,
-            nonImageAttachments.map((attachment) => attachment.fileName).join("\n"),
-          );
-        }
-      }
-
-      addPageFooters(doc, {
-        generatedOnLabel: ui.generatedOn,
+      doc.addPage({ margin: 0, size: "A4" });
+      drawPortraitHeader(doc, {
+        plant: sewo.plant.code.toUpperCase(),
+        title: "SAFETY EWO - ROOT CAUSE & ACTION PLAN",
         generatedOn,
         exportedBy: options.exportedBy,
+        pageLabel: `3/${pageCount}`,
       });
+      drawPortraitPhaseBand(doc, "PLAN", 68, 255, GREEN);
+      drawPortraitPhaseBand(doc, "DO", 336, 112, BLUE);
+      drawPortraitPhaseBand(doc, "CHECK", 460, 74, DANGER);
+      drawPortraitPhaseBand(doc, "ACT", 546, 72, YELLOW);
+
+      drawPortraitPanel(doc, { x: 46, y: 72, width: 503, height: 238, title: "Root cause analysis", color: GREEN });
+      drawLandscapeTable(doc, {
+        x: 56,
+        y: 102,
+        widths: [170, 70, 241],
+        rowHeight: 20,
+        headers: [ui.cause, ui.rootCause, ui.comment],
+        rows: rootCauseDetails.map((entry) => [display(entry.label), yesNo(entry.isRootCause), display(entry.comment)]),
+        maxRows: 4,
+      });
+      const causeCategoryTitles = [
+        "Competence / Knowledge",
+        "Attitude / Behavior",
+        "Management",
+        "Precaution / Attention",
+        "Personal Condition",
+        "Facilities / Equipment",
+        "Procedure / Systems",
+      ];
+      drawCauseCategoryBoxes(doc, {
+        x: 56,
+        y: 210,
+        width: 481,
+        rowHeight: 44,
+        categories: causeCategoryTitles.map((title, index) => {
+          const number = index + 1;
+          return {
+            number,
+            title,
+            items: rootCauseDetails
+              .map((entry) => display(entry.label))
+              .filter((label) => label.trim().startsWith(`${number}.`) || label.trim().startsWith(`${number} `)),
+          };
+        }),
+        fallback: ui.summaryReportNotApplicable,
+      });
+
+      drawPortraitPanel(doc, { x: 46, y: 336, width: 503, height: 100, title: "Correction plan", color: BLUE });
+      drawLandscapeTable(doc, {
+        x: 56,
+        y: 366,
+        widths: [204, 116, 78, 83],
+        rowHeight: 18,
+        headers: ["Correction plan", ui.owner, "Closure date", ui.tableStatus],
+        rows: orderedActions.map((entry) => [
+          `${display(entry.action.title)} - ${display(entry.action.description)}`,
+          entry.action.ownerUser.name,
+          formatDate(entry.action.dueDate),
+          ui.actionStatusLabels[entry.action.status] ?? entry.action.status,
+        ]),
+        maxRows: 3,
+      });
+
+      drawPortraitPanel(doc, { x: 46, y: 460, width: 503, height: 74, title: "Check of suitability for the planned activity", color: DANGER });
+      doc.fillColor(INK).fontSize(7.2).font("Helvetica").text("In the last 3 months did any event occur due to the same root cause?", 58, 490, { width: 300 });
+      drawCheckbox(doc, { x: 366, y: 488, checked: false, label: ui.yes });
+      drawCheckbox(doc, { x: 420, y: 488, checked: false, label: ui.no });
+      drawSignatureLine(doc, "Checked by:", 58, 512, 150);
+      drawSignatureLine(doc, "Date:", 222, 512, 118);
+      drawSignatureLine(doc, "Signature:", 356, 512, 170);
+
+      drawPortraitPanel(doc, { x: 46, y: 546, width: 503, height: 72, title: "Extension plan to areas with similar problems and plan timing", color: YELLOW });
+      doc.fillColor(INK).fontSize(7.5).font("Helvetica").text(
+        fitText(
+          getDisplayValue(
+            templateData.extensionPlan ?? templateData.extensionPlanText ?? templateData.similarAreasPlan ?? templateData.planTiming,
+            ui.summaryReportNotApplicable,
+          ),
+          420,
+        ),
+        58,
+        576,
+        { width: 468, height: 26 },
+      );
+      for (let y = 594; y < 612; y += 10) {
+        doc.moveTo(58, y).lineTo(526, y).strokeColor("#e2e8f0").stroke();
+      }
+
+      drawPortraitPanel(doc, { x: 46, y: 630, width: 503, height: 86, title: "Photo evidence", color: BRAND });
+      if (!photoAttachments.length && !nonImageAttachments.length) {
+        doc.fillColor(INK).fontSize(8).text(ui.summaryReportNotApplicable, 58, 664, { width: 468 });
+      } else {
+        photoAttachments.slice(0, 3).forEach((attachment, index) => {
+          const x = 58 + index * 115;
+          doc.rect(x, 662, 104, 38).fillAndStroke(SOFT, "#c5ceda");
+          try {
+            doc.image(attachment.buffer, x + 4, 666, { fit: [96, 28], align: "center", valign: "center" });
+          } catch {
+            doc.fillColor(INK).fontSize(7).text(ui.summaryReportNotApplicable, x + 6, 675, { width: 92, align: "center" });
+          }
+          doc.fillColor(MUTED).fontSize(6.5).text(fitText(attachment.fileName, 34), x, 704, { width: 104, align: "center" });
+        });
+        if (nonImageAttachments.length) {
+          doc.fillColor(INK).fontSize(7).text(nonImageAttachments.map((attachment) => attachment.fileName).join("\n"), 410, 664, {
+            width: 120,
+            height: 40,
+          });
+        }
+      }
+
+      doc.rect(46, 732, 503, 38).fillAndStroke(SOFT, "#c5ceda");
+      drawSignatureLine(doc, "Date:", 58, 746, 92);
+      drawSignatureLine(doc, "Signature of responsible:", 166, 746, 142);
+      drawSignatureLine(doc, "Signature of Plant Manager / HSE Manager:", 326, 746, 200);
+      drawPortraitFooter(doc, { generatedOn, exportedBy: options.exportedBy, pageLabel: `3/${pageCount}` });
 
       return pdfBufferFromDocument(doc);
     })();

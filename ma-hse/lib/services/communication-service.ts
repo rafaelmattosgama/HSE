@@ -521,8 +521,19 @@ export const CommunicationService = {
           reporterEmployeeNo: before.reporterEmployeeNo,
         })
       : null;
+    const openLinkedActions = input.payload.isValid
+      ? await prisma.action.count({
+          where: {
+            communicationId: input.communicationId,
+            status: {
+              in: [...OPEN_LINKED_ACTION_STATUSES],
+            },
+          },
+        })
+      : 0;
+    const validatedStatus = openLinkedActions > 0 ? CommunicationStatus.ONGOING : nextStatus;
     const validationData: Prisma.CommunicationUncheckedUpdateInput = {
-      status: nextStatus,
+      status: validatedStatus,
       validatedAt: new Date(),
       validatedBy: input.actorUserId,
       validationNotes: input.payload.notes,

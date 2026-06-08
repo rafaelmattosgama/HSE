@@ -1,4 +1,4 @@
-import { ActionPriority, ActionSourceType, ActionStatus, CommunicationStatus, Prisma, SEWOStatus } from "@prisma/client";
+import { ActionPriority, ActionSourceType, ActionStatus, Prisma, SEWOStatus } from "@prisma/client";
 import { addDays } from "date-fns";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -172,18 +172,6 @@ export const ActionService = {
           before: null,
           after: action as unknown as Record<string, unknown>,
           fieldsChanged: Object.keys(action),
-        },
-      });
-    }
-
-    if (action.communicationId) {
-      await prisma.communication.update({
-        where: { id: action.communicationId },
-        data: {
-          status: CommunicationStatus.ONGOING,
-          manuallyClosedBy: null,
-          manuallyClosedAt: null,
-          manualCloseReason: null,
         },
       });
     }

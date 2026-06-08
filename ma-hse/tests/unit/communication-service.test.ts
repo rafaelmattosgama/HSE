@@ -12,6 +12,9 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(),
     create: vi.fn(),
   },
+  action: {
+    count: vi.fn(),
+  },
   userPlantRole: {
     findMany: vi.fn(),
   },
@@ -92,6 +95,7 @@ describe("CommunicationService approved communication alerts", () => {
       employeeNo: "1001",
       name: "Reporter",
     });
+    prismaMock.action.count.mockResolvedValue(0);
     prismaMock.communication.update.mockResolvedValue({
       id: "comm-1",
       plantId: "plant-1",
@@ -126,6 +130,48 @@ describe("CommunicationService approved communication alerts", () => {
     ).toHaveBeenCalledWith({
       communicationId: "comm-1",
       actorRole: RoleCode.N3_SAFETY,
+    });
+  });
+
+  it("marks a validated communication as ongoing when an open action was created during validation", async () => {
+    prismaMock.communication.findUniqueOrThrow.mockResolvedValue({
+      id: "comm-1",
+      plantId: "plant-1",
+      type: CommunicationType.UNSAFE_CONDITION,
+      reporterName: "Reporter",
+      reporterEmployeeNo: "1001",
+      unsafeConditionTypeId: "condition-1",
+      status: CommunicationStatus.PENDING_VALIDATION,
+    });
+    prismaMock.employeeDirectory.findFirst.mockResolvedValue({
+      employeeNo: "1001",
+      name: "Reporter",
+    });
+    prismaMock.action.count.mockResolvedValue(1);
+    prismaMock.communication.update.mockResolvedValue({
+      id: "comm-1",
+      plantId: "plant-1",
+      type: CommunicationType.UNSAFE_CONDITION,
+      status: CommunicationStatus.ONGOING,
+    });
+
+    const result = await CommunicationService.validate({
+      communicationId: "comm-1",
+      actorUserId: "user-1",
+      actorRole: RoleCode.N3_SAFETY,
+      payload: {
+        isValid: true,
+        status: CommunicationStatus.VALID_OPEN,
+        notes: "Approved",
+      },
+    });
+
+    expect((result as { status: CommunicationStatus }).status).toBe(CommunicationStatus.ONGOING);
+    expect(prismaMock.communication.update).toHaveBeenCalledWith({
+      where: { id: "comm-1" },
+      data: expect.objectContaining({
+        status: CommunicationStatus.ONGOING,
+      }),
     });
   });
 

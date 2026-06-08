@@ -163,7 +163,7 @@ async function main() {
   worker.on("exit", (code) => {
     if (!shuttingDown) {
       console.error(`[dev:all] worker exited with code ${code ?? 1}`);
-      shutdown(code ?? 1);
+      console.error("[dev:all] app remains running; restart npm run dev:all to bring the worker back.");
     }
   });
 }
