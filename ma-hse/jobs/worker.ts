@@ -9,7 +9,7 @@ import { handleRepetitiveAlerts } from "@/jobs/handlers/repetitive-alerts";
 import { handleSewoApprovedNotification, type SewoApprovedNotificationJob } from "@/jobs/handlers/sewo-approved-notification";
 
 const connection = getQueueConnection();
-const scheduledReportQueues = new Set([
+const scheduledReportQueues: ReadonlySet<string> = new Set([
   QUEUE_NAMES.DIGEST_WEEKLY,
   QUEUE_NAMES.REPORT_MONTHLY,
   QUEUE_NAMES.REPORT_ANNUAL,
