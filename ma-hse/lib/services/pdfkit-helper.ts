@@ -1,17 +1,38 @@
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import { basename, dirname, join } from "node:path";
+import type PDFDocument from "pdfkit";
 
 const nodeRequire = createRequire(import.meta.url);
-const pdfkitModule = nodeRequire("pdfkit");
-const PDFDocument = pdfkitModule.default ?? pdfkitModule;
-const pdfkitDataDirectories = [
-  join(dirname(nodeRequire.resolve("pdfkit")), "data"),
-  join(process.cwd(), "node_modules", "pdfkit", "js", "data"),
-  process.env.INIT_CWD ? join(process.env.INIT_CWD, "node_modules", "pdfkit", "js", "data") : null,
-].filter((directory): directory is string => Boolean(directory));
+
+type PdfDocumentOptions = ConstructorParameters<typeof PDFDocument>[0];
+type PdfDocumentConstructor = new (options?: PdfDocumentOptions) => InstanceType<typeof PDFDocument>;
 
 let pdfkitFontFallbackInstalled = false;
+let PDFDocumentConstructor: PdfDocumentConstructor | null = null;
+let pdfkitDataDirectories: string[] | null = null;
+
+function getPdfkitDataDirectories() {
+  if (!pdfkitDataDirectories) {
+    pdfkitDataDirectories = [
+      join(dirname(nodeRequire.resolve("pdfkit")), "data"),
+      join(process.cwd(), "node_modules", "pdfkit", "js", "data"),
+      process.env.INIT_CWD ? join(process.env.INIT_CWD, "node_modules", "pdfkit", "js", "data") : null,
+    ].filter((directory): directory is string => Boolean(directory));
+  }
+
+  return pdfkitDataDirectories;
+}
+
+function getPdfDocumentConstructor() {
+  if (!PDFDocumentConstructor) {
+    const pdfkitModule = nodeRequire("pdfkit") as { default?: PdfDocumentConstructor } | PdfDocumentConstructor;
+    PDFDocumentConstructor =
+      typeof pdfkitModule === "function" ? pdfkitModule : (pdfkitModule.default as PdfDocumentConstructor);
+  }
+
+  return PDFDocumentConstructor;
+}
 
 function resolvePdfkitDataFile(pathInput: string) {
   const fileName = basename(pathInput);
@@ -19,7 +40,7 @@ function resolvePdfkitDataFile(pathInput: string) {
     return null;
   }
 
-  for (const directory of pdfkitDataDirectories) {
+  for (const directory of getPdfkitDataDirectories()) {
     const candidate = join(directory, fileName);
     if (fs.existsSync(candidate)) {
       return candidate;
@@ -53,7 +74,7 @@ function installPdfkitFontFallback() {
   } as typeof fs.readFileSync;
 }
 
-export function createPdfDocument(options: ConstructorParameters<typeof PDFDocument>[0] = {}) {
+export function createPdfDocument(options: PdfDocumentOptions = {}) {
   installPdfkitFontFallback();
-  return new PDFDocument(options);
+  return new (getPdfDocumentConstructor())(options);
 }

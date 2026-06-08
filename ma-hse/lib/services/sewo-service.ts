@@ -5,7 +5,6 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
 import { NotificationService } from "@/lib/services/notification-service";
-import { SewoExportService } from "@/lib/services/sewo-export";
 import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
 import {
   sendSewoSubmittedForValidationEmail,
@@ -211,6 +210,7 @@ async function notifySewoApproved(sewoId: string) {
 
   if (recipients.userIds.length || recipients.emailRecipients.length || hasSubmitterEmail) {
     notificationTasks.push((async () => {
+  const { SewoExportService } = await import("@/lib/services/sewo-export");
   const title = `S-EWO aprovado e partilhado: ${summary.occurrenceType}`;
   const body = [
     `Planta: ${summary.plantLabel}`,
@@ -608,6 +608,7 @@ async function sendSewoApprovedExternalReports(input: {
   };
   recipients: Awaited<ReturnType<typeof listSewoReportRecipients>>;
 }) {
+  const { SewoExportService } = await import("@/lib/services/sewo-export");
   const exportPromises = new Map<string, Promise<{ pdf: Buffer }>>();
 
   const results = await Promise.allSettled(input.recipients.map(async (recipient) => {
