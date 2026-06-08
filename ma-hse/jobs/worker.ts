@@ -9,28 +9,39 @@ import { handleRepetitiveAlerts } from "@/jobs/handlers/repetitive-alerts";
 import { handleSewoApprovedNotification, type SewoApprovedNotificationJob } from "@/jobs/handlers/sewo-approved-notification";
 
 const connection = getQueueConnection();
+const scheduledReportQueues = new Set([
+  QUEUE_NAMES.DIGEST_WEEKLY,
+  QUEUE_NAMES.REPORT_MONTHLY,
+  QUEUE_NAMES.REPORT_ANNUAL,
+]);
+const skipDueScheduledReportJobsInDev = process.env.NODE_ENV !== "production";
 
-const workerMap: [string, (data: unknown) => Promise<void>][] = [
-  [QUEUE_NAMES.DIGEST_WEEKLY, () => handleWeeklyDigest()],
-  [QUEUE_NAMES.REPORT_MONTHLY, () => handleMonthlyReport()],
-  [QUEUE_NAMES.REPORT_ANNUAL, () => handleAnnualReport()],
-  [QUEUE_NAMES.ACTIONS_OVERDUE, (data) => handleOverdueActions(data as { plantId?: string })],
-  [QUEUE_NAMES.ALERTS_REPETITIVE, (data) => handleRepetitiveAlerts(data as { plantId: string })],
-  [QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, (data) => handleSewoApprovedNotification(data as SewoApprovedNotificationJob)],
+const workerMap: [string, (data: unknown) => Promise<void>, number][] = [
+  [QUEUE_NAMES.DIGEST_WEEKLY, () => handleWeeklyDigest(), 1],
+  [QUEUE_NAMES.REPORT_MONTHLY, () => handleMonthlyReport(), 1],
+  [QUEUE_NAMES.REPORT_ANNUAL, () => handleAnnualReport(), 1],
+  [QUEUE_NAMES.ACTIONS_OVERDUE, (data) => handleOverdueActions(data as { plantId?: string }), 4],
+  [QUEUE_NAMES.ALERTS_REPETITIVE, (data) => handleRepetitiveAlerts(data as { plantId: string }), 2],
+  [QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, (data) => handleSewoApprovedNotification(data as SewoApprovedNotificationJob), 2],
 ];
 
-for (const [queueName, handler] of workerMap) {
+for (const [queueName, handler, concurrency] of workerMap) {
   const worker = new Worker(
     queueName,
     async (job) => {
       const scoped = logger.child({ jobId: job.id, queueName });
+      if (skipDueScheduledReportJobsInDev && scheduledReportQueues.has(queueName) && job.id?.startsWith("repeat:")) {
+        scoped.info("skipping due scheduled report job in development");
+        return;
+      }
+
       scoped.info("processing job");
       await handler(job.data);
       scoped.info("job done");
     },
     {
       connection,
-      concurrency: 4,
+      concurrency,
     },
   );
 

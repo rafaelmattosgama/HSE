@@ -397,7 +397,8 @@ export function CreateSewoQuick({
   const visibleSifPsifExposureKeys = useMemo(() => getVisibleSifPsifExposureKeys(sifPsifDecision), [sifPsifDecision]);
   const activePsifExposureKey = useMemo(() => getActivePsifExposureKey(sifPsifDecision), [sifPsifDecision]);
   const showPsifReasonability = Boolean(activePsifExposureKey);
-  const requiresBodyPart = selectedCommunication?.type === "FIRST_AID" || selectedCommunication?.type === "ACCIDENT";
+  const linkedCommunicationType = selectedCommunication?.type ?? getTemplateString(initialSewo?.templateData, "eventType");
+  const requiresBodyPart = linkedCommunicationType === "FIRST_AID" || linkedCommunicationType === "ACCIDENT";
   const isSubmittedSewo = Boolean(initialSewo?.status && initialSewo.status !== SEWOStatus.DRAFT);
   const isRejectedSewo = initialSewo?.status === SEWOStatus.REJECTED;
   const isValidatedSewo = initialSewo?.status === SEWOStatus.APPROVED || initialSewo?.status === SEWOStatus.CLOSED;

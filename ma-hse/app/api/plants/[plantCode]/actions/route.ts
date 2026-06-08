@@ -12,6 +12,15 @@ const LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
   CommunicationStatus.ONGOING,
   CommunicationStatus.CLOSED,
 ];
+const VALIDATION_LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
+  CommunicationStatus.SUBMITTED,
+  CommunicationStatus.PENDING_VALIDATION,
+];
+const COMMUNICATION_VALIDATION_ROLES: RoleCode[] = [
+  RoleCode.N1_CORPORATE,
+  RoleCode.N2_PLANT_MANAGER,
+  RoleCode.N3_SAFETY,
+];
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -58,6 +67,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     RoleCode.N5_OPERATOR,
   ]);
   if ("error" in auth) return auth.error;
+  const actorRole = "role" in auth ? auth.role : null;
 
   const parsed = await parseBody(request, createActionInput);
   if ("error" in parsed) return parsed.error;
@@ -69,14 +79,24 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         id: parsed.data.communicationId,
         plantId: plant.id,
         status: {
-          in: LINKABLE_COMMUNICATION_STATUSES,
+          in: [
+            ...LINKABLE_COMMUNICATION_STATUSES,
+            ...VALIDATION_LINKABLE_COMMUNICATION_STATUSES,
+          ],
         },
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
     if (!communication) {
-      return fail("INVALID_COMMUNICATION", "Only validated communications can be linked to a new action", 422);
+      return fail("INVALID_COMMUNICATION", "Only active or pending validation communications can be linked to a new action", 422);
+    }
+
+    if (
+      VALIDATION_LINKABLE_COMMUNICATION_STATUSES.includes(communication.status) &&
+      (!actorRole || !COMMUNICATION_VALIDATION_ROLES.includes(actorRole))
+    ) {
+      return fail("INVALID_COMMUNICATION", "Only validation roles can create actions for pending validation communications", 422);
     }
   }
 

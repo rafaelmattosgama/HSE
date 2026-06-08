@@ -1241,6 +1241,11 @@ export const SewaService = {
           targetEmployee: true,
           bodyPart: true,
           injuryType: true,
+          actions: {
+            select: {
+              id: true,
+            },
+          },
         },
       }),
       prisma.sEWOCauseCatalogVersion.findFirst({
@@ -1261,41 +1266,73 @@ export const SewaService = {
       ? getLocalizedBodyPartName(communication.bodyPart, actorLanguage)
       : null;
 
-    return prisma.sEWO.create({
-      data: {
-        plantId: communication.plantId,
-        communicationId: communication.id,
-        eventClassification: `${communication.plant.code.toUpperCase()} ${communication.type}`,
-        areaId: communication.areaId,
-        lineId: communication.lineId,
-        shiftId: communication.shiftId,
-        analysisDate: new Date(),
-        performedByUserId: input.actorUserId,
-        whatText: localizedInjuryType ?? communication.description,
-        whereText: communication.workstation?.name ?? communication.area?.name ?? "",
-        whoText: communication.targetEmployee?.name ?? communication.reporterName,
-        usualWorkYesNo: true,
-        whichText: communication.type,
-        howText: communication.description,
-        immediateCorrectiveActionText: communication.suggestedAction ?? "",
-        causeCatalogVersionId: catalog.id,
-        status: SEWOStatus.DRAFT,
-        isAutoCreated: true,
-        templateData: {
-          plantCode: communication.plant.code.toUpperCase(),
-          eventType: communication.type,
-          classification: communication.classification,
-          lostDays: communication.lostDays,
-          initialLostDays: communication.initialLostDays,
-          eventDatetime: communication.eventDatetime.toISOString(),
-          reporterName: communication.reporterName,
-          injuredPerson: communication.targetEmployee?.name ?? communication.targetText ?? null,
-          workplace: communication.workstation?.name ?? null,
-          area: communication.area?.name ?? null,
-          line: communication.line?.name ?? null,
-          bodyPart: localizedBodyPart,
+    return prisma.$transaction(async (tx) => {
+      const sewo = await tx.sEWO.create({
+        data: {
+          plantId: communication.plantId,
+          communicationId: communication.id,
+          eventClassification: `${communication.plant.code.toUpperCase()} ${communication.type}`,
+          areaId: communication.areaId,
+          lineId: communication.lineId,
+          shiftId: communication.shiftId,
+          analysisDate: communication.eventDatetime,
+          performedByUserId: input.actorUserId,
+          whatText: localizedInjuryType ?? communication.description,
+          whereText: communication.workstation?.name ?? communication.area?.name ?? "",
+          whoText: communication.targetEmployee?.name ?? communication.targetText ?? communication.reporterName,
+          usualWorkYesNo: true,
+          whichText: communication.type,
+          howText: communication.description,
+          immediateCorrectiveActionText: communication.suggestedAction ?? "",
+          causeCatalogVersionId: catalog.id,
+          status: SEWOStatus.DRAFT,
+          isAutoCreated: true,
+          templateData: {
+            sourceCommunicationId: communication.id,
+            plantCode: communication.plant.code.toUpperCase(),
+            eventType: communication.type,
+            classification: communication.classification,
+            lostDays: communication.lostDays,
+            initialLostDays: communication.initialLostDays,
+            hasLeave: communication.hasLeave,
+            returnDate: communication.returnDate?.toISOString() ?? null,
+            isFatal: communication.isFatal,
+            eventDatetime: communication.eventDatetime.toISOString(),
+            reporterName: communication.reporterName,
+            reporterEmployeeNo: communication.reporterEmployeeNo,
+            involvedWorkerId: communication.targetEmployeeId,
+            involvedWorkerName: communication.targetEmployee?.name ?? communication.targetText ?? "",
+            involvedWorkerEmployeeNo: communication.targetEmployee?.employeeNo ?? communication.targetEmployeeNo,
+            involvedWorkerDepartment: communication.targetEmployee?.dept ?? null,
+            workplace: communication.workstation?.name ?? null,
+            area: communication.area?.name ?? null,
+            areaId: communication.areaId,
+            line: communication.line?.name ?? null,
+            lineId: communication.lineId,
+            workstationId: communication.workstationId,
+            shiftId: communication.shiftId,
+            natureId: communication.injuryTypeId,
+            nature: localizedInjuryType,
+            bodyPartId: communication.bodyPartId,
+            bodyPart: localizedBodyPart,
+            whereText: communication.workstation?.name ?? communication.area?.name ?? "",
+            analysisText: communication.description,
+            suggestedAction: communication.suggestedAction ?? "",
+          },
         },
-      },
+      });
+
+      if (communication.actions.length > 0) {
+        await tx.sEWOActionLink.createMany({
+          data: communication.actions.map((action) => ({
+            sewoId: sewo.id,
+            actionId: action.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return sewo;
     });
   },
 };

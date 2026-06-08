@@ -18,6 +18,11 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function getRecordString(value: Record<string, unknown>, key: string) {
+  const entry = value[key];
+  return typeof entry === "string" && entry.trim() ? entry : null;
+}
+
 export default async function SewoPage({
   params,
   searchParams,
@@ -44,7 +49,20 @@ export default async function SewoPage({
         communication: {
           include: {
             area: true,
+            line: true,
+            shift: true,
             workstation: true,
+            targetEmployee: true,
+            bodyPart: true,
+            injuryType: true,
+            actions: {
+              include: {
+                ownerUser: true,
+              },
+              orderBy: {
+                dueDate: "asc",
+              },
+            },
           },
         },
         approvedBy: true,
@@ -157,6 +175,28 @@ export default async function SewoPage({
           ],
         );
         const templateData = asRecord(record.templateData);
+        const communication = record.communication;
+        const formTemplateData = {
+          ...templateData,
+          sourceCommunicationId: getRecordString(templateData, "sourceCommunicationId") ?? communication?.id ?? null,
+          eventType: getRecordString(templateData, "eventType") ?? communication?.type ?? null,
+          eventDatetime: getRecordString(templateData, "eventDatetime") ?? communication?.eventDatetime.toISOString() ?? null,
+          reporterName: getRecordString(templateData, "reporterName") ?? communication?.reporterName ?? null,
+          reporterEmployeeNo: getRecordString(templateData, "reporterEmployeeNo") ?? communication?.reporterEmployeeNo ?? null,
+          areaId: getRecordString(templateData, "areaId") ?? communication?.areaId ?? null,
+          lineId: getRecordString(templateData, "lineId") ?? communication?.lineId ?? null,
+          workstationId: getRecordString(templateData, "workstationId") ?? communication?.workstationId ?? null,
+          shiftId: getRecordString(templateData, "shiftId") ?? communication?.shiftId ?? null,
+          involvedWorkerId: getRecordString(templateData, "involvedWorkerId") ?? communication?.targetEmployeeId ?? null,
+          involvedWorkerName: getRecordString(templateData, "involvedWorkerName") ?? communication?.targetEmployee?.name ?? communication?.targetText ?? "",
+          involvedWorkerEmployeeNo: getRecordString(templateData, "involvedWorkerEmployeeNo") ?? communication?.targetEmployee?.employeeNo ?? communication?.targetEmployeeNo ?? null,
+          involvedWorkerDepartment: getRecordString(templateData, "involvedWorkerDepartment") ?? communication?.targetEmployee?.dept ?? null,
+          natureId: getRecordString(templateData, "natureId") ?? communication?.injuryTypeId ?? null,
+          bodyPartId: getRecordString(templateData, "bodyPartId") ?? communication?.bodyPartId ?? null,
+          whereText: getRecordString(templateData, "whereText") ?? (record.whereText || communication?.workstation?.name || communication?.area?.name || ""),
+          analysisText: getRecordString(templateData, "analysisText") ?? (record.howText || communication?.description || ""),
+          suggestedAction: getRecordString(templateData, "suggestedAction") ?? communication?.suggestedAction ?? "",
+        };
 
         return {
           id: record.id,
@@ -174,9 +214,9 @@ export default async function SewoPage({
             id: record.id,
             communicationId: record.communicationId ?? null,
             eventClassification: record.eventClassification,
-            areaId: record.areaId,
-            workstationId: typeof templateData.workstationId === "string" ? templateData.workstationId : null,
-            shiftId: record.shiftId,
+            areaId: record.areaId ?? communication?.areaId ?? null,
+            workstationId: getRecordString(formTemplateData, "workstationId"),
+            shiftId: record.shiftId ?? communication?.shiftId ?? null,
             analysisDate: record.analysisDate.toISOString(),
             whatText: record.whatText,
             whereText: record.whereText,
@@ -185,13 +225,20 @@ export default async function SewoPage({
             whichText: record.whichText,
             howText: record.howText,
             immediateCorrectiveActionText: record.immediateCorrectiveActionText,
-            templateData,
+            templateData: formTemplateData,
             causeCatalogVersionId: record.causeCatalogVersionId,
             status: record.status,
             approvalComment: record.approvalComment,
             approvedAt: record.approvedAt?.toISOString() ?? null,
             approvedByName: record.approvedBy?.name ?? null,
-            linkedActions: Array.from(linkedActions.values()).map((action) => ({
+            linkedActions: Array.from(
+              new Map(
+                [
+                  ...linkedActions.values(),
+                  ...(communication?.actions ?? []),
+                ].map((action) => [action.id, action] as const),
+              ).values(),
+            ).map((action) => ({
               id: action.id,
               title: action.title,
               description: action.description,
