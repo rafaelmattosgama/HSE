@@ -1,6 +1,7 @@
 import { CommunicationStatus, RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
+import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { ActionService } from "@/lib/services/action-service";
@@ -100,11 +101,46 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     }
   }
 
-  const action = await ActionService.create({
-    plantId: plant.id,
-    actorUserId: auth.session.user.id,
-    payload: parsed.data,
+  const owner = await prisma.userPlantRole.findFirst({
+    where: {
+      plantId: plant.id,
+      userId: parsed.data.ownerUserId,
+      user: {
+        isActive: true,
+      },
+    },
+    select: {
+      userId: true,
+    },
   });
 
-  return ok(action, { status: action.idempotency.reusedExistingAction ? 200 : 201 });
+  if (!owner) {
+    return fail("INVALID_ACTION_OWNER", "Select an active action owner for this plant", 422);
+  }
+
+  try {
+    const action = await ActionService.create({
+      plantId: plant.id,
+      actorUserId: auth.session.user.id,
+      payload: parsed.data,
+    });
+
+    return ok(action, { status: action.idempotency.reusedExistingAction ? 200 : 201 });
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        plantCode,
+        plantId: plant.id,
+        actorUserId: auth.session.user.id,
+        sourceType: parsed.data.sourceType,
+        communicationId: parsed.data.communicationId,
+        sewoId: parsed.data.sewoId,
+        ownerUserId: parsed.data.ownerUserId,
+      },
+      "failed_to_create_action",
+    );
+
+    return fail("ACTION_CREATE_FAILED", "Failed to create action", 500);
+  }
 }
