@@ -43,16 +43,34 @@ type CompleteReportOptions = {
 };
 
 function pdfBufferFromDocument(doc: PdfDocument) {
-  return new Promise<Buffer>((resolve) => {
+  return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("error", reject);
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.end();
   });
 }
 
-function formatDate(value: Date) {
-  return value.toISOString().slice(0, 10);
+function toValidDate(value: unknown) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+}
+
+function formatDate(value: unknown, fallback = "-") {
+  return toValidDate(value)?.toISOString().slice(0, 10) ?? fallback;
+}
+
+function getDateSortTime(value: unknown) {
+  return toValidDate(value)?.getTime() ?? Number.MAX_SAFE_INTEGER;
 }
 
 function inferImageExtension(input: ExportAttachment) {
@@ -915,7 +933,7 @@ export const SewoExportService = {
     const photoAttachments = await loadAttachmentBuffers(sewo.attachments);
     const nonImageAttachments = sewo.attachments.filter((attachment) => inferImageExtension(attachment) === null);
     const orderedActions = [...sewo.actionLinks].sort(
-      (left, right) => left.action.dueDate.getTime() - right.action.dueDate.getTime(),
+      (left, right) => getDateSortTime(left.action.dueDate) - getDateSortTime(right.action.dueDate),
     );
     const communicationType = getDisplayValue(
       sewo.communication?.type ?? templateData.eventType ?? sewo.whichText,
@@ -1001,7 +1019,7 @@ export const SewoExportService = {
           [ui.summaryReportReference, sewo.id],
           [ui.summaryStatus, localizedStatus],
           [ui.tableDate, formatDate(sewo.analysisDate)],
-          [ui.summaryPerformedBy, sewo.performedBy.name],
+          [ui.summaryPerformedBy, sewo.performedBy?.name ?? ui.summaryReportNotApplicable],
           [ui.summaryCommunication, sewo.communication?.id ?? "-"],
           [ui.validatedBy, sewo.approvedBy?.name ?? ui.summaryReportNotApplicable],
           [ui.reviewedAt, sewo.approvedAt ? formatDate(sewo.approvedAt) : ui.summaryReportNotApplicable],
@@ -1175,8 +1193,8 @@ export const SewoExportService = {
         headers: ["Correction plan", ui.owner, "Closure date", ui.tableStatus],
         rows: orderedActions.map((entry) => [
           `${display(entry.action.title)} - ${display(entry.action.description)}`,
-          entry.action.ownerUser.name,
-          formatDate(entry.action.dueDate),
+          entry.action.ownerUser?.name ?? ui.summaryReportNotApplicable,
+          formatDate(entry.action.dueDate, ui.summaryReportNotApplicable),
           ui.actionStatusLabels[entry.action.status] ?? entry.action.status,
         ]),
         maxRows: 3,
@@ -1258,7 +1276,7 @@ export const SewoExportService = {
       [ui.plant, `${sewo.plant.name} (${sewo.plant.code.toUpperCase()})`],
       [ui.summaryStatus, localizedStatus],
       [ui.tableDate, formatDate(sewo.analysisDate)],
-      [ui.summaryPerformedBy, sewo.performedBy.name],
+      [ui.summaryPerformedBy, sewo.performedBy?.name ?? ui.summaryReportNotApplicable],
       [ui.summaryCommunication, sewo.communication?.id ?? "-"],
       [ui.eventClassification, translated(sewo.eventClassification)],
       [ui.area, sewo.area?.name ?? "-"],
@@ -1352,8 +1370,8 @@ export const SewoExportService = {
         actionsSheet.addRow({
           title: translated(entry.action.title),
           status: entry.action.status,
-          owner: entry.action.ownerUser.name,
-          dueDate: formatDate(entry.action.dueDate),
+          owner: entry.action.ownerUser?.name ?? ui.summaryReportNotApplicable,
+          dueDate: formatDate(entry.action.dueDate, ui.summaryReportNotApplicable),
         });
       });
     }
@@ -1467,7 +1485,7 @@ export const SewoExportService = {
     });
     const photoAttachments = await loadAttachmentBuffers(sewo.attachments);
     const orderedActions = [...sewo.actionLinks].sort(
-      (left, right) => left.action.dueDate.getTime() - right.action.dueDate.getTime(),
+      (left, right) => getDateSortTime(left.action.dueDate) - getDateSortTime(right.action.dueDate),
     );
 
     const pdf = await (async () => {
@@ -1523,8 +1541,8 @@ export const SewoExportService = {
             doc,
             `${translated(entry.action.title)} | ${ui.actionStatusLabels[entry.action.status] ?? entry.action.status}`,
             [
-              `${ui.owner}: ${entry.action.ownerUser.name}`,
-              `${ui.dueDate}: ${formatDate(entry.action.dueDate)}`,
+              `${ui.owner}: ${entry.action.ownerUser?.name ?? ui.summaryReportNotApplicable}`,
+              `${ui.dueDate}: ${formatDate(entry.action.dueDate, ui.summaryReportNotApplicable)}`,
               `${ui.tableStatus}: ${ui.actionStatusLabels[entry.action.status] ?? entry.action.status}`,
               "",
               getDisplayValue(translated(entry.action.description), ui.summaryReportNotApplicable),
