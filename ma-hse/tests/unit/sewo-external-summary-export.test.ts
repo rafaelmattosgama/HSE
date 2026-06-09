@@ -604,4 +604,65 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("SAFETY EWO - COMPLETE REPORT");
     expect(rendered.texts).toContain("sewo-pdf-only");
   });
+
+  it("builds the complete report when legacy linked action data is incomplete", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue({
+      id: "sewo-legacy-action",
+      plant: {
+        code: "maap",
+        name: "MA Automotive Portugal",
+      },
+      communication: null,
+      eventClassification: "Near Miss",
+      area: null,
+      line: null,
+      shift: null,
+      analysisDate: new Date("2026-05-20T08:00:00.000Z"),
+      performedBy: null,
+      approvedBy: null,
+      approvedAt: null,
+      status: "APPROVED",
+      whatText: "Near Miss",
+      whereText: "PT17",
+      whoText: "Operator",
+      usualWorkYesNo: true,
+      whichText: "Lifting operations",
+      howText: "Box fell near the line.",
+      immediateCorrectiveActionText: "Area checked.",
+      templateData: {
+        rootCauseDetails: [
+          {
+            label: "6.3 Weakness in design",
+            comment: "Platform stop needs review",
+            isRootCause: true,
+          },
+        ],
+      },
+      causeSelections: [],
+      actionLinks: [
+        {
+          action: {
+            title: "Review platform stop",
+            description: "Define improvement action",
+            dueDate: null,
+            status: "OPEN",
+            ownerUser: null,
+          },
+        },
+      ],
+      attachments: [],
+    });
+
+    const exported = await SewoExportService.buildExport("sewo-legacy-action", { locale: "en", exportedBy: "Ana Silva" });
+    const rendered = JSON.parse(exported.pdf.toString()) as {
+      texts: string[];
+    };
+
+    expect(exported.xlsx.length).toBeGreaterThan(0);
+    expect(rendered.texts).toContain("sewo-legacy-action");
+    expect(rendered.texts.some((entry) => entry.includes("Review platform stop"))).toBe(true);
+    expect(rendered.texts).toContain("Not applicable");
+  });
 });
