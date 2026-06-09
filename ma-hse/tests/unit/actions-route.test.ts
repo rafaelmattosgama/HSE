@@ -14,6 +14,9 @@ const prismaMock = vi.hoisted(() => ({
     communication: {
       findFirst: vi.fn(),
     },
+    userPlantRole: {
+      findFirst: vi.fn(),
+    },
     action: {
       findMany: vi.fn(),
     },
@@ -111,6 +114,9 @@ describe("actions route", () => {
       id: "11111111-1111-4111-8111-111111111111",
       status: CommunicationStatus.VALID_OPEN,
     });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
+      userId: "22222222-2222-4222-8222-222222222222",
+    });
     actionServiceMock.ActionService.create.mockResolvedValue({
       id: "action-1",
       communicationId: "11111111-1111-4111-8111-111111111111",
@@ -137,6 +143,18 @@ describe("actions route", () => {
     )) as Response;
 
     expect(response.status).toBe(201);
+    expect(prismaMock.prisma.userPlantRole.findFirst).toHaveBeenCalledWith({
+      where: {
+        plantId: "plant-1",
+        userId: "22222222-2222-4222-8222-222222222222",
+        user: {
+          isActive: true,
+        },
+      },
+      select: {
+        userId: true,
+      },
+    });
     expect(actionServiceMock.ActionService.create).toHaveBeenCalledWith({
       plantId: "plant-1",
       actorUserId: "user-1",
@@ -160,6 +178,9 @@ describe("actions route", () => {
     prismaMock.prisma.communication.findFirst.mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
       status: CommunicationStatus.PENDING_VALIDATION,
+    });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
+      userId: "22222222-2222-4222-8222-222222222222",
     });
     actionServiceMock.ActionService.create.mockResolvedValue({
       id: "action-1",
@@ -251,6 +272,9 @@ describe("actions route", () => {
       id: "11111111-1111-4111-8111-111111111111",
       status: CommunicationStatus.VALID_OPEN,
     });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
+      userId: "22222222-2222-4222-8222-222222222222",
+    });
     actionServiceMock.ActionService.create.mockResolvedValue({
       id: "action-existing",
       communicationId: "11111111-1111-4111-8111-111111111111",
@@ -286,5 +310,46 @@ describe("actions route", () => {
         },
       },
     });
+  });
+
+  it("rejects action owners that are not active users for the plant", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N4_SUPERVISOR,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.prisma.communication.findFirst.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      status: CommunicationStatus.VALID_OPEN,
+    });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue(null);
+
+    const response = (await POST(
+      new Request("http://localhost/api/plants/maap/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: ActionSourceType.COMMUNICATION,
+          communicationId: "11111111-1111-4111-8111-111111111111",
+          category: ActionCategory.CORRECTIVE,
+          priority: ActionPriority.MEDIUM,
+          title: "Nova acao",
+          description: "Criada a partir do modulo de acoes.",
+          ownerUserId: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+      routeContext(),
+    )) as Response;
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      errorCode: "INVALID_ACTION_OWNER",
+    });
+    expect(actionServiceMock.ActionService.create).not.toHaveBeenCalled();
   });
 });

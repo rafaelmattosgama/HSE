@@ -39,6 +39,7 @@ type ExportAttachment = {
 type CompleteReportOptions = {
   locale?: string;
   exportedBy?: string | null;
+  includeXlsx?: boolean;
 };
 
 function pdfBufferFromDocument(doc: PdfDocument) {
@@ -166,6 +167,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isUuid(value: unknown): value is string {
+  return typeof value === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function toYesNoAnswer(value: unknown): YesNoAnswer {
   if (value === "YES" || value === true) return "YES";
   if (value === "NO" || value === false) return "NO";
@@ -194,14 +200,26 @@ function drawSummaryHeader(doc: PdfDocument, input: {
   plantLabel: string;
   generatedOnLabel: string;
 }) {
-  doc.roundedRect(40, 36, 515, 92, 18).fill(BRAND);
-  doc.fillColor("#ffffff").fontSize(12).text("MAx Safety", 58, 54);
-  doc.fontSize(21).text(input.title, 58, 72, { width: 320 });
-  doc.fontSize(9).text(`${input.referenceLabel}: ${input.reference}`, 58, 106, { width: 240 });
-  doc.fontSize(10).text(input.plantLabel, 320, 60, { width: 217, align: "right" });
-  doc.text(`${input.generatedOnLabel} ${formatDate(new Date())}`, 320, 104, { width: 217, align: "right" });
-  doc.y = 146;
-  doc.fillColor(INK);
+  doc.rect(0, 0, doc.page.width, 112).fill("#f8fafc");
+  doc.rect(0, 111, doc.page.width, 1).fill("#dbe3ee");
+  drawPlatformLogo(doc, 26, 34, 0.82);
+  doc.fillColor(BRAND).fontSize(15).font("Helvetica-Bold").text("Safety EWO - Summary Report", 198, 27, {
+    width: 200,
+    height: 40,
+    align: "center",
+  });
+  doc.fillColor(INK).fontSize(8).font("Helvetica-Bold").text(input.plantLabel, 450, 31, { width: 104, align: "right" });
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica").text(`${input.generatedOnLabel} ${formatDate(new Date())}`, 430, 57, {
+    width: 124,
+    align: "right",
+  });
+  doc.fillColor(INK).fontSize(7).font("Helvetica-Bold").text(`${input.referenceLabel}: ${input.reference}`, 394, 83, {
+    width: 160,
+    height: 22,
+    align: "right",
+  });
+  doc.y = 138;
+  doc.fillColor(INK).font("Helvetica");
 }
 
 const GREEN = "#4d9f35";
@@ -215,6 +233,43 @@ function fitText(value: unknown, maxLength = 420) {
   return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
 }
 
+function fitTextForBox(doc: PdfDocument, value: unknown, input: {
+  width: number;
+  height: number;
+  maxLength?: number;
+}) {
+  let text = fitText(value, input.maxLength ?? 420);
+  if (doc.heightOfString(text, { width: input.width }) <= input.height) {
+    return text;
+  }
+
+  while (text.length > 12) {
+    text = `${text.slice(0, -5).trim()}...`;
+    if (doc.heightOfString(text, { width: input.width }) <= input.height) {
+      return text;
+    }
+  }
+
+  return fitText(text, 12);
+}
+
+function drawPlatformLogo(doc: PdfDocument, x: number, y: number, scale = 1) {
+  const s = (value: number) => value * scale;
+  doc.roundedRect(x, y, s(64), s(40), s(10)).fillAndStroke("#f8fbff", "#b7c7dd");
+  doc.roundedRect(x + s(11), y + s(16), s(42), s(12), s(4)).strokeColor(BRAND).lineWidth(s(1.1)).stroke();
+  doc.fillColor(BRAND).fontSize(s(6.5)).font("Helvetica-Bold").text("M A", x + s(24), y + s(19), {
+    width: s(18),
+    align: "center",
+  });
+  doc.fillColor(BRAND).fontSize(s(6.8)).font("Helvetica").text("I N T E G R A T E D   S A F E T Y   P L A T F O R M", x + s(78), y + s(3), {
+    width: s(180),
+  });
+  doc.fontSize(s(14)).font("Helvetica-Bold").text("MAx Safety", x + s(78), y + s(18), {
+    width: s(140),
+  });
+  doc.strokeColor(INK).fillColor(INK).font("Helvetica").lineWidth(1);
+}
+
 function drawPortraitHeader(doc: PdfDocument, input: {
   plant: string;
   title: string;
@@ -222,11 +277,16 @@ function drawPortraitHeader(doc: PdfDocument, input: {
   exportedBy?: string | null;
   pageLabel: string;
 }) {
-  doc.rect(0, 0, doc.page.width, 56).fill(BRAND);
-  doc.fillColor(WHITE).fontSize(10).font("Helvetica-Bold").text(`PLANT: ${input.plant}`, 24, 17, { width: 128 });
-  doc.fontSize(15).text(input.title.toUpperCase(), 150, 14, { width: 290, align: "center" });
-  doc.fontSize(7.5).font("Helvetica").text(`Generated: ${input.generatedOn}`, 440, 13, { width: 132, align: "right" });
-  doc.text(`Exported by: ${input.exportedBy?.trim() || "-"}`, 440, 27, { width: 132, align: "right" });
+  doc.rect(0, 0, doc.page.width, 64).fill("#f8fafc");
+  doc.rect(0, 63, doc.page.width, 1).fill("#dbe3ee");
+  drawPlatformLogo(doc, 24, 12);
+  doc.fillColor(BRAND).fontSize(12).font("Helvetica-Bold").text(input.title.toUpperCase(), 284, 14, {
+    width: 176,
+    align: "center",
+  });
+  doc.fillColor(INK).fontSize(7.5).font("Helvetica-Bold").text(`PLANT: ${input.plant}`, 470, 12, { width: 92, align: "right" });
+  doc.fillColor(MUTED).fontSize(7).font("Helvetica").text(`Generated: ${input.generatedOn}`, 438, 27, { width: 124, align: "right" });
+  doc.text(`Exported by: ${input.exportedBy?.trim() || "-"}`, 438, 39, { width: 124, align: "right" });
   doc.fillColor(INK).font("Helvetica");
 }
 
@@ -359,10 +419,25 @@ function drawMiniField(doc: PdfDocument, input: {
   height: number;
 }) {
   doc.rect(input.x, input.y, input.width, input.height).fillAndStroke(SOFT, "#c5ceda");
-  doc.fillColor(MUTED).fontSize(6.5).font("Helvetica-Bold").text(input.label.toUpperCase(), input.x + 6, input.y + 6, { width: input.width - 12 });
-  doc.fillColor(INK).fontSize(8).font("Helvetica").text(fitText(input.value, 110), input.x + 6, input.y + 18, {
+  const labelWidth = input.width - 12;
+  const compact = input.height <= 34;
+  const labelHeight = compact ? 8 : Math.min(11, doc.heightOfString(input.label.toUpperCase(), { width: labelWidth }));
+  const valueY = compact ? input.y + 18 : input.y + 8 + labelHeight + 3;
+  const valueHeight = Math.max(8, input.y + input.height - valueY - 5);
+  doc.fillColor(MUTED).fontSize(6.2).font("Helvetica-Bold").text(input.label.toUpperCase(), input.x + 6, input.y + 6, {
+    width: labelWidth,
+    height: labelHeight,
+  });
+  const value = compact
+    ? fitText(input.value, 110)
+    : fitTextForBox(doc, input.value, {
+        width: labelWidth,
+        height: valueHeight,
+        maxLength: 110,
+      });
+  doc.fillColor(INK).fontSize(7.5).font("Helvetica").text(value, input.x + 6, valueY, {
     width: input.width - 12,
-    height: input.height - 22,
+    height: valueHeight,
   });
 }
 
@@ -376,18 +451,30 @@ function drawLinedTextBox(doc: PdfDocument, input: {
   maxLength?: number;
 }) {
   doc.rect(input.x, input.y, input.width, input.height).fillAndStroke(WHITE, "#c5ceda");
-  doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text(input.label.toUpperCase(), input.x + 7, input.y + 7, {
-    width: input.width - 14,
-  });
-  doc.fillColor(INK).fontSize(8).font("Helvetica").text(fitText(input.value, input.maxLength ?? 260), input.x + 7, input.y + 20, {
-    width: input.width - 14,
-    height: input.height - 25,
-  });
-
   const lineStart = input.y + 36;
   for (let y = lineStart; y < input.y + input.height - 8; y += 14) {
     doc.moveTo(input.x + 7, y).lineTo(input.x + input.width - 7, y).strokeColor("#e2e8f0").stroke();
   }
+  const labelWidth = input.width - 14;
+  const compact = input.height <= 48;
+  const labelHeight = compact ? 10 : Math.min(14, doc.heightOfString(input.label.toUpperCase(), { width: labelWidth }));
+  const valueY = input.y + 9 + labelHeight + 4;
+  const valueHeight = Math.max(8, input.y + input.height - valueY - 6);
+  doc.fillColor(MUTED).fontSize(6.8).font("Helvetica-Bold").text(input.label.toUpperCase(), input.x + 7, input.y + 7, {
+    width: labelWidth,
+    height: labelHeight,
+  });
+  const value = compact
+    ? fitText(input.value, input.maxLength ?? 260)
+    : fitTextForBox(doc, input.value, {
+        width: labelWidth,
+        height: valueHeight,
+        maxLength: input.maxLength ?? 260,
+      });
+  doc.fillColor(INK).fontSize(7.6).font("Helvetica").text(value, input.x + 7, valueY, {
+    width: labelWidth,
+    height: valueHeight,
+  });
   doc.strokeColor(INK).fillColor(INK);
 }
 
@@ -451,7 +538,6 @@ function drawPyramid(doc: PdfDocument, input: {
       [centerX - bottomWidth / 2, y + segmentH],
     ];
     doc.polygon(...points).fillAndStroke(entry.color, WHITE);
-    doc.fillColor(WHITE).fontSize(9).font("Helvetica-Bold").text(String(entry.level), centerX - 8, y + 4, { width: 16, align: "center" });
 
     const checked = input.selectedLevel === entry.level;
     drawCheckbox(doc, {
@@ -559,28 +645,30 @@ function drawAnatomyPanel(doc: PdfDocument, input: {
   const marker = getBodyMarker({ code: input.bodyPartCode, name: input.bodyPart });
   if (input.height < 180) {
     const drawCompactFigure = (figureX: number, figureY: number, label: string, side: "front" | "back") => {
-      doc.fillColor("#f4c27a").circle(figureX + 25, figureY + 9, 6).fill();
-      doc.roundedRect(figureX + 18, figureY + 20, 14, 28, 4).fill("#8dd2c9");
-      doc.roundedRect(figureX + 11, figureY + 23, 5, 25, 3).fill("#7fb4d6");
-      doc.roundedRect(figureX + 34, figureY + 23, 5, 25, 3).fill("#7fb4d6");
-      doc.roundedRect(figureX + 18, figureY + 48, 6, 30, 3).fill("#f6a64b");
-      doc.roundedRect(figureX + 27, figureY + 48, 6, 30, 3).fill("#f6a64b");
+      doc.fillColor("#f4c27a").circle(figureX + 23, figureY + 7, 5).fill();
+      doc.roundedRect(figureX + 17, figureY + 17, 12, 24, 4).fill("#8dd2c9");
+      doc.roundedRect(figureX + 10, figureY + 20, 5, 22, 3).fill("#7fb4d6");
+      doc.roundedRect(figureX + 31, figureY + 20, 5, 22, 3).fill("#7fb4d6");
+      doc.roundedRect(figureX + 17, figureY + 41, 5, 24, 3).fill("#f6a64b");
+      doc.roundedRect(figureX + 25, figureY + 41, 5, 24, 3).fill("#f6a64b");
       if (marker && marker.side === side) {
-        const markerX = figureX + Math.max(7, Math.min(43, marker.x * 0.45));
-        const markerY = figureY + Math.max(5, Math.min(78, marker.y * 0.36));
-        doc.circle(markerX, markerY, Math.max(4, marker.radius * 0.34)).fillOpacity(0.22).fill(DANGER).fillOpacity(1);
-        doc.circle(markerX, markerY, Math.max(6, marker.radius * 0.34 + 2)).strokeColor(DANGER).lineWidth(1.2).stroke();
+        const markerX = figureX + Math.max(7, Math.min(39, marker.x * 0.41));
+        const markerY = figureY + Math.max(4, Math.min(64, marker.y * 0.29));
+        doc.circle(markerX, markerY, Math.max(3, marker.radius * 0.3)).fillOpacity(0.22).fill(DANGER).fillOpacity(1);
+        doc.circle(markerX, markerY, Math.max(5, marker.radius * 0.3 + 2)).strokeColor(DANGER).lineWidth(1.1).stroke();
       }
-      doc.fillColor(MUTED).fontSize(6).font("Helvetica-Bold").text(label.toUpperCase(), figureX, figureY + 82, { width: 50, align: "center" });
+      doc.fillColor(MUTED).fontSize(5.8).font("Helvetica-Bold").text(label.toUpperCase(), figureX, figureY + 67, { width: 46, align: "center" });
     };
-    drawCompactFigure(input.x + 18, input.y + 26, "Front", "front");
-    drawCompactFigure(input.x + input.width - 68, input.y + 26, "Back", "back");
-    doc.fillColor(INK).fontSize(6.5).font("Helvetica-Bold").text(`Affected zone: ${input.bodyPart || "-"}`, input.x + 8, input.y + input.height - 26, {
+    drawCompactFigure(input.x + 8, input.y + 27, "Front", "front");
+    drawCompactFigure(input.x + input.width - 54, input.y + 27, "Back", "back");
+    doc.fillColor(INK).fontSize(6.2).font("Helvetica-Bold").text(fitText(`Affected zone: ${input.bodyPart || "-"}`, 54), input.x + 8, input.y + input.height - 30, {
       width: input.width - 16,
+      height: 12,
       align: "center",
     });
-    doc.fillColor(MUTED).fontSize(6).font("Helvetica").text(`Nature: ${input.injuryType || "-"}`, input.x + 8, input.y + input.height - 15, {
+    doc.fillColor(MUTED).fontSize(5.8).font("Helvetica").text(fitText(`Nature: ${input.injuryType || "-"}`, 58), input.x + 8, input.y + input.height - 16, {
       width: input.width - 16,
+      height: 10,
       align: "center",
     });
     doc.fillColor(INK).font("Helvetica");
@@ -1150,6 +1238,13 @@ export const SewoExportService = {
       return pdfBufferFromDocument(doc);
     })();
 
+    if (options.includeXlsx === false) {
+      return {
+        pdf,
+        xlsx: Buffer.alloc(0),
+      };
+    }
+
     const workbook = new ExcelJS.Workbook();
     const summary = workbook.addWorksheet("S-EWO");
     summary.columns = [
@@ -1292,6 +1387,7 @@ export const SewoExportService = {
           include: {
             area: true,
             workstation: true,
+            injuryType: true,
           },
         },
         attachments: true,
@@ -1341,6 +1437,28 @@ export const SewoExportService = {
     const sifPsifLabel = sifPsifResult === "PENDING"
       ? ui.summaryReportNotApplicable
       : getSifPsifResultLabel(sifPsifResult, ui);
+    const templateNatureId = getDisplayValue(templateData.natureId, "");
+    const sewoNatureText = getDisplayValue(sewo.whatText, "");
+    const injuryTypeLookupId = isUuid(templateNatureId)
+      ? templateNatureId
+      : isUuid(sewoNatureText)
+        ? sewoNatureText
+        : "";
+    const injuryTypeFromMaster = !sewo.communication?.injuryType?.name && injuryTypeLookupId
+      ? await prisma.injuryType.findFirst({
+          where: {
+            id: injuryTypeLookupId,
+            plantId: sewo.plantId,
+          },
+          select: {
+            name: true,
+          },
+        })
+      : null;
+    const injuryNatureText = getDisplayValue(
+      sewo.communication?.injuryType?.name ?? injuryTypeFromMaster?.name ?? sewo.whatText,
+      ui.summaryReportNotApplicable,
+    );
     const rootCauseText = buildRootCauseText({
       templateData,
       causeSelections: sewo.causeSelections,
@@ -1372,7 +1490,7 @@ export const SewoExportService = {
           [ui.summaryReportOccurrenceDate, formatDate(occurrenceDate)],
           [ui.summaryReportOccurrenceType, translated(occurrenceType)],
           [ui.summaryReportLocation, summaryLocation],
-          [ui.summaryReportInjuryNature, getDisplayValue(translated(sewo.whatText), ui.summaryReportNotApplicable)],
+          [ui.summaryReportInjuryNature, getDisplayValue(translated(injuryNatureText), ui.summaryReportNotApplicable)],
         ],
         2,
       );

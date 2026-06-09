@@ -4,6 +4,9 @@ const prismaMock = vi.hoisted(() => ({
   sEWO: {
     findUniqueOrThrow: vi.fn(),
   },
+  injuryType: {
+    findFirst: vi.fn(),
+  },
 }));
 
 const storageMock = vi.hoisted(() => ({
@@ -294,6 +297,7 @@ describe("SewoExportService.buildExternalSummaryExport", () => {
     storageMock.StorageService.getObjectBuffer.mockResolvedValue(Buffer.from("image-1"));
     prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue({
       id: "sewo-1",
+      plantId: "plant-1",
       plant: {
         code: "pl1",
         name: "Valenca",
@@ -304,10 +308,13 @@ describe("SewoExportService.buildExternalSummaryExport", () => {
         workstation: {
           name: "Workstation A",
         },
+        injuryType: {
+          name: "Corte / laceração",
+        },
         type: "NEAR_MISS",
       },
       eventClassification: "NEAR_MISS",
-      whatText: "Cut on hand",
+      whatText: "157748c6-1a3a-4860-b702-509adc5c4704",
       whereText: "",
       howText: "Operator slipped near the conveyor.",
       templateData: {
@@ -357,11 +364,13 @@ describe("SewoExportService.buildExternalSummaryExport", () => {
     }));
     expect(storageMock.StorageService.getObjectBuffer).toHaveBeenCalledWith({ key: "photo-1" });
     expect(rendered.imageCount).toBe(1);
-    expect(rendered.texts).toContain("S-EWO Summary Report");
+    expect(rendered.texts).toContain("MAx Safety");
+    expect(rendered.texts).toContain("Safety EWO - Summary Report");
     expect(rendered.texts).toContain("S-EWO Reference: sewo-1");
     expect(rendered.texts).toContain("Valenca (PL1)");
     expect(rendered.texts).toContain("Near Miss");
-    expect(rendered.texts).toContain("Cut on hand");
+    expect(rendered.texts).toContain("Corte / laceração");
+    expect(rendered.texts).not.toContain("157748c6-1a3a-4860-b702-509adc5c4704");
     expect(rendered.texts).toContain("Operator slipped near the conveyor.");
     expect(rendered.texts).toContain("PSIF");
     expect(rendered.texts).toContain("1.1 Inadequate training: New operator on the task");
@@ -546,5 +555,53 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts.some((entry) => entry.includes("Replace damaged hydraulic hose"))).toBe(true);
     expect(rendered.texts).toContain("floor.jpg");
     expect(rendered.texts).toContain("notes.pdf");
+  });
+
+  it("can build only the complete PDF without generating an XLSX payload", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue({
+      id: "sewo-pdf-only",
+      plant: {
+        code: "pl1",
+        name: "Valenca",
+      },
+      communication: null,
+      eventClassification: "Unsafe act",
+      area: null,
+      line: null,
+      shift: null,
+      analysisDate: new Date("2026-05-20T08:00:00.000Z"),
+      performedBy: {
+        name: "Joao Costa",
+      },
+      approvedBy: null,
+      approvedAt: null,
+      status: "DRAFT",
+      whatText: "Unsafe behavior",
+      whereText: "Warehouse",
+      whoText: "Operator",
+      usualWorkYesNo: false,
+      whichText: null,
+      howText: "Operator crossed outside the marked route.",
+      immediateCorrectiveActionText: "Briefed the team.",
+      templateData: null,
+      causeSelections: [],
+      actionLinks: [],
+      attachments: [],
+    });
+
+    const exported = await SewoExportService.buildExport("sewo-pdf-only", {
+      locale: "en",
+      exportedBy: "Ana Silva",
+      includeXlsx: false,
+    });
+    const rendered = JSON.parse(exported.pdf.toString()) as {
+      texts: string[];
+    };
+
+    expect(exported.xlsx.length).toBe(0);
+    expect(rendered.texts).toContain("SAFETY EWO - COMPLETE REPORT");
+    expect(rendered.texts).toContain("sewo-pdf-only");
   });
 });

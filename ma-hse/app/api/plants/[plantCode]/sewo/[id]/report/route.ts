@@ -1,5 +1,6 @@
 import { RoleCode } from "@prisma/client";
 import { fail } from "@/lib/api";
+import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
@@ -33,29 +34,45 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
     plantLanguage: plant.defaultLanguage,
   });
 
-  if (reportType !== "summary" && (format === "xlsx" || format === "excel")) {
-    const exported = await SewoExportService.buildExport(id, { locale, exportedBy: auth.session.user.name });
+  try {
+    if (reportType !== "summary" && (format === "xlsx" || format === "excel")) {
+      const exported = await SewoExportService.buildExport(id, { locale, exportedBy: auth.session.user.name });
 
-    return new Response(new Uint8Array(exported.xlsx), {
+      return new Response(new Uint8Array(exported.xlsx), {
+        status: 200,
+        headers: {
+          "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "content-disposition": `attachment; filename=\"s-ewo-${id}.xlsx\"`,
+          "cache-control": "no-store",
+        },
+      });
+    }
+
+    const exported = reportType === "summary"
+      ? await SewoExportService.buildExternalSummaryExport(id, { locale })
+      : await SewoExportService.buildExport(id, { locale, exportedBy: auth.session.user.name, includeXlsx: false });
+
+    return new Response(new Uint8Array(exported.pdf), {
       status: 200,
       headers: {
-        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "content-disposition": `attachment; filename=\"s-ewo-${id}.xlsx\"`,
+        "content-type": "application/pdf",
+        "content-disposition": `attachment; filename=\"s-ewo-${id}.pdf\"`,
         "cache-control": "no-store",
       },
     });
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        plantCode,
+        sewoId: id,
+        format,
+        reportType,
+        actorUserId: auth.session.user.id,
+      },
+      "failed_to_export_sewo_report",
+    );
+
+    return fail("SEWO_REPORT_EXPORT_FAILED", "Failed to export S-EWO report", 500);
   }
-
-  const exported = reportType === "summary"
-    ? await SewoExportService.buildExternalSummaryExport(id, { locale })
-    : await SewoExportService.buildExport(id, { locale, exportedBy: auth.session.user.name });
-
-  return new Response(new Uint8Array(exported.pdf), {
-    status: 200,
-    headers: {
-      "content-type": "application/pdf",
-      "content-disposition": `attachment; filename=\"s-ewo-${id}.pdf\"`,
-      "cache-control": "no-store",
-    },
-  });
 }

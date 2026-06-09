@@ -26,11 +26,18 @@ const uiLanguageMock = vi.hoisted(() => ({
   getServerUiLocale: vi.fn(),
 }));
 
+const loggerMock = vi.hoisted(() => ({
+  logger: {
+    error: vi.fn(),
+  },
+}));
+
 vi.mock("@/lib/rbac/guards", () => guardsMock);
 vi.mock("@/lib/plant", () => plantMock);
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/services/sewo-export", () => exportMock);
 vi.mock("@/lib/server-ui-language", () => uiLanguageMock);
+vi.mock("@/lib/logger", () => loggerMock);
 
 import { GET } from "@/app/api/plants/[plantCode]/sewo/[id]/report/route";
 
@@ -47,7 +54,7 @@ describe("S-EWO report route", () => {
 
   it("returns PDF for summary reports and reuses external summary export logic", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
-      session: { user: { language: "en", name: "Ana Silva" } },
+      session: { user: { id: "user-1", language: "en", name: "Ana Silva" } },
       role: RoleCode.N3_SAFETY,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "en" });
@@ -71,7 +78,7 @@ describe("S-EWO report route", () => {
 
   it("returns PDF for complete reports and uses the standard export logic", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
-      session: { user: { language: "pt", name: "Ana Silva" } },
+      session: { user: { id: "user-1", language: "pt", name: "Ana Silva" } },
       role: RoleCode.N2_PLANT_MANAGER,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
@@ -84,7 +91,7 @@ describe("S-EWO report route", () => {
       routeContext(),
     ))!;
 
-    expect(exportMock.SewoExportService.buildExport).toHaveBeenCalledWith("sewo-1", { locale: "pt", exportedBy: "Ana Silva" });
+    expect(exportMock.SewoExportService.buildExport).toHaveBeenCalledWith("sewo-1", { locale: "pt", exportedBy: "Ana Silva", includeXlsx: false });
     expect(exportMock.SewoExportService.buildExternalSummaryExport).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
@@ -95,7 +102,7 @@ describe("S-EWO report route", () => {
 
   it("still supports Excel for the standard full export when requested", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
-      session: { user: { language: "en", name: "Ana Silva" } },
+      session: { user: { id: "user-1", language: "en", name: "Ana Silva" } },
       role: RoleCode.N2_PLANT_MANAGER,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "en" });
@@ -114,5 +121,35 @@ describe("S-EWO report route", () => {
     expect(response.headers.get("content-disposition")).toContain("s-ewo-sewo-1.xlsx");
     const data = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(data)).toEqual([11]);
+  });
+
+  it("returns a controlled error when complete report generation fails", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: { user: { id: "user-1", language: "pt", name: "Ana Silva" } },
+      role: RoleCode.N2_PLANT_MANAGER,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
+    prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1" });
+    uiLanguageMock.getServerUiLocale.mockResolvedValue("pt");
+    exportMock.SewoExportService.buildExport.mockRejectedValue(new Error("PDF failed"));
+
+    const response = (await GET(
+      new Request("http://localhost/api/plants/pl1/sewo/sewo-1/report?type=complete&format=pdf"),
+      routeContext(),
+    ))!;
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      errorCode: "SEWO_REPORT_EXPORT_FAILED",
+    });
+    expect(loggerMock.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sewoId: "sewo-1",
+        format: "pdf",
+        reportType: "complete",
+      }),
+      "failed_to_export_sewo_report",
+    );
   });
 });

@@ -2,7 +2,7 @@ import { ActionCategory, ActionPriority, ActionSourceType, ActionStatus } from "
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const transactionMock = vi.hoisted(() => ({
-  $queryRaw: vi.fn(),
+  $executeRaw: vi.fn(),
   action: {
     findFirst: vi.fn(),
     create: vi.fn(),
@@ -110,7 +110,7 @@ describe("ActionService", () => {
         reusedExistingAction: true,
       },
     });
-    expect(transactionMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(transactionMock.$executeRaw).toHaveBeenCalledTimes(1);
     expect(transactionMock.action.create).not.toHaveBeenCalled();
     expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
     expect(actionAlertServiceMock.ActionAlertService.sendNewActionAlerts).not.toHaveBeenCalled();

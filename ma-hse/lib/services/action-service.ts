@@ -20,7 +20,7 @@ function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriori
 const OPEN_LINKED_ACTION_STATUSES = [ActionStatus.OPEN, ActionStatus.ONGOING] as const;
 
 async function lockCommunicationActionCreation(tx: Prisma.TransactionClient, communicationId: string) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`action:communication:${communicationId}`}))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`action:communication:${communicationId}`}))`;
 }
 
 export const ActionService = {
