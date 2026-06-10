@@ -131,7 +131,8 @@ describe("S-EWO report route", () => {
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
     prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1" });
     uiLanguageMock.getServerUiLocale.mockResolvedValue("pt");
-    exportMock.SewoExportService.buildExport.mockRejectedValue(new Error("PDF failed"));
+    const generationError = new Error("PDF failed");
+    exportMock.SewoExportService.buildExport.mockRejectedValue(generationError);
 
     const response = (await GET(
       new Request("http://localhost/api/plants/pl1/sewo/sewo-1/report?type=complete&format=pdf"),
@@ -145,6 +146,9 @@ describe("S-EWO report route", () => {
     });
     expect(loggerMock.logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
+        err: generationError,
+        errorName: "Error",
+        errorMessage: "PDF failed",
         sewoId: "sewo-1",
         format: "pdf",
         reportType: "complete",

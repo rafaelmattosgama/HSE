@@ -67,6 +67,26 @@ describe("token-based communication rules", () => {
     expect(shouldDeferPublicReportUnsafeActType(CommunicationType.UNSAFE_ACT)).toBe(true);
   });
 
+  it("accepts multiple involved workers for public unsafe act reports", () => {
+    const involvedEmployeeIds = [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+    ];
+    const parsed = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.UNSAFE_ACT,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      involvedEmployeeIds,
+      description: "Unsafe act reported from QR",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.involvedEmployeeIds).toEqual(involvedEmployeeIds);
+      expect(parsed.data.targetEmployeeId).toBeUndefined();
+    }
+  });
+
   it("rejects future event dates for public reports", () => {
     const parsed = createPublicReportCommunicationInput.safeParse({
       type: CommunicationType.UNSAFE_CONDITION,

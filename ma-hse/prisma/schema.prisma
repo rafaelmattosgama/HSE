@@ -482,6 +482,7 @@ model EmployeeDirectory {
   plant                        Plant             @relation(fields: [plantId], references: [id], onDelete: Cascade)
   shift                        Shift?            @relation(fields: [shiftId], references: [id])
   targetCommunications         Communication[]   @relation("TargetEmployee")
+  involvedCommunications       CommunicationInvolvedEmployee[]
   contractorCompanyAssignments ExternalCompany[] @relation("ExternalContractorSponsor")
 
   @@unique([plantId, employeeNo])
@@ -550,6 +551,7 @@ model Communication {
   validatedByUser                  User?                             @relation("ValidatedByUser", fields: [validatedBy], references: [id])
   manuallyClosedByUser             User?                             @relation("ManuallyClosedByUser", fields: [manuallyClosedBy], references: [id])
   attachments                      CommunicationAttachment[]
+  involvedEmployees                CommunicationInvolvedEmployee[]
   actions                          Action[]
   alertEvents                      AlertEvent[]
   safetyCommunicationNotifications SafetyCommunicationNotification[]
@@ -561,6 +563,20 @@ model Communication {
   @@index([riskThemeId, eventDatetime])
   @@index([unsafeConditionTypeId, eventDatetime])
   @@index([shiftId])
+}
+
+model CommunicationInvolvedEmployee {
+  id              String            @id @default(uuid())
+  communicationId String
+  employeeId      String
+  sortOrder       Int               @default(0)
+  createdAt       DateTime          @default(now())
+  communication   Communication     @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+  employee        EmployeeDirectory @relation(fields: [employeeId], references: [id])
+
+  @@unique([communicationId, employeeId])
+  @@index([communicationId, sortOrder])
+  @@index([employeeId])
 }
 
 model CommunicationAttachment {

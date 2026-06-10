@@ -27,6 +27,8 @@ type ReportText = {
   selectShift: string;
   involvedWorker: string;
   selectInvolvedWorker: string;
+  addInvolvedWorker: string;
+  removeInvolvedWorker: string;
   natureOfInjury: string;
   selectNature: string;
   bodyPartAffected: string;
@@ -66,6 +68,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Select shift",
     involvedWorker: "Involved worker",
     selectInvolvedWorker: "Select involved worker",
+    addInvolvedWorker: "Add involved worker",
+    removeInvolvedWorker: "Remove involved worker",
     natureOfInjury: "Nature of injury",
     selectNature: "Select nature of injury",
     bodyPartAffected: "Body part affected",
@@ -103,6 +107,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Selecionar turno",
     involvedWorker: "Trabalhador envolvido",
     selectInvolvedWorker: "Selecionar trabalhador envolvido",
+    addInvolvedWorker: "Adicionar trabalhador envolvido",
+    removeInvolvedWorker: "Remover trabalhador envolvido",
     natureOfInjury: "Natureza da lesão",
     selectNature: "Selecionar natureza da lesão",
     bodyPartAffected: "Parte do corpo afetada",
@@ -140,6 +146,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Seleziona turno",
     involvedWorker: "Lavoratore coinvolto",
     selectInvolvedWorker: "Seleziona lavoratore coinvolto",
+    addInvolvedWorker: "Aggiungi lavoratore coinvolto",
+    removeInvolvedWorker: "Rimuovi lavoratore coinvolto",
     natureOfInjury: "Natura della lesione",
     selectNature: "Seleziona natura della lesione",
     bodyPartAffected: "Parte del corpo interessata",
@@ -177,6 +185,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Wybierz zmiane",
     involvedWorker: "Zaangazowany pracownik",
     selectInvolvedWorker: "Wybierz pracownika",
+    addInvolvedWorker: "Dodaj pracownika",
+    removeInvolvedWorker: "Usun pracownika",
     natureOfInjury: "Rodzaj urazu",
     selectNature: "Wybierz rodzaj urazu",
     bodyPartAffected: "Dotknieta czesc ciala",
@@ -214,6 +224,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Schicht auswahlen",
     involvedWorker: "Beteiligter Mitarbeiter",
     selectInvolvedWorker: "Mitarbeiter auswahlen",
+    addInvolvedWorker: "Beteiligten Mitarbeiter hinzufugen",
+    removeInvolvedWorker: "Beteiligten Mitarbeiter entfernen",
     natureOfInjury: "Art der Verletzung",
     selectNature: "Verletzungsart auswahlen",
     bodyPartAffected: "Betroffener Korperteil",
@@ -251,6 +263,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Selectati schimbul",
     involvedWorker: "Lucrator implicat",
     selectInvolvedWorker: "Selectati lucratorul implicat",
+    addInvolvedWorker: "Adaugati lucrator implicat",
+    removeInvolvedWorker: "Eliminati lucrator implicat",
     natureOfInjury: "Natura leziunii",
     selectNature: "Selectati natura leziunii",
     bodyPartAffected: "Partea corpului afectata",
@@ -288,6 +302,8 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     selectShift: "Selectionner l'equipe",
     involvedWorker: "Travailleur implique",
     selectInvolvedWorker: "Selectionner le travailleur implique",
+    addInvolvedWorker: "Ajouter un travailleur implique",
+    removeInvolvedWorker: "Retirer le travailleur implique",
     natureOfInjury: "Nature de la blessure",
     selectNature: "Selectionner la nature de la blessure",
     bodyPartAffected: "Partie du corps affectee",

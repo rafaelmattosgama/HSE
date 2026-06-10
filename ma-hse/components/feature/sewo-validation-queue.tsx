@@ -171,10 +171,10 @@ export function SewoValidationQueue({
                 <Link href={`/app/${row.plantCode}/sewo?sewoId=${row.id}`} className="app-toolbar">
                   {ui.n1ValidationOpenSewo}
                 </Link>
-                <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?format=pdf`} className="app-toolbar" title={ui.n1ValidationExportPdf}>
+                <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?type=complete&format=pdf`} className="app-toolbar" title={ui.n1ValidationExportPdf}>
                   <FileText className="h-4 w-4" />
                 </Link>
-                <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?format=xlsx`} className="app-toolbar" title={ui.n1ValidationExportExcel}>
+                <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?type=complete&format=xlsx`} className="app-toolbar" title={ui.n1ValidationExportExcel}>
                   <FileSpreadsheet className="h-4 w-4" />
                 </Link>
               </div>

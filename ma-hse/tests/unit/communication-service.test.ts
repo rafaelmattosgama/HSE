@@ -1,9 +1,10 @@
-import { CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
+import { CommunicationSource, CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
   employeeDirectory: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     findUnique: vi.fn(),
   },
   communication: {
@@ -75,6 +76,12 @@ describe("CommunicationService approved communication alerts", () => {
   beforeEach(() => {
     prismaMock.communication.findUnique.mockResolvedValue(null);
     prismaMock.userPlantRole.findMany.mockResolvedValue([]);
+    notificationServiceMock.NotificationService.notifyPlantRoles.mockResolvedValue(undefined);
+    repeatabilityAlertMock.RepeatabilityAlertService.processCommunication.mockResolvedValue(undefined);
+    safetyCommunicationAlertServiceMock.SafetyCommunicationAlertService.safeDispatchN3CommunicationCreatedAlerts.mockResolvedValue(undefined);
+    safetyCommunicationAlertServiceMock.SafetyCommunicationAlertService.safeDispatchApprovedCommunicationAlerts.mockResolvedValue(undefined);
+    sewoServiceMock.SewaService.createProvisionalFromCommunication.mockResolvedValue(undefined);
+    auditMock.writeAuditLog.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -303,5 +310,89 @@ describe("CommunicationService approved communication alerts", () => {
     expect(
       safetyCommunicationAlertServiceMock.SafetyCommunicationAlertService.safeDispatchApprovedCommunicationAlerts,
     ).not.toHaveBeenCalled();
+  });
+
+  it("stores every involved worker for public unsafe act communications", async () => {
+    const involvedEmployeeIds = ["worker-1", "worker-2"];
+    prismaMock.employeeDirectory.findUnique.mockResolvedValue({
+      id: "worker-1",
+      name: "Worker One",
+      employeeNo: "001",
+    });
+    prismaMock.employeeDirectory.findMany.mockResolvedValue([
+      { id: "worker-1" },
+      { id: "worker-2" },
+    ]);
+    prismaMock.communication.create.mockResolvedValue({
+      id: "comm-4",
+      plantId: "plant-1",
+      type: CommunicationType.UNSAFE_ACT,
+      status: CommunicationStatus.SUBMITTED,
+      eventDatetime: new Date("2026-05-01T10:00:00Z"),
+      targetEmployeeId: "worker-1",
+      targetEmployeeNo: "001",
+      workstationId: null,
+      reporterName: "Reporter",
+      reporterEmployeeNo: null,
+    });
+
+    await CommunicationService.create({
+      plantId: "plant-1",
+      payload: {
+        type: CommunicationType.UNSAFE_ACT,
+        eventDatetime: new Date("2026-05-01T10:00:00Z"),
+        reporterName: "Reporter",
+        reporterEmployeeNo: undefined,
+        targetText: undefined,
+        targetEmployeeNo: undefined,
+        targetEmployeeId: "worker-1",
+        involvedEmployeeIds,
+        shiftId: undefined,
+        areaId: undefined,
+        lineId: undefined,
+        workstationId: undefined,
+        equipmentId: undefined,
+        riskThemeId: undefined,
+        unsafeActTypeId: undefined,
+        unsafeConditionTypeId: undefined,
+        nearMissTypeId: undefined,
+        description: "Unsafe act with multiple workers",
+        suggestedAction: undefined,
+        severityPotential: undefined,
+        isContractor: undefined,
+        bodyPartId: undefined,
+        injuryTypeId: undefined,
+        isFatal: false,
+        initialLostDays: undefined,
+        hasLeave: undefined,
+        returnDate: undefined,
+        attachments: undefined,
+      },
+      source: CommunicationSource.TOKEN_REPORT,
+    });
+
+    expect(prismaMock.employeeDirectory.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: involvedEmployeeIds },
+        plantId: "plant-1",
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    expect(prismaMock.communication.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          targetEmployeeId: "worker-1",
+          involvedEmployees: {
+            createMany: {
+              data: [
+                { employeeId: "worker-1", sortOrder: 0 },
+                { employeeId: "worker-2", sortOrder: 1 },
+              ],
+            },
+          },
+        }),
+      }),
+    );
   });
 });
