@@ -1,4 +1,5 @@
 import { RoleCode } from "@prisma/client";
+import { NextResponse } from "next/server";
 import { fail } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
@@ -32,6 +33,29 @@ function getExportErrorLogDetails(error: unknown) {
   };
 }
 
+function getExportErrorDebugDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      errorCause: error.cause instanceof Error
+        ? {
+            name: error.cause.name,
+            message: error.cause.message,
+            stack: error.cause.stack,
+          }
+        : error.cause,
+      errorCode: "code" in error ? error.code : undefined,
+      errorMeta: "meta" in error ? error.meta : undefined,
+    };
+  }
+
+  return {
+    errorMessage: String(error),
+  };
+}
+
 export async function GET(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
   const auth = await requirePlantAccess(plantCode, ALLOWED_ROLES);
@@ -50,8 +74,12 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
     return fail("NOT_FOUND", "SEWO not found", 404);
   }
 
-  const format = new URL(request.url).searchParams.get("format") ?? "pdf";
-  const reportType = new URL(request.url).searchParams.get("type") ?? "complete";
+  const searchParams = new URL(request.url).searchParams;
+  const format = searchParams.get("format") ?? "pdf";
+  const reportType = searchParams.get("type") ?? "complete";
+  const includeDebugDetails = searchParams.get("debug") === "1"
+    && "role" in auth
+    && auth.role === RoleCode.N0_ADMIN;
   const locale = await getServerUiLocale({
     userLanguage: auth.session.user.language,
     plantLanguage: plant.defaultLanguage,
@@ -95,6 +123,18 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
       },
       "failed_to_export_sewo_report",
     );
+
+    if (includeDebugDetails) {
+      return NextResponse.json(
+        {
+          ok: false,
+          errorCode: "SEWO_REPORT_EXPORT_FAILED",
+          message: "Failed to export S-EWO report",
+          debug: getExportErrorDebugDetails(error),
+        },
+        { status: 500 },
+      );
+    }
 
     return fail("SEWO_REPORT_EXPORT_FAILED", "Failed to export S-EWO report", 500);
   }

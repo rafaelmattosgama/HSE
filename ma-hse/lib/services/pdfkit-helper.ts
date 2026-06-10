@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import type PDFDocument from "pdfkit";
 
 const nodeRequire = createRequire(import.meta.url);
+const PDFKIT_PACKAGE_NAME = "pdf" + "kit";
 
 type PdfDocumentOptions = ConstructorParameters<typeof PDFDocument>[0];
 type PdfDocumentConstructor = new (options?: PdfDocumentOptions) => InstanceType<typeof PDFDocument>;
@@ -14,8 +15,18 @@ let pdfkitDataDirectories: string[] | null = null;
 
 function getPdfkitDataDirectories() {
   if (!pdfkitDataDirectories) {
+    let pdfkitEntryDirectory: string | null = null;
+    try {
+      const pdfkitEntry = nodeRequire.resolve(PDFKIT_PACKAGE_NAME);
+      if (typeof pdfkitEntry === "string") {
+        pdfkitEntryDirectory = dirname(pdfkitEntry);
+      }
+    } catch {
+      pdfkitEntryDirectory = null;
+    }
+
     pdfkitDataDirectories = [
-      join(dirname(nodeRequire.resolve("pdfkit")), "data"),
+      pdfkitEntryDirectory ? join(pdfkitEntryDirectory, "data") : null,
       join(process.cwd(), "node_modules", "pdfkit", "js", "data"),
       process.env.INIT_CWD ? join(process.env.INIT_CWD, "node_modules", "pdfkit", "js", "data") : null,
     ].filter((directory): directory is string => Boolean(directory));
@@ -26,7 +37,7 @@ function getPdfkitDataDirectories() {
 
 function getPdfDocumentConstructor() {
   if (!PDFDocumentConstructor) {
-    const pdfkitModule = nodeRequire("pdfkit") as { default?: PdfDocumentConstructor } | PdfDocumentConstructor;
+    const pdfkitModule = nodeRequire(PDFKIT_PACKAGE_NAME) as { default?: PdfDocumentConstructor } | PdfDocumentConstructor;
     PDFDocumentConstructor =
       typeof pdfkitModule === "function" ? pdfkitModule : (pdfkitModule.default as PdfDocumentConstructor);
   }

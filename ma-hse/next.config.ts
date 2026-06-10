@@ -25,6 +25,7 @@ function resolveBuildCommit() {
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["pdfkit"],
   env: {
     NEXT_PUBLIC_BUILD_COMMIT: resolveBuildCommit(),
   },

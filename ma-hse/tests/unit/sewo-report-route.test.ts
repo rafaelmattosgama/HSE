@@ -156,4 +156,30 @@ describe("S-EWO report route", () => {
       "failed_to_export_sewo_report",
     );
   });
+
+  it("returns export debug details only for N0 admins when explicitly requested", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: { user: { id: "user-1", language: "pt", name: "Ana Silva" } },
+      role: RoleCode.N0_ADMIN,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
+    prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1" });
+    uiLanguageMock.getServerUiLocale.mockResolvedValue("pt");
+    exportMock.SewoExportService.buildExport.mockRejectedValue(new TypeError("PDF layout failed"));
+
+    const response = (await GET(
+      new Request("http://localhost/api/plants/pl1/sewo/sewo-1/report?type=complete&format=pdf&debug=1"),
+      routeContext(),
+    ))!;
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      errorCode: "SEWO_REPORT_EXPORT_FAILED",
+      debug: {
+        errorName: "TypeError",
+        errorMessage: "PDF layout failed",
+      },
+    });
+  });
 });
