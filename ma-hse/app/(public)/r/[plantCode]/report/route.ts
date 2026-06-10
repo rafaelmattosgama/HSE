@@ -252,6 +252,10 @@ function renderHtml(
       input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }
       button { margin-top: 14px; background: #0f766e; color: white; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; }
       button:disabled { opacity: 0.65; cursor: not-allowed; }
+      .worker-row { display: grid; gap: 8px; margin-top: 8px; }
+      .worker-row:first-child { margin-top: 0; }
+      .add-worker { display: inline-flex; align-items: center; margin-top: 10px; padding: 0; background: transparent; color: #0f766e; border: 0; font-size: 13px; font-weight: 700; }
+      .remove-worker { justify-self: start; margin-top: 0; padding: 7px 10px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; font-size: 12px; }
       .photo-help { margin: 4px 0 8px; color: #475569; font-size: 13px; }
       .photo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 10px; margin-top: 10px; }
       .photo-card { border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #f8fafc; }
@@ -310,11 +314,16 @@ function renderHtml(
 
           <div id="worker-wrap">
             <label>${escapeHtml(text.involvedWorker)}</label>
-            <div class="combo" data-combo="targetEmployee">
-              <input id="targetEmployeeSearch" type="text" autocomplete="off" placeholder="${escapeHtml(text.selectInvolvedWorker)}" />
-              <input name="targetEmployeeId" type="hidden" />
-              <div id="targetEmployeeList" class="combo-list" hidden></div>
+            <div id="worker-list">
+              <div class="worker-row" data-worker-row>
+                <div class="combo" data-combo="targetEmployee">
+                  <input id="targetEmployeeSearch" type="text" autocomplete="off" placeholder="${escapeHtml(text.selectInvolvedWorker)}" />
+                  <input name="targetEmployeeId" type="hidden" />
+                  <div id="targetEmployeeList" class="combo-list" hidden></div>
+                </div>
+              </div>
             </div>
+            <button id="add-worker" class="add-worker" type="button">${escapeHtml(text.addInvolvedWorker)}</button>
           </div>
 
           <div id="clinical-wrap" style="display:none">
@@ -354,6 +363,8 @@ function renderHtml(
       const msg = document.getElementById('msg');
       const typeSelect = document.getElementById('type');
       const workerWrap = document.getElementById('worker-wrap');
+      const workerList = document.getElementById('worker-list');
+      const addWorkerButton = document.getElementById('add-worker');
       const clinicalWrap = document.getElementById('clinical-wrap');
       const eventDatetimeInput = document.getElementById('eventDatetime');
       const photosInput = document.getElementById('photos');
@@ -373,6 +384,8 @@ function renderHtml(
         failed: ${safeJson(text.submitFailed)},
         futureDatetime: ${safeJson(text.futureDatetime)},
         selectInvolvedWorker: ${safeJson(text.selectInvolvedWorker)},
+        addInvolvedWorker: ${safeJson(text.addInvolvedWorker)},
+        removeInvolvedWorker: ${safeJson(text.removeInvolvedWorker)},
         selectNature: ${safeJson(text.selectNature)},
         selectBodyPart: ${safeJson(text.selectBodyPart)},
         photoInvalidType: ${safeJson(photoText.invalidType)},
@@ -418,7 +431,7 @@ function renderHtml(
         form.reset();
         selectedPhotos = [];
         renderPhotoPreview();
-        workerCombo.clear();
+        clearWorkerCombos();
         injuryTypeCombo.clear();
         syncWorkerVisibility();
         syncEventDatetimeMax();
@@ -434,9 +447,9 @@ function renderHtml(
       }
 
       function setupSearchableSelect(config) {
-        const input = document.getElementById(config.inputId);
-        const list = document.getElementById(config.listId);
-        const hidden = form.elements[config.hiddenName];
+        const input = config.input || document.getElementById(config.inputId);
+        const list = config.list || document.getElementById(config.listId);
+        const hidden = config.hidden || form.elements[config.hiddenName];
         const rows = config.rows.map((row) => ({
           ...row,
           searchText: normalize([row.label, row.employeeNo, row.name].filter(Boolean).join(' ')),
@@ -509,6 +522,10 @@ function renderHtml(
           close();
         }
 
+        function value() {
+          return hidden.value;
+        }
+
         input.addEventListener('input', () => {
           hidden.value = '';
           input.setCustomValidity('');
@@ -519,7 +536,7 @@ function renderHtml(
           window.setTimeout(close, 120);
         });
 
-        return { clear, validate };
+        return { clear, validate, value };
       }
 
       const workerCombo = setupSearchableSelect({
@@ -530,6 +547,84 @@ function renderHtml(
         emptyText: messages.selectInvolvedWorker,
         requiredText: messages.selectInvolvedWorker,
       });
+      const additionalWorkerCombos = [];
+
+      function createAdditionalWorkerCombo() {
+        const row = document.createElement('div');
+        row.className = 'worker-row';
+        row.dataset.workerRow = 'true';
+
+        const comboWrap = document.createElement('div');
+        comboWrap.className = 'combo';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.placeholder = messages.selectInvolvedWorker;
+
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'additionalTargetEmployeeId';
+
+        const list = document.createElement('div');
+        list.className = 'combo-list';
+        list.hidden = true;
+
+        comboWrap.append(input, hidden, list);
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'remove-worker';
+        removeButton.textContent = messages.removeInvolvedWorker;
+
+        row.append(comboWrap, removeButton);
+        workerList.appendChild(row);
+
+        const combo = setupSearchableSelect({
+          input,
+          hidden,
+          list,
+          rows: reportData.employees,
+          emptyText: messages.selectInvolvedWorker,
+          requiredText: messages.selectInvolvedWorker,
+        });
+        const entry = { row, combo };
+        additionalWorkerCombos.push(entry);
+        removeButton.addEventListener('click', () => {
+          row.remove();
+          const index = additionalWorkerCombos.indexOf(entry);
+          if (index >= 0) {
+            additionalWorkerCombos.splice(index, 1);
+          }
+        });
+      }
+
+      function clearAdditionalWorkerCombos() {
+        for (const entry of additionalWorkerCombos) {
+          entry.row.remove();
+        }
+        additionalWorkerCombos.length = 0;
+      }
+
+      function clearWorkerCombos() {
+        workerCombo.clear();
+        clearAdditionalWorkerCombos();
+      }
+
+      function getInvolvedEmployeeIds() {
+        return Array.from(new Set([
+          workerCombo.value(),
+          ...additionalWorkerCombos.map((entry) => entry.combo.value()),
+        ].filter(Boolean)));
+      }
+
+      function validateWorkerCombos(required) {
+        let valid = workerCombo.validate(required);
+        for (const entry of additionalWorkerCombos) {
+          valid = entry.combo.validate(typeSelect.value === 'UNSAFE_ACT') && valid;
+        }
+        return valid;
+      }
 
       const injuryTypeCombo = setupSearchableSelect({
         inputId: 'injuryTypeSearch',
@@ -641,7 +736,12 @@ function renderHtml(
 
       function syncWorkerVisibility() {
         const clinicalVisible = typeSelect.value === 'FIRST_AID';
+        const multipleWorkersVisible = typeSelect.value === 'UNSAFE_ACT';
         workerWrap.style.display = 'block';
+        addWorkerButton.style.display = multipleWorkersVisible ? 'inline-flex' : 'none';
+        if (!multipleWorkersVisible) {
+          clearAdditionalWorkerCombos();
+        }
         clinicalWrap.style.display = clinicalVisible ? 'block' : 'none';
         bodyPartSelect.required = clinicalVisible;
         if (!clinicalVisible) {
@@ -653,6 +753,7 @@ function renderHtml(
       syncEventDatetimeMax();
       syncWorkerVisibility();
       typeSelect.addEventListener('change', syncWorkerVisibility);
+      addWorkerButton.addEventListener('click', createAdditionalWorkerCombo);
       eventDatetimeInput.addEventListener('focus', syncEventDatetimeMax);
       eventDatetimeInput.addEventListener('input', validateEventDatetime);
       photosInput.addEventListener('change', () => addSelectedPhotos(Array.from(photosInput.files || [])));
@@ -666,7 +767,7 @@ function renderHtml(
         syncEventDatetimeMax();
         validateEventDatetime();
         const workerRequired = typeSelect.value === 'UNSAFE_ACT' || typeSelect.value === 'NEAR_MISS' || typeSelect.value === 'FIRST_AID';
-        workerCombo.validate(workerRequired);
+        validateWorkerCombos(workerRequired);
         injuryTypeCombo.validate(false);
 
         if (!form.reportValidity()) return;
@@ -674,9 +775,11 @@ function renderHtml(
         const formData = new FormData(form);
         const eventDatetime = getEventDatetime();
         if (!eventDatetime) return;
+        const communicationType = formData.get('type');
+        const involvedEmployeeIds = communicationType === 'UNSAFE_ACT' ? getInvolvedEmployeeIds() : [];
 
         const payload = {
-          type: formData.get('type'),
+          type: communicationType,
           eventDatetime: eventDatetime.toISOString(),
           reporterName: formData.get('reporterName'),
           reporterEmployeeNo: formData.get('reporterEmployeeNo'),
@@ -686,9 +789,10 @@ function renderHtml(
           riskThemeId: undefined,
           unsafeActTypeId: undefined,
           nearMissTypeId: undefined,
-          targetEmployeeId: formData.get('targetEmployeeId') || undefined,
-          injuryTypeId: formData.get('type') === 'FIRST_AID' ? formData.get('injuryTypeId') || undefined : undefined,
-          bodyPartId: formData.get('type') === 'FIRST_AID' ? formData.get('bodyPartId') || undefined : undefined,
+          targetEmployeeId: involvedEmployeeIds[0] || formData.get('targetEmployeeId') || undefined,
+          involvedEmployeeIds: involvedEmployeeIds.length ? involvedEmployeeIds : undefined,
+          injuryTypeId: communicationType === 'FIRST_AID' ? formData.get('injuryTypeId') || undefined : undefined,
+          bodyPartId: communicationType === 'FIRST_AID' ? formData.get('bodyPartId') || undefined : undefined,
           description: formData.get('description'),
           suggestedAction: formData.get('suggestedAction') || undefined,
         };
@@ -897,16 +1001,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
 
   const parsed = await parsePublicReportRequest(request);
   if ("error" in parsed) return parsed.error;
+  const payload = parsed.data.type === CommunicationType.UNSAFE_ACT
+    && !parsed.data.targetEmployeeId
+    && parsed.data.involvedEmployeeIds?.[0]
+    ? {
+        ...parsed.data,
+        targetEmployeeId: parsed.data.involvedEmployeeIds[0],
+      }
+    : parsed.data;
 
   const { CommunicationService, CommunicationValidationError } = await import("@/lib/services/communication-service");
 
-  if (!CommunicationService.isN6AllowedType(parsed.data.type)) {
+  if (!CommunicationService.isN6AllowedType(payload.type)) {
     return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
   }
 
   const duplicateCommunication = await findRecentDuplicatePublicReport(
     plant.id,
-    parsed.data,
+    payload,
     CommunicationSource.TOKEN_REPORT,
     CommunicationType.FIRST_AID,
   );
@@ -967,7 +1079,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
       return await CommunicationService.create({
         plantId: plant.id,
         payload: {
-          ...parsed.data,
+          ...payload,
           attachments: uploadedAttachments,
           riskThemeId: undefined,
           unsafeActTypeId: undefined,

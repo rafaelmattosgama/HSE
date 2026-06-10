@@ -68,6 +68,10 @@ function resolveReporterName(input: {
   return input.employeeName?.trim() || input.submittedName.trim() || input.fallback;
 }
 
+function uniqueIds(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
 async function resolveReporterForApproval(input: {
   plantId: string;
   reporterEmployeeNo: string | null;
@@ -277,6 +281,10 @@ export const CommunicationService = {
   }) {
     const reporterEmployeeNo = input.payload.reporterEmployeeNo?.trim() || undefined;
     const targetEmployeeNo = input.payload.targetEmployeeNo?.trim() || undefined;
+    const requestedInvolvedEmployeeIds = input.payload.type === CommunicationType.UNSAFE_ACT
+      ? uniqueIds(input.payload.involvedEmployeeIds ?? [])
+      : [];
+    const requestedTargetEmployeeId = input.payload.targetEmployeeId ?? requestedInvolvedEmployeeIds[0];
     const [reporterEmployee, targetEmployee] = await Promise.all([
       reporterEmployeeNo
         ? prisma.employeeDirectory.findUnique({
@@ -289,9 +297,9 @@ export const CommunicationService = {
             select: { id: true, name: true, employeeNo: true },
           })
         : Promise.resolve(null),
-      input.payload.targetEmployeeId
+      requestedTargetEmployeeId
         ? prisma.employeeDirectory.findUnique({
-            where: { id: input.payload.targetEmployeeId },
+            where: { id: requestedTargetEmployeeId },
             select: { id: true, name: true, employeeNo: true },
           })
         : targetEmployeeNo
@@ -312,9 +320,28 @@ export const CommunicationService = {
       employeeName: reporterEmployee?.name,
       fallback: "Unknown reporter",
     });
-    const resolvedTargetEmployeeId = input.payload.targetEmployeeId ?? targetEmployee?.id ?? null;
+    const resolvedTargetEmployeeId = requestedTargetEmployeeId ?? targetEmployee?.id ?? null;
     const resolvedTargetEmployeeNo = targetEmployee?.employeeNo ?? targetEmployeeNo ?? null;
     const resolvedTargetText = input.payload.targetText?.trim() || targetEmployee?.name || undefined;
+    const involvedEmployeeIds = input.payload.type === CommunicationType.UNSAFE_ACT
+      ? uniqueIds([resolvedTargetEmployeeId, ...requestedInvolvedEmployeeIds])
+      : [];
+
+    if (involvedEmployeeIds.length > 0) {
+      const activeInvolvedEmployees = await prisma.employeeDirectory.findMany({
+        where: {
+          id: { in: involvedEmployeeIds },
+          plantId: input.plantId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const validEmployeeIds = new Set(activeInvolvedEmployees.map((employee) => employee.id));
+      const hasInvalidEmployee = involvedEmployeeIds.some((employeeId) => !validEmployeeIds.has(employeeId));
+      if (hasInvalidEmployee) {
+        throw new CommunicationValidationError("INVALID_INVOLVED_WORKER", "Select valid involved workers for this plant", 400);
+      }
+    }
 
     const { riskThemeId, unsafeActTypeId, unsafeConditionTypeId, nearMissTypeId } = await resolveCommunicationClassification({
       plantId: input.plantId,
@@ -377,9 +404,27 @@ export const CommunicationService = {
               },
             }
           : undefined,
+        involvedEmployees: involvedEmployeeIds.length
+          ? {
+              createMany: {
+                data: involvedEmployeeIds.map((employeeId, index) => ({
+                  employeeId,
+                  sortOrder: index,
+                })),
+              },
+            }
+          : undefined,
       },
       include: {
         attachments: true,
+        involvedEmployees: {
+          include: {
+            employee: true,
+          },
+          orderBy: {
+            sortOrder: "asc",
+          },
+        },
       },
     });
 

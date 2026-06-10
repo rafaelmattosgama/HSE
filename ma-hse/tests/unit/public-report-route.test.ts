@@ -190,6 +190,53 @@ describe("public report route", () => {
     expect(Array.from(options).at(-1)?.textContent).toBe("055 - Worker 55");
   });
 
+  it("shows the add involved worker action only for unsafe act reports", async () => {
+    plantMock.findPlantByCode.mockResolvedValue({
+      id: "plant-1",
+      code: "maap",
+      defaultLanguage: "en",
+    });
+    rateLimitMock.consumeRateLimit.mockResolvedValue({ allowed: true });
+    tokenMock.verifyPlantToken.mockResolvedValue({ id: "token-1" });
+    shiftServiceMock.ensureDefaultShifts.mockResolvedValue(undefined);
+    prismaMock.area.findMany.mockResolvedValue([]);
+    prismaMock.workstation.findMany.mockResolvedValue([]);
+    prismaMock.shift.findMany.mockResolvedValue([]);
+    prismaMock.employeeDirectory.findMany.mockResolvedValue([
+      { id: "worker-1", name: "Worker One", employeeNo: "001" },
+      { id: "worker-2", name: "Worker Two", employeeNo: "002" },
+    ]);
+    prismaMock.bodyPart.findMany.mockResolvedValue([]);
+    prismaMock.injuryType.findMany.mockResolvedValue([]);
+    prismaMock.$transaction.mockImplementation(async (queries) => Promise.all(queries));
+
+    const response = await GET(
+      new NextRequest("http://localhost/r/maap/report?t=qr-token"),
+      routeContext(),
+    );
+    const dom = new JSDOM(await response.text(), {
+      runScripts: "dangerously",
+      url: "http://localhost/r/maap/report?t=qr-token",
+    });
+
+    const typeSelect = dom.window.document.getElementById("type") as HTMLSelectElement;
+    const addWorker = dom.window.document.getElementById("add-worker") as HTMLButtonElement;
+
+    expect(addWorker.textContent).toBe("Add involved worker");
+    expect(addWorker.style.display).toBe("none");
+
+    typeSelect.value = CommunicationType.UNSAFE_ACT;
+    typeSelect.dispatchEvent(new dom.window.Event("change"));
+
+    expect(addWorker.style.display).toBe("inline-flex");
+
+    addWorker.click();
+    addWorker.click();
+
+    expect(dom.window.document.querySelectorAll("[data-worker-row]")).toHaveLength(3);
+    expect(dom.window.document.querySelectorAll("input[name='additionalTargetEmployeeId']")).toHaveLength(2);
+  });
+
   it("keeps public report JSON submission working without photos", async () => {
     mockSubmitDependencies();
 
@@ -213,6 +260,42 @@ describe("public report route", () => {
         payload: expect.objectContaining({
           description: "Unsafe condition from public QR form.",
           attachments: [],
+        }),
+      }),
+    );
+  });
+
+  it("passes every selected unsafe act involved worker to communication creation", async () => {
+    mockSubmitDependencies();
+
+    const workerIds = [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+    ];
+
+    const response = await POST(
+      new NextRequest("http://localhost/r/maap/report?t=qr-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...validPayload,
+          type: CommunicationType.UNSAFE_ACT,
+          targetEmployeeId: undefined,
+          involvedEmployeeIds: workerIds,
+          description: "Unsafe act from public QR form.",
+        }),
+      }),
+      routeContext(),
+    );
+
+    expect(response.status).toBe(201);
+    expect(communicationServiceMock.CommunicationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plantId: "plant-1",
+        payload: expect.objectContaining({
+          type: CommunicationType.UNSAFE_ACT,
+          targetEmployeeId: workerIds[0],
+          involvedEmployeeIds: workerIds,
         }),
       }),
     );

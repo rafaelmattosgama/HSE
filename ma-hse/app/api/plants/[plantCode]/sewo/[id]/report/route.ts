@@ -9,6 +9,29 @@ import { SewoExportService } from "@/lib/services/sewo-export";
 
 const ALLOWED_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY];
 
+function getExportErrorLogDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      err: error,
+      errorName: error.name,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      errorCause: error.cause instanceof Error
+        ? {
+            name: error.cause.name,
+            message: error.cause.message,
+            stack: error.cause.stack,
+          }
+        : error.cause,
+    };
+  }
+
+  return {
+    err: error,
+    errorMessage: String(error),
+  };
+}
+
 export async function GET(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
   const auth = await requirePlantAccess(plantCode, ALLOWED_ROLES);
@@ -63,7 +86,7 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
   } catch (error) {
     logger.error(
       {
-        error,
+        ...getExportErrorLogDetails(error),
         plantCode,
         sewoId: id,
         format,

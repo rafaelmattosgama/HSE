@@ -17,6 +17,7 @@ const communicationInputShape = z.object({
     targetText: z.string().optional(),
     targetEmployeeNo: z.string().optional(),
     targetEmployeeId: optionalUuid,
+    involvedEmployeeIds: z.array(z.string().uuid()).optional(),
     shiftId: optionalUuid,
     areaId: optionalUuid,
     lineId: optionalUuid,
@@ -86,8 +87,9 @@ function validateCommunicationPayload(
     }
 
     const requiresInvolvedWorker = value.type === CommunicationType.UNSAFE_ACT || value.type === CommunicationType.NEAR_MISS;
+    const hasInvolvedEmployees = (value.involvedEmployeeIds?.length ?? 0) > 0;
 
-    if (requiresInvolvedWorker && !value.targetText && !value.targetEmployeeId && !value.targetEmployeeNo) {
+    if (requiresInvolvedWorker && !value.targetText && !value.targetEmployeeId && !value.targetEmployeeNo && !hasInvolvedEmployees) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "This communication requires involved worker information",
