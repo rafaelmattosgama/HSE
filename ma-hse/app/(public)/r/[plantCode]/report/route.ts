@@ -163,6 +163,7 @@ async function findRecentDuplicatePublicReport(
       areaId: optionalId(payload.areaId),
       workstationId: optionalId(payload.workstationId),
       targetEmployeeId: optionalId(payload.targetEmployeeId),
+      improvementSubtype: payload.improvementSubtype ?? null,
       bodyPartId: payload.type === firstAidType ? optionalId(payload.bodyPartId) : null,
       injuryTypeId: payload.type === firstAidType ? optionalId(payload.injuryTypeId) : null,
       description: payload.description,
@@ -281,7 +282,16 @@ function renderHtml(
             <option value="UNSAFE_CONDITION" selected>${escapeHtml(text.typeUnsafeCondition)}</option>
             <option value="NEAR_MISS">${escapeHtml(text.typeNearMiss)}</option>
             <option value="FIRST_AID">${escapeHtml(text.typeFirstAid)}</option>
+            <option value="FIVE_S_IMPROVEMENT">${escapeHtml(text.typeFiveSImprovement)}</option>
+            <option value="IMPROVEMENT_SUGGESTION">${escapeHtml(text.typeImprovementSuggestion)}</option>
           </select>
+
+          <div id="improvement-subtype-wrap" style="display:none">
+            <label>${escapeHtml(text.improvementSubtype)}</label>
+            <select name="improvementSubtype" id="improvementSubtype">
+              <option value="">${escapeHtml(text.selectImprovementSubtype)}</option>
+            </select>
+          </div>
 
           <label>${escapeHtml(text.dateTime)}</label>
           <input id="eventDatetime" name="eventDatetime" type="datetime-local" required />
@@ -362,6 +372,8 @@ function renderHtml(
       const form = document.getElementById('report-form');
       const msg = document.getElementById('msg');
       const typeSelect = document.getElementById('type');
+      const improvementSubtypeWrap = document.getElementById('improvement-subtype-wrap');
+      const improvementSubtypeSelect = document.getElementById('improvementSubtype');
       const workerWrap = document.getElementById('worker-wrap');
       const workerList = document.getElementById('worker-list');
       const addWorkerButton = document.getElementById('add-worker');
@@ -394,6 +406,18 @@ function renderHtml(
         photoTotalTooLarge: ${safeJson(photoText.totalTooLarge)},
         photoUploadFailed: ${safeJson(photoText.uploadFailed)},
         photoRemove: ${safeJson(photoText.remove)},
+        selectImprovementSubtype: ${safeJson(text.selectImprovementSubtype)},
+      };
+      const improvementSubtypeOptions = {
+        FIVE_S_IMPROVEMENT: [
+          { value: 'FIVE_S_AREA_IMPROVEMENT', label: ${safeJson(text.fiveSAreaImprovement)} },
+          { value: 'FIVE_S_DISORGANIZATION', label: ${safeJson(text.fiveSDisorganization)} },
+        ],
+        IMPROVEMENT_SUGGESTION: [
+          { value: 'IMPROVEMENT_SAFETY', label: ${safeJson(text.improvementSafety)} },
+          { value: 'IMPROVEMENT_HEALTH', label: ${safeJson(text.improvementHealth)} },
+          { value: 'IMPROVEMENT_ENVIRONMENT', label: ${safeJson(text.improvementEnvironment)} },
+        ],
       };
       const photoLimits = {
         maxFiles: ${PUBLIC_REPORT_PHOTO_LIMITS.maxFiles},
@@ -737,9 +761,29 @@ function renderHtml(
       function syncWorkerVisibility() {
         const clinicalVisible = typeSelect.value === 'FIRST_AID';
         const multipleWorkersVisible = typeSelect.value === 'UNSAFE_ACT';
-        workerWrap.style.display = 'block';
+        const workerVisible = typeSelect.value !== 'FIVE_S_IMPROVEMENT' && typeSelect.value !== 'IMPROVEMENT_SUGGESTION';
+        const subtypeOptions = improvementSubtypeOptions[typeSelect.value] || [];
+        improvementSubtypeWrap.style.display = subtypeOptions.length ? 'block' : 'none';
+        improvementSubtypeSelect.required = Boolean(subtypeOptions.length);
+        improvementSubtypeSelect.replaceChildren();
+        const emptySubtypeOption = document.createElement('option');
+        emptySubtypeOption.value = '';
+        emptySubtypeOption.textContent = messages.selectImprovementSubtype;
+        improvementSubtypeSelect.appendChild(emptySubtypeOption);
+        for (const option of subtypeOptions) {
+          const subtypeOption = document.createElement('option');
+          subtypeOption.value = option.value;
+          subtypeOption.textContent = option.label;
+          improvementSubtypeSelect.appendChild(subtypeOption);
+        }
+        if (!subtypeOptions.length) {
+          improvementSubtypeSelect.value = '';
+        }
+        workerWrap.style.display = workerVisible ? 'block' : 'none';
         addWorkerButton.style.display = multipleWorkersVisible ? 'inline-flex' : 'none';
-        if (!multipleWorkersVisible) {
+        if (!workerVisible) {
+          clearWorkerCombos();
+        } else if (!multipleWorkersVisible) {
           clearAdditionalWorkerCombos();
         }
         clinicalWrap.style.display = clinicalVisible ? 'block' : 'none';
@@ -776,6 +820,7 @@ function renderHtml(
         const eventDatetime = getEventDatetime();
         if (!eventDatetime) return;
         const communicationType = formData.get('type');
+        const hasImprovementSubtype = communicationType === 'FIVE_S_IMPROVEMENT' || communicationType === 'IMPROVEMENT_SUGGESTION';
         const involvedEmployeeIds = communicationType === 'UNSAFE_ACT' ? getInvolvedEmployeeIds() : [];
 
         const payload = {
@@ -788,8 +833,10 @@ function renderHtml(
           workstationId: formData.get('workstationId'),
           riskThemeId: undefined,
           unsafeActTypeId: undefined,
+          unsafeConditionTypeId: undefined,
           nearMissTypeId: undefined,
-          targetEmployeeId: involvedEmployeeIds[0] || formData.get('targetEmployeeId') || undefined,
+          improvementSubtype: hasImprovementSubtype ? formData.get('improvementSubtype') || undefined : undefined,
+          targetEmployeeId: hasImprovementSubtype ? undefined : involvedEmployeeIds[0] || formData.get('targetEmployeeId') || undefined,
           involvedEmployeeIds: involvedEmployeeIds.length ? involvedEmployeeIds : undefined,
           injuryTypeId: communicationType === 'FIRST_AID' ? formData.get('injuryTypeId') || undefined : undefined,
           bodyPartId: communicationType === 'FIRST_AID' ? formData.get('bodyPartId') || undefined : undefined,
@@ -1013,7 +1060,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
   const { CommunicationService, CommunicationValidationError } = await import("@/lib/services/communication-service");
 
   if (!CommunicationService.isN6AllowedType(payload.type)) {
-    return fail("TYPE_NOT_ALLOWED", "N6 can only submit Unsafe Act, Unsafe Condition, Near Miss or First Aid", 403);
+    return fail("TYPE_NOT_ALLOWED", "N6 can only submit the allowed public communication types", 403);
   }
 
   const duplicateCommunication = await findRecentDuplicatePublicReport(

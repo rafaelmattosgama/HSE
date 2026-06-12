@@ -30,6 +30,13 @@ export function requiresUnsafeConditionType(type: CommunicationType) {
   return type === CommunicationType.UNSAFE_CONDITION;
 }
 
+export function requiresImprovementSubtype(type: CommunicationType) {
+  return (
+    type === CommunicationType.FIVE_S_IMPROVEMENT ||
+    type === CommunicationType.IMPROVEMENT_SUGGESTION
+  );
+}
+
 export function shouldDeferPublicReportProfessionalRisk(type: CommunicationType) {
   return type === CommunicationType.NEAR_MISS || type === CommunicationType.FIRST_AID;
 }
@@ -52,6 +59,7 @@ export function getMissingCommunicationClassificationFields(input: {
   unsafeActTypeId?: string | null;
   unsafeConditionTypeId?: string | null;
   nearMissTypeId?: string | null;
+  improvementSubtype?: string | null;
 }) {
   const missing: string[] = [];
 
@@ -69,6 +77,10 @@ export function getMissingCommunicationClassificationFields(input: {
 
   if (requiresNearMissType(input.type) && !input.nearMissTypeId) {
     missing.push("nearMissTypeId");
+  }
+
+  if (requiresImprovementSubtype(input.type) && !input.improvementSubtype) {
+    missing.push("improvementSubtype");
   }
 
   return missing;

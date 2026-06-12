@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ActionPriority, CommunicationType } from "@prisma/client";
+import { ActionPriority, CommunicationImprovementSubtype, CommunicationType } from "@prisma/client";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-select";
@@ -17,6 +17,27 @@ type Option = {
   code?: string;
   category?: string;
 };
+
+const COMMUNICATION_TYPES: CommunicationType[] = [
+  "UNSAFE_ACT",
+  "UNSAFE_CONDITION",
+  "NEAR_MISS",
+  "FIRST_AID",
+  "ACCIDENT",
+  "FIVE_S_IMPROVEMENT",
+  "IMPROVEMENT_SUGGESTION",
+];
+
+const FIVE_S_IMPROVEMENT_SUBTYPES: CommunicationImprovementSubtype[] = [
+  "FIVE_S_AREA_IMPROVEMENT",
+  "FIVE_S_DISORGANIZATION",
+];
+
+const IMPROVEMENT_SUGGESTION_SUBTYPES: CommunicationImprovementSubtype[] = [
+  "IMPROVEMENT_SAFETY",
+  "IMPROVEMENT_HEALTH",
+  "IMPROVEMENT_ENVIRONMENT",
+];
 
 export function CreateCommunicationQuick({
   areas,
@@ -52,6 +73,7 @@ export function CreateCommunicationQuick({
   const text = labels ?? BASE_COMMUNICATION_UI.createCommunicationQuick;
   const communicationTypeLabels =
     typeLabels ?? BASE_COMMUNICATION_UI.communicationTypeLabels;
+  const improvementSubtypeLabels = BASE_COMMUNICATION_UI.communicationImprovementSubtypeLabels;
   const pathname = usePathname();
   const [type, setType] = useState<CommunicationType>("UNSAFE_CONDITION");
   const [eventDatetime, setEventDatetime] = useState("");
@@ -62,6 +84,7 @@ export function CreateCommunicationQuick({
   const [unsafeActTypeId, setUnsafeActTypeId] = useState("");
   const [unsafeConditionTypeId, setUnsafeConditionTypeId] = useState("");
   const [nearMissTypeId, setNearMissTypeId] = useState("");
+  const [improvementSubtype, setImprovementSubtype] = useState<CommunicationImprovementSubtype | "">("");
   const [targetEmployeeId, setTargetEmployeeId] = useState("");
   const [bodyPartId, setBodyPartId] = useState("");
   const [injuryTypeId, setInjuryTypeId] = useState("");
@@ -85,6 +108,13 @@ export function CreateCommunicationQuick({
   const needsUnsafeActType = type === "UNSAFE_ACT" || (type === "FIRST_AID" && canManageClassification);
   const needsUnsafeConditionType = type === "UNSAFE_CONDITION" && canManageClassification;
   const needsNearMissType = type === "NEAR_MISS" && canManageClassification;
+  const improvementSubtypeOptions =
+    type === "FIVE_S_IMPROVEMENT"
+      ? FIVE_S_IMPROVEMENT_SUBTYPES
+      : type === "IMPROVEMENT_SUGGESTION"
+        ? IMPROVEMENT_SUGGESTION_SUBTYPES
+        : [];
+  const needsImprovementSubtype = improvementSubtypeOptions.length > 0;
   const needsClinicalFields = type === "FIRST_AID" || type === "ACCIDENT";
   const shouldCreateAction = canLinkAction && (actionTitle.trim().length > 0 || actionDescription.trim().length > 0);
   const reporterEmployee = employees.find((employee) => employee.id === reporterEmployeeId) ?? null;
@@ -155,6 +185,7 @@ export function CreateCommunicationQuick({
           unsafeActTypeId: needsUnsafeActType ? unsafeActTypeId || undefined : undefined,
           unsafeConditionTypeId: needsUnsafeConditionType ? unsafeConditionTypeId || undefined : undefined,
           nearMissTypeId: needsNearMissType ? nearMissTypeId || undefined : undefined,
+          improvementSubtype: needsImprovementSubtype ? improvementSubtype || undefined : undefined,
           targetText: needsInvolvedWorker ? targetEmployee?.name || undefined : undefined,
           targetEmployeeId: needsInvolvedWorker || needsClinicalFields ? targetEmployeeId || undefined : undefined,
           description,
@@ -193,6 +224,7 @@ export function CreateCommunicationQuick({
         setUnsafeActTypeId("");
         setUnsafeConditionTypeId("");
         setNearMissTypeId("");
+        setImprovementSubtype("");
         setTargetEmployeeId("");
         setBodyPartId("");
         setInjuryTypeId("");
@@ -216,8 +248,15 @@ export function CreateCommunicationQuick({
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-slate-900">{text.title}</h3>
-      <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-        {(["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS", "FIRST_AID", "ACCIDENT"] as CommunicationType[]).map((option) => (
+      <select value={type} onChange={(event) => {
+        const nextType = event.target.value as CommunicationType;
+        setType(nextType);
+        setImprovementSubtype("");
+        if (nextType === "FIVE_S_IMPROVEMENT" || nextType === "IMPROVEMENT_SUGGESTION") {
+          setTargetEmployeeId("");
+        }
+      }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+        {COMMUNICATION_TYPES.map((option) => (
           <option key={option} value={option}>
             {communicationTypeLabels[option] ?? option}
           </option>
@@ -290,6 +329,14 @@ export function CreateCommunicationQuick({
           <option value="">{text.involvedWorkerFromPlantWorkers}</option>
           {employees.map((employee) => (
             <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
+          ))}
+        </select>
+      ) : null}
+      {needsImprovementSubtype ? (
+        <select value={improvementSubtype} onChange={(event) => setImprovementSubtype(event.target.value as CommunicationImprovementSubtype)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+          <option value="">{text.improvementSubtype}</option>
+          {improvementSubtypeOptions.map((option) => (
+            <option key={option} value={option}>{improvementSubtypeLabels[option] ?? option}</option>
           ))}
         </select>
       ) : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionStatus, CommunicationStatus, CommunicationType } from "@prisma/client";
+import { ActionStatus, CommunicationImprovementSubtype, CommunicationStatus, CommunicationType } from "@prisma/client";
 import { useState } from "react";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
@@ -25,6 +25,27 @@ type ActionOwnerOption = {
   label: string;
 };
 
+const COMMUNICATION_TYPES: CommunicationType[] = [
+  "UNSAFE_ACT",
+  "UNSAFE_CONDITION",
+  "NEAR_MISS",
+  "FIRST_AID",
+  "ACCIDENT",
+  "FIVE_S_IMPROVEMENT",
+  "IMPROVEMENT_SUGGESTION",
+];
+
+const FIVE_S_IMPROVEMENT_SUBTYPES: CommunicationImprovementSubtype[] = [
+  "FIVE_S_AREA_IMPROVEMENT",
+  "FIVE_S_DISORGANIZATION",
+];
+
+const IMPROVEMENT_SUGGESTION_SUBTYPES: CommunicationImprovementSubtype[] = [
+  "IMPROVEMENT_SAFETY",
+  "IMPROVEMENT_HEALTH",
+  "IMPROVEMENT_ENVIRONMENT",
+];
+
 type CommunicationRecord = {
   id: string;
   type: CommunicationType;
@@ -43,6 +64,7 @@ type CommunicationRecord = {
   unsafeActTypeId: string | null;
   unsafeConditionTypeId: string | null;
   nearMissTypeId: string | null;
+  improvementSubtype: CommunicationImprovementSubtype | null;
   description: string;
   suggestedAction: string | null;
   severityPotential: "LOW" | "MED" | "HIGH" | null;
@@ -102,6 +124,7 @@ export function CommunicationDetailEditor({
   bodyZonePickerLabels?: BodyZonePickerLabels;
 }) {
   const text = labels ?? BASE_COMMUNICATION_UI.detailEditor;
+  const improvementSubtypeLabels = BASE_COMMUNICATION_UI.communicationImprovementSubtypeLabels;
   const [type, setType] = useState<CommunicationType>(communication.type);
   const [eventDatetime, setEventDatetime] = useState(communication.eventDatetime.slice(0, 16));
   const [reporterEmployeeNo, setReporterEmployeeNo] = useState(communication.reporterEmployeeNo ?? "");
@@ -114,6 +137,7 @@ export function CommunicationDetailEditor({
   const [unsafeActTypeId, setUnsafeActTypeId] = useState(communication.unsafeActTypeId ?? "");
   const [unsafeConditionTypeId, setUnsafeConditionTypeId] = useState(communication.unsafeConditionTypeId ?? "");
   const [nearMissTypeId, setNearMissTypeId] = useState(communication.nearMissTypeId ?? "");
+  const [improvementSubtype, setImprovementSubtype] = useState<CommunicationImprovementSubtype | "">(communication.improvementSubtype ?? "");
   const [description, setDescription] = useState(communication.description);
   const [suggestedAction, setSuggestedAction] = useState(communication.suggestedAction ?? "");
   const [severityPotential, setSeverityPotential] = useState(communication.severityPotential ?? "");
@@ -135,6 +159,13 @@ export function CommunicationDetailEditor({
   const needsUnsafeActType = type === "UNSAFE_ACT" || (type === "FIRST_AID" && canManageClassification);
   const needsUnsafeConditionType = type === "UNSAFE_CONDITION" && canManageClassification;
   const needsNearMissType = type === "NEAR_MISS" && canManageClassification;
+  const improvementSubtypeOptions =
+    type === "FIVE_S_IMPROVEMENT"
+      ? FIVE_S_IMPROVEMENT_SUBTYPES
+      : type === "IMPROVEMENT_SUGGESTION"
+        ? IMPROVEMENT_SUGGESTION_SUBTYPES
+        : [];
+  const needsImprovementSubtype = improvementSubtypeOptions.length > 0;
   const needsClinicalFields = type === "FIRST_AID" || type === "ACCIDENT";
   const selectedReporter = employees.find((employee) => employee.employeeNo === reporterEmployeeNo) ?? null;
   const selectedTarget = employees.find((employee) => employee.id === targetEmployeeId) ?? null;
@@ -165,6 +196,7 @@ export function CommunicationDetailEditor({
           unsafeActTypeId: needsUnsafeActType ? unsafeActTypeId || undefined : undefined,
           unsafeConditionTypeId: needsUnsafeConditionType ? unsafeConditionTypeId || undefined : undefined,
           nearMissTypeId: needsNearMissType ? nearMissTypeId || undefined : undefined,
+          improvementSubtype: needsImprovementSubtype ? improvementSubtype || undefined : undefined,
           description,
           suggestedAction: suggestedAction || undefined,
           severityPotential: severityPotential || undefined,
@@ -293,8 +325,15 @@ export function CommunicationDetailEditor({
         ) : null}
 
         <div className="grid gap-3 md:grid-cols-3">
-          <select value={type} onChange={(event) => setType(event.target.value as CommunicationType)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
-            {(["UNSAFE_ACT", "UNSAFE_CONDITION", "NEAR_MISS", "FIRST_AID", "ACCIDENT"] as CommunicationType[]).map((option) => (
+          <select value={type} onChange={(event) => {
+            const nextType = event.target.value as CommunicationType;
+            setType(nextType);
+            setImprovementSubtype("");
+            if (nextType === "FIVE_S_IMPROVEMENT" || nextType === "IMPROVEMENT_SUGGESTION") {
+              setTargetEmployeeId("");
+            }
+          }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit}>
+            {COMMUNICATION_TYPES.map((option) => (
               <option key={option} value={option}>{typeLabels[option] ?? option}</option>
             ))}
           </select>
@@ -385,6 +424,15 @@ export function CommunicationDetailEditor({
             <option value="">{text.nearMissType}</option>
             {nearMissTypes.map((entry) => (
               <option key={entry.id} value={entry.id}>{entry.name}</option>
+            ))}
+          </select>
+        ) : null}
+
+        {needsImprovementSubtype ? (
+          <select value={improvementSubtype} onChange={(event) => setImprovementSubtype(event.target.value as CommunicationImprovementSubtype)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
+            <option value="">{text.improvementSubtype}</option>
+            {improvementSubtypeOptions.map((option) => (
+              <option key={option} value={option}>{improvementSubtypeLabels[option] ?? option}</option>
             ))}
           </select>
         ) : null}

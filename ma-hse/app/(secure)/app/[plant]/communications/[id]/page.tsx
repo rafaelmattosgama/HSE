@@ -233,6 +233,7 @@ export default async function CommunicationDetailPage({
           unsafeActTypeId: canManageClassification || communication.type !== "FIRST_AID" ? communication.unsafeActTypeId : null,
           unsafeConditionTypeId: canManageClassification ? communication.unsafeConditionTypeId : null,
           nearMissTypeId: canManageClassification ? communication.nearMissTypeId : null,
+          improvementSubtype: communication.improvementSubtype,
           description: communication.description,
           suggestedAction: communication.suggestedAction,
           severityPotential: communication.severityPotential,

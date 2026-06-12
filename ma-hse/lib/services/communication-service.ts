@@ -1,4 +1,4 @@
-import { ActionPriority, CommunicationSource, CommunicationStatus, CommunicationType, Prisma, RoleCode } from "@prisma/client";
+import { ActionPriority, CommunicationImprovementSubtype, CommunicationSource, CommunicationStatus, CommunicationType, Prisma, RoleCode } from "@prisma/client";
 import { addDays } from "date-fns";
 import { writeAuditLog, buildDiff } from "@/lib/audit";
 import { OPEN_LINKED_ACTION_STATUSES } from "@/lib/communication-status";
@@ -33,6 +33,15 @@ const ALERT_TYPES: CommunicationType[] = [
 const REPORTER_REVIEW_REQUIRED_MESSAGE = "Open the communication and select a valid reporter before validating.";
 const CLASSIFICATION_REQUIRED_MESSAGE = "Complete the required classification fields before validating.";
 const OPEN_LINKED_ACTIONS_MESSAGE = "Cannot close this communication because linked actions are still open.";
+const FIVE_S_IMPROVEMENT_SUBTYPES: CommunicationImprovementSubtype[] = [
+  CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+  CommunicationImprovementSubtype.FIVE_S_DISORGANIZATION,
+];
+const IMPROVEMENT_SUGGESTION_SUBTYPES: CommunicationImprovementSubtype[] = [
+  CommunicationImprovementSubtype.IMPROVEMENT_SAFETY,
+  CommunicationImprovementSubtype.IMPROVEMENT_HEALTH,
+  CommunicationImprovementSubtype.IMPROVEMENT_ENVIRONMENT,
+];
 
 function runCommunicationSideEffect(
   task: () => Promise<unknown>,
@@ -70,6 +79,34 @@ function resolveReporterName(input: {
 
 function uniqueIds(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function isImprovementCommunicationType(type: CommunicationType) {
+  return (
+    type === CommunicationType.FIVE_S_IMPROVEMENT ||
+    type === CommunicationType.IMPROVEMENT_SUGGESTION
+  );
+}
+
+function resolveCommunicationImprovementSubtype(input: {
+  type: CommunicationType;
+  improvementSubtype?: CommunicationImprovementSubtype | null;
+}) {
+  if (input.type === CommunicationType.FIVE_S_IMPROVEMENT) {
+    if (!input.improvementSubtype || !FIVE_S_IMPROVEMENT_SUBTYPES.includes(input.improvementSubtype)) {
+      throw new CommunicationValidationError("IMPROVEMENT_SUBTYPE_REQUIRED", "Select a valid improvement subtype", 400);
+    }
+    return input.improvementSubtype;
+  }
+
+  if (input.type === CommunicationType.IMPROVEMENT_SUGGESTION) {
+    if (!input.improvementSubtype || !IMPROVEMENT_SUGGESTION_SUBTYPES.includes(input.improvementSubtype)) {
+      throw new CommunicationValidationError("IMPROVEMENT_SUBTYPE_REQUIRED", "Select a valid improvement subtype", 400);
+    }
+    return input.improvementSubtype;
+  }
+
+  return null;
 }
 
 async function resolveReporterForApproval(input: {
@@ -281,10 +318,13 @@ export const CommunicationService = {
   }) {
     const reporterEmployeeNo = input.payload.reporterEmployeeNo?.trim() || undefined;
     const targetEmployeeNo = input.payload.targetEmployeeNo?.trim() || undefined;
+    const shouldIgnoreWorker = isImprovementCommunicationType(input.payload.type);
     const requestedInvolvedEmployeeIds = input.payload.type === CommunicationType.UNSAFE_ACT
       ? uniqueIds(input.payload.involvedEmployeeIds ?? [])
       : [];
-    const requestedTargetEmployeeId = input.payload.targetEmployeeId ?? requestedInvolvedEmployeeIds[0];
+    const requestedTargetEmployeeId = shouldIgnoreWorker
+      ? undefined
+      : input.payload.targetEmployeeId ?? requestedInvolvedEmployeeIds[0];
     const [reporterEmployee, targetEmployee] = await Promise.all([
       reporterEmployeeNo
         ? prisma.employeeDirectory.findUnique({
@@ -297,7 +337,9 @@ export const CommunicationService = {
             select: { id: true, name: true, employeeNo: true },
           })
         : Promise.resolve(null),
-      requestedTargetEmployeeId
+      shouldIgnoreWorker
+        ? Promise.resolve(null)
+        : requestedTargetEmployeeId
         ? prisma.employeeDirectory.findUnique({
             where: { id: requestedTargetEmployeeId },
             select: { id: true, name: true, employeeNo: true },
@@ -320,9 +362,11 @@ export const CommunicationService = {
       employeeName: reporterEmployee?.name,
       fallback: "Unknown reporter",
     });
-    const resolvedTargetEmployeeId = requestedTargetEmployeeId ?? targetEmployee?.id ?? null;
-    const resolvedTargetEmployeeNo = targetEmployee?.employeeNo ?? targetEmployeeNo ?? null;
-    const resolvedTargetText = input.payload.targetText?.trim() || targetEmployee?.name || undefined;
+    const resolvedTargetEmployeeId = shouldIgnoreWorker ? null : requestedTargetEmployeeId ?? targetEmployee?.id ?? null;
+    const resolvedTargetEmployeeNo = shouldIgnoreWorker ? null : targetEmployee?.employeeNo ?? targetEmployeeNo ?? null;
+    const resolvedTargetText = shouldIgnoreWorker
+      ? undefined
+      : input.payload.targetText?.trim() || targetEmployee?.name || undefined;
     const involvedEmployeeIds = input.payload.type === CommunicationType.UNSAFE_ACT
       ? uniqueIds([resolvedTargetEmployeeId, ...requestedInvolvedEmployeeIds])
       : [];
@@ -352,6 +396,10 @@ export const CommunicationService = {
       nearMissTypeId: input.payload.nearMissTypeId,
       actorRole: input.actorRole,
       source: input.source,
+    });
+    const improvementSubtype = resolveCommunicationImprovementSubtype({
+      type: input.payload.type,
+      improvementSubtype: input.payload.improvementSubtype,
     });
 
     const leave = calculateLeaveFields({
@@ -385,6 +433,7 @@ export const CommunicationService = {
         unsafeActTypeId,
         unsafeConditionTypeId,
         nearMissTypeId,
+        improvementSubtype,
         description: input.payload.description,
         suggestedAction: input.payload.suggestedAction,
         severityPotential: input.payload.severityPotential,
@@ -887,6 +936,8 @@ export const CommunicationService = {
       CommunicationType.UNSAFE_CONDITION,
       CommunicationType.NEAR_MISS,
       CommunicationType.FIRST_AID,
+      CommunicationType.FIVE_S_IMPROVEMENT,
+      CommunicationType.IMPROVEMENT_SUGGESTION,
     ];
     return allowed.includes(type);
   },
@@ -959,6 +1010,10 @@ export const CommunicationService = {
       nearMissTypeId: input.payload.nearMissTypeId,
       actorRole: input.actorRole,
     });
+    const improvementSubtype = resolveCommunicationImprovementSubtype({
+      type: input.payload.type,
+      improvementSubtype: input.payload.improvementSubtype,
+    });
 
     const leave = calculateLeaveFields({
       eventDatetime: input.payload.eventDatetime,
@@ -987,6 +1042,7 @@ export const CommunicationService = {
         unsafeActTypeId,
         unsafeConditionTypeId,
         nearMissTypeId,
+        improvementSubtype,
         description: input.payload.description,
         suggestedAction: input.payload.suggestedAction?.trim() || null,
         severityPotential: input.payload.severityPotential ?? null,

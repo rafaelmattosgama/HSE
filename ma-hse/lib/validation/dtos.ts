@@ -1,4 +1,4 @@
-import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, RoleCode, SEWOStatus } from "@prisma/client";
+import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, RoleCode, SEWOStatus } from "@prisma/client";
 import { z } from "zod";
 
 const optionalUuid = z.string().uuid().optional().nullable();
@@ -27,6 +27,7 @@ const communicationInputShape = z.object({
     unsafeActTypeId: optionalUuid,
     unsafeConditionTypeId: optionalUuid,
     nearMissTypeId: optionalUuid,
+    improvementSubtype: z.nativeEnum(CommunicationImprovementSubtype).optional().nullable(),
     description: z.string().min(5),
     suggestedAction: z.string().optional(),
     severityPotential: z.enum(["LOW", "MED", "HIGH"]).optional(),
@@ -127,6 +128,36 @@ function validateCommunicationPayload(
           code: z.ZodIssueCode.custom,
           message: "Fatal injuries cannot have a return date",
           path: ["returnDate"],
+        });
+      }
+    }
+
+    const fiveSSubtypes: CommunicationImprovementSubtype[] = [
+      CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+      CommunicationImprovementSubtype.FIVE_S_DISORGANIZATION,
+    ];
+    const suggestionSubtypes: CommunicationImprovementSubtype[] = [
+      CommunicationImprovementSubtype.IMPROVEMENT_SAFETY,
+      CommunicationImprovementSubtype.IMPROVEMENT_HEALTH,
+      CommunicationImprovementSubtype.IMPROVEMENT_ENVIRONMENT,
+    ];
+
+    if (value.type === CommunicationType.FIVE_S_IMPROVEMENT) {
+      if (!value.improvementSubtype || !fiveSSubtypes.includes(value.improvementSubtype)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Improvement subtype is required",
+          path: ["improvementSubtype"],
+        });
+      }
+    }
+
+    if (value.type === CommunicationType.IMPROVEMENT_SUGGESTION) {
+      if (!value.improvementSubtype || !suggestionSubtypes.includes(value.improvementSubtype)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Improvement subtype is required",
+          path: ["improvementSubtype"],
         });
       }
     }
