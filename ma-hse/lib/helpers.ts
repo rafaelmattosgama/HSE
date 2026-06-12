@@ -29,6 +29,8 @@ export function formatCommunicationType(type: CommunicationType | string) {
     NEAR_MISS: "Near Miss",
     FIRST_AID: "First Aid",
     ACCIDENT: "Injury",
+    FIVE_S_IMPROVEMENT: "Melhoria 5S's",
+    IMPROVEMENT_SUGGESTION: "Sugestão de melhoria",
   };
 
   return labels[type] ?? type;

@@ -1,4 +1,4 @@
-import { CommunicationType } from "@prisma/client";
+import { CommunicationImprovementSubtype, CommunicationType } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import { NextRequest } from "next/server";
@@ -222,6 +222,8 @@ describe("public report route", () => {
     const typeSelect = dom.window.document.getElementById("type") as HTMLSelectElement;
     const addWorker = dom.window.document.getElementById("add-worker") as HTMLButtonElement;
 
+    expect(Array.from(typeSelect.options).map((option) => option.textContent)).toContain("5S Improvement");
+    expect(Array.from(typeSelect.options).map((option) => option.textContent)).toContain("Improvement suggestion");
     expect(addWorker.textContent).toBe("Add involved worker");
     expect(addWorker.style.display).toBe("none");
 
@@ -235,6 +237,63 @@ describe("public report route", () => {
 
     expect(dom.window.document.querySelectorAll("[data-worker-row]")).toHaveLength(3);
     expect(dom.window.document.querySelectorAll("input[name='additionalTargetEmployeeId']")).toHaveLength(2);
+  });
+
+  it("shows improvement subtype choices and hides involved worker for public improvement reports", async () => {
+    plantMock.findPlantByCode.mockResolvedValue({
+      id: "plant-1",
+      code: "maap",
+      defaultLanguage: "pt",
+    });
+    rateLimitMock.consumeRateLimit.mockResolvedValue({ allowed: true });
+    tokenMock.verifyPlantToken.mockResolvedValue({ id: "token-1" });
+    shiftServiceMock.ensureDefaultShifts.mockResolvedValue(undefined);
+    prismaMock.area.findMany.mockResolvedValue([]);
+    prismaMock.workstation.findMany.mockResolvedValue([]);
+    prismaMock.shift.findMany.mockResolvedValue([]);
+    prismaMock.employeeDirectory.findMany.mockResolvedValue([
+      { id: "worker-1", name: "Worker One", employeeNo: "001" },
+    ]);
+    prismaMock.bodyPart.findMany.mockResolvedValue([]);
+    prismaMock.injuryType.findMany.mockResolvedValue([]);
+    prismaMock.$transaction.mockImplementation(async (queries) => Promise.all(queries));
+
+    const response = await GET(
+      new NextRequest("http://localhost/r/maap/report?t=qr-token"),
+      routeContext(),
+    );
+    const dom = new JSDOM(await response.text(), {
+      runScripts: "dangerously",
+      url: "http://localhost/r/maap/report?t=qr-token",
+    });
+
+    const typeSelect = dom.window.document.getElementById("type") as HTMLSelectElement;
+    const workerWrap = dom.window.document.getElementById("worker-wrap") as HTMLDivElement;
+    const subtypeWrap = dom.window.document.getElementById("improvement-subtype-wrap") as HTMLDivElement;
+    const subtypeSelect = dom.window.document.getElementById("improvementSubtype") as HTMLSelectElement;
+
+    typeSelect.value = CommunicationType.FIVE_S_IMPROVEMENT;
+    typeSelect.dispatchEvent(new dom.window.Event("change"));
+
+    expect(workerWrap.style.display).toBe("none");
+    expect(subtypeWrap.style.display).toBe("block");
+    expect(subtypeSelect.required).toBe(true);
+    expect(Array.from(subtypeSelect.options).map((option) => option.value)).toEqual([
+      "",
+      CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+      CommunicationImprovementSubtype.FIVE_S_DISORGANIZATION,
+    ]);
+
+    typeSelect.value = CommunicationType.IMPROVEMENT_SUGGESTION;
+    typeSelect.dispatchEvent(new dom.window.Event("change"));
+
+    expect(workerWrap.style.display).toBe("none");
+    expect(Array.from(subtypeSelect.options).map((option) => option.value)).toEqual([
+      "",
+      CommunicationImprovementSubtype.IMPROVEMENT_SAFETY,
+      CommunicationImprovementSubtype.IMPROVEMENT_HEALTH,
+      CommunicationImprovementSubtype.IMPROVEMENT_ENVIRONMENT,
+    ]);
   });
 
   it("keeps public report JSON submission working without photos", async () => {

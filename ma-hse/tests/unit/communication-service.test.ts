@@ -1,4 +1,4 @@
-import { CommunicationSource, CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
+import { CommunicationImprovementSubtype, CommunicationSource, CommunicationStatus, CommunicationType, RoleCode } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
@@ -391,6 +391,72 @@ describe("CommunicationService approved communication alerts", () => {
               ],
             },
           },
+        }),
+      }),
+    );
+  });
+
+  it("stores improvement subtype and ignores worker data for improvement communications", async () => {
+    prismaMock.employeeDirectory.findUnique.mockResolvedValue({
+      id: "worker-1",
+      name: "Worker One",
+      employeeNo: "001",
+    });
+    prismaMock.communication.create.mockResolvedValue({
+      id: "comm-5",
+      plantId: "plant-1",
+      type: CommunicationType.FIVE_S_IMPROVEMENT,
+      status: CommunicationStatus.SUBMITTED,
+      eventDatetime: new Date("2026-05-01T10:00:00Z"),
+      targetEmployeeId: null,
+      targetEmployeeNo: null,
+      workstationId: null,
+      reporterName: "Reporter",
+      reporterEmployeeNo: null,
+    });
+
+    await CommunicationService.create({
+      plantId: "plant-1",
+      payload: {
+        type: CommunicationType.FIVE_S_IMPROVEMENT,
+        improvementSubtype: CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+        eventDatetime: new Date("2026-05-01T10:00:00Z"),
+        reporterName: "Reporter",
+        reporterEmployeeNo: undefined,
+        targetText: "Worker One",
+        targetEmployeeNo: "001",
+        targetEmployeeId: "worker-1",
+        shiftId: undefined,
+        areaId: undefined,
+        lineId: undefined,
+        workstationId: undefined,
+        equipmentId: undefined,
+        riskThemeId: undefined,
+        unsafeActTypeId: undefined,
+        unsafeConditionTypeId: undefined,
+        nearMissTypeId: undefined,
+        description: "5S improvement without involved worker",
+        suggestedAction: undefined,
+        severityPotential: undefined,
+        isContractor: undefined,
+        bodyPartId: undefined,
+        injuryTypeId: undefined,
+        isFatal: false,
+        initialLostDays: undefined,
+        hasLeave: undefined,
+        returnDate: undefined,
+        attachments: undefined,
+      },
+      source: CommunicationSource.TOKEN_REPORT,
+    });
+
+    expect(prismaMock.communication.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          improvementSubtype: CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+          targetText: undefined,
+          targetEmployeeNo: null,
+          targetEmployeeId: null,
         }),
       }),
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CommunicationType } from "@prisma/client";
+import { CommunicationImprovementSubtype, CommunicationType } from "@prisma/client";
 import { shouldDeferPublicReportUnsafeActType } from "@/lib/communication-classification";
 import { CommunicationService } from "@/lib/services/communication-service";
 import { createCommunicationInput, createPublicReportCommunicationInput } from "@/lib/validation/dtos";
@@ -9,6 +9,8 @@ describe("token-based communication rules", () => {
     expect(CommunicationService.isN6AllowedType(CommunicationType.UNSAFE_ACT)).toBe(true);
     expect(CommunicationService.isN6AllowedType(CommunicationType.UNSAFE_CONDITION)).toBe(true);
     expect(CommunicationService.isN6AllowedType(CommunicationType.NEAR_MISS)).toBe(true);
+    expect(CommunicationService.isN6AllowedType(CommunicationType.FIVE_S_IMPROVEMENT)).toBe(true);
+    expect(CommunicationService.isN6AllowedType(CommunicationType.IMPROVEMENT_SUGGESTION)).toBe(true);
     expect(CommunicationService.isN6AllowedType(CommunicationType.ACCIDENT)).toBe(false);
   });
 
@@ -132,5 +134,40 @@ describe("token-based communication rules", () => {
       expect(parsed.data.riskThemeId).toBeUndefined();
       expect(parsed.data.unsafeActTypeId).toBeUndefined();
     }
+  });
+
+  it("requires the fixed secondary dropdown for public improvement communication types", () => {
+    const missingSubtype = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.FIVE_S_IMPROVEMENT,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      description: "5S improvement reported from QR",
+    });
+    const validFiveS = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.FIVE_S_IMPROVEMENT,
+      improvementSubtype: CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      description: "5S improvement reported from QR",
+    });
+    const validSuggestion = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.IMPROVEMENT_SUGGESTION,
+      improvementSubtype: CommunicationImprovementSubtype.IMPROVEMENT_ENVIRONMENT,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      description: "Improvement suggestion reported from QR",
+    });
+    const mismatchedSubtype = createPublicReportCommunicationInput.safeParse({
+      type: CommunicationType.IMPROVEMENT_SUGGESTION,
+      improvementSubtype: CommunicationImprovementSubtype.FIVE_S_DISORGANIZATION,
+      eventDatetime: new Date().toISOString(),
+      reporterName: "QR Reporter",
+      description: "Improvement suggestion reported from QR",
+    });
+
+    expect(missingSubtype.success).toBe(false);
+    expect(validFiveS.success).toBe(true);
+    expect(validSuggestion.success).toBe(true);
+    expect(mismatchedSubtype.success).toBe(false);
   });
 });

@@ -1,0 +1,12 @@
+ALTER TYPE "CommunicationType" ADD VALUE 'FIVE_S_IMPROVEMENT';
+ALTER TYPE "CommunicationType" ADD VALUE 'IMPROVEMENT_SUGGESTION';
+
+CREATE TYPE "CommunicationImprovementSubtype" AS ENUM (
+  'FIVE_S_AREA_IMPROVEMENT',
+  'FIVE_S_DISORGANIZATION',
+  'IMPROVEMENT_SAFETY',
+  'IMPROVEMENT_HEALTH',
+  'IMPROVEMENT_ENVIRONMENT'
+);
+
+ALTER TABLE "Communication" ADD COLUMN "improvementSubtype" "CommunicationImprovementSubtype";

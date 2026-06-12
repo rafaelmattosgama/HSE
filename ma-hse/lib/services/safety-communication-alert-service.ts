@@ -505,6 +505,8 @@ function formatCommunicationTypeLabel(type: CommunicationType) {
   if (type === CommunicationType.NEAR_MISS) return "Quase Acidente";
   if (type === CommunicationType.FIRST_AID) return "Primeiros Socorros";
   if (type === CommunicationType.ACCIDENT) return "Acidente";
+  if (type === CommunicationType.FIVE_S_IMPROVEMENT) return "Melhoria 5S's";
+  if (type === CommunicationType.IMPROVEMENT_SUGGESTION) return "Sugestão de melhoria";
   return type;
 }
 

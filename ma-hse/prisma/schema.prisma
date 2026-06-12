@@ -29,6 +29,16 @@ enum CommunicationType {
   NEAR_MISS
   FIRST_AID
   ACCIDENT
+  FIVE_S_IMPROVEMENT
+  IMPROVEMENT_SUGGESTION
+}
+
+enum CommunicationImprovementSubtype {
+  FIVE_S_AREA_IMPROVEMENT
+  FIVE_S_DISORGANIZATION
+  IMPROVEMENT_SAFETY
+  IMPROVEMENT_HEALTH
+  IMPROVEMENT_ENVIRONMENT
 }
 
 enum CommunicationStatus {
@@ -513,6 +523,7 @@ model Communication {
   unsafeActTypeId                  String?
   unsafeConditionTypeId            String?
   nearMissTypeId                   String?
+  improvementSubtype               CommunicationImprovementSubtype?
   description                      String
   suggestedAction                  String?
   severityPotential                SeverityPotential?
