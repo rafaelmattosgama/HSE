@@ -172,6 +172,8 @@ export default async function CommunicationsPage({
           const reporterEmployee = employeeByNumber.get(row.reporterEmployeeNo ?? "");
           return {
             id: row.id,
+            codigoCompleto: row.codigoCompleto,
+            codigoAbreviado: row.codigoAbreviado,
             eventDatetime: row.eventDatetime.toISOString(),
             level: row.level,
             type: row.type,

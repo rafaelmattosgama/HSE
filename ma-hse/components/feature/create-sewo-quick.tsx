@@ -50,6 +50,8 @@ type CommunicationActionOption = {
 
 type CommunicationOption = {
   id: string;
+  codigoCompleto: string | null;
+  codigoAbreviado: string | null;
   eventDate: string;
   monthKey: string;
   monthLabel: string;
@@ -66,6 +68,7 @@ type CommunicationOption = {
   description: string;
   suggestedAction: string | null;
   linkedSewoId: string | null;
+  linkedSewoCode: string | null;
   openActions: CommunicationActionOption[];
 };
 
@@ -98,6 +101,7 @@ type EditableCommunicationAction = CommunicationActionOption & {
 
 type SewoInitialData = {
   id: string;
+  codigoSewo: string | null;
   communicationId: string | null;
   eventClassification: string;
   areaId: string | null;
@@ -424,9 +428,9 @@ export function CreateSewoQuick({
     : "border-emerald-200 bg-emerald-50 text-emerald-700";
   const n1FeedbackCommentClassName = isRejectedSewo ? "border-rose-100" : "border-emerald-100";
   const associatedCommunicationSummary = selectedCommunication
-    ? `${selectedCommunication.eventDate} | ${selectedCommunication.typeLabel} | ${selectedCommunication.locationLabel}`
+    ? `${selectedCommunication.codigoCompleto ?? selectedCommunication.codigoAbreviado ?? "Requires code update"} | ${selectedCommunication.eventDate} | ${selectedCommunication.typeLabel} | ${selectedCommunication.locationLabel}`
     : communicationId
-      ? communicationId
+      ? "Requires code update"
       : ui.manualWithoutCommunication;
   const showAssociatedCommunicationSummary = Boolean(selectedCommunication || skipCommunicationSelection || initialSewo);
 
@@ -1093,7 +1097,10 @@ export function CreateSewoQuick({
                     >
                       <span className="text-sm font-medium text-slate-700">{communication.eventDate}</span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-slate-900">{communication.typeLabel}</span>
+                        <span className="block truncate text-sm font-semibold text-slate-900">
+                          {communication.codigoCompleto ?? communication.codigoAbreviado ?? "Requires code update"}
+                        </span>
+                        <span className="block truncate text-xs font-medium text-slate-600">{communication.typeLabel}</span>
                         <span className="block truncate text-xs text-slate-500">{communication.locationLabel}</span>
                       </span>
                       <span className="flex justify-end">
@@ -1147,11 +1154,12 @@ export function CreateSewoQuick({
               <p className="font-semibold text-slate-900">{ui.selectedCommunication}</p>
               {selectedCommunication ? (
                 <>
-                  <p className="mt-1">{selectedCommunication.eventDate} | {selectedCommunication.typeLabel}</p>
+                  <p className="mt-1">{selectedCommunication.codigoCompleto ?? selectedCommunication.codigoAbreviado ?? "Requires code update"}</p>
+                  <p>{selectedCommunication.eventDate} | {selectedCommunication.typeLabel}</p>
                   <p>{selectedCommunication.locationLabel}</p>
                 </>
               ) : communicationId ? (
-                <p className="mt-1">{communicationId}</p>
+                <p className="mt-1">Requires code update</p>
               ) : (
                 <p className="mt-1">{ui.manualWithoutCommunication}</p>
               )}

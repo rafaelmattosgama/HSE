@@ -7,6 +7,7 @@ import {
   formatLocalizedActionSourceType,
   formatLocalizedActionStatus,
 } from "@/lib/actions-ui";
+import { getActionLinkedRecordCodes, getActionLinkedRecordDescription } from "@/lib/action-linked-record";
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
 import { getServerUiLocale } from "@/lib/server-ui-language";
@@ -50,9 +51,12 @@ export default async function ActionDetailPage({
 
   if (!action) notFound();
   const actionsUi = await getLocalizedActionsUi(uiLocale);
-  const [translatedTitle, translatedDescription, translatedClosureComment, translatedReopenReason] = await translateForViewer(uiLocale, [
+  const linkedRecordDescription = getActionLinkedRecordDescription(action);
+  const linkedRecordCodes = getActionLinkedRecordCodes(action);
+  const [translatedTitle, translatedDescription, translatedLinkedRecordDescription, translatedClosureComment, translatedReopenReason] = await translateForViewer(uiLocale, [
     action.title,
     action.description,
+    linkedRecordDescription,
     action.closureComment,
     action.reopenReason,
   ]);
@@ -93,15 +97,20 @@ export default async function ActionDetailPage({
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.description}</h2>
-        <p className="mt-3 text-sm text-slate-800">{translatedDescription}</p>
+        <p className="mt-3 text-sm text-slate-800">{translatedDescription || "-"}</p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.linkedRecordDescription}</h2>
+        <p className="mt-3 text-sm text-slate-800">{translatedLinkedRecordDescription || "-"}</p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.linkedRecords}</h2>
           <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.communication}</dt><dd>{action.communicationId ?? "-"}</dd></div>
-            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.sewo}</dt><dd>{action.sewoId ?? "-"}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.communication}</dt><dd>{linkedRecordCodes.communicationCode}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.sewo}</dt><dd>{linkedRecordCodes.sewoCode}</dd></div>
           </dl>
         </article>
 

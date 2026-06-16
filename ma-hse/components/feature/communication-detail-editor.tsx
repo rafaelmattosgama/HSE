@@ -48,6 +48,8 @@ const IMPROVEMENT_SUGGESTION_SUBTYPES: CommunicationImprovementSubtype[] = [
 
 type CommunicationRecord = {
   id: string;
+  codigoCompleto: string | null;
+  codigoAbreviado: string | null;
   type: CommunicationType;
   level: string | null;
   status: CommunicationStatus;
@@ -169,7 +171,8 @@ export function CommunicationDetailEditor({
   const needsClinicalFields = type === "FIRST_AID" || type === "ACCIDENT";
   const selectedReporter = employees.find((employee) => employee.employeeNo === reporterEmployeeNo) ?? null;
   const selectedTarget = employees.find((employee) => employee.id === targetEmployeeId) ?? null;
-  const communicationLabel = `${communication.id} | ${typeLabels[communication.type] ?? communication.type} | ${statusLabel}`;
+  const communicationCode = communication.codigoCompleto ?? communication.codigoAbreviado ?? "Requires code update";
+  const communicationLabel = `${communicationCode} | ${typeLabels[communication.type] ?? communication.type} | ${statusLabel}`;
   const hasBlockingLinkedActions = hasOpenLinkedActions(communication.linkedActionStatuses);
 
   async function submit(event: React.FormEvent) {

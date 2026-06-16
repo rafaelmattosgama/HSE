@@ -12,6 +12,7 @@ import type { SifPsifResult } from "@/lib/sewo-sif-psif";
 
 type SewoValidationQueueRow = {
   id: string;
+  code: string;
   plantCode: string;
   plantName: string;
   occurrenceType: string;
@@ -137,6 +138,7 @@ export function SewoValidationQueue({
                 </div>
 
                 <div>
+                  <p className="text-sm font-semibold text-[var(--brand-700)]">{row.code}</p>
                   <h2 className="text-lg font-semibold text-slate-900">{row.occurrenceType}</h2>
                   <p className="mt-1 text-sm text-slate-600">{row.description}</p>
                 </div>

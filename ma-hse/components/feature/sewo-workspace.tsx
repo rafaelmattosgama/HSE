@@ -32,6 +32,8 @@ type CommunicationActionOption = {
 
 type CommunicationOption = {
   id: string;
+  codigoCompleto: string | null;
+  codigoAbreviado: string | null;
   eventDate: string;
   monthKey: string;
   monthLabel: string;
@@ -48,11 +50,13 @@ type CommunicationOption = {
   description: string;
   suggestedAction: string | null;
   linkedSewoId: string | null;
+  linkedSewoCode: string | null;
   openActions: CommunicationActionOption[];
 };
 
 type SewoFormData = {
   id: string;
+  codigoSewo: string | null;
   communicationId: string | null;
   eventClassification: string;
   areaId: string | null;
@@ -77,6 +81,7 @@ type SewoFormData = {
 
 type SewoRow = {
   id: string;
+  codigoSewo: string | null;
   date: string;
   local: string;
   typeLabel: string;
@@ -152,6 +157,7 @@ export function SewoWorkspace({
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">{ui.tableDate}</th>
+                <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">{ui.tableLocation}</th>
                 <th className="px-4 py-3">{ui.tableType}</th>
                 <th className="px-4 py-3">{ui.tableStatus}</th>
@@ -162,6 +168,7 @@ export function SewoWorkspace({
               {sewoRows.map((row) => (
                 <tr key={row.id} className="border-t border-slate-200">
                   <td className="px-4 py-3">{row.date}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">{row.codigoSewo ?? "Requires code update"}</td>
                   <td className="px-4 py-3">{row.local}</td>
                   <td className="px-4 py-3">{row.typeLabel}</td>
                   <td className="px-4 py-3">
@@ -176,7 +183,7 @@ export function SewoWorkspace({
               ))}
               {sewoRows.length === 0 ? (
                 <tr className="border-t border-slate-200">
-                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
                 </tr>
               ) : null}
             </tbody>
@@ -190,7 +197,7 @@ export function SewoWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">{ui.editSewoTitle}</h2>
-                <p className="mt-1 text-sm text-slate-600">{selectedSewo.date} | {selectedSewo.typeLabel} | {selectedSewo.local}</p>
+                <p className="mt-1 text-sm text-slate-600">{selectedSewo.codigoSewo ?? "Requires code update"} | {selectedSewo.date} | {selectedSewo.typeLabel} | {selectedSewo.local}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Link href={`/api/plants/${plant}/sewo/${selectedSewo.id}/report?type=summary&format=pdf`} className="app-toolbar">

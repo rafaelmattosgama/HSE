@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { NotificationService } from "@/lib/services/notification-service";
 import { KpiService } from "@/lib/services/kpi-service";
+import { RecordCodeService } from "@/lib/services/record-code-service";
 import { StorageService } from "@/lib/services/storage-service";
 
 const KPI_STATUSES = [CommunicationStatus.VALID_OPEN, CommunicationStatus.ONGOING, CommunicationStatus.CLOSED];
@@ -829,24 +830,38 @@ export const ReportService = {
       body: pdf,
     });
 
-    await prisma.reportRun.create({
-      data: {
-        plantId: selectedPlant?.id ?? null,
-        type: input.reportType,
+    await prisma.$transaction(async (tx) => {
+      const recordCode = await RecordCodeService.allocateReportCode(tx, {
+        reportType: input.reportType,
+        codigoFabrica: selectedPlant?.code ?? "GLOBAL",
         periodStart: input.periodStart,
-        periodEnd: input.periodEnd,
-        fileKeys: {
-          pdfKey: storage.pdfKey,
-          pdfFileName: storage.files.pdf,
-          scope: reportScope,
-          scopeLabel,
-          plantCode: selectedPlant?.code ?? null,
-          plantName: selectedPlant?.name ?? null,
+      });
+
+      await tx.reportRun.create({
+        data: {
+          plantId: selectedPlant?.id ?? null,
+          type: input.reportType,
+          codigoCompleto: recordCode.codigoCompleto,
+          codigoAbreviado: recordCode.codigoAbreviado,
+          tipo: recordCode.tipo,
+          codigoFabrica: recordCode.codigoFabrica,
+          ano: recordCode.ano,
+          numeroSequencial: recordCode.numeroSequencial,
+          periodStart: input.periodStart,
+          periodEnd: input.periodEnd,
+          fileKeys: {
+            pdfKey: storage.pdfKey,
+            pdfFileName: storage.files.pdf,
+            scope: reportScope,
+            scopeLabel,
+            plantCode: selectedPlant?.code ?? null,
+            plantName: selectedPlant?.name ?? null,
+          },
+          recipients: input.recipients ?? [],
+          status: "COMPLETED",
+          completedAt: new Date(),
         },
-        recipients: input.recipients ?? [],
-        status: "COMPLETED",
-        completedAt: new Date(),
-      },
+      });
     });
 
     return {

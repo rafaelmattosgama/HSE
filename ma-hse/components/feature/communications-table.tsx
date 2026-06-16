@@ -10,6 +10,8 @@ import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication
 
 type CommunicationRow = {
   id: string;
+  codigoCompleto?: string | null;
+  codigoAbreviado?: string | null;
   eventDatetime: string;
   level?: string | null;
   type: string;
@@ -134,6 +136,7 @@ export function CommunicationsTable({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           rows: filteredRows.map((row) => ({
+            code: row.codigoCompleto ?? row.codigoAbreviado ?? "Requires code update",
             event: row.eventDatetime.replace("T", " ").slice(0, 16),
             level: formatRecordLevel(row.level),
             type: communicationTypeLabels[row.type as keyof typeof communicationTypeLabels] ?? row.type,
@@ -320,6 +323,7 @@ export function CommunicationsTable({
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">{text.event}</th>
+              <th className="px-4 py-3">Code</th>
               <th className="px-4 py-3">{text.type}</th>
               <th className="px-4 py-3">{text.status}</th>
               <th className="px-4 py-3">{text.reporter}</th>
@@ -333,6 +337,7 @@ export function CommunicationsTable({
             {filteredRows.map((row) => (
               <tr key={row.id} className="border-t border-slate-200">
                 <td className="px-4 py-3">{row.eventDatetime.replace("T", " ").slice(0, 16)}</td>
+                <td className="px-4 py-3 font-semibold text-slate-900">{row.codigoCompleto ?? row.codigoAbreviado ?? "Requires code update"}</td>
                 <td className="px-4 py-3">{communicationTypeLabels[row.type as keyof typeof communicationTypeLabels] ?? row.type}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getCommunicationStatusClasses(row.status)}`}>
@@ -364,7 +369,7 @@ export function CommunicationsTable({
             ))}
             {filteredRows.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={canDelete ? 8 : 7} className="px-4 py-6 text-center text-sm text-slate-500">{text.noRows}</td>
+                <td colSpan={canDelete ? 9 : 8} className="px-4 py-6 text-center text-sm text-slate-500">{text.noRows}</td>
               </tr>
             ) : null}
           </tbody>

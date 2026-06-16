@@ -34,7 +34,9 @@ type ActionRow = {
   sourceLabel: string;
   sourceHref: string | null;
   communicationId: string | null;
+  communicationCode: string | null;
   sewoId: string | null;
+  sewoCode: string | null;
   evidence: EvidenceRow[];
 };
 
@@ -295,7 +297,7 @@ export function ActionsTable({
             action: `${formatActionCode(plant, action.sequenceNumber)} | ${action.title}`,
             level: formatRecordLevel(action.level),
             local: action.local,
-            source: action.sourceLabel,
+            source: [action.sourceLabel, action.communicationCode ?? action.sewoCode].filter(Boolean).join(" | "),
             priority: action.priority,
             status: action.status,
             owner: action.ownerName,
@@ -502,7 +504,7 @@ export function ActionsTable({
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.linkedRecords}</p>
                               <p className="mt-2 text-sm text-slate-700">
-                                {text.communication}: {row.communicationId ?? "-"} | {text.sewo}: {row.sewoId ?? "-"}
+                                {text.communication}: {row.communicationCode ?? "-"} | {text.sewo}: {row.sewoCode ?? "-"}
                               </p>
                             </div>
                             <div>

@@ -8,6 +8,7 @@ import type { SifPsifResult } from "@/lib/sewo-sif-psif";
 
 type PendingSewoAlert = {
   id: string;
+  code: string;
   plantCode: string;
   plantName: string;
   occurrenceType: string;
@@ -109,6 +110,7 @@ export function SewoApprovalFloatingAlert({ enabled }: { enabled: boolean }) {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-slate-900">S-EWO pendente de aprovação</p>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{alert.code}</span>
                   <span className={cn("rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wide", getSifPsifClassName(alert.sifPsifResult))}>
                     {getSifPsifLabel(alert.sifPsifResult)}
                   </span>
