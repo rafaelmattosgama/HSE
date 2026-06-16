@@ -503,6 +503,12 @@ model Communication {
   id                               String                            @id @default(uuid())
   plantId                          String
   type                             CommunicationType
+  codigoCompleto                   String?                           @unique
+  codigoAbreviado                  String?
+  tipo                             String?
+  codigoFabrica                    String?
+  ano                              Int?
+  numeroSequencial                 Int?
   level                            RecordLevel?
   status                           CommunicationStatus               @default(SUBMITTED)
   source                           CommunicationSource               @default(BACKOFFICE)
@@ -571,6 +577,7 @@ model Communication {
   smatAudits                       SmatAudit[]
 
   @@index([plantId, status, eventDatetime])
+  @@index([tipo, codigoFabrica, ano, numeroSequencial])
   @@index([riskThemeId, eventDatetime])
   @@index([unsafeConditionTypeId, eventDatetime])
   @@index([shiftId])
@@ -1050,6 +1057,11 @@ model SEWO {
   id                            String                  @id @default(uuid())
   plantId                       String
   communicationId               String?
+  codigoSewo                    String?                 @unique
+  tipo                          String?
+  codigoFabrica                 String?
+  ano                           Int?
+  numeroSequencial              Int?
   eventClassification           String
   areaId                        String?
   lineId                        String?
@@ -1084,6 +1096,8 @@ model SEWO {
   causeSelections               SEWOCauseSelection[]
   actions                       Action[]
   actionLinks                   SEWOActionLink[]
+
+  @@index([tipo, codigoFabrica, ano, numeroSequencial])
 }
 
 model SEWOAttachment {
@@ -1241,6 +1255,12 @@ model ReportRun {
   id          String     @id @default(uuid())
   plantId     String?
   type        ReportType
+  codigoCompleto   String? @unique
+  codigoAbreviado  String?
+  tipo             String?
+  codigoFabrica    String?
+  ano              Int?
+  numeroSequencial Int?
   periodStart DateTime
   periodEnd   DateTime
   fileKeys    Json
@@ -1250,6 +1270,22 @@ model ReportRun {
   createdAt   DateTime   @default(now())
   completedAt DateTime?
   plant       Plant?     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@index([tipo, codigoFabrica, ano, numeroSequencial])
+}
+
+model RecordCodeSequence {
+  id              String   @id @default(uuid())
+  entityType      String
+  tipo            String
+  codigoFabrica   String
+  ano             Int
+  currentValue    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([entityType, tipo, codigoFabrica, ano])
+  @@index([entityType, codigoFabrica, ano])
 }
 
 model IdempotencyKey {

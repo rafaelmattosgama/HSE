@@ -561,6 +561,7 @@ export const deleteMasterDataItemInput = z.object({
 
 export const communicationListExportInput = z.object({
   rows: z.array(z.object({
+    code: z.string(),
     event: z.string(),
     level: z.string(),
     type: z.string(),

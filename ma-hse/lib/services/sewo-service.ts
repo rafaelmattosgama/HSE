@@ -5,7 +5,9 @@ import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
 import { NotificationService } from "@/lib/services/notification-service";
+import { RecordCodeService } from "@/lib/services/record-code-service";
 import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
+import { getReadableSewoCode } from "@/lib/record-code";
 import {
   sendSewoSubmittedForValidationEmail,
   sendSewoValidatedDistributionEmail,
@@ -169,6 +171,7 @@ async function notifySewoSubmitted(input: {
   });
 
   if (recipients.emailRecipients.length) {
+    const sewoCode = getReadableSewoCode(sewo);
     const detailUrl = new URL(`/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`, env.APP_URL).toString();
     await Promise.allSettled(
       recipients.emailRecipients.map((recipient) =>
@@ -178,7 +181,7 @@ async function notifySewoSubmitted(input: {
           descricao: summary.occurrenceType,
           prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
           dataHora: sewo.analysisDate,
-          sewoCode: sewo.id,
+          sewoCode,
           plantName: summary.plantLabel,
           sewoStatus: "Submitted",
           sewoUrl: detailUrl,
@@ -206,6 +209,7 @@ async function notifySewoApproved(sewoId: string) {
   if (!recipients.userIds.length && !recipients.emailRecipients.length && !externalRecipients.length && !hasSubmitterEmail) return;
 
   const summary = buildSewoNotificationSummary(sewo);
+  const sewoCode = getReadableSewoCode(sewo);
   const notificationTasks: Promise<unknown>[] = [];
 
   if (recipients.userIds.length || recipients.emailRecipients.length || hasSubmitterEmail) {
@@ -240,7 +244,7 @@ async function notifySewoApproved(sewoId: string) {
     attachments: exported
       ? [
           {
-            filename: `sewo-${sewo.plant.code}-${sewo.id}.pdf`,
+            filename: `sewo-${sewo.plant.code}-${filenameSafeCode(sewoCode)}.pdf`,
             content: exported.pdf,
             contentType: "application/pdf",
           },
@@ -249,6 +253,7 @@ async function notifySewoApproved(sewoId: string) {
   });
 
   if (sewo.performedBy.email) {
+    const sewoCode = getReadableSewoCode(sewo);
     const detailUrl = new URL(`/app/${sewo.plant.code}/sewo?sewoId=${sewo.id}`, env.APP_URL).toString();
     await sendSewoValidatedSubmitterEmail({
       user: sewo.performedBy,
@@ -256,7 +261,7 @@ async function notifySewoApproved(sewoId: string) {
       descricao: summary.occurrenceType,
       prioridade: summary.isPriority ? summary.sifPsifLabel : "Normal",
       dataHora: sewo.approvedAt ?? new Date(),
-      sewoCode: sewo.id,
+      sewoCode,
       plantName: summary.plantLabel,
       sewoStatus: "Approved",
       sewoUrl: detailUrl,
@@ -275,6 +280,7 @@ async function notifySewoApproved(sewoId: string) {
           code: sewo.plant.code,
           name: sewo.plant.name,
         },
+        codigoSewo: sewo.codigoSewo,
       },
       summary,
       recipients: externalRecipients,
@@ -326,7 +332,7 @@ async function notifySewoRejected(input: {
   const title = "S-EWO rejeitado pelo N1 — ação necessária";
   const body = [
     "S-EWO rejeitado pelo N1. Por favor, reveja a informação e volte a submeter.",
-    `S-EWO: ${sewo.id}`,
+    `S-EWO: ${getReadableSewoCode(sewo)}`,
     `Planta: ${summary.plantLabel}`,
     `Tipo de ocorrência: ${summary.occurrenceType}`,
     `Data/hora da rejeição: ${rejectedAt.toISOString().replace("T", " ").slice(0, 16)}`,
@@ -346,7 +352,7 @@ async function notifySewoRejected(input: {
       intro: "O S-EWO foi rejeitado na validação N1. Reveja a informação, atualize o registo e submeta novamente.",
       plantLabel: summary.plantLabel,
       occurrenceType: summary.occurrenceType,
-      sewoId: sewo.id,
+      sewoId: getReadableSewoCode(sewo),
       rejectedAt,
       rejectedBy,
       approvalComment: input.approvalComment,
@@ -510,6 +516,10 @@ function getSewoWorkstationValue(sewo: {
   return "-";
 }
 
+function filenameSafeCode(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]+/g, "_");
+}
+
 function buildSewoNotificationSummary(sewo: {
   plant: { code: string; name: string };
   communication: { type: string } | null;
@@ -593,6 +603,7 @@ async function sendSewoApprovedExternalReports(input: {
   sewoId: string;
   sewo: {
     id: string;
+    codigoSewo: string | null;
     plantId: string;
     plant: {
       code: string;
@@ -620,13 +631,14 @@ async function sendSewoApprovedExternalReports(input: {
     }
 
     const exported = await exportedPromise;
+    const sewoCode = getReadableSewoCode(input.sewo);
     const email = buildSewoApprovedExternalEmailContent({
       locale,
       recipientName: recipient.name,
       plantLabel: input.summary.plantLabel,
       workstation: input.summary.workstation,
       occurrenceType: input.summary.occurrenceType,
-      sewoId: input.sewo.id,
+      sewoId: sewoCode,
       sifPsifLabel: input.summary.sifPsifLabel,
       isPriority: input.summary.isPriority,
     });
@@ -642,13 +654,13 @@ async function sendSewoApprovedExternalReports(input: {
       descricao: input.summary.occurrenceType,
       prioridade: input.summary.isPriority ? input.summary.sifPsifLabel : "Normal",
       dataHora: new Date(),
-      sewoCode: input.sewo.id,
+      sewoCode,
       plantName: input.summary.plantLabel,
       sewoStatus: "Approved",
       sewoUrl: "",
       attachments: [
         {
-          filename: `sewo-summary-${input.sewo.plant.code}-${input.sewo.id}.pdf`,
+          filename: `sewo-summary-${input.sewo.plant.code}-${filenameSafeCode(sewoCode)}.pdf`,
           content: exported.pdf,
           contentType: "application/pdf",
         },
@@ -749,6 +761,23 @@ export const SewaService = {
     actorUserId: string;
     payload: CreateSEWOInput;
   }) {
+    const [plant, linkedCommunication] = await Promise.all([
+      prisma.plant.findUniqueOrThrow({
+        where: { id: input.plantId },
+        select: { code: true },
+      }),
+      input.payload.communicationId
+        ? prisma.communication.findFirst({
+            where: {
+              id: input.payload.communicationId,
+              plantId: input.plantId,
+            },
+            select: {
+              type: true,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
     const requestedStatus = input.payload.status ?? SEWOStatus.DRAFT;
     const actorRole = requestedStatus === SEWOStatus.IN_APPROVAL
       ? await getUserHighestRoleForSewoPlant(input.actorUserId, input.plantId)
@@ -761,49 +790,62 @@ export const SewaService = {
         })
       : input.payload.templateData as Prisma.InputJsonValue | undefined;
 
-    const sewo = await prisma.sEWO.create({
-      data: {
-        plantId: input.plantId,
-        communicationId: input.payload.communicationId ?? null,
-        eventClassification: input.payload.eventClassification,
-        areaId: input.payload.areaId,
-        lineId: input.payload.lineId,
-        shiftId: input.payload.shiftId,
+    const sewo = await prisma.$transaction(async (tx) => {
+      const recordCode = await RecordCodeService.allocateSewoCode(tx, {
+        communicationType: linkedCommunication?.type ?? input.payload.whichText ?? input.payload.eventClassification,
+        codigoFabrica: plant.code,
         analysisDate: input.payload.analysisDate,
-        performedByUserId: input.actorUserId,
-        whatText: input.payload.whatText,
-        whereText: input.payload.whereText,
-        whoText: input.payload.whoText,
-        usualWorkYesNo: input.payload.usualWorkYesNo,
-        whichText: input.payload.whichText,
-        howText: input.payload.howText,
-        immediateCorrectiveActionText: input.payload.immediateCorrectiveActionText,
-        templateData,
-        status: requestedStatus,
-        causeCatalogVersionId: input.payload.causeCatalogVersionId,
-        causeSelections: input.payload.causeSelections.length
-          ? {
-              createMany: {
-                data: input.payload.causeSelections,
-              },
-            }
-          : undefined,
-        attachments: input.payload.attachments?.length
-          ? {
-              createMany: {
-                data: input.payload.attachments.map((attachment) => ({
-                  ...attachment,
-                  type: "EVENT_EVIDENCE",
-                  uploadedById: input.actorUserId,
-                })),
-              },
-            }
-          : undefined,
-      },
-      include: {
-        causeSelections: true,
-        attachments: true,
-      },
+      });
+
+      return tx.sEWO.create({
+        data: {
+          plantId: input.plantId,
+          communicationId: input.payload.communicationId ?? null,
+          codigoSewo: recordCode?.codigoSewo,
+          tipo: recordCode?.tipo,
+          codigoFabrica: recordCode?.codigoFabrica,
+          ano: recordCode?.ano,
+          numeroSequencial: recordCode?.numeroSequencial,
+          eventClassification: input.payload.eventClassification,
+          areaId: input.payload.areaId,
+          lineId: input.payload.lineId,
+          shiftId: input.payload.shiftId,
+          analysisDate: input.payload.analysisDate,
+          performedByUserId: input.actorUserId,
+          whatText: input.payload.whatText,
+          whereText: input.payload.whereText,
+          whoText: input.payload.whoText,
+          usualWorkYesNo: input.payload.usualWorkYesNo,
+          whichText: input.payload.whichText,
+          howText: input.payload.howText,
+          immediateCorrectiveActionText: input.payload.immediateCorrectiveActionText,
+          templateData,
+          status: requestedStatus,
+          causeCatalogVersionId: input.payload.causeCatalogVersionId,
+          causeSelections: input.payload.causeSelections.length
+            ? {
+                createMany: {
+                  data: input.payload.causeSelections,
+                },
+              }
+            : undefined,
+          attachments: input.payload.attachments?.length
+            ? {
+                createMany: {
+                  data: input.payload.attachments.map((attachment) => ({
+                    ...attachment,
+                    type: "EVENT_EVIDENCE",
+                    uploadedById: input.actorUserId,
+                  })),
+                },
+              }
+            : undefined,
+        },
+        include: {
+          causeSelections: true,
+          attachments: true,
+        },
+      });
     });
 
     await writeAuditLog({
@@ -1268,10 +1310,20 @@ export const SewaService = {
       : null;
 
     return prisma.$transaction(async (tx) => {
+      const recordCode = await RecordCodeService.allocateSewoCode(tx, {
+        communicationType: communication.type,
+        codigoFabrica: communication.plant.code,
+        analysisDate: communication.eventDatetime,
+      });
       const sewo = await tx.sEWO.create({
         data: {
           plantId: communication.plantId,
           communicationId: communication.id,
+          codigoSewo: recordCode?.codigoSewo,
+          tipo: recordCode?.tipo,
+          codigoFabrica: recordCode?.codigoFabrica,
+          ano: recordCode?.ano,
+          numeroSequencial: recordCode?.numeroSequencial,
           eventClassification: `${communication.plant.code.toUpperCase()} ${communication.type}`,
           areaId: communication.areaId,
           lineId: communication.lineId,

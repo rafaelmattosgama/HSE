@@ -2,6 +2,7 @@ import { ActionPriority, CommunicationImprovementSubtype, CommunicationSource, C
 import { addDays } from "date-fns";
 import { writeAuditLog, buildDiff } from "@/lib/audit";
 import { OPEN_LINKED_ACTION_STATUSES } from "@/lib/communication-status";
+import { getReadableCommunicationCode } from "@/lib/record-code";
 import type { CreateCommunicationInput, ManualCloseCommunicationInput, ReopenActionInput, UpdateCommunicationInput, ValidateCommunicationInput } from "@/lib/validation/dtos";
 import {
   canManageCommunicationClassification,
@@ -18,6 +19,7 @@ import {
 import { DEFAULT_NEAR_MISS_TYPE_CODES } from "@/lib/defaults/near-miss-types";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { RecordCodeService } from "@/lib/services/record-code-service";
 import { calculateLeaveFields, initialStatusForCommunicationCreation, nextStatusAfterValidation } from "@/lib/services/workflow";
 import { NotificationService } from "@/lib/services/notification-service";
 import { RepeatabilityAlertService } from "@/lib/services/repeatability-alert-service";
@@ -325,7 +327,15 @@ export const CommunicationService = {
     const requestedTargetEmployeeId = shouldIgnoreWorker
       ? undefined
       : input.payload.targetEmployeeId ?? requestedInvolvedEmployeeIds[0];
-    const [reporterEmployee, targetEmployee] = await Promise.all([
+    const [plant, reporterEmployee, targetEmployee] = await Promise.all([
+      prisma.plant.findUniqueOrThrow({
+        where: {
+          id: input.plantId,
+        },
+        select: {
+          code: true,
+        },
+      }),
       reporterEmployeeNo
         ? prisma.employeeDirectory.findUnique({
             where: {
@@ -410,71 +420,85 @@ export const CommunicationService = {
       isFatal: input.payload.isFatal,
     });
 
-    const communication = await prisma.communication.create({
-      data: {
-        plantId: input.plantId,
-        type: input.payload.type,
-        level: input.payload.level ?? null,
-        status: initialStatusForCommunicationCreation(input.actorRole),
-        source: input.source ?? CommunicationSource.BACKOFFICE,
+    const communication = await prisma.$transaction(async (tx) => {
+      const recordCode = await RecordCodeService.allocateCommunicationCode(tx, {
+        communicationType: input.payload.type,
+        codigoFabrica: plant.code,
         eventDatetime: input.payload.eventDatetime,
-        reporterName,
-        reporterEmployeeNo,
-        reporterUserId: input.reporterUserId,
-        targetText: resolvedTargetText,
-        targetEmployeeNo: resolvedTargetEmployeeNo,
-        targetEmployeeId: resolvedTargetEmployeeId,
-        shiftId: input.payload.shiftId,
-        areaId: input.payload.areaId,
-        lineId: input.payload.lineId,
-        workstationId: input.payload.workstationId,
-        equipmentId: input.payload.equipmentId,
-        riskThemeId,
-        unsafeActTypeId,
-        unsafeConditionTypeId,
-        nearMissTypeId,
-        improvementSubtype,
-        description: input.payload.description,
-        suggestedAction: input.payload.suggestedAction,
-        severityPotential: input.payload.severityPotential,
-        isContractor: input.payload.isContractor,
-        bodyPartId: input.payload.bodyPartId,
-        injuryTypeId: input.payload.injuryTypeId,
-        isFatal: input.payload.isFatal,
-        initialLostDays: input.payload.initialLostDays,
-        hasLeave: input.payload.hasLeave,
-        returnDate: input.payload.returnDate,
-        lostDays: leave.lostDays,
-        classification: leave.classification,
-        attachments: input.payload.attachments?.length
-          ? {
-              createMany: {
-                data: input.payload.attachments,
-              },
-            }
-          : undefined,
-        involvedEmployees: involvedEmployeeIds.length
-          ? {
-              createMany: {
-                data: involvedEmployeeIds.map((employeeId, index) => ({
-                  employeeId,
-                  sortOrder: index,
-                })),
-              },
-            }
-          : undefined,
-      },
-      include: {
-        attachments: true,
-        involvedEmployees: {
-          include: {
-            employee: true,
-          },
-          orderBy: {
-            sortOrder: "asc",
+      });
+
+      return tx.communication.create({
+        data: {
+          plantId: input.plantId,
+          type: input.payload.type,
+          codigoCompleto: recordCode?.codigoCompleto,
+          codigoAbreviado: recordCode?.codigoAbreviado,
+          tipo: recordCode?.tipo,
+          codigoFabrica: recordCode?.codigoFabrica,
+          ano: recordCode?.ano,
+          numeroSequencial: recordCode?.numeroSequencial,
+          level: input.payload.level ?? null,
+          status: initialStatusForCommunicationCreation(input.actorRole),
+          source: input.source ?? CommunicationSource.BACKOFFICE,
+          eventDatetime: input.payload.eventDatetime,
+          reporterName,
+          reporterEmployeeNo,
+          reporterUserId: input.reporterUserId,
+          targetText: resolvedTargetText,
+          targetEmployeeNo: resolvedTargetEmployeeNo,
+          targetEmployeeId: resolvedTargetEmployeeId,
+          shiftId: input.payload.shiftId,
+          areaId: input.payload.areaId,
+          lineId: input.payload.lineId,
+          workstationId: input.payload.workstationId,
+          equipmentId: input.payload.equipmentId,
+          riskThemeId,
+          unsafeActTypeId,
+          unsafeConditionTypeId,
+          nearMissTypeId,
+          improvementSubtype,
+          description: input.payload.description,
+          suggestedAction: input.payload.suggestedAction,
+          severityPotential: input.payload.severityPotential,
+          isContractor: input.payload.isContractor,
+          bodyPartId: input.payload.bodyPartId,
+          injuryTypeId: input.payload.injuryTypeId,
+          isFatal: input.payload.isFatal,
+          initialLostDays: input.payload.initialLostDays,
+          hasLeave: input.payload.hasLeave,
+          returnDate: input.payload.returnDate,
+          lostDays: leave.lostDays,
+          classification: leave.classification,
+          attachments: input.payload.attachments?.length
+            ? {
+                createMany: {
+                  data: input.payload.attachments,
+                },
+              }
+            : undefined,
+          involvedEmployees: involvedEmployeeIds.length
+            ? {
+                createMany: {
+                  data: involvedEmployeeIds.map((employeeId, index) => ({
+                    employeeId,
+                    sortOrder: index,
+                  })),
+                },
+              }
+            : undefined,
+        },
+        include: {
+          attachments: true,
+          involvedEmployees: {
+            include: {
+              employee: true,
+            },
+            orderBy: {
+              sortOrder: "asc",
+            },
           },
         },
-      },
+      });
     });
 
     const isPublicTokenReport = input.source === CommunicationSource.TOKEN_REPORT;
@@ -649,7 +673,7 @@ export const CommunicationService = {
         plantId: updated.plantId,
         roles: [RoleCode.N1_CORPORATE],
         title: `${updated.type} validated`,
-        body: `Communication ${updated.id} was validated and is ready for corporate follow-up.`,
+        body: `Communication ${getReadableCommunicationCode(updated)} was validated and is ready for corporate follow-up.`,
       });
 
       await SewaService.createProvisionalFromCommunication({

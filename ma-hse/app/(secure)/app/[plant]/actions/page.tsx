@@ -145,7 +145,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
         }))}
         communicationOptions={communications.map((entry) => ({
           id: entry.id,
-          label: `${entry.eventDatetime.toISOString().slice(0, 10)} | ${communicationUi.communicationTypeLabels[entry.type] ?? entry.type} | ${entry.reporterName}`,
+          label: `${entry.codigoCompleto ?? entry.codigoAbreviado ?? "Requires code update"} | ${entry.eventDatetime.toISOString().slice(0, 10)} | ${communicationUi.communicationTypeLabels[entry.type] ?? entry.type} | ${entry.reporterName}`,
         }))}
         labels={communicationUi.createActionQuick}
       />
@@ -181,7 +181,9 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
                 ? `/app/${plant}/sewo?sewoId=${row.sewoId}`
                 : null,
           communicationId: row.communicationId,
+          communicationCode: row.communication?.codigoCompleto ?? row.communication?.codigoAbreviado ?? null,
           sewoId: row.sewoId,
+          sewoCode: row.sewo?.codigoSewo ?? null,
           evidence: row.evidenceAttachments.map((entry) => ({
             id: entry.id,
             fileName: entry.fileName,

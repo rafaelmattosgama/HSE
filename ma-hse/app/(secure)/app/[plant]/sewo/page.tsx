@@ -117,6 +117,7 @@ export default async function SewoPage({
         sewoRecords: {
           select: {
             id: true,
+            codigoSewo: true,
           },
           take: 1,
         },
@@ -200,6 +201,7 @@ export default async function SewoPage({
 
         return {
           id: record.id,
+          codigoSewo: record.codigoSewo,
           date: record.analysisDate.toISOString().slice(0, 10),
           local: record.whereText || record.communication?.workstation?.name || record.communication?.area?.name || "",
           typeLabel: record.communication
@@ -212,6 +214,7 @@ export default async function SewoPage({
           description: translatedSewoDescriptions[index] ?? record.howText,
           formData: {
             id: record.id,
+            codigoSewo: record.codigoSewo,
             communicationId: record.communicationId ?? null,
             eventClassification: record.eventClassification,
             areaId: record.areaId ?? communication?.areaId ?? null,
@@ -256,6 +259,8 @@ export default async function SewoPage({
         const monthKey = communication.eventDatetime.toISOString().slice(0, 7);
         return {
           id: communication.id,
+          codigoCompleto: communication.codigoCompleto,
+          codigoAbreviado: communication.codigoAbreviado,
           eventDate: communication.eventDatetime.toISOString().slice(0, 10),
           monthKey,
           monthLabel: monthLabel(communication.eventDatetime, uiLocale),
@@ -272,6 +277,7 @@ export default async function SewoPage({
           description: communication.description,
           suggestedAction: communication.suggestedAction,
           linkedSewoId: communication.sewoRecords[0]?.id ?? null,
+          linkedSewoCode: communication.sewoRecords[0]?.codigoSewo ?? null,
           openActions: communication.actions.map((action) => ({
             id: action.id,
             title: action.title,

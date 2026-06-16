@@ -201,6 +201,7 @@ export default async function CommunicationDetailPage({
   );
   const typeLabel = communicationUi.communicationTypeLabels[communication.type] ?? communication.type;
   const statusLabel = communicationUi.communicationStatusLabels[communication.status] ?? communication.status;
+  const communicationCode = communication.codigoCompleto ?? communication.codigoAbreviado ?? "Requires code update";
   const backHref = currentSearchParams.from === "validation" ? `/app/${plant}/validation` : `/app/${plant}/communications`;
   const backLabel =
     currentSearchParams.from === "validation"
@@ -211,12 +212,15 @@ export default async function CommunicationDetailPage({
     <div className="space-y-5">
       <header className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">{typeLabel}</h1>
+        <p className="mt-2 text-sm font-semibold text-slate-600">{communicationCode}</p>
       </header>
 
       <CommunicationDetailEditor
         plant={plant}
         communication={{
           id: communication.id,
+          codigoCompleto: communication.codigoCompleto,
+          codigoAbreviado: communication.codigoAbreviado,
           type: communication.type,
           level: communication.level,
           status: communication.status,
@@ -324,6 +328,11 @@ export default async function CommunicationDetailPage({
           <div className="mt-3 space-y-2 text-sm text-slate-700">
             <p>{communicationUi.detailPage.actions}: {communication.actions.length}</p>
             <p>{communicationUi.detailPage.sewoRecords}: {communication.sewoRecords.length}</p>
+            {communication.sewoRecords.slice(0, 5).map((sewo) => (
+              <p key={sewo.id}>
+                S-EWO: {sewo.codigoSewo ?? "Requires code update"}
+              </p>
+            ))}
             {communication.actions.slice(0, 5).map((action, index) => (
               <p key={action.id}>
                 {translatedActionTitles[index] ?? action.title} ({communicationUi.actionStatusLabels[action.status] ?? action.status})

@@ -76,6 +76,7 @@ export default async function CorporateReportsPage({
 
       return {
         id: run.id,
+        code: run.codigoCompleto ?? run.codigoAbreviado ?? "Requires code update",
         type: run.type,
         scopeLabel: isFactoryReport ? "Factory" : "Global",
         factoryLabel,
@@ -128,6 +129,7 @@ export default async function CorporateReportsPage({
         <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-4 py-3">Code</th>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Scope</th>
               <th className="px-4 py-3">Factory</th>
@@ -142,6 +144,7 @@ export default async function CorporateReportsPage({
           <tbody>
             {reports.map((report) => (
               <tr key={report.id} className="border-t border-slate-200">
+                <td className="px-4 py-3 font-semibold text-slate-900">{report.code}</td>
                 <td className="px-4 py-3 font-semibold text-slate-900">{report.type}</td>
                 <td className="px-4 py-3">{report.scopeLabel}</td>
                 <td className="px-4 py-3">{report.factoryLabel}</td>
@@ -165,7 +168,7 @@ export default async function CorporateReportsPage({
             ))}
             {reports.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
                   No corporate reports have been generated yet.
                 </td>
               </tr>

@@ -19,6 +19,7 @@ import {
 } from "@/lib/services/sewo-validation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { formatLocalizedSewoStatus, type SewoUi } from "@/lib/sewo-ui";
+import { getReadableCommunicationCode, getReadableSewoCode } from "@/lib/record-code";
 
 type PdfDocument = ReturnType<typeof createPdfDocument>;
 
@@ -889,6 +890,8 @@ export const SewoExportService = {
     });
 
     const templateData = (sewo.templateData as Record<string, unknown> | null) ?? {};
+    const sewoCode = getReadableSewoCode(sewo);
+    const communicationCode = sewo.communication ? getReadableCommunicationCode(sewo.communication) : "-";
     const fiveWhys = Array.isArray(templateData.fiveWhys) ? (templateData.fiveWhys as Array<Record<string, unknown>>) : [];
     const sifPsifDecision = readSifPsifDecision(templateData.sifPsifDecision);
     const sifPsifResult = sifPsifDecision ? getSifPsifResult(sifPsifDecision) : "PENDING";
@@ -1016,11 +1019,11 @@ export const SewoExportService = {
         gapY: 6,
         entries: [
           [ui.plant, plantLabel],
-          [ui.summaryReportReference, sewo.id],
+          [ui.summaryReportReference, sewoCode],
           [ui.summaryStatus, localizedStatus],
           [ui.tableDate, formatDate(sewo.analysisDate)],
           [ui.summaryPerformedBy, sewo.performedBy?.name ?? ui.summaryReportNotApplicable],
-          [ui.summaryCommunication, sewo.communication?.id ?? "-"],
+          [ui.summaryCommunication, communicationCode],
           [ui.validatedBy, sewo.approvedBy?.name ?? ui.summaryReportNotApplicable],
           [ui.reviewedAt, sewo.approvedAt ? formatDate(sewo.approvedAt) : ui.summaryReportNotApplicable],
           [ui.eventClassification, display(sewo.eventClassification)],
@@ -1277,7 +1280,7 @@ export const SewoExportService = {
       [ui.summaryStatus, localizedStatus],
       [ui.tableDate, formatDate(sewo.analysisDate)],
       [ui.summaryPerformedBy, sewo.performedBy?.name ?? ui.summaryReportNotApplicable],
-      [ui.summaryCommunication, sewo.communication?.id ?? "-"],
+      [ui.summaryCommunication, communicationCode],
       [ui.eventClassification, translated(sewo.eventClassification)],
       [ui.area, sewo.area?.name ?? "-"],
       [ui.workstation, sewo.whereText || sewo.line?.name || "-"],
@@ -1428,6 +1431,7 @@ export const SewoExportService = {
       },
     });
     const templateData = getSewoTemplateRecord(sewo.templateData);
+    const sewoCode = getReadableSewoCode(sewo);
     const occurrenceType = formatSewoOccurrenceType({
       communicationType: sewo.communication?.type,
       templateEventType: templateData.eventType,
@@ -1494,7 +1498,7 @@ export const SewoExportService = {
       drawSummaryHeader(doc, {
         title: ui.summaryReportTitle,
         referenceLabel: ui.summaryReportReference,
-        reference: sewo.id,
+        reference: sewoCode,
         plantLabel,
         generatedOnLabel: ui.generatedOn,
       });

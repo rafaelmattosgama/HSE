@@ -1,5 +1,6 @@
 import { CommunicationType, RoleCode, SEWOStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getReadableSewoCode } from "@/lib/record-code";
 import {
   SIF_PSIF_EXPOSURE_KEYS,
   createEmptySifPsifDecision,
@@ -41,6 +42,7 @@ type SewoValidationRecord = Prisma.SEWOGetPayload<{
 
 export type SewoValidationRow = {
   id: string;
+  code: string;
   plantCode: string;
   plantName: string;
   occurrenceType: string;
@@ -210,6 +212,7 @@ function toValidationRow(record: SewoValidationRecord): SewoValidationRow {
 
   return {
     id: record.id,
+    code: getReadableSewoCode(record),
     plantCode: record.plant.code,
     plantName: record.plant.name,
     occurrenceType,

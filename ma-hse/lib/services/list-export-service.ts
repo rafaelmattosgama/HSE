@@ -89,6 +89,7 @@ async function buildPdf<T extends Record<string, string>>(title: string, columns
 }
 
 const communicationColumns: ExportColumn<CommunicationExportRow>[] = [
+  { key: "code", header: "Code", width: 16 },
   { key: "event", header: "Event", width: 14 },
   { key: "level", header: "Level", width: 7 },
   { key: "type", header: "Type", width: 14 },
@@ -112,6 +113,7 @@ const actionColumns: ExportColumn<ActionExportRow>[] = [
 ];
 
 export type CommunicationExportRow = {
+  code: string;
   event: string;
   level: string;
   type: string;
