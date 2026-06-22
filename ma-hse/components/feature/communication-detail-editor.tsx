@@ -8,6 +8,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { sanitizeCommunicationPdfFileName, supportsCommunicationPdfReport } from "@/lib/communication-report";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
 import type { BodyZonePickerLabels } from "@/lib/sewo-ui";
@@ -152,8 +153,10 @@ export function CommunicationDetailEditor({
   const [message, setMessage] = useState("");
   const [statusReason, setStatusReason] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
   const needsRestrictedProfessionalRisk = type === "NEAR_MISS" || type === "FIRST_AID";
@@ -174,6 +177,41 @@ export function CommunicationDetailEditor({
   const communicationCode = communication.codigoCompleto ?? communication.codigoAbreviado ?? "Requires code update";
   const communicationLabel = `${communicationCode} | ${typeLabels[communication.type] ?? communication.type} | ${statusLabel}`;
   const hasBlockingLinkedActions = hasOpenLinkedActions(communication.linkedActionStatuses);
+  const canExportPdf = supportsCommunicationPdfReport(communication.type);
+
+  function getFileNameFromDisposition(disposition: string | null) {
+    const match = disposition?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+    return match ? decodeURIComponent(match[1]) : sanitizeCommunicationPdfFileName(communicationCode);
+  }
+
+  async function exportPdf() {
+    setExportingPdf(true);
+    setExportMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/communications/${communication.id}/report`, {
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        throw new Error(text.exportPdfFailed);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = getFileNameFromDisposition(response.headers.get("content-disposition"));
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setExportMessage(text.exportPdfFailed);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -275,10 +313,24 @@ export function CommunicationDetailEditor({
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{text.communicationRecord}</h2>
           </div>
-          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-            {statusLabel}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {canExportPdf ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={exportingPdf}
+                onClick={() => void exportPdf()}
+              >
+                {exportingPdf ? text.generatingPdf : text.exportPdf}
+              </Button>
+            ) : null}
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {statusLabel}
+            </div>
           </div>
         </div>
+        {exportMessage ? <p className="text-sm text-red-700">{exportMessage}</p> : null}
 
         {canManageStatus ? (
           <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">

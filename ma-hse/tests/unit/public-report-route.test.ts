@@ -403,6 +403,61 @@ describe("public report route", () => {
     );
   });
 
+  it("accepts public 5S report multipart submission with photos", async () => {
+    mockSubmitDependencies();
+    attachmentServiceMock.uploadPublicReportPhotos.mockResolvedValue([
+      {
+        fileKey: "maap/communications/public-reports/five-s-photo.jpg",
+        fileName: "five-s-photo.jpg",
+        originalName: "five-s-photo.jpg",
+        contentType: "image/jpeg",
+        size: 4,
+      },
+    ]);
+
+    const formData = new FormData();
+    formData.set(
+      "payload",
+      JSON.stringify({
+        ...validPayload,
+        type: CommunicationType.FIVE_S_IMPROVEMENT,
+        improvementSubtype: CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+        targetEmployeeId: undefined,
+        description: "5S improvement from public QR form with photo.",
+      }),
+    );
+    formData.append("photos", new File([new Uint8Array([0xff, 0xd8, 0xff, 0x00])], "five-s-photo.jpg", { type: "image/jpeg" }));
+
+    const response = await POST(
+      new NextRequest("http://localhost/r/maap/report?t=qr-token", {
+        method: "POST",
+        body: formData,
+      }),
+      routeContext(),
+    );
+
+    expect(response.status).toBe(201);
+    expect(attachmentServiceMock.uploadPublicReportPhotos).toHaveBeenCalledWith({
+      plantCode: "maap",
+      files: [expect.any(File)],
+    });
+    expect(communicationServiceMock.CommunicationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          type: CommunicationType.FIVE_S_IMPROVEMENT,
+          improvementSubtype: CommunicationImprovementSubtype.FIVE_S_AREA_IMPROVEMENT,
+          attachments: [
+            expect.objectContaining({
+              fileKey: "maap/communications/public-reports/five-s-photo.jpg",
+              contentType: "image/jpeg",
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(communicationServiceMock.CommunicationService.create.mock.calls[0][0].payload).not.toHaveProperty("targetEmployeeId");
+  });
+
   it("returns a clear response when photo storage fails", async () => {
     mockSubmitDependencies();
     attachmentServiceMock.uploadPublicReportPhotos.mockRejectedValue(new Error("storage unavailable"));
