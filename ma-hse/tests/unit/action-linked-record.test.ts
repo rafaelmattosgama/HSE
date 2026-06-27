@@ -22,6 +22,7 @@ describe("action linked record helpers", () => {
     expect(getActionLinkedRecordCodes(action)).toEqual({
       communicationCode: "UC_MAAP_2026_01",
       sewoCode: "-",
+      smatCode: "-",
     });
   });
 
@@ -41,6 +42,34 @@ describe("action linked record helpers", () => {
     expect(getActionLinkedRecordCodes(action)).toEqual({
       communicationCode: "-",
       sewoCode: "sewo_MAAPUC202601",
+      smatCode: "-",
+    });
+  });
+
+  it("resolves SMAT description and readable label", () => {
+    const action = {
+      sourceType: "SMAT",
+      communication: null,
+      sewo: null,
+      smatLinks: [
+        {
+          smatAudit: {
+            id: "smat-1",
+            auditDate: new Date("2026-06-20T00:00:00.000Z"),
+            auditorName: "Maria Silva",
+            areaExamined: "Linha 1",
+            locationExamined: "Posto A",
+            notes: "Observation notes",
+          },
+        },
+      ],
+    };
+
+    expect(getActionLinkedRecordDescription(action)).toBe("Observation notes");
+    expect(getActionLinkedRecordCodes(action)).toEqual({
+      communicationCode: "-",
+      sewoCode: "-",
+      smatCode: "SMAT | 2026-06-20 | Maria Silva",
     });
   });
 
@@ -61,6 +90,7 @@ describe("action linked record helpers", () => {
     expect(getActionLinkedRecordCodes(action)).toEqual({
       communicationCode: "-",
       sewoCode: "-",
+      smatCode: "-",
     });
   });
 });

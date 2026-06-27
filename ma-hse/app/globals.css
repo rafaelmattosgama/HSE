@@ -11,6 +11,17 @@
   --primary: #002663;
   --primary-foreground: #f8fafc;
   --danger: #b91c1c;
+  --chart-axis: #cbd5e1;
+  --chart-line: #111827;
+  --chart-text-muted: #64748b;
+  --chart-text-strong: #0f172a;
+  --chart-track: #e2e8f0;
+  --chart-series-1: #002663;
+  --chart-series-2: #0a4dff;
+  --chart-series-3: #1d8cf8;
+  --chart-series-4: #22c55e;
+  --chart-series-5: #f59e0b;
+  --chart-series-6: #ef4444;
   --app-background: radial-gradient(circle at top right, #dbe7ff 0%, #ffffff 48%, #f7faff 100%);
   --surface: #ffffff;
   --surface-muted: #f8fafc;
@@ -20,6 +31,7 @@
   --text-muted: #64748b;
   --brand-50: #e7eefb;
   --brand-100: #d3e0f9;
+  --brand-200: #b8cbed;
   --brand-300: #8aa6dd;
   --brand-400: #6b8ccf;
   --brand-700: #002663;
@@ -45,6 +57,17 @@ html[data-theme="black"] {
   --primary: #7fa3ff;
   --primary-foreground: #020407;
   --danger: #f87171;
+  --chart-axis: #475569;
+  --chart-line: #d7e1f0;
+  --chart-text-muted: #aab8cd;
+  --chart-text-strong: #f8fbff;
+  --chart-track: #243247;
+  --chart-series-1: #7fa3ff;
+  --chart-series-2: #60a5fa;
+  --chart-series-3: #38bdf8;
+  --chart-series-4: #34d399;
+  --chart-series-5: #fbbf24;
+  --chart-series-6: #fb7185;
   --app-background: radial-gradient(circle at top right, #0e1a31 0%, #05080f 42%, #000000 100%);
   --surface: #09111d;
   --surface-muted: #101a29;
@@ -54,6 +77,7 @@ html[data-theme="black"] {
   --text-muted: #aab8cd;
   --brand-50: #0d1a31;
   --brand-100: #19345b;
+  --brand-200: #284671;
   --brand-300: #4d6fb3;
   --brand-400: #6b8fe3;
   --brand-700: #7fa3ff;
@@ -128,6 +152,14 @@ html[data-theme] .bg-white\/80 {
   background-color: color-mix(in srgb, var(--surface) 80%, transparent) !important;
 }
 
+html[data-theme] .bg-white\/90 {
+  background-color: color-mix(in srgb, var(--surface) 90%, transparent) !important;
+}
+
+html[data-theme] .bg-white\/95 {
+  background-color: color-mix(in srgb, var(--surface) 95%, transparent) !important;
+}
+
 html[data-theme] .bg-slate-50 {
   background-color: var(--surface-muted) !important;
 }
@@ -137,20 +169,24 @@ html[data-theme] .bg-slate-100 {
 }
 
 html[data-theme] .border-slate-200,
+html[data-theme] .border-slate-100,
 html[data-theme] .border-slate-300,
 html[data-theme] .border-amber-200 {
   border-color: var(--border) !important;
 }
 
+html[data-theme] .text-slate-950,
 html[data-theme] .text-slate-900 {
   color: var(--text-strong) !important;
 }
 
+html[data-theme] .text-slate-800,
 html[data-theme] .text-slate-700,
 html[data-theme] .text-slate-600 {
   color: var(--text-default) !important;
 }
 
+html[data-theme] .text-slate-400,
 html[data-theme] .text-slate-500 {
   color: var(--text-muted) !important;
 }
@@ -171,8 +207,60 @@ html[data-theme] .text-rose-700 {
   color: #fb7185 !important;
 }
 
+html[data-theme="black"] .text-red-800,
+html[data-theme="black"] .text-rose-800 {
+  color: var(--danger) !important;
+}
+
+html[data-theme="black"] .text-indigo-950,
+html[data-theme="black"] .text-violet-800 {
+  color: var(--violet) !important;
+}
+
+html[data-theme="black"] .text-sky-950,
+html[data-theme="black"] .text-sky-800,
+html[data-theme="black"] .text-sky-700 {
+  color: var(--info) !important;
+}
+
+html[data-theme="black"] .text-emerald-950,
+html[data-theme="black"] .text-emerald-900,
+html[data-theme="black"] .text-emerald-800,
+html[data-theme="black"] .text-emerald-700,
+html[data-theme="black"] .text-lime-700 {
+  color: var(--success) !important;
+}
+
+html[data-theme="black"] .text-orange-950,
+html[data-theme="black"] .text-orange-800,
+html[data-theme="black"] .text-orange-700 {
+  color: var(--warning) !important;
+}
+
+html[data-theme="black"] .bg-emerald-50,
+html[data-theme="black"] .bg-emerald-100 {
+  background-color: var(--success-soft) !important;
+}
+
+html[data-theme="black"] .bg-sky-100 {
+  background-color: var(--info-soft) !important;
+}
+
+html[data-theme="black"] .bg-red-50,
+html[data-theme="black"] .bg-rose-100 {
+  background-color: var(--danger-soft) !important;
+}
+
+html[data-theme="black"] .bg-orange-100 {
+  background-color: var(--warning-soft) !important;
+}
+
 html[data-theme] .text-teal-700 {
   color: var(--brand-700) !important;
+}
+
+html[data-theme] .text-teal-800 {
+  color: var(--brand-800) !important;
 }
 
 html[data-theme] .text-teal-900 {

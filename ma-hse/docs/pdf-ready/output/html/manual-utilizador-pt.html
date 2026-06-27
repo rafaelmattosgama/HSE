@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-PT" xml:lang="pt-PT">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="MA HSE" />
+  <title>Manual de Utilizador</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">@page {
+size: A4;
+margin: 22mm 18mm 20mm 18mm;
+}
+body {
+color: #0f172a;
+font-family: "Segoe UI", Arial, sans-serif;
+font-size: 10.5pt;
+line-height: 1.45;
+}
+.cover {
+align-items: center;
+border: 1px solid #cbd5e1;
+display: flex;
+flex-direction: column;
+justify-content: center;
+min-height: 86vh;
+padding: 36mm 20mm;
+text-align: center;
+}
+.cover-brand {
+color: #0f766e;
+font-size: 13pt;
+font-weight: 700;
+letter-spacing: 0.16em;
+margin-bottom: 18mm;
+text-transform: uppercase;
+}
+.cover-title {
+color: #0f172a;
+font-size: 30pt;
+font-weight: 800;
+line-height: 1.08;
+margin: 0;
+}
+.cover-subtitle {
+color: #334155;
+font-size: 15pt;
+font-weight: 600;
+margin-top: 8mm;
+}
+.cover-meta {
+border-top: 1px solid #cbd5e1;
+color: #475569;
+font-size: 10pt;
+margin-top: 24mm;
+padding-top: 8mm;
+}
+h1,
+h2,
+h3,
+h4 {
+color: #0f172a;
+line-height: 1.2;
+}
+h1 {
+border-bottom: 2px solid #0f766e;
+font-size: 22pt;
+margin-top: 0;
+padding-bottom: 5mm;
+}
+h2 {
+border-bottom: 1px solid #cbd5e1;
+font-size: 15pt;
+margin-top: 12mm;
+padding-bottom: 2mm;
+}
+h3 {
+font-size: 12.5pt;
+margin-top: 8mm;
+}
+h4 {
+font-size: 11pt;
+margin-top: 6mm;
+}
+a {
+color: #0f766e;
+}
+code {
+background: #f1f5f9;
+border-radius: 3px;
+color: #0f172a;
+font-family: Consolas, "Courier New", monospace;
+font-size: 9.5pt;
+padding: 1px 4px;
+}
+pre {
+background: #f8fafc;
+border: 1px solid #cbd5e1;
+border-radius: 6px;
+overflow-wrap: break-word;
+padding: 10px 12px;
+white-space: pre-wrap;
+}
+pre code {
+background: transparent;
+padding: 0;
+}
+table {
+border-collapse: collapse;
+width: 100%;
+}
+th,
+td {
+border: 1px solid #cbd5e1;
+padding: 6px 8px;
+vertical-align: top;
+}
+th {
+background: #f1f5f9;
+}
+blockquote {
+border-left: 4px solid #0f766e;
+color: #475569;
+margin-left: 0;
+padding-left: 12px;
+}
+.page-break {
+break-after: page;
+page-break-after: always;
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Manual de Utilizador</h1>
+<p class="subtitle">MA HSE</p>
+<p class="author">MA HSE</p>
+<p class="date">25 de junho de 2026</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#manual-de-utilizador---ma-hse" id="toc-manual-de-utilizador---ma-hse"><span class="toc-section-number">1</span> Manual de Utilizador - MA HSE</a>
+<ul>
+<li><a href="#objetivo" id="toc-objetivo"><span class="toc-section-number">1.1</span> 1. Objetivo</a></li>
+<li><a href="#acesso" id="toc-acesso"><span class="toc-section-number">1.2</span> 2. Acesso</a>
+<ul>
+<li><a href="#entrar-na-aplicacao" id="toc-entrar-na-aplicacao"><span class="toc-section-number">1.2.1</span> 2.1 Entrar na aplicacao</a></li>
+<li><a href="#alterar-palavra-passe" id="toc-alterar-palavra-passe"><span class="toc-section-number">1.2.2</span> 2.2 Alterar
+palavra-passe</a></li>
+<li><a href="#idioma" id="toc-idioma"><span class="toc-section-number">1.2.3</span> 2.3 Idioma</a></li>
+</ul></li>
+<li><a href="#navegacao-principal" id="toc-navegacao-principal"><span class="toc-section-number">1.3</span> 3. Navegacao Principal</a></li>
+<li><a href="#safety-dashboard" id="toc-safety-dashboard"><span class="toc-section-number">1.4</span> 4. Safety Dashboard</a>
+<ul>
+<li><a href="#filtrar-periodo" id="toc-filtrar-periodo"><span class="toc-section-number">1.4.1</span> 4.1 Filtrar periodo</a></li>
+<li><a href="#indicadores-apresentados" id="toc-indicadores-apresentados"><span class="toc-section-number">1.4.2</span> 4.2 Indicadores
+apresentados</a></li>
+</ul></li>
+<li><a href="#communications" id="toc-communications"><span class="toc-section-number">1.5</span> 5. Communications</a>
+<ul>
+<li><a href="#tipos-de-comunicacao" id="toc-tipos-de-comunicacao"><span class="toc-section-number">1.5.1</span> 5.1 Tipos de
+comunicacao</a></li>
+<li><a href="#criar-comunicacao" id="toc-criar-comunicacao"><span class="toc-section-number">1.5.2</span> 5.2 Criar comunicacao</a></li>
+<li><a href="#consultar-comunicacoes" id="toc-consultar-comunicacoes"><span class="toc-section-number">1.5.3</span> 5.3 Consultar
+comunicacoes</a></li>
+<li><a href="#detalhe-da-comunicacao" id="toc-detalhe-da-comunicacao"><span class="toc-section-number">1.5.4</span> 5.4 Detalhe da
+comunicacao</a></li>
+</ul></li>
+<li><a href="#validacao" id="toc-validacao"><span class="toc-section-number">1.6</span> 6. Validacao</a>
+<ul>
+<li><a href="#validar-comunicacoes" id="toc-validar-comunicacoes"><span class="toc-section-number">1.6.1</span> 6.1 Validar
+comunicacoes</a></li>
+<li><a href="#validacao-s-ewo" id="toc-validacao-s-ewo"><span class="toc-section-number">1.6.2</span> 6.2 Validacao S-EWO</a></li>
+</ul></li>
+<li><a href="#actions" id="toc-actions"><span class="toc-section-number">1.7</span> 7. Actions</a>
+<ul>
+<li><a href="#criar-acao" id="toc-criar-acao"><span class="toc-section-number">1.7.1</span> 7.1 Criar acao</a></li>
+<li><a href="#acompanhar-acoes" id="toc-acompanhar-acoes"><span class="toc-section-number">1.7.2</span> 7.2 Acompanhar acoes</a></li>
+<li><a href="#fechar-acao" id="toc-fechar-acao"><span class="toc-section-number">1.7.3</span> 7.3 Fechar acao</a></li>
+</ul></li>
+<li><a href="#s-ewo" id="toc-s-ewo"><span class="toc-section-number">1.8</span> 8. S-EWO</a>
+<ul>
+<li><a href="#criar-s-ewo" id="toc-criar-s-ewo"><span class="toc-section-number">1.8.1</span> 8.1 Criar S-EWO</a></li>
+<li><a href="#estados" id="toc-estados"><span class="toc-section-number">1.8.2</span> 8.2 Estados</a></li>
+<li><a href="#aprovacao" id="toc-aprovacao"><span class="toc-section-number">1.8.3</span> 8.3 Aprovacao</a></li>
+</ul></li>
+<li><a href="#smat" id="toc-smat"><span class="toc-section-number">1.9</span> 9. SMAT</a>
+<ul>
+<li><a href="#criar-auditoria" id="toc-criar-auditoria"><span class="toc-section-number">1.9.1</span> 9.1 Criar auditoria</a></li>
+<li><a href="#exportar-auditoria" id="toc-exportar-auditoria"><span class="toc-section-number">1.9.2</span> 9.2 Exportar auditoria</a></li>
+</ul></li>
+<li><a href="#occupational-health" id="toc-occupational-health"><span class="toc-section-number">1.10</span> 10. Occupational Health</a>
+<ul>
+<li><a href="#consultar-trabalhadores" id="toc-consultar-trabalhadores"><span class="toc-section-number">1.10.1</span> 10.1 Consultar
+trabalhadores</a></li>
+<li><a href="#adicionar-ou-editar-trabalhador" id="toc-adicionar-ou-editar-trabalhador"><span class="toc-section-number">1.10.2</span> 10.2 Adicionar ou editar
+trabalhador</a></li>
+<li><a href="#importar-e-exportar" id="toc-importar-e-exportar"><span class="toc-section-number">1.10.3</span> 10.3 Importar e
+exportar</a></li>
+</ul></li>
+<li><a href="#monthly-inputs" id="toc-monthly-inputs"><span class="toc-section-number">1.11</span> 11. Monthly Inputs</a>
+<ul>
+<li><a href="#preencher-dados" id="toc-preencher-dados"><span class="toc-section-number">1.11.1</span> 11.1 Preencher dados</a></li>
+<li><a href="#modos-de-visualizacao" id="toc-modos-de-visualizacao"><span class="toc-section-number">1.11.2</span> 11.2 Modos de
+visualizacao</a></li>
+<li><a href="#excel" id="toc-excel"><span class="toc-section-number">1.11.3</span> 11.3 Excel</a></li>
+</ul></li>
+<li><a href="#environment-dashboard" id="toc-environment-dashboard"><span class="toc-section-number">1.12</span> 12. Environment
+Dashboard</a></li>
+<li><a href="#contractors" id="toc-contractors"><span class="toc-section-number">1.13</span> 13. Contractors</a>
+<ul>
+<li><a href="#convidar-empresa-externa" id="toc-convidar-empresa-externa"><span class="toc-section-number">1.13.1</span> 13.1 Convidar empresa
+externa</a></li>
+<li><a href="#consultar-empresas-e-trabalhadores" id="toc-consultar-empresas-e-trabalhadores"><span class="toc-section-number">1.13.2</span> 13.2 Consultar empresas e
+trabalhadores</a></li>
+<li><a href="#portal-da-empresa-externa" id="toc-portal-da-empresa-externa"><span class="toc-section-number">1.13.3</span> 13.3 Portal da empresa
+externa</a></li>
+</ul></li>
+<li><a href="#mapa" id="toc-mapa"><span class="toc-section-number">1.14</span> 14. MAPA</a></li>
+<li><a href="#registo-publico-por-qr-code" id="toc-registo-publico-por-qr-code"><span class="toc-section-number">1.15</span> 15. Registo Publico por QR
+Code</a>
+<ul>
+<li><a href="#submeter-ocorrencia-por-qr" id="toc-submeter-ocorrencia-por-qr"><span class="toc-section-number">1.15.1</span> 15.1 Submeter ocorrencia por
+QR</a></li>
+<li><a href="#fotografias" id="toc-fotografias"><span class="toc-section-number">1.15.2</span> 15.2 Fotografias</a></li>
+</ul></li>
+<li><a href="#alertas-e-notificacoes" id="toc-alertas-e-notificacoes"><span class="toc-section-number">1.16</span> 16. Alertas e
+Notificacoes</a></li>
+<li><a href="#boas-praticas" id="toc-boas-praticas"><span class="toc-section-number">1.17</span> 17. Boas Praticas</a></li>
+<li><a href="#resolucao-de-problemas" id="toc-resolucao-de-problemas"><span class="toc-section-number">1.18</span> 18. Resolucao de Problemas</a>
+<ul>
+<li><a href="#nao-consigo-entrar" id="toc-nao-consigo-entrar"><span class="toc-section-number">1.18.1</span> Nao consigo entrar</a></li>
+<li><a href="#nao-vejo-um-modulo" id="toc-nao-vejo-um-modulo"><span class="toc-section-number">1.18.2</span> Nao vejo um modulo</a></li>
+<li><a href="#os-kpi-parecem-incompletos" id="toc-os-kpi-parecem-incompletos"><span class="toc-section-number">1.18.3</span> Os KPI parecem
+incompletos</a></li>
+<li><a href="#nao-consigo-fechar-uma-acao" id="toc-nao-consigo-fechar-uma-acao"><span class="toc-section-number">1.18.4</span> Nao consigo fechar uma
+acao</a></li>
+<li><a href="#o-qr-code-nao-abre" id="toc-o-qr-code-nao-abre"><span class="toc-section-number">1.18.5</span> O QR Code nao abre</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+<div class="cover">
+<div class="cover-brand">
+MA HSE
+</div>
+<h1 class="cover-title">
+Manual de Utilizador
+</h1>
+<div class="cover-subtitle">
+MA HSE
+</div>
+<div class="cover-meta">
+<pre><code>&lt;p&gt;&lt;strong&gt;Publico:&lt;/strong&gt; Utilizadores finais&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Data:&lt;/strong&gt; 25 de junho de 2026&lt;/p&gt;
+&lt;p&gt;Guia funcional para utilizacao dos modulos MA HSE.&lt;/p&gt;</code></pre>
+</div>
+</div>
+<div class="page-break">
+
+</div>
+<h1 data-number="1" id="manual-de-utilizador---ma-hse"><span class="header-section-number">1</span> Manual de Utilizador - MA
+HSE</h1>
+<p>Versao gerada por analise do projeto em 2026-06-25.</p>
+<h2 data-number="1.1" id="objetivo"><span class="header-section-number">1.1</span> 1. Objetivo</h2>
+<p>O MA HSE e uma aplicacao web para gestao de Saude, Seguranca e
+Ambiente em contexto multi-planta. Permite registar comunicacoes de
+seguranca, gerir acoes corretivas, acompanhar indicadores, validar
+ocorrencias, executar analises S-EWO, registar auditorias SMAT,
+controlar saude ocupacional, contractors, inputs mensais e mapas
+operacionais.</p>
+<p>Este manual destina-se aos utilizadores finais da aplicacao. Algumas
+opcoes podem nao aparecer para todos os utilizadores, porque a
+visibilidade depende do perfil de acesso, da planta selecionada e dos
+modulos ativos.</p>
+<h2 data-number="1.2" id="acesso"><span class="header-section-number">1.2</span> 2. Acesso</h2>
+<h3 data-number="1.2.1" id="entrar-na-aplicacao"><span class="header-section-number">1.2.1</span> 2.1 Entrar na aplicacao</h3>
+<ol type="1">
+<li>Abrir o endereco da aplicacao no navegador.</li>
+<li>Introduzir o email e a palavra-passe.</li>
+<li>Selecionar a area/planta disponivel no menu lateral ou entrar pelo
+dashboard apresentado.</li>
+</ol>
+<p>Se a conta tiver sido criada com uma palavra-passe temporaria, o
+sistema pode pedir a alteracao da palavra-passe antes de permitir o
+acesso normal.</p>
+<h3 data-number="1.2.2" id="alterar-palavra-passe"><span class="header-section-number">1.2.2</span> 2.2 Alterar
+palavra-passe</h3>
+<ol type="1">
+<li>Abrir o menu do utilizador.</li>
+<li>Entrar no perfil ou na pagina de alteracao de palavra-passe, quando
+solicitado.</li>
+<li>Introduzir a palavra-passe atual e a nova palavra-passe.</li>
+<li>Guardar.</li>
+</ol>
+<h3 data-number="1.2.3" id="idioma"><span class="header-section-number">1.2.3</span> 2.3 Idioma</h3>
+<p>A aplicacao suporta varios idiomas. O idioma pode ser definido pelo
+utilizador ou herdado da configuracao da planta. Algumas areas ainda
+podem apresentar textos tecnicos em ingles, dependendo do modulo.</p>
+<h2 data-number="1.3" id="navegacao-principal"><span class="header-section-number">1.3</span> 3. Navegacao Principal</h2>
+<p>Dentro de uma planta, o menu lateral pode apresentar:</p>
+<ul>
+<li>Safety Dashboard</li>
+<li>Environment Dashboard</li>
+<li>Validation</li>
+<li>Communications</li>
+<li>Actions</li>
+<li>S-EWO</li>
+<li>SMAT</li>
+<li>Occupational Health</li>
+<li>Monthly Inputs</li>
+<li>Contractors</li>
+<li>MAPA</li>
+<li>Admin</li>
+</ul>
+<p>Utilizadores com permissao corporativa podem tambem aceder ao
+dashboard corporativo. Administradores globais podem aceder a
+Settings.</p>
+<h2 data-number="1.4" id="safety-dashboard"><span class="header-section-number">1.4</span> 4. Safety Dashboard</h2>
+<p>O dashboard de seguranca resume o desempenho da planta para um
+periodo selecionado.</p>
+<h3 data-number="1.4.1" id="filtrar-periodo"><span class="header-section-number">1.4.1</span> 4.1 Filtrar periodo</h3>
+<ol type="1">
+<li>Abrir <code>Safety Dashboard</code>.</li>
+<li>Selecionar ano, mes ou intervalo de datas.</li>
+<li>Clicar em <code>Apply</code>.</li>
+<li>Usar <code>Clear dates</code> ou <code>Current year</code> para
+repor filtros.</li>
+</ol>
+<h3 data-number="1.4.2" id="indicadores-apresentados"><span class="header-section-number">1.4.2</span> 4.2 Indicadores
+apresentados</h3>
+<p>O dashboard pode mostrar:</p>
+<ul>
+<li>dias sem acidente;</li>
+<li>comunicacoes validadas;</li>
+<li>horas trabalhadas;</li>
+<li>acoes em atraso;</li>
+<li>minhas acoes abertas;</li>
+<li>comunicacoes abertas;</li>
+<li>comunicacoes pendentes de validacao;</li>
+<li>casos clinicos;</li>
+<li>piramide de seguranca;</li>
+<li>top 5 de causas raiz S-EWO;</li>
+<li>top 5 por tipos de ato inseguro, condicao insegura e near miss;</li>
+<li>rankings por trabalhador, departamento e local.</li>
+</ul>
+<p>Os indicadores KPI consideram comunicacoes em estados validados, em
+curso ou fechadas.</p>
+<h2 data-number="1.5" id="communications"><span class="header-section-number">1.5</span> 5. Communications</h2>
+<p>O modulo <code>Communications</code> e usado para registar e
+consultar ocorrencias de seguranca.</p>
+<h3 data-number="1.5.1" id="tipos-de-comunicacao"><span class="header-section-number">1.5.1</span> 5.1 Tipos de comunicacao</h3>
+<p>A aplicacao suporta, de acordo com permissao e origem:</p>
+<ul>
+<li>Unsafe Act</li>
+<li>Unsafe Condition</li>
+<li>Near Miss</li>
+<li>First Aid</li>
+<li>Injury / Accident</li>
+<li>5S Improvement</li>
+<li>Improvement Suggestion</li>
+</ul>
+<h3 data-number="1.5.2" id="criar-comunicacao"><span class="header-section-number">1.5.2</span> 5.2 Criar comunicacao</h3>
+<ol type="1">
+<li>Abrir <code>Communications</code>.</li>
+<li>Preencher o formulario de criacao rapida.</li>
+<li>Selecionar tipo, data/hora, area, local, trabalhador envolvido
+quando aplicavel, descricao e acao sugerida.</li>
+<li>Se disponivel, associar uma acao corretiva.</li>
+<li>Submeter.</li>
+</ol>
+<p>Alguns campos clinicos, como natureza da lesao ou parte do corpo,
+aparecem apenas para eventos que os exigem.</p>
+<h3 data-number="1.5.3" id="consultar-comunicacoes"><span class="header-section-number">1.5.3</span> 5.3 Consultar
+comunicacoes</h3>
+<p>A lista mostra as comunicacoes recentes da planta, incluindo codigo,
+data, tipo, estado, reportador, departamento, local e descricao.
+Consoante a permissao, tambem podem aparecer classificacoes tecnicas,
+tipos de ato inseguro, condicao insegura ou near miss.</p>
+<h3 data-number="1.5.4" id="detalhe-da-comunicacao"><span class="header-section-number">1.5.4</span> 5.4 Detalhe da
+comunicacao</h3>
+<p>Ao abrir uma comunicacao, o utilizador pode consultar os dados
+registados, estados, anexos, acoes ligadas e historico operacional
+disponivel.</p>
+<h2 data-number="1.6" id="validacao"><span class="header-section-number">1.6</span> 6. Validacao</h2>
+<p>O modulo <code>Validation</code> e usado principalmente por perfis de
+seguranca e corporativos.</p>
+<h3 data-number="1.6.1" id="validar-comunicacoes"><span class="header-section-number">1.6.1</span> 6.1 Validar comunicacoes</h3>
+<ol type="1">
+<li>Abrir <code>Validation</code>.</li>
+<li>Rever as comunicacoes em estado submetido ou pendente.</li>
+<li>Confirmar os dados da ocorrencia.</li>
+<li>Aprovar/validar ou tratar conforme as opcoes disponiveis.</li>
+</ol>
+<p>Uma comunicacao validada passa a contar para dashboards e KPI.</p>
+<h3 data-number="1.6.2" id="validacao-s-ewo"><span class="header-section-number">1.6.2</span> 6.2 Validacao S-EWO</h3>
+<p>Utilizadores corporativos podem ver tambem a fila de
+validacao/aprovacao S-EWO, quando existirem registos pendentes.</p>
+<h2 data-number="1.7" id="actions"><span class="header-section-number">1.7</span> 7. Actions</h2>
+<p>O modulo <code>Actions</code> gere planos de acao corretiva e
+preventiva.</p>
+<h3 data-number="1.7.1" id="criar-acao"><span class="header-section-number">1.7.1</span> 7.1 Criar acao</h3>
+<ol type="1">
+<li>Abrir <code>Actions</code>.</li>
+<li>Preencher titulo, descricao, responsavel, prioridade, prazo e
+origem.</li>
+<li>Associar a uma comunicacao quando aplicavel.</li>
+<li>Guardar.</li>
+</ol>
+<h3 data-number="1.7.2" id="acompanhar-acoes"><span class="header-section-number">1.7.2</span> 7.2 Acompanhar acoes</h3>
+<p>A tabela apresenta:</p>
+<ul>
+<li>codigo sequencial;</li>
+<li>titulo e descricao;</li>
+<li>nivel;</li>
+<li>prioridade;</li>
+<li>estado;</li>
+<li>responsavel;</li>
+<li>prazo;</li>
+<li>data de fecho;</li>
+<li>local;</li>
+<li>origem;</li>
+<li>evidencias.</li>
+</ul>
+<h3 data-number="1.7.3" id="fechar-acao"><span class="header-section-number">1.7.3</span> 7.3 Fechar acao</h3>
+<ol type="1">
+<li>Abrir a acao.</li>
+<li>Adicionar comentario de fecho.</li>
+<li>Anexar evidencia obrigatoria, quando solicitado.</li>
+<li>Confirmar o fecho.</li>
+</ol>
+<p>Sem evidencia e comentario, o fecho pode ser recusado pelo
+sistema.</p>
+<h2 data-number="1.8" id="s-ewo"><span class="header-section-number">1.8</span> 8. S-EWO</h2>
+<p>O modulo <code>S-EWO</code> e usado para analise estruturada de
+ocorrencias, causas e acoes.</p>
+<h3 data-number="1.8.1" id="criar-s-ewo"><span class="header-section-number">1.8.1</span> 8.1 Criar S-EWO</h3>
+<ol type="1">
+<li>Abrir <code>S-EWO</code>.</li>
+<li>Escolher criar novo registo ou iniciar a partir de uma comunicacao
+existente.</li>
+<li>Preencher dados do evento, local, trabalhador, turno e
+descricao.</li>
+<li>Preencher os campos de analise.</li>
+<li>Selecionar causas e marcar causas raiz.</li>
+<li>Criar ou associar acoes.</li>
+<li>Submeter para aprovacao quando aplicavel.</li>
+</ol>
+<h3 data-number="1.8.2" id="estados"><span class="header-section-number">1.8.2</span> 8.2 Estados</h3>
+<p>Os estados podem incluir rascunho, submetido, aprovado, rejeitado ou
+fechado, conforme o fluxo configurado.</p>
+<h3 data-number="1.8.3" id="aprovacao"><span class="header-section-number">1.8.3</span> 8.3 Aprovacao</h3>
+<p>A aprovacao final e normalmente feita por perfil de
+gestao/corporativo autorizado. Comentarios de aprovacao ou rejeicao
+ficam associados ao registo.</p>
+<h2 data-number="1.9" id="smat"><span class="header-section-number">1.9</span> 9. SMAT</h2>
+<p>O modulo <code>SMAT</code> permite registar auditorias
+comportamentais e observacoes em campo.</p>
+<h3 data-number="1.9.1" id="criar-auditoria"><span class="header-section-number">1.9.1</span> 9.1 Criar auditoria</h3>
+<ol type="1">
+<li>Abrir <code>SMAT</code>.</li>
+<li>Preencher auditor, data, hora, area e local.</li>
+<li>Registar numero de pessoas observadas e envolvidas.</li>
+<li>Preencher observacoes de atos seguros, condicoes seguras, atos
+inseguros e condicoes inseguras.</li>
+<li>Responder ao guia de perguntas.</li>
+<li>Adicionar fotos/anexos e acoes, se necessario.</li>
+<li>Guardar.</li>
+</ol>
+<h3 data-number="1.9.2" id="exportar-auditoria"><span class="header-section-number">1.9.2</span> 9.2 Exportar auditoria</h3>
+<p>Auditorias recentes podem ser exportadas para PDF ou Excel.</p>
+<h2 data-number="1.10" id="occupational-health"><span class="header-section-number">1.10</span> 10. Occupational Health</h2>
+<p>O modulo <code>Occupational Health</code> gere trabalhadores e
+validade de exames.</p>
+<h3 data-number="1.10.1" id="consultar-trabalhadores"><span class="header-section-number">1.10.1</span> 10.1 Consultar
+trabalhadores</h3>
+<p>A tabela apresenta numero, nome, idade, data de exame, validade,
+estado e observacoes.</p>
+<h3 data-number="1.10.2" id="adicionar-ou-editar-trabalhador"><span class="header-section-number">1.10.2</span> 10.2 Adicionar ou editar
+trabalhador</h3>
+<ol type="1">
+<li>Abrir <code>Occupational Health</code>.</li>
+<li>Clicar em <code>Add worker</code> ou no nome do trabalhador.</li>
+<li>Preencher dados pessoais, posto, funcao, nacionalidade, data de
+exame e estado.</li>
+<li>Guardar.</li>
+</ol>
+<p>A idade e a validade do exame sao calculadas automaticamente com base
+nas datas introduzidas.</p>
+<h3 data-number="1.10.3" id="importar-e-exportar"><span class="header-section-number">1.10.3</span> 10.3 Importar e
+exportar</h3>
+<p>O modulo permite:</p>
+<ul>
+<li>importar Excel;</li>
+<li>descarregar template;</li>
+<li>exportar Excel;</li>
+<li>exportar PDF;</li>
+<li>inativar trabalhadores selecionados.</li>
+</ul>
+<h2 data-number="1.11" id="monthly-inputs"><span class="header-section-number">1.11</span> 11. Monthly Inputs</h2>
+<p>O modulo <code>Monthly Inputs</code> recolhe dados mensais usados nos
+dashboards de seguranca, operacao e ambiente.</p>
+<h3 data-number="1.11.1" id="preencher-dados"><span class="header-section-number">1.11.1</span> 11.1 Preencher dados</h3>
+<ol type="1">
+<li>Abrir <code>Monthly Inputs</code>.</li>
+<li>Confirmar o ano.</li>
+<li>Selecionar o mes.</li>
+<li>Preencher os indicadores por seccao.</li>
+<li>Guardar.</li>
+</ol>
+<h3 data-number="1.11.2" id="modos-de-visualizacao"><span class="header-section-number">1.11.2</span> 11.2 Modos de
+visualizacao</h3>
+<ul>
+<li><code>Month</code>: foco num mes.</li>
+<li><code>Year</code>: revisao anual completa.</li>
+</ul>
+<p>A pagina mostra percentagem de preenchimento mensal e anual, numero
+de indicadores ativos e horas standard calculadas.</p>
+<h3 data-number="1.11.3" id="excel"><span class="header-section-number">1.11.3</span> 11.3 Excel</h3>
+<p>E possivel exportar template, exportar dados e importar ficheiro
+Excel preenchido.</p>
+<h2 data-number="1.12" id="environment-dashboard"><span class="header-section-number">1.12</span> 12. Environment Dashboard</h2>
+<p>O <code>Environment Dashboard</code> usa os inputs mensais para
+apresentar indicadores ambientais por planta ou corporativos. A
+disponibilidade depende do modulo ativo e das permissoes do
+utilizador.</p>
+<h2 data-number="1.13" id="contractors"><span class="header-section-number">1.13</span> 13. Contractors</h2>
+<p>O modulo <code>Contractors</code> gere empresas externas,
+trabalhadores externos e respetiva documentacao.</p>
+<h3 data-number="1.13.1" id="convidar-empresa-externa"><span class="header-section-number">1.13.1</span> 13.1 Convidar empresa
+externa</h3>
+<ol type="1">
+<li>Abrir <code>Contractors</code>.</li>
+<li>Introduzir o email de contacto da empresa.</li>
+<li>Enviar convite.</li>
+</ol>
+<p>A empresa recebe/acede a um link de registo.</p>
+<h3 data-number="1.13.2" id="consultar-empresas-e-trabalhadores"><span class="header-section-number">1.13.2</span> 13.2 Consultar empresas e
+trabalhadores</h3>
+<p>A tabela permite filtrar por:</p>
+<ul>
+<li>nome;</li>
+<li>tipo: empresa ou trabalhador;</li>
+<li>estado de aprovacao;</li>
+<li>estado ativo/inativo.</li>
+</ul>
+<h3 data-number="1.13.3" id="portal-da-empresa-externa"><span class="header-section-number">1.13.3</span> 13.3 Portal da empresa
+externa</h3>
+<p>No portal, a empresa externa pode:</p>
+<ul>
+<li>consultar estado de aprovacao;</li>
+<li>submeter documentos da empresa em PDF;</li>
+<li>criar trabalhadores;</li>
+<li>submeter documentos dos trabalhadores em PDF;</li>
+<li>ativar, inativar ou eliminar trabalhadores, conforme o fluxo
+disponivel.</li>
+</ul>
+<h2 data-number="1.14" id="mapa"><span class="header-section-number">1.14</span> 14. MAPA</h2>
+<p>O modulo <code>MAPA</code> permite visualizar mapas/documentos da
+planta com camadas e pontos de interesse.</p>
+<p>Funcionalidades principais:</p>
+<ul>
+<li>consultar documentos de mapa;</li>
+<li>visualizar camadas;</li>
+<li>posicionar areas e postos de trabalho;</li>
+<li>ver marcadores automaticos agregados de incidentes por tipo.</li>
+</ul>
+<h2 data-number="1.15" id="registo-publico-por-qr-code"><span class="header-section-number">1.15</span> 15. Registo Publico por QR
+Code</h2>
+<p>Algumas plantas podem ter links publicos por QR Code para reportar
+situacoes sem login.</p>
+<h3 data-number="1.15.1" id="submeter-ocorrencia-por-qr"><span class="header-section-number">1.15.1</span> 15.1 Submeter ocorrencia por
+QR</h3>
+<ol type="1">
+<li>Abrir o QR Code ou link publico.</li>
+<li>Selecionar o tipo de comunicacao.</li>
+<li>Preencher data/hora, nome do reportador, numero, area, local, turno,
+trabalhador envolvido quando aplicavel, descricao e acao sugerida.</li>
+<li>Anexar fotografias se necessario.</li>
+<li>Submeter.</li>
+</ol>
+<h3 data-number="1.15.2" id="fotografias"><span class="header-section-number">1.15.2</span> 15.2 Fotografias</h3>
+<p>Limites aplicados:</p>
+<ul>
+<li>maximo de 5 fotografias;</li>
+<li>maximo de 5 MB por fotografia;</li>
+<li>maximo de 20 MB no total;</li>
+<li>formatos aceites: JPG, JPEG, PNG, WEBP, HEIC e HEIF.</li>
+</ul>
+<p>O sistema bloqueia datas futuras e evita duplicados recentes no
+periodo configurado.</p>
+<h2 data-number="1.16" id="alertas-e-notificacoes"><span class="header-section-number">1.16</span> 16. Alertas e
+Notificacoes</h2>
+<p>A aplicacao pode apresentar alertas flutuantes e notificacoes
+internas, por exemplo:</p>
+<ul>
+<li>alertas de repetibilidade;</li>
+<li>S-EWO rejeitado;</li>
+<li>comunicacoes de seguranca pendentes;</li>
+<li>acoes em atraso;</li>
+<li>emails de digest ou relatorios, quando os jobs estiverem
+ativos.</li>
+</ul>
+<h2 data-number="1.17" id="boas-praticas"><span class="header-section-number">1.17</span> 17. Boas Praticas</h2>
+<ul>
+<li>Registar ocorrencias logo apos o evento.</li>
+<li>Usar descricoes objetivas e completas.</li>
+<li>Associar areas, locais e trabalhadores corretos.</li>
+<li>Anexar evidencias quando ajudam a compreender a situacao.</li>
+<li>Validar comunicacoes pendentes regularmente.</li>
+<li>Fechar acoes apenas quando a acao foi realmente executada e existe
+evidencia.</li>
+<li>Manter dados mensais atualizados antes de analisar KPI.</li>
+</ul>
+<h2 data-number="1.18" id="resolucao-de-problemas"><span class="header-section-number">1.18</span> 18. Resolucao de
+Problemas</h2>
+<h3 data-number="1.18.1" id="nao-consigo-entrar"><span class="header-section-number">1.18.1</span> Nao consigo entrar</h3>
+<p>Confirmar email, palavra-passe e estado da conta. Se a palavra-passe
+for temporaria, concluir a alteracao obrigatoria.</p>
+<h3 data-number="1.18.2" id="nao-vejo-um-modulo"><span class="header-section-number">1.18.2</span> Nao vejo um modulo</h3>
+<p>O modulo pode estar desativado para a planta ou o perfil pode nao ter
+permissao.</p>
+<h3 data-number="1.18.3" id="os-kpi-parecem-incompletos"><span class="header-section-number">1.18.3</span> Os KPI parecem
+incompletos</h3>
+<p>Verificar se as comunicacoes foram validadas e se os inputs mensais,
+como horas trabalhadas, foram preenchidos.</p>
+<h3 data-number="1.18.4" id="nao-consigo-fechar-uma-acao"><span class="header-section-number">1.18.4</span> Nao consigo fechar uma
+acao</h3>
+<p>Confirmar que foi introduzido comentario e anexada evidencia quando
+obrigatoria.</p>
+<h3 data-number="1.18.5" id="o-qr-code-nao-abre"><span class="header-section-number">1.18.5</span> O QR Code nao abre</h3>
+<p>O token pode estar incorreto, revogado ou expirado por regeneracao.
+Pedir novo QR Code ao administrador da planta.</p>
+</body>
+</html>

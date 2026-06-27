@@ -72,7 +72,14 @@ enum CommunicationSource {
 enum ActionSourceType {
   COMMUNICATION
   SEWO
+  SMAT
   MANUAL
+}
+
+enum ActionManualOrigin {
+  AUDITS
+  EXTERNAL_VERIFICATIONS
+  OTHER
 }
 
 enum ActionCategory {
@@ -618,6 +625,7 @@ model Action {
   plantId             String
   sequenceNumber      Int?
   sourceType          ActionSourceType
+  manualOrigin        ActionManualOrigin?
   level               RecordLevel?
   communicationId     String?
   sewoId              String?
@@ -700,6 +708,7 @@ model SmatAuditAttachment {
   smatAuditId  String
   fileKey      String
   fileName     String
+  caption      String?
   contentType  String
   uploadedAt   DateTime  @default(now())
   uploadedById String?

@@ -1,9 +1,18 @@
 "use client";
 
-import type { Dispatch, FormEvent, SetStateAction } from "react";
-import { useState } from "react";
+import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionPriority } from "@prisma/client";
-import { Button } from "@/components/ui/button";
+import { Camera, FileUp, Trash2 } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  SMAT_ATTACHMENT_ACCEPT,
+  SMAT_ATTACHMENT_LIMITS,
+  getSmatAttachmentContentType,
+  isSmatPreviewableImage,
+  validateSmatAttachmentCollection,
+  validateSmatAttachmentFile,
+} from "@/lib/smat-attachments";
 
 type ObservationRow = {
   category: "A" | "B" | "C" | "D" | "E" | "F";
@@ -21,6 +30,15 @@ type ActionPlanRow = {
 type OwnerOption = {
   id: string;
   name: string;
+};
+
+type AttachmentDraft = {
+  id: string;
+  file: File;
+  caption: string;
+  contentType: string;
+  previewUrl: string | null;
+  error: string | null;
 };
 
 const CATEGORY_OPTIONS: Array<{ code: ObservationRow["category"]; label: string }> = [
@@ -62,6 +80,46 @@ function parseNumber(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function createAttachmentId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createPreviewUrl(file: File, contentType: string) {
+  if (!isSmatPreviewableImage(file.name, contentType) || typeof URL.createObjectURL !== "function") {
+    return null;
+  }
+
+  return URL.createObjectURL(file);
+}
+
+function revokePreviewUrl(attachment: AttachmentDraft) {
+  if (attachment.previewUrl && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(attachment.previewUrl);
+  }
+}
+
+function createAttachmentDraft(file: File): AttachmentDraft {
+  const contentType = getSmatAttachmentContentType(file.name, file.type);
+
+  return {
+    id: createAttachmentId(),
+    file,
+    caption: "",
+    contentType,
+    previewUrl: createPreviewUrl(file, contentType),
+    error: validateSmatAttachmentFile({
+      fileName: file.name,
+      contentType,
+      size: file.size,
+    }),
+  };
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function CreateSmatAudit({
   plantCode,
   auditorName,
@@ -73,7 +131,8 @@ export function CreateSmatAudit({
 }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const attachmentsRef = useRef<AttachmentDraft[]>([]);
 
   const [form, setForm] = useState({
     auditorName,
@@ -104,6 +163,22 @@ export function CreateSmatAudit({
   const [unsafeActs, setUnsafeActs] = useState<ObservationRow[]>([emptyObservation("C")]);
   const [unsafeConditions, setUnsafeConditions] = useState<ObservationRow[]>([emptyObservation("A")]);
   const [actionPlans, setActionPlans] = useState<ActionPlanRow[]>([]);
+  const attachmentCollectionError = useMemo(
+    () => validateSmatAttachmentCollection(attachments.map((attachment) => ({ size: attachment.file.size }))),
+    [attachments],
+  );
+  const attachmentError = attachmentCollectionError ?? attachments.find((attachment) => attachment.error)?.error ?? "";
+  const hasInvalidAttachments = Boolean(attachmentError);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => {
+    return () => {
+      attachmentsRef.current.forEach(revokePreviewUrl);
+    };
+  }, []);
 
   function updateObservation(
     setter: Dispatch<SetStateAction<ObservationRow[]>>,
@@ -125,17 +200,56 @@ export function CreateSmatAudit({
     setActionPlans((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
 
-  async function uploadPhotos() {
-    const uploaded: Array<{ fileKey: string; fileName: string; contentType: string }> = [];
+  function addAttachmentFiles(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0) return;
 
-    for (const photo of photos) {
+    const drafts = files.map(createAttachmentDraft);
+    const nextAttachments = [...attachments, ...drafts];
+    const nextError =
+      validateSmatAttachmentCollection(nextAttachments.map((attachment) => ({ size: attachment.file.size }))) ??
+      drafts.find((attachment) => attachment.error)?.error ??
+      "";
+
+    setAttachments(nextAttachments);
+    setMessage(nextError);
+  }
+
+  function handleAttachmentInputChange(event: ChangeEvent<HTMLInputElement>) {
+    addAttachmentFiles(event.currentTarget.files);
+    event.currentTarget.value = "";
+  }
+
+  function updateAttachmentCaption(id: string, caption: string) {
+    setAttachments((current) =>
+      current.map((attachment) =>
+        attachment.id === id
+          ? { ...attachment, caption: caption.slice(0, SMAT_ATTACHMENT_LIMITS.maxCaptionLength) }
+          : attachment,
+      ),
+    );
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((current) => {
+      const attachment = current.find((entry) => entry.id === id);
+      if (attachment) revokePreviewUrl(attachment);
+      return current.filter((entry) => entry.id !== id);
+    });
+  }
+
+  async function uploadAttachments() {
+    const uploaded: Array<{ fileKey: string; fileName: string; contentType: string; caption?: string; size: number }> = [];
+
+    for (const attachment of attachments) {
+      const { file, contentType } = attachment;
       const presignResponse = await fetch("/api/storage/presign", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           plantCode,
-          fileName: photo.name,
-          contentType: photo.type || "image/jpeg",
+          fileName: file.name,
+          contentType,
           folder: "smat",
         }),
       });
@@ -147,18 +261,20 @@ export function CreateSmatAudit({
 
       const putResponse = await fetch(presignJson.data.uploadUrl, {
         method: "PUT",
-        headers: { "content-type": photo.type || "image/jpeg" },
-        body: photo,
+        headers: { "content-type": contentType },
+        body: file,
       });
 
       if (!putResponse.ok) {
-        throw new Error(`Não foi possível carregar ${photo.name}`);
+        throw new Error(`Nao foi possivel carregar ${file.name}`);
       }
 
       uploaded.push({
         fileKey: presignJson.data.key,
-        fileName: photo.name,
-        contentType: photo.type || "image/jpeg",
+        fileName: file.name,
+        contentType,
+        caption: attachment.caption.trim() || undefined,
+        size: file.size,
       });
     }
 
@@ -167,11 +283,17 @@ export function CreateSmatAudit({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setMessage("");
 
+    if (hasInvalidAttachments) {
+      setMessage(attachmentError);
+      return;
+    }
+
+    setBusy(true);
+
     try {
-      const attachments = photos.length ? await uploadPhotos() : [];
+      const uploadedAttachments = attachments.length ? await uploadAttachments() : [];
 
       const response = await fetch(`/api/plants/${plantCode}/smat`, {
         method: "POST",
@@ -190,7 +312,7 @@ export function CreateSmatAudit({
           safeConditions: safeConditions.filter((entry) => entry.description.trim().length > 0),
           unsafeActs: unsafeActs.filter((entry) => entry.description.trim().length > 0),
           unsafeConditions: unsafeConditions.filter((entry) => entry.description.trim().length > 0),
-          attachments,
+          attachments: uploadedAttachments,
           actionPlans: actionPlans.filter(
             (entry) =>
               entry.title.trim().length > 0 &&
@@ -221,7 +343,7 @@ export function CreateSmatAudit({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Nova auditoria SMAT</h2>
         </div>
-        <Button type="submit" disabled={busy}>{busy ? "A gravar..." : "Gravar auditoria"}</Button>
+        <Button type="submit" disabled={busy || hasInvalidAttachments}>{busy ? "A gravar..." : "Gravar auditoria"}</Button>
       </div>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -240,10 +362,6 @@ export function CreateSmatAudit({
         <label className="text-sm text-slate-700">
           <span className="mb-1 block font-medium">Hora de fim</span>
           <input type="time" value={form.endTimeText} onChange={(event) => setForm((current) => ({ ...current, endTimeText: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
-        </label>
-        <label className="text-sm text-slate-700">
-          <span className="mb-1 block font-medium">Fotos / imagens</span>
-          <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
         </label>
         <label className="text-sm text-slate-700 md:col-span-2">
           <span className="mb-1 block font-medium">Área examinada</span>
@@ -329,7 +447,87 @@ export function CreateSmatAudit({
         <textarea rows={5} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} className="w-full rounded-md border border-slate-300 px-3 py-2" />
       </label>
 
-      {photos.length > 0 ? <p className="text-sm text-slate-500">{photos.length} ficheiro(s) pronto(s) para carregamento.</p> : null}
+      <section className="space-y-4 rounded-xl border border-slate-200 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">Ficheiros / Fotografias</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Anexe fotos, PDFs ou documentos. Limite: {SMAT_ATTACHMENT_LIMITS.maxFiles} ficheiros, {SMAT_ATTACHMENT_LIMITS.maxFileSizeBytes / 1024 / 1024} MB por ficheiro.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <label className={buttonVariants({ variant: "secondary", size: "sm", className: "cursor-pointer" })}>
+              <FileUp className="h-4 w-4" />
+              <span>Adicionar ficheiros</span>
+              <input
+                type="file"
+                accept={SMAT_ATTACHMENT_ACCEPT}
+                multiple
+                onChange={handleAttachmentInputChange}
+                className="sr-only"
+              />
+            </label>
+            <label className={buttonVariants({ variant: "secondary", size: "sm", className: "cursor-pointer" })}>
+              <Camera className="h-4 w-4" />
+              <span>Tirar fotografia</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleAttachmentInputChange}
+                className="sr-only"
+              />
+            </label>
+          </div>
+        </div>
+
+        {attachmentError ? <p className="text-sm font-medium text-rose-700">{attachmentError}</p> : null}
+
+        {attachments.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-500">
+            Sem ficheiros selecionados.
+          </p>
+        ) : (
+          <div className="grid gap-3">
+            {attachments.map((attachment) => (
+              <article key={attachment.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[88px_minmax(0,1fr)_auto]">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  {attachment.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={attachment.previewUrl} alt={`Previsualizacao de ${attachment.file.name}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <FileUp className="h-7 w-7 text-slate-400" />
+                  )}
+                </div>
+
+                <div className="min-w-0 space-y-2">
+                  <div>
+                    <p className="truncate text-sm font-semibold text-slate-900">{attachment.file.name}</p>
+                    <p className="text-xs text-slate-500">{formatFileSize(attachment.file.size)} | {attachment.contentType}</p>
+                    {attachment.error ? <p className="mt-1 text-xs font-medium text-rose-700">{attachment.error}</p> : null}
+                  </div>
+                  <label className="block text-sm text-slate-700">
+                    <span className="mb-1 block font-medium">Legenda</span>
+                    <input
+                      value={attachment.caption}
+                      onChange={(event) => updateAttachmentCaption(attachment.id, event.target.value)}
+                      maxLength={SMAT_ATTACHMENT_LIMITS.maxCaptionLength}
+                      placeholder="Legenda opcional"
+                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <Button type="button" variant="ghost" size="sm" onClick={() => removeAttachment(attachment.id)} className="self-start">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Remover</span>
+                </Button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       {message ? <p className="text-sm text-rose-700">{message}</p> : null}
 
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -337,7 +535,7 @@ export function CreateSmatAudit({
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={busy}>{busy ? "A gravar..." : "Gravar auditoria"}</Button>
+        <Button type="submit" disabled={busy || hasInvalidAttachments}>{busy ? "A gravar..." : "Gravar auditoria"}</Button>
       </div>
     </form>
   );

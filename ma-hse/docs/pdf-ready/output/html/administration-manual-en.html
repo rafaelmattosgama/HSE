@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="MA HSE" />
+  <meta name="dcterms.date" content="2026-06-25" />
+  <title>Administration Manual</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+  <style type="text/css">@page {
+size: A4;
+margin: 22mm 18mm 20mm 18mm;
+}
+body {
+color: #0f172a;
+font-family: "Segoe UI", Arial, sans-serif;
+font-size: 10.5pt;
+line-height: 1.45;
+}
+.cover {
+align-items: center;
+border: 1px solid #cbd5e1;
+display: flex;
+flex-direction: column;
+justify-content: center;
+min-height: 86vh;
+padding: 36mm 20mm;
+text-align: center;
+}
+.cover-brand {
+color: #0f766e;
+font-size: 13pt;
+font-weight: 700;
+letter-spacing: 0.16em;
+margin-bottom: 18mm;
+text-transform: uppercase;
+}
+.cover-title {
+color: #0f172a;
+font-size: 30pt;
+font-weight: 800;
+line-height: 1.08;
+margin: 0;
+}
+.cover-subtitle {
+color: #334155;
+font-size: 15pt;
+font-weight: 600;
+margin-top: 8mm;
+}
+.cover-meta {
+border-top: 1px solid #cbd5e1;
+color: #475569;
+font-size: 10pt;
+margin-top: 24mm;
+padding-top: 8mm;
+}
+h1,
+h2,
+h3,
+h4 {
+color: #0f172a;
+line-height: 1.2;
+}
+h1 {
+border-bottom: 2px solid #0f766e;
+font-size: 22pt;
+margin-top: 0;
+padding-bottom: 5mm;
+}
+h2 {
+border-bottom: 1px solid #cbd5e1;
+font-size: 15pt;
+margin-top: 12mm;
+padding-bottom: 2mm;
+}
+h3 {
+font-size: 12.5pt;
+margin-top: 8mm;
+}
+h4 {
+font-size: 11pt;
+margin-top: 6mm;
+}
+a {
+color: #0f766e;
+}
+code {
+background: #f1f5f9;
+border-radius: 3px;
+color: #0f172a;
+font-family: Consolas, "Courier New", monospace;
+font-size: 9.5pt;
+padding: 1px 4px;
+}
+pre {
+background: #f8fafc;
+border: 1px solid #cbd5e1;
+border-radius: 6px;
+overflow-wrap: break-word;
+padding: 10px 12px;
+white-space: pre-wrap;
+}
+pre code {
+background: transparent;
+padding: 0;
+}
+table {
+border-collapse: collapse;
+width: 100%;
+}
+th,
+td {
+border: 1px solid #cbd5e1;
+padding: 6px 8px;
+vertical-align: top;
+}
+th {
+background: #f1f5f9;
+}
+blockquote {
+border-left: 4px solid #0f766e;
+color: #475569;
+margin-left: 0;
+padding-left: 12px;
+}
+.page-break {
+break-after: page;
+page-break-after: always;
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Administration Manual</h1>
+<p class="subtitle">MA HSE</p>
+<p class="author">MA HSE</p>
+<p class="date">June 25, 2026</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#administration-manual---ma-hse" id="toc-administration-manual---ma-hse"><span class="toc-section-number">1</span> Administration Manual - MA HSE</a>
+<ul>
+<li><a href="#purpose" id="toc-purpose"><span class="toc-section-number">1.1</span> 1. Purpose</a></li>
+<li><a href="#roles-and-permissions" id="toc-roles-and-permissions"><span class="toc-section-number">1.2</span> 2. Roles and Permissions</a>
+<ul>
+<li><a href="#n0_admin" id="toc-n0_admin"><span class="toc-section-number">1.2.1</span> N0_ADMIN</a></li>
+<li><a href="#n1_corporate" id="toc-n1_corporate"><span class="toc-section-number">1.2.2</span> N1_CORPORATE</a></li>
+<li><a href="#n2_plant_manager" id="toc-n2_plant_manager"><span class="toc-section-number">1.2.3</span> N2_PLANT_MANAGER</a></li>
+<li><a href="#n3_safety" id="toc-n3_safety"><span class="toc-section-number">1.2.4</span> N3_SAFETY</a></li>
+<li><a href="#n4_supervisor" id="toc-n4_supervisor"><span class="toc-section-number">1.2.5</span> N4_SUPERVISOR</a></li>
+<li><a href="#n5_operator" id="toc-n5_operator"><span class="toc-section-number">1.2.6</span> N5_OPERATOR</a></li>
+<li><a href="#n6_qr_reporter" id="toc-n6_qr_reporter"><span class="toc-section-number">1.2.7</span> N6_QR_REPORTER</a></li>
+<li><a href="#medico" id="toc-medico"><span class="toc-section-number">1.2.8</span> MEDICO</a></li>
+</ul></li>
+<li><a href="#local-startup" id="toc-local-startup"><span class="toc-section-number">1.3</span> 3. Local Startup</a>
+<ul>
+<li><a href="#requirements" id="toc-requirements"><span class="toc-section-number">1.3.1</span> 3.1 Requirements</a></li>
+<li><a href="#main-commands" id="toc-main-commands"><span class="toc-section-number">1.3.2</span> 3.2 Main commands</a></li>
+<li><a href="#local-services" id="toc-local-services"><span class="toc-section-number">1.3.3</span> 3.3 Local services</a></li>
+<li><a href="#useful-scripts" id="toc-useful-scripts"><span class="toc-section-number">1.3.4</span> 3.4 Useful scripts</a></li>
+</ul></li>
+<li><a href="#global-administration---settings" id="toc-global-administration---settings"><span class="toc-section-number">1.4</span> 4. Global Administration -
+Settings</a>
+<ul>
+<li><a href="#plants" id="toc-plants"><span class="toc-section-number">1.4.1</span> 4.1 Plants</a></li>
+<li><a href="#plant-language" id="toc-plant-language"><span class="toc-section-number">1.4.2</span> 4.2 Plant language</a></li>
+<li><a href="#global-and-plant-modules" id="toc-global-and-plant-modules"><span class="toc-section-number">1.4.3</span> 4.3 Global and plant
+modules</a></li>
+<li><a href="#plant-master-data" id="toc-plant-master-data"><span class="toc-section-number">1.4.4</span> 4.4 Plant master data</a></li>
+<li><a href="#users" id="toc-users"><span class="toc-section-number">1.4.5</span> 4.5 Users</a></li>
+<li><a href="#recipients-and-layouts" id="toc-recipients-and-layouts"><span class="toc-section-number">1.4.6</span> 4.6 Recipients and
+layouts</a></li>
+</ul></li>
+<li><a href="#plant-administration" id="toc-plant-administration"><span class="toc-section-number">1.5</span> 5. Plant Administration</a>
+<ul>
+<li><a href="#sla" id="toc-sla"><span class="toc-section-number">1.5.1</span> 5.1 SLA</a></li>
+<li><a href="#safety-days" id="toc-safety-days"><span class="toc-section-number">1.5.2</span> 5.2 Safety Days</a></li>
+<li><a href="#qr-token-manager" id="toc-qr-token-manager"><span class="toc-section-number">1.5.3</span> 5.3 QR Token Manager</a></li>
+<li><a href="#repeatability-alerts" id="toc-repeatability-alerts"><span class="toc-section-number">1.5.4</span> 5.4 Repeatability
+alerts</a></li>
+<li><a href="#plant-master-data-1" id="toc-plant-master-data-1"><span class="toc-section-number">1.5.5</span> 5.5 Plant master data</a></li>
+<li><a href="#recipient-lists" id="toc-recipient-lists"><span class="toc-section-number">1.5.6</span> 5.6 Recipient lists</a></li>
+<li><a href="#plant-users" id="toc-plant-users"><span class="toc-section-number">1.5.7</span> 5.7 Plant users</a></li>
+</ul></li>
+<li><a href="#communication-management" id="toc-communication-management"><span class="toc-section-number">1.6</span> 6. Communication Management</a>
+<ul>
+<li><a href="#statuses" id="toc-statuses"><span class="toc-section-number">1.6.1</span> 6.1 Statuses</a></li>
+<li><a href="#validation" id="toc-validation"><span class="toc-section-number">1.6.2</span> 6.2 Validation</a></li>
+<li><a href="#manual-close-and-reopen" id="toc-manual-close-and-reopen"><span class="toc-section-number">1.6.3</span> 6.3 Manual close and
+reopen</a></li>
+<li><a href="#classification" id="toc-classification"><span class="toc-section-number">1.6.4</span> 6.4 Classification</a></li>
+</ul></li>
+<li><a href="#action-management" id="toc-action-management"><span class="toc-section-number">1.7</span> 7. Action Management</a>
+<ul>
+<li><a href="#sla-and-priority" id="toc-sla-and-priority"><span class="toc-section-number">1.7.1</span> 7.1 SLA and priority</a></li>
+<li><a href="#required-evidence" id="toc-required-evidence"><span class="toc-section-number">1.7.2</span> 7.2 Required evidence</a></li>
+<li><a href="#relationship-with-communications" id="toc-relationship-with-communications"><span class="toc-section-number">1.7.3</span> 7.3 Relationship with
+communications</a></li>
+</ul></li>
+<li><a href="#s-ewo" id="toc-s-ewo"><span class="toc-section-number">1.8</span> 8. S-EWO</a>
+<ul>
+<li><a href="#cause-catalog" id="toc-cause-catalog"><span class="toc-section-number">1.8.1</span> 8.1 Cause catalog</a></li>
+<li><a href="#approval" id="toc-approval"><span class="toc-section-number">1.8.2</span> 8.2 Approval</a></li>
+<li><a href="#recipients" id="toc-recipients"><span class="toc-section-number">1.8.3</span> 8.3 Recipients</a></li>
+</ul></li>
+<li><a href="#contractors" id="toc-contractors"><span class="toc-section-number">1.9</span> 9. Contractors</a>
+<ul>
+<li><a href="#invitations" id="toc-invitations"><span class="toc-section-number">1.9.1</span> 9.1 Invitations</a></li>
+<li><a href="#review" id="toc-review"><span class="toc-section-number">1.9.2</span> 9.2 Review</a></li>
+<li><a href="#approval-1" id="toc-approval-1"><span class="toc-section-number">1.9.3</span> 9.3 Approval</a></li>
+</ul></li>
+<li><a href="#occupational-health" id="toc-occupational-health"><span class="toc-section-number">1.10</span> 10. Occupational Health</a></li>
+<li><a href="#monthly-inputs-and-environment-dashboard" id="toc-monthly-inputs-and-environment-dashboard"><span class="toc-section-number">1.11</span> 11. Monthly Inputs and
+Environment Dashboard</a>
+<ul>
+<li><a href="#monthly-inputs" id="toc-monthly-inputs"><span class="toc-section-number">1.11.1</span> 11.1 Monthly inputs</a></li>
+<li><a href="#custom-indicators" id="toc-custom-indicators"><span class="toc-section-number">1.11.2</span> 11.2 Custom indicators</a></li>
+</ul></li>
+<li><a href="#mapa" id="toc-mapa"><span class="toc-section-number">1.12</span> 12. MAPA</a></li>
+<li><a href="#jobs-queues-and-email" id="toc-jobs-queues-and-email"><span class="toc-section-number">1.13</span> 13. Jobs, Queues and
+Email</a></li>
+<li><a href="#storage-and-attachments" id="toc-storage-and-attachments"><span class="toc-section-number">1.14</span> 14. Storage and
+Attachments</a></li>
+<li><a href="#security" id="toc-security"><span class="toc-section-number">1.15</span> 15. Security</a>
+<ul>
+<li><a href="#secrets" id="toc-secrets"><span class="toc-section-number">1.15.1</span> 15.1 Secrets</a></li>
+<li><a href="#token_pepper" id="toc-token_pepper"><span class="toc-section-number">1.15.2</span> 15.2 TOKEN_PEPPER</a></li>
+<li><a href="#accounts-and-passwords" id="toc-accounts-and-passwords"><span class="toc-section-number">1.15.3</span> 15.3 Accounts and
+passwords</a></li>
+<li><a href="#rate-limit" id="toc-rate-limit"><span class="toc-section-number">1.15.4</span> 15.4 Rate limit</a></li>
+</ul></li>
+<li><a href="#observability" id="toc-observability"><span class="toc-section-number">1.16</span> 16. Observability</a></li>
+<li><a href="#backups" id="toc-backups"><span class="toc-section-number">1.17</span> 17. Backups</a></li>
+<li><a href="#tests-and-validation" id="toc-tests-and-validation"><span class="toc-section-number">1.18</span> 18. Tests and Validation</a></li>
+<li><a href="#troubleshooting" id="toc-troubleshooting"><span class="toc-section-number">1.19</span> 19. Troubleshooting</a>
+<ul>
+<li><a href="#application-does-not-start" id="toc-application-does-not-start"><span class="toc-section-number">1.19.1</span> Application does not
+start</a></li>
+<li><a href="#login-fails" id="toc-login-fails"><span class="toc-section-number">1.19.2</span> Login fails</a></li>
+<li><a href="#qr-code-stopped-working" id="toc-qr-code-stopped-working"><span class="toc-section-number">1.19.3</span> QR Code stopped
+working</a></li>
+<li><a href="#dashboard-has-no-data" id="toc-dashboard-has-no-data"><span class="toc-section-number">1.19.4</span> Dashboard has no data</a></li>
+<li><a href="#upload-fails" id="toc-upload-fails"><span class="toc-section-number">1.19.5</span> Upload fails</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+<div class="cover">
+<div class="cover-brand">
+MA HSE
+</div>
+<h1 class="cover-title">
+Administration Manual
+</h1>
+<div class="cover-subtitle">
+MA HSE
+</div>
+<div class="cover-meta">
+<pre><code>&lt;p&gt;&lt;strong&gt;Audience:&lt;/strong&gt; Administrators and technical team&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Date:&lt;/strong&gt; June 25, 2026&lt;/p&gt;
+&lt;p&gt;Functional administration, local operation and configuration guide.&lt;/p&gt;</code></pre>
+</div>
+</div>
+<div class="page-break">
+
+</div>
+<h1 data-number="1" id="administration-manual---ma-hse"><span class="header-section-number">1</span> Administration Manual - MA
+HSE</h1>
+<p>Version generated from project analysis on 2026-06-25.</p>
+<h2 data-number="1.1" id="purpose"><span class="header-section-number">1.1</span> 1. Purpose</h2>
+<p>This manual describes functional and technical administration for MA
+HSE. It covers roles, permissions, plant configuration, users, modules,
+master data, QR Codes, SLA, alerts, notifications, contractors,
+occupational health and local operation.</p>
+<p>For detailed Linux deployment instructions, also see
+<code>DEPLOY.md</code>.</p>
+<h2 data-number="1.2" id="roles-and-permissions"><span class="header-section-number">1.2</span> 2. Roles and Permissions</h2>
+<h3 data-number="1.2.1" id="n0_admin"><span class="header-section-number">1.2.1</span> N0_ADMIN</h3>
+<p>Global administrator.</p>
+<p>Can:</p>
+<ul>
+<li>manage plants;</li>
+<li>access Settings;</li>
+<li>enable/disable modules globally and per plant;</li>
+<li>manage global and plant master data;</li>
+<li>manage high-level and plant users;</li>
+<li>configure recipients, layouts, professional risks and lists;</li>
+<li>access dashboards and operational modules.</li>
+</ul>
+<h3 data-number="1.2.2" id="n1_corporate"><span class="header-section-number">1.2.2</span> N1_CORPORATE</h3>
+<p>Multi-plant corporate role.</p>
+<p>Can:</p>
+<ul>
+<li>access the corporate dashboard;</li>
+<li>access plants;</li>
+<li>validate communications;</li>
+<li>approve S-EWO;</li>
+<li>create and manage N1/N2/N3 users per plant;</li>
+<li>create, reopen and close communications/actions where
+authorized;</li>
+<li>manage global repeatability alerts.</li>
+</ul>
+<h3 data-number="1.2.3" id="n2_plant_manager"><span class="header-section-number">1.2.3</span> N2_PLANT_MANAGER</h3>
+<p>Plant manager.</p>
+<p>Can:</p>
+<ul>
+<li>view plant dashboards;</li>
+<li>create and view communications and actions;</li>
+<li>create and approve S-EWO;</li>
+<li>reopen communications and actions;</li>
+<li>access monthly inputs;</li>
+<li>view plant administration according to permissions.</li>
+</ul>
+<p>Normally does not modify sensitive administrative parameters such as
+SLA, QR tokens, recipients or master data.</p>
+<h3 data-number="1.2.4" id="n3_safety"><span class="header-section-number">1.2.4</span> N3_SAFETY</h3>
+<p>Plant safety role.</p>
+<p>Can:</p>
+<ul>
+<li>create and view communications and actions;</li>
+<li>validate communications;</li>
+<li>manually close communications;</li>
+<li>reopen communications and actions;</li>
+<li>administer plant data;</li>
+<li>manage SLA, alerts, QR tokens and recipients where authorized;</li>
+<li>create N4/N5/MEDICO users in the same plant;</li>
+<li>create S-EWO without final N2 approval.</li>
+</ul>
+<h3 data-number="1.2.5" id="n4_supervisor"><span class="header-section-number">1.2.5</span> N4_SUPERVISOR</h3>
+<p>Supervisor.</p>
+<p>Can:</p>
+<ul>
+<li>view and create communications;</li>
+<li>view and create actions;</li>
+<li>close actions with evidence;</li>
+<li>view the S-EWO list;</li>
+<li>access SMAT when enabled.</li>
+</ul>
+<p>Cannot validate communications, approve S-EWO or reopen
+communications/actions.</p>
+<h3 data-number="1.2.6" id="n5_operator"><span class="header-section-number">1.2.6</span> N5_OPERATOR</h3>
+<p>Operator.</p>
+<p>Can:</p>
+<ul>
+<li>view and create communications;</li>
+<li>view and create actions;</li>
+<li>close actions with evidence;</li>
+<li>view permitted dashboards.</li>
+</ul>
+<p>Cannot access S-EWO API, validation or administration.</p>
+<h3 data-number="1.2.7" id="n6_qr_reporter"><span class="header-section-number">1.2.7</span> N6_QR_REPORTER</h3>
+<p>Public reporter without login.</p>
+<p>Can submit communications through public QR/link access. The types
+currently allowed by code are:</p>
+<ul>
+<li>Unsafe Act</li>
+<li>Unsafe Condition</li>
+<li>Near Miss</li>
+<li>First Aid</li>
+<li>5S Improvement</li>
+<li>Improvement Suggestion</li>
+</ul>
+<h3 data-number="1.2.8" id="medico"><span class="header-section-number">1.2.8</span> MEDICO</h3>
+<p>Medical role.</p>
+<p>Can view communications, including clinical fields. Cannot create
+communications/actions or access administrative/S-EWO mutations.</p>
+<h2 data-number="1.3" id="local-startup"><span class="header-section-number">1.3</span> 3. Local Startup</h2>
+<h3 data-number="1.3.1" id="requirements"><span class="header-section-number">1.3.1</span> 3.1 Requirements</h3>
+<ul>
+<li>Node.js 22+</li>
+<li>Docker Desktop</li>
+<li>npm</li>
+</ul>
+<h3 data-number="1.3.2" id="main-commands"><span class="header-section-number">1.3.2</span> 3.2 Main commands</h3>
+<p>From the project folder:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cd</span> C<span class="op">:</span>\HSE\ma-hse</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>docker compose up <span class="op">-</span>d</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>npm run dev<span class="op">:</span>all</span></code></pre></div>
+<p><code>dev:all</code> starts the scheduler, the Next.js app on a free
+port between 3000 and 3020, and the BullMQ worker.</p>
+<h3 data-number="1.3.3" id="local-services"><span class="header-section-number">1.3.3</span> 3.3 Local services</h3>
+<ul>
+<li>PostgreSQL: <code>localhost:5433</code></li>
+<li>Redis: <code>localhost:6380</code></li>
+<li>MinIO API: <code>http://localhost:9000</code></li>
+<li>MinIO Console: <code>http://localhost:9001</code></li>
+<li>Mailpit SMTP: <code>localhost:1025</code></li>
+<li>Mailpit UI: <code>http://localhost:8025</code></li>
+</ul>
+<h3 data-number="1.3.4" id="useful-scripts"><span class="header-section-number">1.3.4</span> 3.4 Useful scripts</h3>
+<ul>
+<li><code>npm run dev</code>: development app.</li>
+<li><code>npm run dev:all</code>: app, scheduler and worker.</li>
+<li><code>npm run build</code>: production build.</li>
+<li><code>npm run start</code>: production server.</li>
+<li><code>npm run lint</code>: lint.</li>
+<li><code>npm run db:migrate</code>: Prisma migrations for
+development.</li>
+<li><code>npm run db:migrate:deploy</code>: migrations for
+deployment.</li>
+<li><code>npm run db:seed</code>: seed data.</li>
+<li><code>npm run db:studio</code>: Prisma Studio.</li>
+<li><code>npm run worker:dev</code>: BullMQ worker.</li>
+<li><code>npm run scheduler:dev</code>: schedule recurring jobs.</li>
+<li><code>npm run test:unit</code>: unit tests.</li>
+<li><code>npm run test:e2e</code>: Playwright tests.</li>
+</ul>
+<h2 data-number="1.4" id="global-administration---settings"><span class="header-section-number">1.4</span> 4. Global Administration -
+Settings</h2>
+<p>The <code>Settings</code> page is available to N0_ADMIN.</p>
+<h3 data-number="1.4.1" id="plants"><span class="header-section-number">1.4.1</span> 4.1 Plants</h3>
+<p>Allows creating, editing and activating/inactivating plants.</p>
+<p>Main fields:</p>
+<ul>
+<li>code;</li>
+<li>name;</li>
+<li>timezone;</li>
+<li>default language;</li>
+<li>active/inactive status.</li>
+</ul>
+<h3 data-number="1.4.2" id="plant-language"><span class="header-section-number">1.4.2</span> 4.2 Plant language</h3>
+<p>Defines the plant default language and timezone. This affects
+localized UI, public forms and localized data where supported.</p>
+<h3 data-number="1.4.3" id="global-and-plant-modules"><span class="header-section-number">1.4.3</span> 4.3 Global and plant
+modules</h3>
+<p>Global and per-plant toggles control availability of:</p>
+<ul>
+<li>MAPA</li>
+<li>Validations</li>
+<li>Actions</li>
+<li>S-EWO</li>
+<li>SMAT</li>
+<li>Contractors</li>
+<li>Communications</li>
+<li>Monthly Inputs</li>
+<li>Occupational Health</li>
+</ul>
+<p>If a module is disabled globally or for the plant, it may disappear
+from navigation even when the user role has permission.</p>
+<h3 data-number="1.4.4" id="plant-master-data"><span class="header-section-number">1.4.4</span> 4.4 Plant master data</h3>
+<p>N0 can manage:</p>
+<ul>
+<li>areas;</li>
+<li>workstations/locations;</li>
+<li>equipment;</li>
+<li>workers;</li>
+<li>near miss types;</li>
+<li>unsafe act types;</li>
+<li>unsafe condition types;</li>
+<li>injury types;</li>
+<li>professional risks.</li>
+</ul>
+<p>Keeping this data updated is essential for dashboard and form
+quality.</p>
+<h3 data-number="1.4.5" id="users"><span class="header-section-number">1.4.5</span> 4.5 Users</h3>
+<p>N0 can create and manage users linked to plants. If an account is
+created without a password, the system generates a temporary password,
+tries to send it by email and requires a password change on first
+login.</p>
+<h3 data-number="1.4.6" id="recipients-and-layouts"><span class="header-section-number">1.4.6</span> 4.6 Recipients and
+layouts</h3>
+<p>Settings can configure:</p>
+<ul>
+<li>S-EWO report recipients;</li>
+<li>safety communication alert recipients;</li>
+<li>report layouts.</li>
+</ul>
+<h2 data-number="1.5" id="plant-administration"><span class="header-section-number">1.5</span> 5. Plant Administration</h2>
+<p>The plant <code>Admin</code> page contains local configuration.</p>
+<h3 data-number="1.5.1" id="sla"><span class="header-section-number">1.5.1</span> 5.1 SLA</h3>
+<p>Configures due dates by priority:</p>
+<ul>
+<li>LOW;</li>
+<li>MEDIUM;</li>
+<li>HIGH.</li>
+</ul>
+<p>These values affect action deadlines and follow-up.</p>
+<h3 data-number="1.5.2" id="safety-days"><span class="header-section-number">1.5.2</span> 5.2 Safety Days</h3>
+<p>Allows defining:</p>
+<ul>
+<li>manual last accident date;</li>
+<li>historical record days;</li>
+<li>historical record start date.</li>
+</ul>
+<p>These values feed the days-without-accident boards.</p>
+<h3 data-number="1.5.3" id="qr-token-manager"><span class="header-section-number">1.5.3</span> 5.3 QR Token Manager</h3>
+<p>Manages public tokens:</p>
+<ul>
+<li>REPORT;</li>
+<li>KIOSK.</li>
+</ul>
+<p>Regenerating a token revokes the previous active token of the same
+type. The system displays:</p>
+<ul>
+<li>full public link;</li>
+<li>QR Code;</li>
+<li>open link option;</li>
+<li>copy link;</li>
+<li>save QR as image;</li>
+<li>print QR.</li>
+</ul>
+<p>Store and distribute QR Codes only in approved places. If misuse is
+suspected, regenerate the token.</p>
+<h3 data-number="1.5.4" id="repeatability-alerts"><span class="header-section-number">1.5.4</span> 5.4 Repeatability alerts</h3>
+<p>Configures plant repeatability rules. These rules support
+notifications when similar events repeat within a time window.</p>
+<h3 data-number="1.5.5" id="plant-master-data-1"><span class="header-section-number">1.5.5</span> 5.5 Plant master data</h3>
+<p>Authorized roles can manage areas, locations and workers. N0 can
+manage additional datasets such as equipment and occurrence types.</p>
+<h3 data-number="1.5.6" id="recipient-lists"><span class="header-section-number">1.5.6</span> 5.6 Recipient lists</h3>
+<p>Recipient lists control who receives selected reports and
+notifications. Review them whenever team responsibilities change.</p>
+<h3 data-number="1.5.7" id="plant-users"><span class="header-section-number">1.5.7</span> 5.7 Plant users</h3>
+<p>Authorized administrators can:</p>
+<ul>
+<li>create users;</li>
+<li>set name, email, language and role;</li>
+<li>activate/inactivate users;</li>
+<li>change plant role association.</li>
+</ul>
+<p>Main rules:</p>
+<ul>
+<li>N1 creates N1/N2/N3.</li>
+<li>N3 creates N4/N5/MEDICO in the same plant.</li>
+<li>N0 has global administration.</li>
+</ul>
+<h2 data-number="1.6" id="communication-management"><span class="header-section-number">1.6</span> 6. Communication
+Management</h2>
+<h3 data-number="1.6.1" id="statuses"><span class="header-section-number">1.6.1</span> 6.1 Statuses</h3>
+<p>Relevant statuses:</p>
+<ul>
+<li><code>SUBMITTED</code>;</li>
+<li><code>PENDING_VALIDATION</code>;</li>
+<li><code>VALID_OPEN</code>;</li>
+<li><code>ONGOING</code>;</li>
+<li><code>CLOSED</code>.</li>
+</ul>
+<p>Only communications in <code>VALID_OPEN</code>, <code>ONGOING</code>
+or <code>CLOSED</code> count toward KPI.</p>
+<h3 data-number="1.6.2" id="validation"><span class="header-section-number">1.6.2</span> 6.2 Validation</h3>
+<p>N1 and N3 validate communications. Validation updates the status and
+stores an audit diff.</p>
+<h3 data-number="1.6.3" id="manual-close-and-reopen"><span class="header-section-number">1.6.3</span> 6.3 Manual close and
+reopen</h3>
+<p>N1 and N3 can manually close communications with a reason. N1, N2 and
+N3 can reopen communications/actions when authorized.</p>
+<h3 data-number="1.6.4" id="classification"><span class="header-section-number">1.6.4</span> 6.4 Classification</h3>
+<p>Technical classifications should use correct master data to support
+rankings and trend analysis.</p>
+<h2 data-number="1.7" id="action-management"><span class="header-section-number">1.7</span> 7. Action Management</h2>
+<h3 data-number="1.7.1" id="sla-and-priority"><span class="header-section-number">1.7.1</span> 7.1 SLA and priority</h3>
+<p>Priority drives due dates based on the configured SLA.</p>
+<h3 data-number="1.7.2" id="required-evidence"><span class="header-section-number">1.7.2</span> 7.2 Required evidence</h3>
+<p>Action closure requires a comment and evidence. This improves CAPA
+traceability and control.</p>
+<h3 data-number="1.7.3" id="relationship-with-communications"><span class="header-section-number">1.7.3</span> 7.3 Relationship with
+communications</h3>
+<p>Open actions linked to communications can move the communication to
+<code>ONGOING</code>.</p>
+<h2 data-number="1.8" id="s-ewo"><span class="header-section-number">1.8</span> 8. S-EWO</h2>
+<h3 data-number="1.8.1" id="cause-catalog"><span class="header-section-number">1.8.1</span> 8.1 Cause catalog</h3>
+<p>S-EWO uses a versioned cause catalog. Administrators should keep the
+catalog consistent and avoid changes that reduce historical
+comparability.</p>
+<h3 data-number="1.8.2" id="approval"><span class="header-section-number">1.8.2</span> 8.2 Approval</h3>
+<p>Final approval is handled by authorized roles, normally N1/N2.
+Comments should be clear, especially for rejections.</p>
+<h3 data-number="1.8.3" id="recipients"><span class="header-section-number">1.8.3</span> 8.3 Recipients</h3>
+<p>S-EWO recipient lists should reflect who needs to receive reports and
+notifications.</p>
+<h2 data-number="1.9" id="contractors"><span class="header-section-number">1.9</span> 9. Contractors</h2>
+<h3 data-number="1.9.1" id="invitations"><span class="header-section-number">1.9.1</span> 9.1 Invitations</h3>
+<p>In the <code>Contractors</code> module, the administrator sends an
+invitation to the external company email. The company registers and
+accesses the portal.</p>
+<h3 data-number="1.9.2" id="review"><span class="header-section-number">1.9.2</span> 9.2 Review</h3>
+<p>Administrators with permission can review:</p>
+<ul>
+<li>company data;</li>
+<li>company documents;</li>
+<li>workers;</li>
+<li>worker documents;</li>
+<li>document validity;</li>
+<li>approved, pending, rejected or expired status.</li>
+</ul>
+<h3 data-number="1.9.3" id="approval-1"><span class="header-section-number">1.9.3</span> 9.3 Approval</h3>
+<p>N3 Safety and N1 Corporate can approve, according to the rule
+implemented in the dashboard.</p>
+<h2 data-number="1.10" id="occupational-health"><span class="header-section-number">1.10</span> 10. Occupational Health</h2>
+<p>Authorized administrators can:</p>
+<ul>
+<li>add workers;</li>
+<li>edit data;</li>
+<li>import Excel;</li>
+<li>export Excel/PDF;</li>
+<li>download template;</li>
+<li>inactivate workers.</li>
+</ul>
+<p>Regularly check expired or soon-to-expire medical exams.</p>
+<h2 data-number="1.11" id="monthly-inputs-and-environment-dashboard"><span class="header-section-number">1.11</span> 11. Monthly Inputs and
+Environment Dashboard</h2>
+<h3 data-number="1.11.1" id="monthly-inputs"><span class="header-section-number">1.11.1</span> 11.1 Monthly inputs</h3>
+<p>Monthly inputs feed dashboards and calculations such as hours worked,
+indexes and environmental indicators.</p>
+<p>Administrators should ensure:</p>
+<ul>
+<li>the correct year is loaded;</li>
+<li>months are filled in;</li>
+<li>active indicators are appropriate;</li>
+<li>Excel imports are validated after processing.</li>
+</ul>
+<h3 data-number="1.11.2" id="custom-indicators"><span class="header-section-number">1.11.2</span> 11.2 Custom indicators</h3>
+<p>The form allows enabling/disabling indicators, editing labels, units,
+options and distances when applicable. Changes should be controlled to
+preserve historical comparability.</p>
+<h2 data-number="1.12" id="mapa"><span class="header-section-number">1.12</span> 12. MAPA</h2>
+<p>The MAPA module uses documents, layers and features. For good
+maintenance:</p>
+<ul>
+<li>keep documents updated;</li>
+<li>keep areas and workstations correctly positioned;</li>
+<li>validate visible layers;</li>
+<li>review automatic incident markers.</li>
+</ul>
+<h2 data-number="1.13" id="jobs-queues-and-email"><span class="header-section-number">1.13</span> 13. Jobs, Queues and
+Email</h2>
+<p>The application uses BullMQ and Redis for jobs.</p>
+<p>Existing handlers include:</p>
+<ul>
+<li>weekly digest;</li>
+<li>monthly and annual reports;</li>
+<li>overdue action alerts;</li>
+<li>repeatability alerts;</li>
+<li>approved S-EWO notifications;</li>
+<li>email notifications.</li>
+</ul>
+<p>In a local environment, use <code>npm run dev:all</code> or start
+<code>scheduler</code> and <code>worker</code> separately.</p>
+<h2 data-number="1.14" id="storage-and-attachments"><span class="header-section-number">1.14</span> 14. Storage and
+Attachments</h2>
+<p>Attachments, evidence and public photos are stored in S3-compatible
+storage, usually local MinIO or an equivalent S3 provider.</p>
+<p>For the public form:</p>
+<ul>
+<li>maximum 5 photos;</li>
+<li>maximum 5 MB per photo;</li>
+<li>maximum 20 MB total;</li>
+<li>JPG, JPEG, PNG, WEBP, HEIC and HEIF formats.</li>
+</ul>
+<h2 data-number="1.15" id="security"><span class="header-section-number">1.15</span> 15. Security</h2>
+<h3 data-number="1.15.1" id="secrets"><span class="header-section-number">1.15.1</span> 15.1 Secrets</h3>
+<p>Protect:</p>
+<ul>
+<li><code>.env</code>;</li>
+<li><code>.env.production</code>;</li>
+<li><code>NEXTAUTH_SECRET</code>;</li>
+<li><code>TOKEN_PEPPER</code>;</li>
+<li>database credentials;</li>
+<li>S3/MinIO credentials;</li>
+<li>SMTP credentials;</li>
+<li>API keys.</li>
+</ul>
+<p>Do not publish <code>.env</code> files or real dumps.</p>
+<h3 data-number="1.15.2" id="token_pepper"><span class="header-section-number">1.15.2</span> 15.2 TOKEN_PEPPER</h3>
+<p>Do not change <code>TOKEN_PEPPER</code> after generating QR tokens,
+because existing tokens will stop validating.</p>
+<h3 data-number="1.15.3" id="accounts-and-passwords"><span class="header-section-number">1.15.3</span> 15.3 Accounts and
+passwords</h3>
+<ul>
+<li>Use strong passwords.</li>
+<li>Inactivate accounts that should no longer have access.</li>
+<li>Avoid shared accounts.</li>
+<li>Change temporary passwords on first access.</li>
+</ul>
+<h3 data-number="1.15.4" id="rate-limit"><span class="header-section-number">1.15.4</span> 15.4 Rate limit</h3>
+<p>Public QR routes use rate limiting by IP and plant to reduce
+abuse.</p>
+<h2 data-number="1.16" id="observability"><span class="header-section-number">1.16</span> 16. Observability</h2>
+<p>Endpoints:</p>
+<ul>
+<li><code>GET /api/health/live</code></li>
+<li><code>GET /api/health/ready</code></li>
+</ul>
+<p>The ready endpoint validates dependencies such as database, Redis and
+storage.</p>
+<p>Logs use structured <code>pino</code> logging.</p>
+<h2 data-number="1.17" id="backups"><span class="header-section-number">1.17</span> 17. Backups</h2>
+<p>Before important updates:</p>
+<ol type="1">
+<li>Create a SQL database backup.</li>
+<li>Preserve attachment storage/volume.</li>
+<li>Confirm the backup can be restored.</li>
+</ol>
+<p>Production backup examples are documented in
+<code>DEPLOY.md</code>.</p>
+<h2 data-number="1.18" id="tests-and-validation"><span class="header-section-number">1.18</span> 18. Tests and Validation</h2>
+<p>Before publishing changes:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode powershell"><code class="sourceCode powershell"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>npm run lint</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>npm run test<span class="op">:</span>unit</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>npm run test<span class="op">:</span>e2e</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>npm run build</span></code></pre></div>
+<p>If a test fails, fix it before deployment.</p>
+<h2 data-number="1.19" id="troubleshooting"><span class="header-section-number">1.19</span> 19. Troubleshooting</h2>
+<h3 data-number="1.19.1" id="application-does-not-start"><span class="header-section-number">1.19.1</span> Application does not
+start</h3>
+<p>Check:</p>
+<ul>
+<li>Docker is running;</li>
+<li>Postgres, Redis and MinIO are healthy;</li>
+<li><code>.env</code> is correct;</li>
+<li>migrations were applied;</li>
+<li>port is free.</li>
+</ul>
+<h3 data-number="1.19.2" id="login-fails"><span class="header-section-number">1.19.2</span> Login fails</h3>
+<p>Check:</p>
+<ul>
+<li>user is active;</li>
+<li>role is assigned;</li>
+<li>password;</li>
+<li><code>NEXTAUTH_SECRET</code>;</li>
+<li>configured URL (<code>NEXTAUTH_URL</code>,
+<code>APP_URL</code>).</li>
+</ul>
+<h3 data-number="1.19.3" id="qr-code-stopped-working"><span class="header-section-number">1.19.3</span> QR Code stopped working</h3>
+<p>Possible causes:</p>
+<ul>
+<li>token was regenerated;</li>
+<li><code>TOKEN_PEPPER</code> changed;</li>
+<li>plant missing/inactive;</li>
+<li>public route blocked;</li>
+<li>rate limit.</li>
+</ul>
+<h3 data-number="1.19.4" id="dashboard-has-no-data"><span class="header-section-number">1.19.4</span> Dashboard has no data</h3>
+<p>Confirm:</p>
+<ul>
+<li>communications are validated;</li>
+<li>period is correct;</li>
+<li>monthly inputs are filled in;</li>
+<li>hours worked exist;</li>
+<li>modules are enabled.</li>
+</ul>
+<h3 data-number="1.19.5" id="upload-fails"><span class="header-section-number">1.19.5</span> Upload fails</h3>
+<p>Check:</p>
+<ul>
+<li>MinIO/S3 availability;</li>
+<li>bucket configuration;</li>
+<li>credentials;</li>
+<li>size and format limits.</li>
+</ul>
+</body>
+</html>

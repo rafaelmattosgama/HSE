@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import {
   formatLocalizedActionCategory,
+  formatLocalizedActionManualOrigin,
   formatLocalizedActionPriority,
   formatLocalizedActionSourceType,
   formatLocalizedActionStatus,
@@ -44,6 +45,11 @@ export default async function ActionDetailPage({
       evidenceAttachments: true,
       communication: true,
       sewo: true,
+      smatLinks: {
+        include: {
+          smatAudit: true,
+        },
+      },
       closedByUser: true,
       reopenedByUser: true,
     },
@@ -76,6 +82,7 @@ export default async function ActionDetailPage({
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldPriority}</dt><dd>{formatLocalizedActionPriority(action.priority, actionsUi)}</dd></div>
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldCategory}</dt><dd>{formatLocalizedActionCategory(action.category, actionsUi)}</dd></div>
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldSourceType}</dt><dd>{formatLocalizedActionSourceType(action.sourceType, actionsUi)}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.manualOrigin}</dt><dd>{formatLocalizedActionManualOrigin(action.manualOrigin, actionsUi)}</dd></div>
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldOwner}</dt><dd>{action.ownerUser.name}</dd></div>
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.fieldDueDate}</dt><dd>{action.dueDate.toISOString().slice(0, 10)}</dd></div>
           </dl>
@@ -111,6 +118,7 @@ export default async function ActionDetailPage({
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.communication}</dt><dd>{linkedRecordCodes.communicationCode}</dd></div>
             <div className="flex justify-between gap-4"><dt>{actionsUi.detail.sewo}</dt><dd>{linkedRecordCodes.sewoCode}</dd></div>
+            <div className="flex justify-between gap-4"><dt>{actionsUi.detail.smat}</dt><dd>{linkedRecordCodes.smatCode}</dd></div>
           </dl>
         </article>
 

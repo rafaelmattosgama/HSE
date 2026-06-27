@@ -293,7 +293,10 @@ export default async function SmatPage({ params }: { params: Promise<{ plant: st
                         ) : (
                           <div className="mt-2 space-y-2">
                             {audit.attachments.map((attachment) => (
-                              <p key={attachment.id} className="rounded-md bg-slate-50 p-2">{attachment.fileName}</p>
+                              <div key={attachment.id} className="rounded-md bg-slate-50 p-2">
+                                <p>{attachment.fileName}</p>
+                                {attachment.caption ? <p className="mt-1 text-xs text-slate-500">{attachment.caption}</p> : null}
+                              </div>
                             ))}
                           </div>
                         )}

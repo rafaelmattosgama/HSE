@@ -8,6 +8,8 @@ type PartialDeep<T> = {
 const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
   createCommunicationQuick: {
     title: "Comunicacao rapida",
+    expandSection: "Mostrar",
+    collapseSection: "Ocultar",
     eventDatetime: "Data e hora",
     reporterFromPlantWorkers: "Comunicante dos trabalhadores da planta",
     reporterNumber: "Numero do comunicante",
@@ -152,8 +154,19 @@ const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
     newAction: "Nova acao",
     manualAction: "Acao manual",
     linkedToCommunication: "Associada a comunicacao",
+    linkedToSewo: "Associada a S-EWO",
+    linkedToSmat: "Associada a SMAT",
+    manualOrigin: "Origem da acao",
+    selectManualOrigin: "Selecionar origem da acao",
+    manualOriginLabels: {
+      AUDITS: "Auditorias",
+      EXTERNAL_VERIFICATIONS: "Verificacoes Externas",
+      OTHER: "Outras",
+    },
     linkedCommunication: "Comunicacao associada",
     selectCommunication: "Selecionar comunicacao",
+    selectSewo: "Selecionar S-EWO",
+    selectSmat: "Selecionar SMAT",
     noLinkMessage: "Esta acao sera criada sem ligacoes a comunicacao, S-EWO ou SMAT.",
     title: "Titulo",
     description: "Descricao",
