@@ -133,14 +133,15 @@ export const ActionService = {
         },
       });
 
-      return tx.action.create({
+      const createdAction = await tx.action.create({
         data: {
           plantId: input.plantId,
           sequenceNumber: (latest?.sequenceNumber ?? 0) + 1,
           sourceType: input.payload.sourceType as ActionSourceType,
+          manualOrigin: input.payload.sourceType === ActionSourceType.MANUAL ? input.payload.manualOrigin : null,
           level: input.payload.level ?? null,
-          communicationId: input.payload.communicationId,
-          sewoId: input.payload.sewoId,
+          communicationId: input.payload.sourceType === ActionSourceType.COMMUNICATION ? input.payload.communicationId : null,
+          sewoId: input.payload.sourceType === ActionSourceType.SEWO ? input.payload.sewoId : null,
           category: input.payload.category,
           priority: input.payload.priority,
           title: input.payload.title,
@@ -159,6 +160,17 @@ export const ActionService = {
           coOwners: true,
         },
       });
+
+      if (input.payload.sourceType === ActionSourceType.SMAT && input.payload.smatAuditId) {
+        await tx.smatAuditActionLink.create({
+          data: {
+            smatAuditId: input.payload.smatAuditId,
+            actionId: createdAction.id,
+          },
+        });
+      }
+
+      return createdAction;
     });
 
     if (!reusedExistingAction) {

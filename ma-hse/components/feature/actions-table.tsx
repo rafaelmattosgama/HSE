@@ -33,10 +33,13 @@ type ActionRow = {
   local: string;
   sourceLabel: string;
   sourceHref: string | null;
+  manualOrigin: string;
   communicationId: string | null;
   communicationCode: string | null;
   sewoId: string | null;
   sewoCode: string | null;
+  smatAuditId: string | null;
+  smatCode: string | null;
   evidence: EvidenceRow[];
 };
 
@@ -297,7 +300,11 @@ export function ActionsTable({
             action: `${formatActionCode(plant, action.sequenceNumber)} | ${action.title}`,
             level: formatRecordLevel(action.level),
             local: action.local,
-            source: [action.sourceLabel, action.communicationCode ?? action.sewoCode].filter(Boolean).join(" | "),
+            source: [
+              action.sourceLabel,
+              action.communicationCode ?? action.sewoCode ?? action.smatCode,
+              action.manualOrigin !== "-" ? action.manualOrigin : null,
+            ].filter(Boolean).join(" | "),
             priority: action.priority,
             status: action.status,
             owner: action.ownerName,
@@ -504,7 +511,7 @@ export function ActionsTable({
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.linkedRecords}</p>
                               <p className="mt-2 text-sm text-slate-700">
-                                {text.communication}: {row.communicationCode ?? "-"} | {text.sewo}: {row.sewoCode ?? "-"}
+                                {text.manualOrigin}: {row.manualOrigin} | {text.communication}: {row.communicationCode ?? "-"} | {text.sewo}: {row.sewoCode ?? "-"} | {text.smat}: {row.smatCode ?? "-"}
                               </p>
                             </div>
                             <div>

@@ -34,8 +34,10 @@ export const BASE_ACTIONS_UI = {
     openClose: "Open / close",
     openOnly: "Open",
     linkedRecords: "Linked records",
+    manualOrigin: "Manual origin",
     communication: "Communication",
     sewo: "S-EWO",
+    smat: "SMAT",
     evidenceAttached: "Evidence already attached",
     closeAction: "Close action",
     describeClosure: "Describe what was done.",
@@ -72,8 +74,10 @@ export const BASE_ACTIONS_UI = {
     description: "Action",
     linkedRecordDescription: "Communication description",
     linkedRecords: "Linked records",
+    manualOrigin: "Manual origin",
     communication: "Communication",
     sewo: "S-EWO",
+    smat: "SMAT",
     coOwners: "Co-owners",
     evidence: "Evidence",
     comments: "Comments",
@@ -100,6 +104,12 @@ export const BASE_ACTIONS_UI = {
     MANUAL: "Manual",
     COMMUNICATION: "Communication",
     SEWO: "S-EWO",
+    SMAT: "SMAT",
+  },
+  manualOriginLabels: {
+    AUDITS: "Audits",
+    EXTERNAL_VERIFICATIONS: "External verifications",
+    OTHER: "Other",
   },
 } as const;
 
@@ -139,4 +149,12 @@ export function formatLocalizedActionSourceType(
   ui: Pick<ActionsUi, "sourceTypeLabels">,
 ) {
   return ui.sourceTypeLabels[sourceType as keyof ActionsUi["sourceTypeLabels"]] ?? sourceType;
+}
+
+export function formatLocalizedActionManualOrigin(
+  manualOrigin: string | null | undefined,
+  ui: Pick<ActionsUi, "manualOriginLabels">,
+) {
+  if (!manualOrigin) return "-";
+  return ui.manualOriginLabels[manualOrigin as keyof ActionsUi["manualOriginLabels"]] ?? manualOrigin;
 }

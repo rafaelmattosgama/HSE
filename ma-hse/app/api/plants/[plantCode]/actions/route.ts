@@ -48,6 +48,11 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
       evidenceAttachments: true,
       communication: true,
       sewo: true,
+      smatLinks: {
+        include: {
+          smatAudit: true,
+        },
+      },
     },
     orderBy: {
       dueDate: "asc",
@@ -101,6 +106,34 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     }
   }
 
+  if (parsed.data.sourceType === "SEWO" && parsed.data.sewoId) {
+    const sewo = await prisma.sEWO.findFirst({
+      where: {
+        id: parsed.data.sewoId,
+        plantId: plant.id,
+      },
+      select: { id: true },
+    });
+
+    if (!sewo) {
+      return fail("INVALID_SEWO", "Select an existing S-EWO record for this plant", 422);
+    }
+  }
+
+  if (parsed.data.sourceType === "SMAT" && parsed.data.smatAuditId) {
+    const smat = await prisma.smatAudit.findFirst({
+      where: {
+        id: parsed.data.smatAuditId,
+        plantId: plant.id,
+      },
+      select: { id: true },
+    });
+
+    if (!smat) {
+      return fail("INVALID_SMAT", "Select an existing SMAT record for this plant", 422);
+    }
+  }
+
   const owner = await prisma.userPlantRole.findFirst({
     where: {
       plantId: plant.id,
@@ -136,6 +169,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         sourceType: parsed.data.sourceType,
         communicationId: parsed.data.communicationId,
         sewoId: parsed.data.sewoId,
+        smatAuditId: parsed.data.smatAuditId,
         ownerUserId: parsed.data.ownerUserId,
       },
       "failed_to_create_action",

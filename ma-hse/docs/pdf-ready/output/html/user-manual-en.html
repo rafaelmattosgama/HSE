@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="MA HSE" />
+  <meta name="dcterms.date" content="2026-06-25" />
+  <title>User Manual</title>
+  <style>
+
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+.display.math{display: block; text-align: center; margin: 0.5rem auto;}
+</style>
+  <style type="text/css">@page {
+size: A4;
+margin: 22mm 18mm 20mm 18mm;
+}
+body {
+color: #0f172a;
+font-family: "Segoe UI", Arial, sans-serif;
+font-size: 10.5pt;
+line-height: 1.45;
+}
+.cover {
+align-items: center;
+border: 1px solid #cbd5e1;
+display: flex;
+flex-direction: column;
+justify-content: center;
+min-height: 86vh;
+padding: 36mm 20mm;
+text-align: center;
+}
+.cover-brand {
+color: #0f766e;
+font-size: 13pt;
+font-weight: 700;
+letter-spacing: 0.16em;
+margin-bottom: 18mm;
+text-transform: uppercase;
+}
+.cover-title {
+color: #0f172a;
+font-size: 30pt;
+font-weight: 800;
+line-height: 1.08;
+margin: 0;
+}
+.cover-subtitle {
+color: #334155;
+font-size: 15pt;
+font-weight: 600;
+margin-top: 8mm;
+}
+.cover-meta {
+border-top: 1px solid #cbd5e1;
+color: #475569;
+font-size: 10pt;
+margin-top: 24mm;
+padding-top: 8mm;
+}
+h1,
+h2,
+h3,
+h4 {
+color: #0f172a;
+line-height: 1.2;
+}
+h1 {
+border-bottom: 2px solid #0f766e;
+font-size: 22pt;
+margin-top: 0;
+padding-bottom: 5mm;
+}
+h2 {
+border-bottom: 1px solid #cbd5e1;
+font-size: 15pt;
+margin-top: 12mm;
+padding-bottom: 2mm;
+}
+h3 {
+font-size: 12.5pt;
+margin-top: 8mm;
+}
+h4 {
+font-size: 11pt;
+margin-top: 6mm;
+}
+a {
+color: #0f766e;
+}
+code {
+background: #f1f5f9;
+border-radius: 3px;
+color: #0f172a;
+font-family: Consolas, "Courier New", monospace;
+font-size: 9.5pt;
+padding: 1px 4px;
+}
+pre {
+background: #f8fafc;
+border: 1px solid #cbd5e1;
+border-radius: 6px;
+overflow-wrap: break-word;
+padding: 10px 12px;
+white-space: pre-wrap;
+}
+pre code {
+background: transparent;
+padding: 0;
+}
+table {
+border-collapse: collapse;
+width: 100%;
+}
+th,
+td {
+border: 1px solid #cbd5e1;
+padding: 6px 8px;
+vertical-align: top;
+}
+th {
+background: #f1f5f9;
+}
+blockquote {
+border-left: 4px solid #0f766e;
+color: #475569;
+margin-left: 0;
+padding-left: 12px;
+}
+.page-break {
+break-after: page;
+page-break-after: always;
+}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">User Manual</h1>
+<p class="subtitle">MA HSE</p>
+<p class="author">MA HSE</p>
+<p class="date">June 25, 2026</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#user-manual---ma-hse" id="toc-user-manual---ma-hse"><span class="toc-section-number">1</span> User Manual - MA HSE</a>
+<ul>
+<li><a href="#purpose" id="toc-purpose"><span class="toc-section-number">1.1</span> 1. Purpose</a></li>
+<li><a href="#access" id="toc-access"><span class="toc-section-number">1.2</span> 2. Access</a>
+<ul>
+<li><a href="#sign-in" id="toc-sign-in"><span class="toc-section-number">1.2.1</span> 2.1 Sign in</a></li>
+<li><a href="#change-password" id="toc-change-password"><span class="toc-section-number">1.2.2</span> 2.2 Change password</a></li>
+<li><a href="#language" id="toc-language"><span class="toc-section-number">1.2.3</span> 2.3 Language</a></li>
+</ul></li>
+<li><a href="#main-navigation" id="toc-main-navigation"><span class="toc-section-number">1.3</span> 3. Main Navigation</a></li>
+<li><a href="#safety-dashboard" id="toc-safety-dashboard"><span class="toc-section-number">1.4</span> 4. Safety Dashboard</a>
+<ul>
+<li><a href="#filter-the-period" id="toc-filter-the-period"><span class="toc-section-number">1.4.1</span> 4.1 Filter the period</a></li>
+<li><a href="#displayed-indicators" id="toc-displayed-indicators"><span class="toc-section-number">1.4.2</span> 4.2 Displayed
+indicators</a></li>
+</ul></li>
+<li><a href="#communications" id="toc-communications"><span class="toc-section-number">1.5</span> 5. Communications</a>
+<ul>
+<li><a href="#communication-types" id="toc-communication-types"><span class="toc-section-number">1.5.1</span> 5.1 Communication types</a></li>
+<li><a href="#create-a-communication" id="toc-create-a-communication"><span class="toc-section-number">1.5.2</span> 5.2 Create a
+communication</a></li>
+<li><a href="#review-communications" id="toc-review-communications"><span class="toc-section-number">1.5.3</span> 5.3 Review
+communications</a></li>
+</ul></li>
+<li><a href="#validation" id="toc-validation"><span class="toc-section-number">1.6</span> 6. Validation</a>
+<ul>
+<li><a href="#validate-communications" id="toc-validate-communications"><span class="toc-section-number">1.6.1</span> 6.1 Validate
+communications</a></li>
+<li><a href="#s-ewo-validation" id="toc-s-ewo-validation"><span class="toc-section-number">1.6.2</span> 6.2 S-EWO validation</a></li>
+</ul></li>
+<li><a href="#actions" id="toc-actions"><span class="toc-section-number">1.7</span> 7. Actions</a>
+<ul>
+<li><a href="#create-an-action" id="toc-create-an-action"><span class="toc-section-number">1.7.1</span> 7.1 Create an action</a></li>
+<li><a href="#track-actions" id="toc-track-actions"><span class="toc-section-number">1.7.2</span> 7.2 Track actions</a></li>
+<li><a href="#close-an-action" id="toc-close-an-action"><span class="toc-section-number">1.7.3</span> 7.3 Close an action</a></li>
+</ul></li>
+<li><a href="#s-ewo" id="toc-s-ewo"><span class="toc-section-number">1.8</span> 8. S-EWO</a>
+<ul>
+<li><a href="#create-an-s-ewo" id="toc-create-an-s-ewo"><span class="toc-section-number">1.8.1</span> 8.1 Create an S-EWO</a></li>
+<li><a href="#statuses" id="toc-statuses"><span class="toc-section-number">1.8.2</span> 8.2 Statuses</a></li>
+<li><a href="#approval" id="toc-approval"><span class="toc-section-number">1.8.3</span> 8.3 Approval</a></li>
+</ul></li>
+<li><a href="#smat" id="toc-smat"><span class="toc-section-number">1.9</span> 9. SMAT</a>
+<ul>
+<li><a href="#create-an-audit" id="toc-create-an-audit"><span class="toc-section-number">1.9.1</span> 9.1 Create an audit</a></li>
+<li><a href="#export-an-audit" id="toc-export-an-audit"><span class="toc-section-number">1.9.2</span> 9.2 Export an audit</a></li>
+</ul></li>
+<li><a href="#occupational-health" id="toc-occupational-health"><span class="toc-section-number">1.10</span> 10. Occupational Health</a>
+<ul>
+<li><a href="#review-workers" id="toc-review-workers"><span class="toc-section-number">1.10.1</span> 10.1 Review workers</a></li>
+<li><a href="#add-or-edit-a-worker" id="toc-add-or-edit-a-worker"><span class="toc-section-number">1.10.2</span> 10.2 Add or edit a
+worker</a></li>
+<li><a href="#import-and-export" id="toc-import-and-export"><span class="toc-section-number">1.10.3</span> 10.3 Import and export</a></li>
+</ul></li>
+<li><a href="#monthly-inputs" id="toc-monthly-inputs"><span class="toc-section-number">1.11</span> 11. Monthly Inputs</a>
+<ul>
+<li><a href="#fill-in-data" id="toc-fill-in-data"><span class="toc-section-number">1.11.1</span> 11.1 Fill in data</a></li>
+<li><a href="#view-modes" id="toc-view-modes"><span class="toc-section-number">1.11.2</span> 11.2 View modes</a></li>
+<li><a href="#excel" id="toc-excel"><span class="toc-section-number">1.11.3</span> 11.3 Excel</a></li>
+</ul></li>
+<li><a href="#environment-dashboard" id="toc-environment-dashboard"><span class="toc-section-number">1.12</span> 12. Environment
+Dashboard</a></li>
+<li><a href="#contractors" id="toc-contractors"><span class="toc-section-number">1.13</span> 13. Contractors</a>
+<ul>
+<li><a href="#invite-an-external-company" id="toc-invite-an-external-company"><span class="toc-section-number">1.13.1</span> 13.1 Invite an external
+company</a></li>
+<li><a href="#review-companies-and-workers" id="toc-review-companies-and-workers"><span class="toc-section-number">1.13.2</span> 13.2 Review companies and
+workers</a></li>
+<li><a href="#external-company-portal" id="toc-external-company-portal"><span class="toc-section-number">1.13.3</span> 13.3 External company
+portal</a></li>
+</ul></li>
+<li><a href="#mapa" id="toc-mapa"><span class="toc-section-number">1.14</span> 14. MAPA</a></li>
+<li><a href="#public-qr-reporting" id="toc-public-qr-reporting"><span class="toc-section-number">1.15</span> 15. Public QR Reporting</a>
+<ul>
+<li><a href="#submit-a-qr-report" id="toc-submit-a-qr-report"><span class="toc-section-number">1.15.1</span> 15.1 Submit a QR
+report</a></li>
+<li><a href="#photos" id="toc-photos"><span class="toc-section-number">1.15.2</span> 15.2 Photos</a></li>
+</ul></li>
+<li><a href="#alerts-and-notifications" id="toc-alerts-and-notifications"><span class="toc-section-number">1.16</span> 16. Alerts and
+Notifications</a></li>
+<li><a href="#good-practices" id="toc-good-practices"><span class="toc-section-number">1.17</span> 17. Good Practices</a></li>
+<li><a href="#troubleshooting" id="toc-troubleshooting"><span class="toc-section-number">1.18</span> 18. Troubleshooting</a>
+<ul>
+<li><a href="#i-cannot-sign-in" id="toc-i-cannot-sign-in"><span class="toc-section-number">1.18.1</span> I cannot sign in</a></li>
+<li><a href="#i-cannot-see-a-module" id="toc-i-cannot-see-a-module"><span class="toc-section-number">1.18.2</span> I cannot see a module</a></li>
+<li><a href="#kpi-look-incomplete" id="toc-kpi-look-incomplete"><span class="toc-section-number">1.18.3</span> KPI look incomplete</a></li>
+<li><a href="#i-cannot-close-an-action" id="toc-i-cannot-close-an-action"><span class="toc-section-number">1.18.4</span> I cannot close an
+action</a></li>
+<li><a href="#the-qr-code-does-not-open" id="toc-the-qr-code-does-not-open"><span class="toc-section-number">1.18.5</span> The QR Code does not
+open</a></li>
+</ul></li>
+</ul></li>
+</ul>
+</nav>
+<div class="cover">
+<div class="cover-brand">
+MA HSE
+</div>
+<h1 class="cover-title">
+User Manual
+</h1>
+<div class="cover-subtitle">
+MA HSE
+</div>
+<div class="cover-meta">
+<pre><code>&lt;p&gt;&lt;strong&gt;Audience:&lt;/strong&gt; End users&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Date:&lt;/strong&gt; June 25, 2026&lt;/p&gt;
+&lt;p&gt;Functional guide for using the MA HSE modules.&lt;/p&gt;</code></pre>
+</div>
+</div>
+<div class="page-break">
+
+</div>
+<h1 data-number="1" id="user-manual---ma-hse"><span class="header-section-number">1</span> User Manual - MA HSE</h1>
+<p>Version generated from project analysis on 2026-06-25.</p>
+<h2 data-number="1.1" id="purpose"><span class="header-section-number">1.1</span> 1. Purpose</h2>
+<p>MA HSE is a multi-plant Health, Safety and Environment web
+application. It supports safety communications, corrective actions,
+dashboards, validation workflows, S-EWO analysis, SMAT audits,
+occupational health, contractors, monthly inputs and operational
+maps.</p>
+<p>This manual is for end users. Available pages and actions depend on
+the user’s role, selected plant and enabled modules.</p>
+<h2 data-number="1.2" id="access"><span class="header-section-number">1.2</span> 2. Access</h2>
+<h3 data-number="1.2.1" id="sign-in"><span class="header-section-number">1.2.1</span> 2.1 Sign in</h3>
+<ol type="1">
+<li>Open the application URL in a browser.</li>
+<li>Enter email and password.</li>
+<li>Open the relevant plant or dashboard.</li>
+</ol>
+<p>If the account was created with a temporary password, the system may
+require a password change before normal access.</p>
+<h3 data-number="1.2.2" id="change-password"><span class="header-section-number">1.2.2</span> 2.2 Change password</h3>
+<ol type="1">
+<li>Open the user menu or the password change page.</li>
+<li>Enter the current password and the new password.</li>
+<li>Save the change.</li>
+</ol>
+<h3 data-number="1.2.3" id="language"><span class="header-section-number">1.2.3</span> 2.3 Language</h3>
+<p>The application supports multiple languages. The visible language can
+come from the user’s preference or from the plant default. Some
+technical module labels may still appear in English.</p>
+<h2 data-number="1.3" id="main-navigation"><span class="header-section-number">1.3</span> 3. Main Navigation</h2>
+<p>Inside a plant, the side menu may include:</p>
+<ul>
+<li>Safety Dashboard</li>
+<li>Environment Dashboard</li>
+<li>Validation</li>
+<li>Communications</li>
+<li>Actions</li>
+<li>S-EWO</li>
+<li>SMAT</li>
+<li>Occupational Health</li>
+<li>Monthly Inputs</li>
+<li>Contractors</li>
+<li>MAPA</li>
+<li>Admin</li>
+</ul>
+<p>Corporate users can also access the corporate dashboard. Global
+administrators can access Settings.</p>
+<h2 data-number="1.4" id="safety-dashboard"><span class="header-section-number">1.4</span> 4. Safety Dashboard</h2>
+<p>The safety dashboard summarizes plant performance for a selected
+period.</p>
+<h3 data-number="1.4.1" id="filter-the-period"><span class="header-section-number">1.4.1</span> 4.1 Filter the period</h3>
+<ol type="1">
+<li>Open <code>Safety Dashboard</code>.</li>
+<li>Select year, month or a date range.</li>
+<li>Click <code>Apply</code>.</li>
+<li>Use <code>Clear dates</code> or <code>Current year</code> to reset
+filters.</li>
+</ol>
+<h3 data-number="1.4.2" id="displayed-indicators"><span class="header-section-number">1.4.2</span> 4.2 Displayed indicators</h3>
+<p>The dashboard may show:</p>
+<ul>
+<li>days without accident;</li>
+<li>validated events;</li>
+<li>hours worked;</li>
+<li>overdue actions;</li>
+<li>my open actions;</li>
+<li>open communications;</li>
+<li>communications pending validation;</li>
+<li>clinical cases;</li>
+<li>safety pyramid;</li>
+<li>S-EWO root cause top 5;</li>
+<li>unsafe act, unsafe condition and near miss type top 5;</li>
+<li>rankings by worker, department and location.</li>
+</ul>
+<p>KPI indicators use communications that are validated, ongoing or
+closed.</p>
+<h2 data-number="1.5" id="communications"><span class="header-section-number">1.5</span> 5. Communications</h2>
+<p>The <code>Communications</code> module is used to create and review
+safety events.</p>
+<h3 data-number="1.5.1" id="communication-types"><span class="header-section-number">1.5.1</span> 5.1 Communication types</h3>
+<p>Depending on permissions and source, the system supports:</p>
+<ul>
+<li>Unsafe Act</li>
+<li>Unsafe Condition</li>
+<li>Near Miss</li>
+<li>First Aid</li>
+<li>Injury / Accident</li>
+<li>5S Improvement</li>
+<li>Improvement Suggestion</li>
+</ul>
+<h3 data-number="1.5.2" id="create-a-communication"><span class="header-section-number">1.5.2</span> 5.2 Create a
+communication</h3>
+<ol type="1">
+<li>Open <code>Communications</code>.</li>
+<li>Fill in the quick creation form.</li>
+<li>Select type, date/time, area, location, involved worker when
+required, description and suggested action.</li>
+<li>Link a corrective action if available.</li>
+<li>Submit.</li>
+</ol>
+<p>Clinical fields, such as injury nature or affected body part, are
+displayed only when required by the event type.</p>
+<h3 data-number="1.5.3" id="review-communications"><span class="header-section-number">1.5.3</span> 5.3 Review
+communications</h3>
+<p>The list shows recent plant communications, including code, date,
+type, status, reporter, department, location and description. Depending
+on permission, technical classification and unsafe act, unsafe condition
+or near miss types may also be visible.</p>
+<h2 data-number="1.6" id="validation"><span class="header-section-number">1.6</span> 6. Validation</h2>
+<p>The <code>Validation</code> module is mainly used by safety and
+corporate roles.</p>
+<h3 data-number="1.6.1" id="validate-communications"><span class="header-section-number">1.6.1</span> 6.1 Validate
+communications</h3>
+<ol type="1">
+<li>Open <code>Validation</code>.</li>
+<li>Review submitted or pending communications.</li>
+<li>Confirm event data.</li>
+<li>Approve/validate or handle the item using the available
+actions.</li>
+</ol>
+<p>A validated communication is included in dashboards and KPI.</p>
+<h3 data-number="1.6.2" id="s-ewo-validation"><span class="header-section-number">1.6.2</span> 6.2 S-EWO validation</h3>
+<p>Corporate users may also see the S-EWO validation/approval queue when
+records are pending.</p>
+<h2 data-number="1.7" id="actions"><span class="header-section-number">1.7</span> 7. Actions</h2>
+<p>The <code>Actions</code> module manages corrective and preventive
+action plans.</p>
+<h3 data-number="1.7.1" id="create-an-action"><span class="header-section-number">1.7.1</span> 7.1 Create an action</h3>
+<ol type="1">
+<li>Open <code>Actions</code>.</li>
+<li>Fill in title, description, owner, priority, due date and
+source.</li>
+<li>Link the action to a communication when applicable.</li>
+<li>Save.</li>
+</ol>
+<h3 data-number="1.7.2" id="track-actions"><span class="header-section-number">1.7.2</span> 7.2 Track actions</h3>
+<p>The table includes:</p>
+<ul>
+<li>sequence code;</li>
+<li>title and description;</li>
+<li>level;</li>
+<li>priority;</li>
+<li>status;</li>
+<li>owner;</li>
+<li>due date;</li>
+<li>closed date;</li>
+<li>location;</li>
+<li>source;</li>
+<li>evidence.</li>
+</ul>
+<h3 data-number="1.7.3" id="close-an-action"><span class="header-section-number">1.7.3</span> 7.3 Close an action</h3>
+<ol type="1">
+<li>Open the action.</li>
+<li>Add a closure comment.</li>
+<li>Upload required evidence when requested.</li>
+<li>Confirm closure.</li>
+</ol>
+<p>The system may reject closure without a comment and required
+evidence.</p>
+<h2 data-number="1.8" id="s-ewo"><span class="header-section-number">1.8</span> 8. S-EWO</h2>
+<p>The <code>S-EWO</code> module supports structured event analysis,
+root causes and action planning.</p>
+<h3 data-number="1.8.1" id="create-an-s-ewo"><span class="header-section-number">1.8.1</span> 8.1 Create an S-EWO</h3>
+<ol type="1">
+<li>Open <code>S-EWO</code>.</li>
+<li>Create a standalone record or start from an existing
+communication.</li>
+<li>Fill in event, location, worker, shift and description data.</li>
+<li>Complete the analysis fields.</li>
+<li>Select causes and mark root causes.</li>
+<li>Create or link actions.</li>
+<li>Submit for approval when required.</li>
+</ol>
+<h3 data-number="1.8.2" id="statuses"><span class="header-section-number">1.8.2</span> 8.2 Statuses</h3>
+<p>Statuses may include draft, submitted, approved, rejected or closed,
+depending on the configured workflow.</p>
+<h3 data-number="1.8.3" id="approval"><span class="header-section-number">1.8.3</span> 8.3 Approval</h3>
+<p>Final approval is normally performed by an authorized management or
+corporate role. Approval and rejection comments remain attached to the
+record.</p>
+<h2 data-number="1.9" id="smat"><span class="header-section-number">1.9</span> 9. SMAT</h2>
+<p>The <code>SMAT</code> module records behavioral audits and field
+observations.</p>
+<h3 data-number="1.9.1" id="create-an-audit"><span class="header-section-number">1.9.1</span> 9.1 Create an audit</h3>
+<ol type="1">
+<li>Open <code>SMAT</code>.</li>
+<li>Fill in auditor, date, time, area and location.</li>
+<li>Register observed and involved people.</li>
+<li>Add safe acts, safe conditions, unsafe acts and unsafe
+conditions.</li>
+<li>Complete the question guide.</li>
+<li>Add photos/attachments and actions if needed.</li>
+<li>Save.</li>
+</ol>
+<h3 data-number="1.9.2" id="export-an-audit"><span class="header-section-number">1.9.2</span> 9.2 Export an audit</h3>
+<p>Recent audits can be exported to PDF or Excel.</p>
+<h2 data-number="1.10" id="occupational-health"><span class="header-section-number">1.10</span> 10. Occupational Health</h2>
+<p>The <code>Occupational Health</code> module manages workers and
+medical exam validity.</p>
+<h3 data-number="1.10.1" id="review-workers"><span class="header-section-number">1.10.1</span> 10.1 Review workers</h3>
+<p>The table shows worker number, name, age, exam date, validity, status
+and observations.</p>
+<h3 data-number="1.10.2" id="add-or-edit-a-worker"><span class="header-section-number">1.10.2</span> 10.2 Add or edit a
+worker</h3>
+<ol type="1">
+<li>Open <code>Occupational Health</code>.</li>
+<li>Click <code>Add worker</code> or select an existing worker.</li>
+<li>Fill in personal data, workstation, role, nationality, exam date and
+status.</li>
+<li>Save.</li>
+</ol>
+<p>Age and exam validity are calculated automatically from the entered
+dates.</p>
+<h3 data-number="1.10.3" id="import-and-export"><span class="header-section-number">1.10.3</span> 10.3 Import and export</h3>
+<p>The module supports:</p>
+<ul>
+<li>Excel import;</li>
+<li>template download;</li>
+<li>Excel export;</li>
+<li>PDF export;</li>
+<li>inactivation of selected workers.</li>
+</ul>
+<h2 data-number="1.11" id="monthly-inputs"><span class="header-section-number">1.11</span> 11. Monthly Inputs</h2>
+<p>The <code>Monthly Inputs</code> module collects monthly data used by
+safety, operational and environmental dashboards.</p>
+<h3 data-number="1.11.1" id="fill-in-data"><span class="header-section-number">1.11.1</span> 11.1 Fill in data</h3>
+<ol type="1">
+<li>Open <code>Monthly Inputs</code>.</li>
+<li>Confirm the year.</li>
+<li>Select the month.</li>
+<li>Fill in indicators by section.</li>
+<li>Save.</li>
+</ol>
+<h3 data-number="1.11.2" id="view-modes"><span class="header-section-number">1.11.2</span> 11.2 View modes</h3>
+<ul>
+<li><code>Month</code>: focus on one month.</li>
+<li><code>Year</code>: full annual review.</li>
+</ul>
+<p>The page shows monthly and annual completion, number of active
+indicators and calculated standard hours.</p>
+<h3 data-number="1.11.3" id="excel"><span class="header-section-number">1.11.3</span> 11.3 Excel</h3>
+<p>Users can export a template, export data and import a completed Excel
+file.</p>
+<h2 data-number="1.12" id="environment-dashboard"><span class="header-section-number">1.12</span> 12. Environment Dashboard</h2>
+<p>The <code>Environment Dashboard</code> uses monthly inputs to display
+environmental indicators at plant or corporate level. Availability
+depends on enabled modules and user permissions.</p>
+<h2 data-number="1.13" id="contractors"><span class="header-section-number">1.13</span> 13. Contractors</h2>
+<p>The <code>Contractors</code> module manages external companies,
+external workers and documents.</p>
+<h3 data-number="1.13.1" id="invite-an-external-company"><span class="header-section-number">1.13.1</span> 13.1 Invite an external
+company</h3>
+<ol type="1">
+<li>Open <code>Contractors</code>.</li>
+<li>Enter the company contact email.</li>
+<li>Send the invitation.</li>
+</ol>
+<p>The company uses the registration link to create its account.</p>
+<h3 data-number="1.13.2" id="review-companies-and-workers"><span class="header-section-number">1.13.2</span> 13.2 Review companies and
+workers</h3>
+<p>The table can be filtered by:</p>
+<ul>
+<li>name;</li>
+<li>type: company or worker;</li>
+<li>approval status;</li>
+<li>active/inactive status.</li>
+</ul>
+<h3 data-number="1.13.3" id="external-company-portal"><span class="header-section-number">1.13.3</span> 13.3 External company
+portal</h3>
+<p>In the portal, an external company can:</p>
+<ul>
+<li>review approval status;</li>
+<li>submit company PDF documents;</li>
+<li>create workers;</li>
+<li>submit worker PDF documents;</li>
+<li>activate, inactivate or delete workers where available.</li>
+</ul>
+<h2 data-number="1.14" id="mapa"><span class="header-section-number">1.14</span> 14. MAPA</h2>
+<p>The <code>MAPA</code> module displays plant maps/documents with
+layers and points of interest.</p>
+<p>Main capabilities:</p>
+<ul>
+<li>review map documents;</li>
+<li>view layers;</li>
+<li>position areas and workstations;</li>
+<li>view automatic aggregated incident markers by type.</li>
+</ul>
+<h2 data-number="1.15" id="public-qr-reporting"><span class="header-section-number">1.15</span> 15. Public QR Reporting</h2>
+<p>Some plants may provide public QR links for reporting situations
+without signing in.</p>
+<h3 data-number="1.15.1" id="submit-a-qr-report"><span class="header-section-number">1.15.1</span> 15.1 Submit a QR report</h3>
+<ol type="1">
+<li>Open the QR Code or public link.</li>
+<li>Select the communication type.</li>
+<li>Fill in date/time, reporter name, reporter number, area, location,
+shift, involved worker when required, description and suggested
+action.</li>
+<li>Attach photos if needed.</li>
+<li>Submit.</li>
+</ol>
+<h3 data-number="1.15.2" id="photos"><span class="header-section-number">1.15.2</span> 15.2 Photos</h3>
+<p>Applied limits:</p>
+<ul>
+<li>maximum 5 photos;</li>
+<li>maximum 5 MB per photo;</li>
+<li>maximum 20 MB total;</li>
+<li>accepted formats: JPG, JPEG, PNG, WEBP, HEIC and HEIF.</li>
+</ul>
+<p>The system blocks future dates and reuses recent duplicate
+submissions when detected.</p>
+<h2 data-number="1.16" id="alerts-and-notifications"><span class="header-section-number">1.16</span> 16. Alerts and
+Notifications</h2>
+<p>The application may show floating alerts and internal notifications,
+for example:</p>
+<ul>
+<li>repeatability alerts;</li>
+<li>rejected S-EWO;</li>
+<li>pending safety communications;</li>
+<li>overdue actions;</li>
+<li>email digests or reports when background jobs are active.</li>
+</ul>
+<h2 data-number="1.17" id="good-practices"><span class="header-section-number">1.17</span> 17. Good Practices</h2>
+<ul>
+<li>Register events as soon as possible.</li>
+<li>Use objective and complete descriptions.</li>
+<li>Select the correct area, location and workers.</li>
+<li>Attach evidence when it helps explain the situation.</li>
+<li>Validate pending communications regularly.</li>
+<li>Close actions only when the work is complete and evidence
+exists.</li>
+<li>Keep monthly data updated before reviewing KPI.</li>
+</ul>
+<h2 data-number="1.18" id="troubleshooting"><span class="header-section-number">1.18</span> 18. Troubleshooting</h2>
+<h3 data-number="1.18.1" id="i-cannot-sign-in"><span class="header-section-number">1.18.1</span> I cannot sign in</h3>
+<p>Check email, password and account status. If using a temporary
+password, complete the mandatory password change.</p>
+<h3 data-number="1.18.2" id="i-cannot-see-a-module"><span class="header-section-number">1.18.2</span> I cannot see a module</h3>
+<p>The module may be disabled for the plant, or the user role may not
+have permission.</p>
+<h3 data-number="1.18.3" id="kpi-look-incomplete"><span class="header-section-number">1.18.3</span> KPI look incomplete</h3>
+<p>Check whether communications have been validated and whether monthly
+inputs, such as hours worked, have been filled in.</p>
+<h3 data-number="1.18.4" id="i-cannot-close-an-action"><span class="header-section-number">1.18.4</span> I cannot close an
+action</h3>
+<p>Check that a closure comment and required evidence have been
+provided.</p>
+<h3 data-number="1.18.5" id="the-qr-code-does-not-open"><span class="header-section-number">1.18.5</span> The QR Code does not
+open</h3>
+<p>The token may be invalid, revoked or replaced by regeneration. Ask
+the plant administrator for a new QR Code.</p>
+</body>
+</html>

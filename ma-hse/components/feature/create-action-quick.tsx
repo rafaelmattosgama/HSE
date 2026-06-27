@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionCategory, ActionPriority, ActionSourceType } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, ActionSourceType } from "@prisma/client";
 import { useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ type Option = {
 export function CreateActionQuick({
   owners,
   communicationOptions,
+  sewoOptions = [],
+  smatOptions = [],
   initialCommunicationId,
   lockedCommunicationId,
   lockedCommunicationLabel,
@@ -21,6 +23,8 @@ export function CreateActionQuick({
 }: {
   owners: Option[];
   communicationOptions: Option[];
+  sewoOptions?: Option[];
+  smatOptions?: Option[];
   initialCommunicationId?: string;
   lockedCommunicationId?: string;
   lockedCommunicationLabel?: string;
@@ -35,7 +39,10 @@ export function CreateActionQuick({
   const initialCommunicationValue = lockedCommunicationId ?? initialCommunicationId ?? "";
 
   const [sourceType, setSourceType] = useState<ActionSourceType>(initialSourceType);
+  const [manualOrigin, setManualOrigin] = useState("");
   const [communicationId, setCommunicationId] = useState(initialCommunicationValue);
+  const [sewoId, setSewoId] = useState("");
+  const [smatAuditId, setSmatAuditId] = useState("");
   const [category, setCategory] = useState<ActionCategory>(ActionCategory.CORRECTIVE);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -49,13 +56,24 @@ export function CreateActionQuick({
 
   function resetForm() {
     setSourceType(initialSourceType);
+    setManualOrigin("");
     setCommunicationId(initialCommunicationValue);
+    setSewoId("");
+    setSmatAuditId("");
     setCategory(ActionCategory.CORRECTIVE);
     setTitle("");
     setDescription("");
     setOwnerUserId("");
     setPriority(ActionPriority.MEDIUM);
     setDueDate("");
+  }
+
+  function changeSourceType(nextSourceType: ActionSourceType) {
+    setSourceType(nextSourceType);
+    setManualOrigin("");
+    setCommunicationId(initialCommunicationValue);
+    setSewoId("");
+    setSmatAuditId("");
   }
 
   async function submit(event: React.FormEvent) {
@@ -74,6 +92,9 @@ export function CreateActionQuick({
         body: JSON.stringify({
           sourceType,
           communicationId: sourceType === ActionSourceType.COMMUNICATION ? communicationId : undefined,
+          sewoId: sourceType === ActionSourceType.SEWO ? sewoId : undefined,
+          smatAuditId: sourceType === ActionSourceType.SMAT ? smatAuditId : undefined,
+          manualOrigin: sourceType === ActionSourceType.MANUAL ? manualOrigin : undefined,
           category,
           priority,
           title,
@@ -115,18 +136,33 @@ export function CreateActionQuick({
       {!lockedCommunicationId ? (
         <select
           value={sourceType}
-          onChange={(event) => setSourceType(event.target.value as ActionSourceType)}
+          onChange={(event) => changeSourceType(event.target.value as ActionSourceType)}
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           disabled={submitting || isRefreshing}
         >
           <option value={ActionSourceType.MANUAL}>{text.manualAction}</option>
           <option value={ActionSourceType.COMMUNICATION}>{text.linkedToCommunication}</option>
+          <option value={ActionSourceType.SEWO}>{text.linkedToSewo}</option>
+          <option value={ActionSourceType.SMAT}>{text.linkedToSmat}</option>
         </select>
       ) : null}
       {lockedCommunicationId ? (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
           {text.linkedCommunication}: {lockedCommunicationLabel ?? lockedCommunicationId}
         </div>
+      ) : sourceType === ActionSourceType.MANUAL ? (
+        <select
+          value={manualOrigin}
+          onChange={(event) => setManualOrigin(event.target.value)}
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          disabled={submitting || isRefreshing}
+          required
+        >
+          <option value="">{text.selectManualOrigin}</option>
+          <option value={ActionManualOrigin.AUDITS}>{text.manualOriginLabels.AUDITS}</option>
+          <option value={ActionManualOrigin.EXTERNAL_VERIFICATIONS}>{text.manualOriginLabels.EXTERNAL_VERIFICATIONS}</option>
+          <option value={ActionManualOrigin.OTHER}>{text.manualOriginLabels.OTHER}</option>
+        </select>
       ) : sourceType === ActionSourceType.COMMUNICATION ? (
         <select
           value={communicationId}
@@ -137,6 +173,32 @@ export function CreateActionQuick({
         >
           <option value="">{text.selectCommunication}</option>
           {communicationOptions.map((option) => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </select>
+      ) : sourceType === ActionSourceType.SEWO ? (
+        <select
+          value={sewoId}
+          onChange={(event) => setSewoId(event.target.value)}
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          disabled={submitting || isRefreshing}
+          required
+        >
+          <option value="">{text.selectSewo}</option>
+          {sewoOptions.map((option) => (
+            <option key={option.id} value={option.id}>{option.label}</option>
+          ))}
+        </select>
+      ) : sourceType === ActionSourceType.SMAT ? (
+        <select
+          value={smatAuditId}
+          onChange={(event) => setSmatAuditId(event.target.value)}
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          disabled={submitting || isRefreshing}
+          required
+        >
+          <option value="">{text.selectSmat}</option>
+          {smatOptions.map((option) => (
             <option key={option.id} value={option.id}>{option.label}</option>
           ))}
         </select>

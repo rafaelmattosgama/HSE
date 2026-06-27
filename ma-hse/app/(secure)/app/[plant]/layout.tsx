@@ -147,7 +147,7 @@ export default async function PlantLayout({
   return (
     <>
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[240px_1fr]">
-        <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:sticky md:top-6 md:max-h-[calc(100vh-48px)] md:self-start md:overflow-y-auto">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Plant {plant.toUpperCase()}</p>
           <PlantNav items={visibleItems} utilityItems={utilityItems} />
         </aside>

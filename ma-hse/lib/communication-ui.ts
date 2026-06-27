@@ -1,6 +1,8 @@
 export const BASE_COMMUNICATION_UI = {
   createCommunicationQuick: {
     title: "Quick communication",
+    expandSection: "Show",
+    collapseSection: "Hide",
     eventDatetime: "Date and time",
     reporterFromPlantWorkers: "Reporter from plant workers",
     reporterNumber: "Reporter number",
@@ -145,8 +147,19 @@ export const BASE_COMMUNICATION_UI = {
     newAction: "New action",
     manualAction: "Manual action",
     linkedToCommunication: "Linked to communication",
+    linkedToSewo: "Linked to S-EWO",
+    linkedToSmat: "Linked to SMAT",
+    manualOrigin: "Action origin",
+    selectManualOrigin: "Select action origin",
+    manualOriginLabels: {
+      AUDITS: "Audits",
+      EXTERNAL_VERIFICATIONS: "External verifications",
+      OTHER: "Other",
+    },
     linkedCommunication: "Linked communication",
     selectCommunication: "Select communication",
+    selectSewo: "Select S-EWO",
+    selectSmat: "Select SMAT",
     noLinkMessage: "This action will be created without links to communication, S-EWO or SMAT.",
     title: "Title",
     description: "Description",

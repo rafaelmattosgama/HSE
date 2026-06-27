@@ -112,7 +112,10 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         ? {
             createMany: {
               data: parsed.data.attachments.map((attachment) => ({
-                ...attachment,
+                fileKey: attachment.fileKey,
+                fileName: attachment.fileName,
+                contentType: attachment.contentType,
+                caption: attachment.caption?.trim() || undefined,
                 uploadedById: auth.session.user.id,
               })),
             },
@@ -126,24 +129,18 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
 
   if (parsed.data.actionPlans.length > 0) {
     for (const actionPlan of parsed.data.actionPlans) {
-      const action = await ActionService.create({
+      await ActionService.create({
         plantId: plant.id,
         actorUserId: auth.session.user.id,
         payload: {
-          sourceType: ActionSourceType.MANUAL,
+          sourceType: ActionSourceType.SMAT,
+          smatAuditId: audit.id,
           category: ActionCategory.CORRECTIVE,
           priority: actionPlan.priority as ActionPriority,
           title: actionPlan.title,
           description: actionPlan.description,
           ownerUserId: actionPlan.ownerUserId,
           dueDate: actionPlan.dueDate,
-        },
-      });
-
-      await prisma.smatAuditActionLink.create({
-        data: {
-          smatAuditId: audit.id,
-          actionId: action.id,
         },
       });
     }

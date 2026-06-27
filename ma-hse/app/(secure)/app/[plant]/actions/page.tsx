@@ -3,6 +3,7 @@ import { CreateActionQuick } from "@/components/feature/create-action-quick";
 import { ActionsTable } from "@/components/feature/actions-table";
 import { authOptions } from "@/lib/auth/options";
 import {
+  formatLocalizedActionManualOrigin,
   formatLocalizedActionSourceType,
 } from "@/lib/actions-ui";
 import { prisma } from "@/lib/prisma";
@@ -40,7 +41,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
   });
   const ui = getUiDictionary(uiLocale);
 
-  const [actions, owners, communications] = await prisma.$transaction([
+  const [actions, owners, communications, sewoRecords, smatAudits] = await prisma.$transaction([
     prisma.action.findMany({
       where: {
         plantId: plantRow.id,
@@ -62,6 +63,11 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
                 workstation: true,
               },
             },
+          },
+        },
+        smatLinks: {
+          include: {
+            smatAudit: true,
           },
         },
       },
@@ -94,6 +100,20 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
       orderBy: {
         eventDatetime: "desc",
       },
+      take: 100,
+    }),
+    prisma.sEWO.findMany({
+      where: {
+        plantId: plantRow.id,
+      },
+      orderBy: [{ analysisDate: "desc" }, { createdAt: "desc" }],
+      take: 100,
+    }),
+    prisma.smatAudit.findMany({
+      where: {
+        plantId: plantRow.id,
+      },
+      orderBy: [{ auditDate: "desc" }, { createdAt: "desc" }],
       take: 100,
     }),
   ]);
@@ -147,6 +167,14 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
           id: entry.id,
           label: `${entry.codigoCompleto ?? entry.codigoAbreviado ?? "Requires code update"} | ${entry.eventDatetime.toISOString().slice(0, 10)} | ${communicationUi.communicationTypeLabels[entry.type] ?? entry.type} | ${entry.reporterName}`,
         }))}
+        sewoOptions={sewoRecords.map((entry) => ({
+          id: entry.id,
+          label: `${entry.codigoSewo ?? "S-EWO"} | ${entry.analysisDate.toISOString().slice(0, 10)} | ${entry.whoText}`,
+        }))}
+        smatOptions={smatAudits.map((entry) => ({
+          id: entry.id,
+          label: `SMAT | ${entry.auditDate.toISOString().slice(0, 10)} | ${entry.auditorName} | ${entry.locationExamined || entry.areaExamined || "-"}`,
+        }))}
         labels={communicationUi.createActionQuick}
       />
 
@@ -173,17 +201,26 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
               ? formatLocalizedActionSourceType("COMMUNICATION", actionsUi)
               : row.sewoId
                 ? formatLocalizedActionSourceType("SEWO", actionsUi)
+                : row.smatLinks.length > 0
+                  ? formatLocalizedActionSourceType("SMAT", actionsUi)
                 : formatLocalizedActionSourceType(row.sourceType, actionsUi),
           sourceHref:
             row.communicationId
               ? `/app/${plant}/communications/${row.communicationId}`
               : row.sewoId
                 ? `/app/${plant}/sewo?sewoId=${row.sewoId}`
+                : row.smatLinks.length > 0
+                  ? `/app/${plant}/smat`
                 : null,
+          manualOrigin: formatLocalizedActionManualOrigin(row.manualOrigin, actionsUi),
           communicationId: row.communicationId,
           communicationCode: row.communication?.codigoCompleto ?? row.communication?.codigoAbreviado ?? null,
           sewoId: row.sewoId,
           sewoCode: row.sewo?.codigoSewo ?? null,
+          smatAuditId: row.smatLinks[0]?.smatAuditId ?? null,
+          smatCode: row.smatLinks[0]?.smatAudit
+            ? `SMAT | ${row.smatLinks[0].smatAudit.auditDate.toISOString().slice(0, 10)} | ${row.smatLinks[0].smatAudit.auditorName}`
+            : null,
           evidence: row.evidenceAttachments.map((entry) => ({
             id: entry.id,
             fileName: entry.fileName,

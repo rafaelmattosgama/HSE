@@ -48,7 +48,14 @@ type TrendSeries = {
   values: number[];
 };
 
-const COLORS = ["#002663", "#0a4dff", "#1d8cf8", "#22c55e", "#f59e0b", "#ef4444"];
+const COLORS = [
+  "var(--chart-series-1)",
+  "var(--chart-series-2)",
+  "var(--chart-series-3)",
+  "var(--chart-series-4)",
+  "var(--chart-series-5)",
+  "var(--chart-series-6)",
+];
 
 const METRIC_OPTIONS: Array<{ id: MetricId; labelKey: keyof DashboardUiDictionary; variant: "count" | "percent" | "index" }> = [
   { id: "validatedEvents", labelKey: "validatedEvents", variant: "count" },
@@ -243,7 +250,7 @@ function TrendBarChart({
   return (
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
-        <line x1="40" y1="210" x2="700" y2="210" stroke="#cbd5e1" />
+        <line x1="40" y1="210" x2="700" y2="210" stroke="var(--chart-axis)" />
         {labels.map((label, labelIndex) => (
           <g key={label} transform={`translate(${40 + labelIndex * groupWidth}, 0)`}>
             {series.map((entry, seriesIndex) => {
@@ -261,12 +268,12 @@ function TrendBarChart({
                 />
               );
             })}
-            <text x={groupWidth / 2} y="232" textAnchor="middle" fontSize="11" fill="#64748b">
+            <text x={groupWidth / 2} y="232" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
               {label}
             </text>
           </g>
         ))}
-        <text x="40" y="24" fontSize="12" fill="#64748b">
+        <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {maxLabel}: {formatValue(maxValue, variant)}
         </text>
       </svg>
@@ -294,7 +301,7 @@ function TrendPointsChart({
   return (
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
-        <line x1="40" y1="210" x2="700" y2="210" stroke="#cbd5e1" />
+        <line x1="40" y1="210" x2="700" y2="210" stroke="var(--chart-axis)" />
         {series.map((entry, seriesIndex) => {
           const points = entry.values
             .map((value, pointIndex) => {
@@ -316,11 +323,11 @@ function TrendPointsChart({
           );
         })}
         {labels.map((label, labelIndex) => (
-          <text key={label} x={40 + labelIndex * stepX} y="232" textAnchor="middle" fontSize="11" fill="#64748b">
+          <text key={label} x={40 + labelIndex * stepX} y="232" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
             {label}
           </text>
         ))}
-        <text x="40" y="24" fontSize="12" fill="#64748b">
+        <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {maxLabel}: {formatValue(maxValue, variant)}
         </text>
       </svg>
@@ -375,10 +382,10 @@ function CircularChart({
             />
           );
         })}
-        <text x="110" y="102" textAnchor="middle" fontSize="14" fill="#64748b">
+        <text x="110" y="102" textAnchor="middle" fontSize="14" fill="var(--chart-text-muted)">
           {labels.total}
         </text>
-        <text x="110" y="124" textAnchor="middle" fontSize="20" fontWeight="700" fill="#0f172a">
+        <text x="110" y="124" textAnchor="middle" fontSize="20" fontWeight="700" fill="var(--chart-text-strong)">
           {formatValue(total, variant)}
         </text>
       </svg>
@@ -425,7 +432,7 @@ function ParetoChart({
   return (
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
-        <line x1="40" y1="220" x2="700" y2="220" stroke="#cbd5e1" />
+        <line x1="40" y1="220" x2="700" y2="220" stroke="var(--chart-axis)" />
         {sorted.map((item, index) => {
           const barWidth = 620 / Math.max(sorted.length, 1);
           const barHeight = (item.value / maxValue) * 170;
@@ -434,24 +441,24 @@ function ParetoChart({
           return (
             <g key={item.key}>
               <rect x={x} y={220 - barHeight} width={barWidth - 16} height={barHeight} rx="6" fill={COLORS[index % COLORS.length]} />
-              <circle cx={x + (barWidth - 16) / 2} cy={percentY} r="4" fill="#111827" />
+              <circle cx={x + (barWidth - 16) / 2} cy={percentY} r="4" fill="var(--chart-line)" />
               {index > 0 ? (
                 <line
                   x1={56 + (index - 1) * barWidth + (barWidth - 16) / 2}
                   y1={220 - ((sorted.slice(0, index).reduce((sum, entry) => sum + entry.value, 0) / total) * 170)}
                   x2={x + (barWidth - 16) / 2}
                   y2={percentY}
-                  stroke="#111827"
+                  stroke="var(--chart-line)"
                   strokeWidth="2"
                 />
               ) : null}
-              <text x={x + (barWidth - 16) / 2} y="242" textAnchor="middle" fontSize="11" fill="#64748b">
+              <text x={x + (barWidth - 16) / 2} y="242" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
                 {item.label}
               </text>
             </g>
           );
         })}
-        <text x="40" y="24" fontSize="12" fill="#64748b">
+        <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {labels.total}: {formatValue(total, variant)}
         </text>
       </svg>

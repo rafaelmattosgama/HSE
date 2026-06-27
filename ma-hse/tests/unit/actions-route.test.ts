@@ -1,4 +1,4 @@
-import { ActionCategory, ActionPriority, ActionSourceType, CommunicationStatus, RoleCode } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, ActionSourceType, CommunicationStatus, RoleCode } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const guardsMock = vi.hoisted(() => ({
@@ -12,6 +12,12 @@ const plantMock = vi.hoisted(() => ({
 const prismaMock = vi.hoisted(() => ({
   prisma: {
     communication: {
+      findFirst: vi.fn(),
+    },
+    sEWO: {
+      findFirst: vi.fn(),
+    },
+    smatAudit: {
       findFirst: vi.fn(),
     },
     userPlantRole: {
@@ -309,6 +315,201 @@ describe("actions route", () => {
           reusedExistingAction: true,
         },
       },
+    });
+  });
+
+  it("allows creating a manual action when origin is provided", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N4_SUPERVISOR,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
+      userId: "22222222-2222-4222-8222-222222222222",
+    });
+    actionServiceMock.ActionService.create.mockResolvedValue({
+      id: "action-manual",
+      idempotency: {
+        reusedExistingAction: false,
+      },
+    });
+
+    const response = (await POST(
+      new Request("http://localhost/api/plants/maap/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: ActionSourceType.MANUAL,
+          manualOrigin: ActionManualOrigin.AUDITS,
+          category: ActionCategory.CORRECTIVE,
+          priority: ActionPriority.MEDIUM,
+          title: "Nova acao",
+          description: "Criada manualmente.",
+          ownerUserId: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+      routeContext(),
+    )) as Response;
+
+    expect(response.status).toBe(201);
+    expect(actionServiceMock.ActionService.create).toHaveBeenCalledWith({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: expect.objectContaining({
+        sourceType: ActionSourceType.MANUAL,
+        manualOrigin: ActionManualOrigin.AUDITS,
+      }),
+    });
+  });
+
+  it("rejects manual actions without origin", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N4_SUPERVISOR,
+    });
+
+    const response = (await POST(
+      new Request("http://localhost/api/plants/maap/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: ActionSourceType.MANUAL,
+          category: ActionCategory.CORRECTIVE,
+          priority: ActionPriority.MEDIUM,
+          title: "Nova acao",
+          description: "Criada manualmente.",
+          ownerUserId: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+      routeContext(),
+    )) as Response;
+
+    expect(response.status).toBe(422);
+    expect(actionServiceMock.ActionService.create).not.toHaveBeenCalled();
+  });
+
+  it("allows linking a new action to S-EWO records in the same plant", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N4_SUPERVISOR,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.prisma.sEWO.findFirst.mockResolvedValue({
+      id: "33333333-3333-4333-8333-333333333333",
+    });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
+      userId: "22222222-2222-4222-8222-222222222222",
+    });
+    actionServiceMock.ActionService.create.mockResolvedValue({
+      id: "action-sewo",
+      sewoId: "33333333-3333-4333-8333-333333333333",
+      idempotency: {
+        reusedExistingAction: false,
+      },
+    });
+
+    const response = (await POST(
+      new Request("http://localhost/api/plants/maap/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: ActionSourceType.SEWO,
+          sewoId: "33333333-3333-4333-8333-333333333333",
+          category: ActionCategory.CORRECTIVE,
+          priority: ActionPriority.MEDIUM,
+          title: "Nova acao",
+          description: "Criada a partir de S-EWO.",
+          ownerUserId: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+      routeContext(),
+    )) as Response;
+
+    expect(response.status).toBe(201);
+    expect(prismaMock.prisma.sEWO.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "33333333-3333-4333-8333-333333333333",
+        plantId: "plant-1",
+      },
+      select: { id: true },
+    });
+    expect(actionServiceMock.ActionService.create).toHaveBeenCalledWith({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: expect.objectContaining({
+        sourceType: ActionSourceType.SEWO,
+        sewoId: "33333333-3333-4333-8333-333333333333",
+      }),
+    });
+  });
+
+  it("allows linking a new action to SMAT records in the same plant", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N4_SUPERVISOR,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.prisma.smatAudit.findFirst.mockResolvedValue({
+      id: "44444444-4444-4444-8444-444444444444",
+    });
+    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
+      userId: "22222222-2222-4222-8222-222222222222",
+    });
+    actionServiceMock.ActionService.create.mockResolvedValue({
+      id: "action-smat",
+      idempotency: {
+        reusedExistingAction: false,
+      },
+    });
+
+    const response = (await POST(
+      new Request("http://localhost/api/plants/maap/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceType: ActionSourceType.SMAT,
+          smatAuditId: "44444444-4444-4444-8444-444444444444",
+          category: ActionCategory.CORRECTIVE,
+          priority: ActionPriority.MEDIUM,
+          title: "Nova acao",
+          description: "Criada a partir de SMAT.",
+          ownerUserId: "22222222-2222-4222-8222-222222222222",
+        }),
+      }),
+      routeContext(),
+    )) as Response;
+
+    expect(response.status).toBe(201);
+    expect(prismaMock.prisma.smatAudit.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "44444444-4444-4444-8444-444444444444",
+        plantId: "plant-1",
+      },
+      select: { id: true },
+    });
+    expect(actionServiceMock.ActionService.create).toHaveBeenCalledWith({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: expect.objectContaining({
+        sourceType: ActionSourceType.SMAT,
+        smatAuditId: "44444444-4444-4444-8444-444444444444",
+      }),
     });
   });
 

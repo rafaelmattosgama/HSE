@@ -413,7 +413,7 @@ function DonutChart({
   return (
     <div className="grid gap-4 sm:grid-cols-[164px_minmax(0,1fr)] sm:items-center">
       <svg viewBox="0 0 160 160" className="mx-auto h-40 w-40">
-        <circle cx="80" cy="80" r="54" fill="none" stroke="#e2e8f0" strokeWidth="24" />
+        <circle cx="80" cy="80" r="54" fill="none" stroke="var(--chart-track)" strokeWidth="24" />
         {segments.map(({ item, slice, offset }) => (
           <circle
             key={item.key}
@@ -429,10 +429,10 @@ function DonutChart({
             transform="rotate(-90 80 80)"
           />
         ))}
-        <text x="80" y="76" textAnchor="middle" fontSize="12" fontWeight="700" fill="#64748b">
+        <text x="80" y="76" textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--chart-text-muted)">
           {centerLabel}
         </text>
-        <text x="80" y="96" textAnchor="middle" fontSize="18" fontWeight="900" fill="#0f172a">
+        <text x="80" y="96" textAnchor="middle" fontSize="18" fontWeight="900" fill="var(--chart-text-strong)">
           {formatMetric(total, unit, digits)}
         </text>
       </svg>
@@ -654,7 +654,7 @@ function MonthlyLineChart({ months, series, labels }: { months: EnvironmentMonth
     <div className="overflow-x-auto">
       <ChartLegend series={series} />
       <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
-        <line x1="48" y1="212" x2="688" y2="212" stroke="#cbd5e1" />
+        <line x1="48" y1="212" x2="688" y2="212" stroke="var(--chart-axis)" />
         {series.map((entry) => {
           const points = visibleMonths
             .map((month, index) => {
@@ -686,11 +686,11 @@ function MonthlyLineChart({ months, series, labels }: { months: EnvironmentMonth
           );
         })}
         {visibleMonths.map((month, index) => (
-          <text key={month.key} x={48 + index * stepX} y="235" textAnchor="middle" fontSize="11" fill="#64748b">
+          <text key={month.key} x={48 + index * stepX} y="235" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
             {month.label.split(" ")[0]}
           </text>
         ))}
-        <text x="48" y="26" fontSize="12" fill="#64748b">
+        <text x="48" y="26" fontSize="12" fill="var(--chart-text-muted)">
           {labels.max}: {formatNumber(maxValue, 1)}
         </text>
       </svg>

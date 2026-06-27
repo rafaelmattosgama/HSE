@@ -1,5 +1,10 @@
-import { ActionCategory, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, RoleCode, SEWOStatus } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, RoleCode, SEWOStatus } from "@prisma/client";
 import { z } from "zod";
+import {
+  SMAT_ATTACHMENT_LIMITS,
+  validateSmatAttachmentCollection,
+  validateSmatAttachmentFile,
+} from "@/lib/smat-attachments";
 
 const optionalUuid = z.string().uuid().optional().nullable();
 const recordLevelInput = z.enum(["N1", "N2", "N3", "N4"]);
@@ -199,10 +204,12 @@ export const reopenEntityInput = z.object({
 });
 
 export const createActionInput = z.object({
-  sourceType: z.enum(["COMMUNICATION", "SEWO", "MANUAL"]),
+  sourceType: z.enum(["COMMUNICATION", "SEWO", "SMAT", "MANUAL"]),
+  manualOrigin: z.nativeEnum(ActionManualOrigin).optional(),
   level: recordLevelInput.optional().nullable(),
   communicationId: z.string().uuid().optional(),
   sewoId: z.string().uuid().optional(),
+  smatAuditId: z.string().uuid().optional(),
   category: z.nativeEnum(ActionCategory),
   priority: z.nativeEnum(ActionPriority),
   title: z.string().min(3),
@@ -210,6 +217,38 @@ export const createActionInput = z.object({
   ownerUserId: z.string().uuid(),
   coOwnerIds: z.array(z.string().uuid()).optional(),
   dueDate: z.coerce.date().optional(),
+}).superRefine((value, ctx) => {
+  if (value.sourceType === "MANUAL" && !value.manualOrigin) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Manual action origin is required",
+      path: ["manualOrigin"],
+    });
+  }
+
+  if (value.sourceType === "COMMUNICATION" && !value.communicationId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Communication is required",
+      path: ["communicationId"],
+    });
+  }
+
+  if (value.sourceType === "SEWO" && !value.sewoId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "S-EWO is required",
+      path: ["sewoId"],
+    });
+  }
+
+  if (value.sourceType === "SMAT" && !value.smatAuditId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "SMAT is required",
+      path: ["smatAuditId"],
+    });
+  }
 });
 
 export const updateActionInput = z.object({
@@ -226,6 +265,29 @@ const smatObservationInput = z.object({
   category: z.enum(["A", "B", "C", "D", "E", "F"]),
   description: z.string().min(2),
 });
+
+const smatAttachmentInput = z
+  .object({
+    fileKey: z.string().min(3),
+    fileName: z.string().min(1),
+    contentType: z.string().min(3),
+    caption: z.string().trim().max(SMAT_ATTACHMENT_LIMITS.maxCaptionLength).optional(),
+    size: z.number().int().nonnegative().optional(),
+  })
+  .superRefine((attachment, ctx) => {
+    const message = validateSmatAttachmentFile({
+      fileName: attachment.fileName,
+      contentType: attachment.contentType,
+      size: attachment.size ?? 1,
+    });
+
+    if (message) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+      });
+    }
+  });
 
 export const createSMATAuditInput = z.object({
   communicationId: z.string().uuid().optional().nullable(),
@@ -255,13 +317,16 @@ export const createSMATAuditInput = z.object({
   answer6: z.string().optional(),
   notes: z.string().optional(),
   attachments: z
-    .array(
-      z.object({
-        fileKey: z.string().min(3),
-        fileName: z.string().min(1),
-        contentType: z.string().min(3),
-      }),
-    )
+    .array(smatAttachmentInput)
+    .superRefine((attachments, ctx) => {
+      const message = validateSmatAttachmentCollection(attachments.map((attachment) => ({ size: attachment.size ?? 0 })));
+      if (message) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message,
+        });
+      }
+    })
     .default([]),
   actionPlans: z
     .array(

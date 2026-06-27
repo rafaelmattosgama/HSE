@@ -1,10 +1,13 @@
-import { ActionCategory, ActionPriority, ActionSourceType, ActionStatus } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, ActionSourceType, ActionStatus } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const transactionMock = vi.hoisted(() => ({
   $executeRaw: vi.fn(),
   action: {
     findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+  smatAuditActionLink: {
     create: vi.fn(),
   },
 }));
@@ -116,5 +119,101 @@ describe("ActionService", () => {
     expect(actionAlertServiceMock.ActionAlertService.sendNewActionAlerts).not.toHaveBeenCalled();
     expect(prismaMock.prisma.communication.update).not.toHaveBeenCalled();
     expect(communicationServiceMock.CommunicationService.syncStatusWithActions).toHaveBeenCalledWith("communication-1");
+  });
+
+  it("stores manual origin for manual actions", async () => {
+    parameterMock.getSlaConfig.mockResolvedValue({
+      LOW: 3,
+      MEDIUM: 7,
+      HIGH: 14,
+    });
+    transactionMock.action.findFirst.mockResolvedValueOnce(null);
+    transactionMock.action.create.mockResolvedValue({
+      id: "action-manual",
+      plantId: "plant-1",
+      sourceType: ActionSourceType.MANUAL,
+      manualOrigin: ActionManualOrigin.AUDITS,
+      communicationId: null,
+      sewoId: null,
+      category: ActionCategory.CORRECTIVE,
+      priority: ActionPriority.MEDIUM,
+      title: "Auditoria",
+      description: "Acao criada manualmente.",
+      ownerUserId: "owner-1",
+      dueDate: new Date("2026-07-04T00:00:00.000Z"),
+      status: ActionStatus.OPEN,
+      coOwners: [],
+    });
+    prismaMock.prisma.sEWOActionLink.findMany.mockResolvedValue([]);
+
+    await ActionService.create({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: {
+        sourceType: ActionSourceType.MANUAL,
+        manualOrigin: ActionManualOrigin.AUDITS,
+        category: ActionCategory.CORRECTIVE,
+        priority: ActionPriority.MEDIUM,
+        title: "Auditoria",
+        description: "Acao criada manualmente.",
+        ownerUserId: "owner-1",
+      },
+    });
+
+    expect(transactionMock.action.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        sourceType: ActionSourceType.MANUAL,
+        manualOrigin: ActionManualOrigin.AUDITS,
+        communicationId: null,
+        sewoId: null,
+      }),
+    }));
+  });
+
+  it("creates the SMAT action link when source type is SMAT", async () => {
+    parameterMock.getSlaConfig.mockResolvedValue({
+      LOW: 3,
+      MEDIUM: 7,
+      HIGH: 14,
+    });
+    transactionMock.action.findFirst.mockResolvedValueOnce(null);
+    transactionMock.action.create.mockResolvedValue({
+      id: "action-smat",
+      plantId: "plant-1",
+      sourceType: ActionSourceType.SMAT,
+      manualOrigin: null,
+      communicationId: null,
+      sewoId: null,
+      category: ActionCategory.CORRECTIVE,
+      priority: ActionPriority.MEDIUM,
+      title: "SMAT",
+      description: "Acao criada a partir de SMAT.",
+      ownerUserId: "owner-1",
+      dueDate: new Date("2026-07-04T00:00:00.000Z"),
+      status: ActionStatus.OPEN,
+      coOwners: [],
+    });
+    prismaMock.prisma.sEWOActionLink.findMany.mockResolvedValue([]);
+
+    await ActionService.create({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: {
+        sourceType: ActionSourceType.SMAT,
+        smatAuditId: "smat-1",
+        category: ActionCategory.CORRECTIVE,
+        priority: ActionPriority.MEDIUM,
+        title: "SMAT",
+        description: "Acao criada a partir de SMAT.",
+        ownerUserId: "owner-1",
+      },
+    });
+
+    expect(transactionMock.smatAuditActionLink.create).toHaveBeenCalledWith({
+      data: {
+        smatAuditId: "smat-1",
+        actionId: "action-smat",
+      },
+    });
   });
 });
