@@ -8,7 +8,9 @@ import {
   GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
   MODULE_TOGGLES_PARAMETER_KEY,
 } from "@/lib/modules";
+import { AGGREGATE_PLANT_MODULES, ALL_PLANTS_SCOPE, isAllPlantsScope } from "@/lib/plant-scope";
 import { PlantNav } from "@/components/layout/plant-nav";
+import { PlantSwitcher } from "@/components/layout/plant-switcher";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
 import { prisma } from "@/lib/prisma";
@@ -58,10 +60,30 @@ export default async function PlantLayout({
   if (!session?.user) redirect("/login");
 
   const { plant } = await params;
-
-  const hasPlantAccess = session.user.plantRoles.some(
-    (entry) => entry.plantCode === plant || entry.role === "N0_ADMIN" || entry.role === "N1_CORPORATE",
+  const isAllPlants = isAllPlantsScope(plant);
+  const hasGlobalPlantAccess = session.user.plantRoles.some(
+    (entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE,
   );
+  const scopedPlantCodes = Array.from(
+    new Set(session.user.plantRoles.map((entry) => entry.plantCode).filter((code): code is string => Boolean(code))),
+  ).sort((left, right) => left.localeCompare(right));
+  const accessiblePlants = hasGlobalPlantAccess
+    ? await prisma.plant.findMany({
+        where: { isActive: true },
+        orderBy: { code: "asc" },
+        select: { id: true, code: true, name: true, defaultLanguage: true },
+      })
+    : scopedPlantCodes.length
+      ? await prisma.plant.findMany({
+          where: { code: { in: scopedPlantCodes }, isActive: true },
+          orderBy: { code: "asc" },
+          select: { id: true, code: true, name: true, defaultLanguage: true },
+        })
+      : [];
+
+  const hasPlantAccess = isAllPlants
+    ? accessiblePlants.length > 1
+    : accessiblePlants.some((entry) => entry.code === plant) || hasGlobalPlantAccess;
   if (!hasPlantAccess) {
     redirect("/app/corporate");
   }
@@ -70,19 +92,23 @@ export default async function PlantLayout({
     ? RoleCode.N0_ADMIN
     : session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
       ? RoleCode.N1_CORPORATE
-      : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
+      : isAllPlants
+        ? session.user.plantRoles.find((entry) => entry.plantCode)?.role
+        : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
   const hasSafetyCommunicationAlerts = plantRole === RoleCode.N3_SAFETY || plantRole === RoleCode.N4_SUPERVISOR;
-  const [plantRecord, globalModuleParameter] = await prisma.$transaction([
-    prisma.plant.findUnique({
-      where: { code: plant },
-      include: {
-        systemParameters: {
-          where: {
-            key: MODULE_TOGGLES_PARAMETER_KEY,
+  const [plantRecord, globalModuleParameter] = await Promise.all([
+    isAllPlants
+      ? Promise.resolve(null)
+      : prisma.plant.findUnique({
+          where: { code: plant },
+          include: {
+            systemParameters: {
+              where: {
+                key: MODULE_TOGGLES_PARAMETER_KEY,
+              },
+            },
           },
-        },
-      },
-    }),
+        }),
     prisma.systemParameter.findFirst({
       where: {
         plantId: null,
@@ -105,6 +131,23 @@ export default async function PlantLayout({
         },
         take: 10,
       })
+    : isAllPlants
+      ? await prisma.notification.findMany({
+          where: {
+            userId: session.user.id,
+            plantId: {
+              in: accessiblePlants.map((entry) => entry.id),
+            },
+            channel: {
+              in: ["REPEATABILITY_ALERT", "SEWO_REJECTED"],
+            },
+            status: "UNREAD",
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 10,
+        })
     : [];
   const moduleToggles: Record<keyof typeof DEFAULT_MODULE_TOGGLES, boolean> = {
     ...DEFAULT_MODULE_TOGGLES,
@@ -117,6 +160,7 @@ export default async function PlantLayout({
   });
   const visibleItems = items
     .filter((item) => (plantRole ? item.roles.includes(plantRole) : false))
+    .filter((item) => (isAllPlants ? AGGREGATE_PLANT_MODULES.has(item.href) : true))
     .filter((item) => {
       const moduleKey = MODULE_BY_ITEM[item.href];
       return moduleKey ? Boolean(moduleToggles[moduleKey]) : true;
@@ -148,7 +192,11 @@ export default async function PlantLayout({
     <>
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[240px_1fr]">
         <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:sticky md:top-6 md:max-h-[calc(100vh-48px)] md:self-start md:overflow-y-auto">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Plant {plant.toUpperCase()}</p>
+          <PlantSwitcher
+            currentPlant={isAllPlants ? ALL_PLANTS_SCOPE : plant}
+            plants={accessiblePlants.map((entry) => ({ code: entry.code, name: entry.name }))}
+            allowAllPlants={accessiblePlants.length > 1}
+          />
           <PlantNav items={visibleItems} utilityItems={utilityItems} />
         </aside>
 
@@ -166,17 +214,19 @@ export default async function PlantLayout({
         </section>
       </div>
 
-      <RepeatabilityAlertModal
-        plantCode={plant}
-        title="Alerts"
-        alerts={unreadAlerts.map((alert) => ({
-          id: alert.id,
-          title: alert.title,
-          body: alert.body,
-          createdAt: alert.createdAt.toISOString(),
-        }))}
-      />
-      <SafetyCommunicationFloatingAlert plantCode={plant} enabled={hasSafetyCommunicationAlerts} />
+      {!isAllPlants ? (
+        <RepeatabilityAlertModal
+          plantCode={plant}
+          title="Alerts"
+          alerts={unreadAlerts.map((alert) => ({
+            id: alert.id,
+            title: alert.title,
+            body: alert.body,
+            createdAt: alert.createdAt.toISOString(),
+          }))}
+        />
+      ) : null}
+      <SafetyCommunicationFloatingAlert plantCode={plant} enabled={!isAllPlants && hasSafetyCommunicationAlerts} />
     </>
   );
 }

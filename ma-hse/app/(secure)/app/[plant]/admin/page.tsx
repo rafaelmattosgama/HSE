@@ -1,6 +1,7 @@
 import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
 import { getCreatableRoles } from "@/lib/rbac/user-management";
 import { UserManager } from "@/components/feature/user-manager";
@@ -16,6 +17,7 @@ import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
+import { isAllPlantsScope } from "@/lib/plant-scope";
 import { canManageSafetyCommunicationAlertRecipients } from "@/lib/rbac/safety-communication-alerts";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getUiDictionary } from "@/lib/ui-language";
@@ -34,6 +36,10 @@ export default async function AdminPage({
 }) {
   const { plant } = await params;
   const session = await getServerSession(authOptions);
+  if (isAllPlantsScope(plant)) {
+    const firstPlant = session?.user.plantRoles.find((entry) => entry.plantCode)?.plantCode;
+    redirect(firstPlant ? `/app/${firstPlant}/admin` : "/app/corporate");
+  }
   const plantRow = await findPlantByCode(plant);
   if (!plantRow) {
     notFound();
@@ -149,7 +155,12 @@ export default async function AdminPage({
   const userPlantRoles = canManageUsers
     ? await prisma.userPlantRole.findMany({
         where: {
-          plantId: plantRow.id,
+          OR: [
+            { plantId: plantRow.id },
+            ...(actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE
+              ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }]
+              : []),
+          ],
         },
         include: {
           role: true,

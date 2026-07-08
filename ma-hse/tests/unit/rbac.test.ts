@@ -34,10 +34,44 @@ describe("rbac evaluator", () => {
   it("grants corporate cross-plant access", () => {
     const allowed = hasPlantAccess({
       plantCode: "pl99",
-      roles: [{ plantId: "c", plantCode: "pl01", role: RoleCode.N1_CORPORATE }],
+      roles: [{ plantId: null, plantCode: null, role: RoleCode.N1_CORPORATE }],
       allowedRoles: [RoleCode.N2_PLANT_MANAGER],
     });
 
     expect(allowed).toBe(true);
+  });
+
+  it("does not grant N1 access to N0-only routes", () => {
+    const allowed = hasPlantAccess({
+      plantCode: "pl99",
+      roles: [{ plantId: null, plantCode: null, role: RoleCode.N1_CORPORATE }],
+      allowedRoles: [RoleCode.N0_ADMIN],
+    });
+
+    expect(allowed).toBe(false);
+  });
+
+  it("grants plant-scoped access for the same N3 user across assigned plants only", () => {
+    const multiPlantRoles = [
+      { plantId: "p1", plantCode: "pt01", role: RoleCode.N3_SAFETY },
+      { plantId: "p2", plantCode: "pt02", role: RoleCode.N3_SAFETY },
+      { plantId: "p3", plantCode: "pt03", role: RoleCode.N3_SAFETY },
+    ];
+
+    expect(
+      hasPlantAccess({
+        plantCode: "pt02",
+        roles: multiPlantRoles,
+        allowedRoles: [RoleCode.N3_SAFETY],
+      }),
+    ).toBe(true);
+
+    expect(
+      hasPlantAccess({
+        plantCode: "pt04",
+        roles: multiPlantRoles,
+        allowedRoles: [RoleCode.N3_SAFETY],
+      }),
+    ).toBe(false);
   });
 });

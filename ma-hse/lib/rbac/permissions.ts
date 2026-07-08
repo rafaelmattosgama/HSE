@@ -7,7 +7,6 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
   N3_SAFETY: "Safety",
   N4_SUPERVISOR: "Supervisor",
   N5_OPERATOR: "Operator",
-  N6_QR_REPORTER: "QR Reporter",
   MEDICO: "Medico",
 };
 

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
 import { NotificationService } from "@/lib/services/notification-service";
 import { RecordCodeService } from "@/lib/services/record-code-service";
+import { buildPlantRoleScope } from "@/lib/rbac/user-management";
 import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
 import { getReadableSewoCode } from "@/lib/record-code";
 import {
@@ -473,7 +474,7 @@ async function safeNotifySewoRejected(input: {
 async function getRoleRecipients(plantId: string, roles: RoleCode[]) {
   const recipients = await prisma.userPlantRole.findMany({
     where: {
-      plantId,
+      ...buildPlantRoleScope(plantId, roles),
       role: {
         code: {
           in: roles,
@@ -834,6 +835,7 @@ export const SewaService = {
                 createMany: {
                   data: input.payload.attachments.map((attachment) => ({
                     ...attachment,
+                    caption: attachment.caption?.trim() || null,
                     type: "EVENT_EVIDENCE",
                     uploadedById: input.actorUserId,
                   })),
@@ -925,15 +927,21 @@ export const SewaService = {
               }
             : {}),
         },
-        attachments: input.payload.attachments?.length
+        attachments: input.payload.attachments
           ? {
-              createMany: {
-                data: input.payload.attachments.map((attachment) => ({
-                  ...attachment,
-                  type: "EVENT_EVIDENCE",
-                  uploadedById: input.actorUserId,
-                })),
-              },
+              deleteMany: {},
+              ...(input.payload.attachments.length
+                ? {
+                    createMany: {
+                      data: input.payload.attachments.map((attachment) => ({
+                        ...attachment,
+                        caption: attachment.caption?.trim() || null,
+                        type: "EVENT_EVIDENCE",
+                        uploadedById: input.actorUserId,
+                      })),
+                    },
+                  }
+                : {}),
             }
           : undefined,
       },

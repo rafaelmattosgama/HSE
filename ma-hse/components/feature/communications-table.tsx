@@ -10,6 +10,8 @@ import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication
 
 type CommunicationRow = {
   id: string;
+  plantCode?: string;
+  plantName?: string;
   codigoCompleto?: string | null;
   codigoAbreviado?: string | null;
   eventDatetime: string;
@@ -19,6 +21,7 @@ type CommunicationRow = {
   reporterName: string;
   department: string;
   location: string;
+  involvedWorker: string;
   description: string;
   unsafeActType?: string;
   unsafeConditionType?: string;
@@ -45,11 +48,13 @@ export function CommunicationsTable({
   labels,
   typeLabels,
   statusLabels,
+  showPlant = false,
 }: {
   plant: string;
   rows: CommunicationRow[];
   canDelete?: boolean;
   canViewClassification?: boolean;
+  showPlant?: boolean;
   labels?: CommunicationUi["communicationsTable"];
   typeLabels?: CommunicationUi["communicationTypeLabels"];
   statusLabels?: CommunicationUi["communicationStatusLabels"];
@@ -131,6 +136,10 @@ export function CommunicationsTable({
     setMessage("");
 
     try {
+      if (showPlant) {
+        throw new Error("Export is available after selecting a single plant.");
+      }
+
       const response = await fetch(`/api/plants/${plant}/communications/export?format=${format}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -185,7 +194,8 @@ export function CommunicationsTable({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plant}/communications/${row.id}`, {
+      const rowPlant = row.plantCode ?? plant;
+      const response = await fetch(`/api/plants/${rowPlant}/communications/${row.id}`, {
         method: "DELETE",
       });
       const json = await response.json();
@@ -319,16 +329,18 @@ export function CommunicationsTable({
       {message ? <p className="text-sm text-slate-700">{message}</p> : null}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[1050px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">{text.event}</th>
+              {showPlant ? <th className="px-4 py-3">Plant</th> : null}
               <th className="px-4 py-3">Code</th>
               <th className="px-4 py-3">{text.type}</th>
               <th className="px-4 py-3">{text.status}</th>
               <th className="px-4 py-3">{text.reporter}</th>
               <th className="px-4 py-3">{text.department}</th>
               <th className="px-4 py-3">{text.location}</th>
+              <th className="px-4 py-3">{text.involvedWorker}</th>
               <th className="px-4 py-3">{text.detail}</th>
               {canDelete ? <th className="px-4 py-3">{text.delete}</th> : null}
             </tr>
@@ -337,6 +349,7 @@ export function CommunicationsTable({
             {filteredRows.map((row) => (
               <tr key={row.id} className="border-t border-slate-200">
                 <td className="px-4 py-3">{row.eventDatetime.replace("T", " ").slice(0, 16)}</td>
+                {showPlant ? <td className="px-4 py-3 font-semibold text-slate-700">{row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</td> : null}
                 <td className="px-4 py-3 font-semibold text-slate-900">{row.codigoCompleto ?? row.codigoAbreviado ?? "Requires code update"}</td>
                 <td className="px-4 py-3">{communicationTypeLabels[row.type as keyof typeof communicationTypeLabels] ?? row.type}</td>
                 <td className="px-4 py-3">
@@ -347,8 +360,9 @@ export function CommunicationsTable({
                 <td className="px-4 py-3">{row.reporterName}</td>
                 <td className="px-4 py-3">{row.department}</td>
                 <td className="px-4 py-3">{row.location}</td>
+                <td className="px-4 py-3">{row.involvedWorker}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/app/${plant}/communications/${row.id}`} className="font-semibold text-teal-700 hover:underline">
+                  <Link href={`/app/${row.plantCode ?? plant}/communications/${row.id}`} className="font-semibold text-teal-700 hover:underline">
                     {text.openEdit}
                   </Link>
                 </td>
@@ -369,7 +383,7 @@ export function CommunicationsTable({
             ))}
             {filteredRows.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={canDelete ? 9 : 8} className="px-4 py-6 text-center text-sm text-slate-500">{text.noRows}</td>
+                <td colSpan={(canDelete ? 10 : 9) + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">{text.noRows}</td>
               </tr>
             ) : null}
           </tbody>

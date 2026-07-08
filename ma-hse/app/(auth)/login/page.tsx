@@ -13,6 +13,17 @@ const LOGIN_ERROR_MESSAGES: Record<string, string> = {
   Default: "Authentication failed. Please try again.",
 };
 
+const LAST_PLANT_COOKIE = "ma_hse_last_plant";
+
+function readCookie(name: string) {
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(";")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(prefix))
+    ?.slice(prefix.length);
+}
+
 function friendlyLoginError(rawError?: string | null): string {
   if (!rawError) return LOGIN_ERROR_MESSAGES.Default;
   return LOGIN_ERROR_MESSAGES[rawError] ?? rawError;
@@ -62,10 +73,20 @@ export default function LoginPage() {
       }
 
       const isCorporate = session?.user?.plantRoles?.some((entry) => entry.role === "N0_ADMIN" || entry.role === "N1_CORPORATE");
-      const primaryPlant = session?.user?.plantRoles?.find((entry) => entry.plantCode)?.plantCode;
+      const availablePlants = session?.user?.plantRoles?.map((entry) => entry.plantCode).filter((code): code is string => Boolean(code)) ?? [];
+      const lastPlant = decodeURIComponent(readCookie(LAST_PLANT_COOKIE) ?? "");
+      const primaryPlant =
+        lastPlant && availablePlants.includes(lastPlant)
+          ? lastPlant
+          : session?.user?.plantRoles?.find((entry) => entry.plantCode)?.plantCode;
 
       if (session?.user?.plantRoles?.some((entry) => entry.role === "N0_ADMIN")) {
         window.location.href = "/app/settings";
+        return;
+      }
+
+      if (lastPlant === "all" && (isCorporate || availablePlants.length > 1)) {
+        window.location.href = "/app/all/communications";
         return;
       }
 

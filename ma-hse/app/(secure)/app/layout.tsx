@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
 import { UserMenu } from "@/components/layout/user-menu";
 import { authOptions } from "@/lib/auth/options";
+import { ALL_PLANTS_SCOPE, LAST_PLANT_COOKIE } from "@/lib/plant-scope";
 import { ProfileAlertService } from "@/lib/services/profile-alert-service";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
@@ -32,8 +33,15 @@ export default async function SecureAppLayout({
     redirect("/change-password");
   }
 
-  const primaryPlantCode = session.user.plantRoles.find((entry) => entry.plantCode)?.plantCode;
-  const homeHref = primaryPlantCode
+  const availablePlantCodes = session.user.plantRoles.map((entry) => entry.plantCode).filter((code): code is string => Boolean(code));
+  const lastPlant = cookieStore.get(LAST_PLANT_COOKIE)?.value;
+  const primaryPlantCode =
+    lastPlant && availablePlantCodes.includes(lastPlant)
+      ? lastPlant
+      : session.user.plantRoles.find((entry) => entry.plantCode)?.plantCode;
+  const homeHref = lastPlant === ALL_PLANTS_SCOPE && availablePlantCodes.length > 1
+    ? "/app/all/communications"
+    : primaryPlantCode
     ? `/app/${primaryPlantCode}/dashboards`
     : session.user.plantRoles.some((entry) => entry.role === "N0_ADMIN")
       ? "/app/settings"

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { RoleCode } from "@prisma/client";
-import { canCreateRole, getCreatableRoles } from "@/lib/rbac/user-management";
+import {
+  canCreateRole,
+  getCreatableRoles,
+  getRoleAssignmentPlantId,
+  isPlantScopedUserRole,
+  isValidUserPlantRoleScope,
+} from "@/lib/rbac/user-management";
 import { createPlantUserInput, updatePlantUserInput } from "@/lib/validation/dtos";
 
 describe("user management role policy", () => {
@@ -36,6 +42,20 @@ describe("user management role policy", () => {
     expect(canCreateRole(RoleCode.N3_SAFETY, RoleCode.N2_PLANT_MANAGER)).toBe(false);
     expect(canCreateRole(RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR)).toBe(false);
     expect(canCreateRole(RoleCode.N5_OPERATOR, RoleCode.MEDICO)).toBe(false);
+  });
+
+  it("keeps N1 global and N3 plant-scoped for role assignments", () => {
+    expect(getRoleAssignmentPlantId(RoleCode.N1_CORPORATE, "plant-1")).toBeNull();
+    expect(getRoleAssignmentPlantId(RoleCode.N3_SAFETY, "plant-1")).toBe("plant-1");
+    expect(isPlantScopedUserRole(RoleCode.N3_SAFETY)).toBe(true);
+    expect(isPlantScopedUserRole(RoleCode.N1_CORPORATE)).toBe(false);
+  });
+
+  it("validates UserPlantRole scope by role type", () => {
+    expect(isValidUserPlantRoleScope(RoleCode.N1_CORPORATE, null)).toBe(true);
+    expect(isValidUserPlantRoleScope(RoleCode.N1_CORPORATE, "plant-1")).toBe(false);
+    expect(isValidUserPlantRoleScope(RoleCode.N3_SAFETY, "plant-1")).toBe(true);
+    expect(isValidUserPlantRoleScope(RoleCode.N3_SAFETY, null)).toBe(false);
   });
 
   it("rejects N0_ADMIN in createPlantUserInput Zod schema", () => {

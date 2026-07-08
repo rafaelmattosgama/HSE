@@ -102,7 +102,6 @@ const roles: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
-  RoleCode.N6_QR_REPORTER,
   RoleCode.MEDICO,
 ];
 
@@ -651,35 +650,6 @@ async function upsertSeedUser(user: SeedUserDefinition, passwordHash: string) {
       language: user.language,
       passwordHash,
       isActive: true,
-    },
-  });
-}
-
-async function upsertN6ReferenceUser(input: { name: string; language: string }) {
-  const existing = await prisma.user.findFirst({
-    where: {
-      email: null,
-      name: input.name,
-    },
-  });
-
-  if (existing) {
-    return prisma.user.update({
-      where: { id: existing.id },
-      data: {
-        language: input.language,
-        isActive: true,
-      },
-    });
-  }
-
-  return prisma.user.create({
-    data: {
-      email: null,
-      name: input.name,
-      language: input.language,
-      isActive: true,
-      passwordHash: null,
     },
   });
 }
@@ -1389,10 +1359,7 @@ async function main() {
       email: "corporate@ma-hse.local",
       name: "Corporate N1",
       language: "en",
-      roleBindings: [
-        { plantCode: "pl01", role: RoleCode.N1_CORPORATE },
-        { plantCode: "pl02", role: RoleCode.N1_CORPORATE },
-      ],
+      roleBindings: [{ plantCode: null, role: RoleCode.N1_CORPORATE }],
     },
     {
       email: "manager.pl01@ma-hse.local",
@@ -1463,16 +1430,6 @@ async function main() {
     usersByEmail.set(userDef.email, user);
   }
 
-  const n6ReferencePl01 = await upsertN6ReferenceUser({
-    name: "QR Reporter Reference PL01 (N6)",
-    language: "it",
-  });
-
-  const n6ReferencePl02 = await upsertN6ReferenceUser({
-    name: "QR Reporter Reference PL02 (N6)",
-    language: "pt",
-  });
-
   const roleRows = await prisma.role.findMany();
   const roleLookup = new Map(roleRows.map((row) => [row.code, row.id]));
 
@@ -1487,20 +1444,6 @@ async function main() {
     }));
     await syncUserRoles(user.id, bindings);
   }
-
-  await syncUserRoles(n6ReferencePl01.id, [
-    {
-      plantId: requireValue(plantByCode.get("pl01"), "Missing plant pl01").id,
-      roleId: requireValue(roleLookup.get(RoleCode.N6_QR_REPORTER), "Missing role id for N6"),
-    },
-  ]);
-
-  await syncUserRoles(n6ReferencePl02.id, [
-    {
-      plantId: requireValue(plantByCode.get("pl02"), "Missing plant pl02").id,
-      roleId: requireValue(roleLookup.get(RoleCode.N6_QR_REPORTER), "Missing role id for N6"),
-    },
-  ]);
 
   const fixturePl01 = await getPlantFixture(requireValue(plantByCode.get("pl01"), "Missing plant pl01").id);
   const fixturePl02 = await getPlantFixture(requireValue(plantByCode.get("pl02"), "Missing plant pl02").id);

@@ -153,7 +153,12 @@ export const authOptions: NextAuthOptions = {
           session.user.name = dbUser?.name ?? session.user.name;
           session.user.language = dbUser?.language ?? "en";
           session.user.plantRoles = roles
-            .filter((entry) => entry.role.code === RoleCode.N0_ADMIN || Boolean(entry.plant?.isActive))
+            .filter(
+              (entry) =>
+                entry.role.code === RoleCode.N0_ADMIN ||
+                entry.role.code === RoleCode.N1_CORPORATE ||
+                Boolean(entry.plant?.isActive),
+            )
             .map((entry) => ({
               plantId: entry.plantId,
               plantCode: entry.plant?.code ?? null,
@@ -164,7 +169,13 @@ export const authOptions: NextAuthOptions = {
                 entry.role.code === RoleCode.N2_PLANT_MANAGER ||
                 entry.role.code === RoleCode.N3_SAFETY ||
                 entry.role.code === RoleCode.MEDICO,
-            }));
+            }))
+            .sort((left, right) => {
+              if (left.plantCode && right.plantCode) return left.plantCode.localeCompare(right.plantCode);
+              if (left.plantCode) return 1;
+              if (right.plantCode) return -1;
+              return left.role.localeCompare(right.role);
+            });
         session.user.mustChangePassword = Boolean(dbUser?.forcePasswordChange ?? token.mustChangePassword);
       }
 

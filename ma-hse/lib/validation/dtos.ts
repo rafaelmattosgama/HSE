@@ -391,6 +391,7 @@ export const createSEWOInput = z.object({
         fileKey: z.string().min(3),
         fileName: z.string().min(1),
         contentType: z.string().min(3),
+        caption: z.string().trim().max(200).optional().nullable(),
       }),
     )
     .optional(),

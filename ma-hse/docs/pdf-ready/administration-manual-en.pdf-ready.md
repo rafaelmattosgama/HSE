@@ -121,11 +121,11 @@ Can:
 
 Cannot access S-EWO API, validation or administration.
 
-### N6_QR_REPORTER
+### Public QR/link reporting
 
-Public reporter without login.
+Public QR/link reporting is not a user role.
 
-Can submit communications through public QR/link access. The types currently allowed by code are:
+Public submissions are controlled by plant tokens and recorded as a public source. The types currently allowed by code are:
 
 - Unsafe Act
 - Unsafe Condition

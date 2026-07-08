@@ -55,6 +55,11 @@ export default async function SewoPage({
             targetEmployee: true,
             bodyPart: true,
             injuryType: true,
+            attachments: {
+              orderBy: {
+                createdAt: "asc",
+              },
+            },
             actions: {
               include: {
                 ownerUser: true,
@@ -67,6 +72,11 @@ export default async function SewoPage({
         },
         approvedBy: true,
         performedBy: true,
+        attachments: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
         actions: {
           include: {
             ownerUser: true,
@@ -114,6 +124,11 @@ export default async function SewoPage({
         targetEmployee: true,
         area: true,
         workstation: true,
+        attachments: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
         sewoRecords: {
           select: {
             id: true,
@@ -234,6 +249,14 @@ export default async function SewoPage({
             approvalComment: record.approvalComment,
             approvedAt: record.approvedAt?.toISOString() ?? null,
             approvedByName: record.approvedBy?.name ?? null,
+            attachments: record.attachments.map((attachment) => ({
+              id: attachment.id,
+              fileKey: attachment.fileKey,
+              fileName: attachment.fileName,
+              contentType: attachment.contentType,
+              caption: attachment.caption,
+              downloadUrl: `/api/plants/${plant}/sewo/${record.id}/attachments/${attachment.id}`,
+            })),
             linkedActions: Array.from(
               new Map(
                 [
@@ -276,6 +299,14 @@ export default async function SewoPage({
           bodyPartId: communication.bodyPartId,
           description: communication.description,
           suggestedAction: communication.suggestedAction,
+          attachments: communication.attachments.map((attachment) => ({
+            id: attachment.id,
+            fileKey: attachment.fileKey,
+            fileName: attachment.fileName,
+            contentType: attachment.contentType,
+            caption: null,
+            downloadUrl: `/api/plants/${plant}/communications/${communication.id}/attachments/${attachment.id}`,
+          })),
           linkedSewoId: communication.sewoRecords[0]?.id ?? null,
           linkedSewoCode: communication.sewoRecords[0]?.codigoSewo ?? null,
           openActions: communication.actions.map((action) => ({

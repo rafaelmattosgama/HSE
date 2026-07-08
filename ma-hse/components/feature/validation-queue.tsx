@@ -7,6 +7,8 @@ import { ValidationActions } from "@/components/feature/validation-actions";
 
 type ValidationRow = {
   id: string;
+  plantCode?: string;
+  plantName?: string;
   type: string;
   typeLabel: string;
   reporterName: string;
@@ -21,9 +23,11 @@ export function ValidationQueue({
   rows,
   labels,
   actionLabels,
+  showPlant = false,
 }: {
   plant: string;
   rows: ValidationRow[];
+  showPlant?: boolean;
   labels?: CommunicationUi["validationQueue"];
   actionLabels?: CommunicationUi["validationActions"];
 }) {
@@ -61,18 +65,19 @@ export function ValidationQueue({
           <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-1">
               <h2 className="font-semibold text-slate-900">{row.typeLabel}</h2>
+              {showPlant ? <p className="text-sm font-semibold text-teal-800">Plant: {row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</p> : null}
               <p className="text-sm text-slate-500">{text.reporter}: {row.reporterName}</p>
               <p className="text-sm text-slate-500">{text.department}: {row.department}</p>
               <p className="text-sm text-slate-500">{text.location}: {row.location}</p>
               <p className="text-sm text-slate-500">{text.date}: {row.eventDatetime.replace("T", " ").slice(0, 16)}</p>
             </div>
-            <Link href={`/app/${plant}/communications/${row.id}?from=validation`} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <Link href={`/app/${row.plantCode ?? plant}/communications/${row.id}?from=validation`} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
               {text.openEdit}
             </Link>
           </div>
 
           <p className="mb-4 text-sm text-slate-700">{row.description}</p>
-          <ValidationActions plant={plant} communicationId={row.id} labels={actionLabels} />
+          <ValidationActions plant={row.plantCode ?? plant} communicationId={row.id} labels={actionLabels} />
         </article>
       ))}
     </div>

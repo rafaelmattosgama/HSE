@@ -4,6 +4,7 @@ import { SewoValidationQueue } from "@/components/feature/sewo-validation-queue"
 import { AppHero, AppSectionHeader } from "@/components/ui/app-surface";
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
+import { isAllPlantsScope } from "@/lib/plant-scope";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
@@ -26,22 +27,42 @@ export default async function ValidationPage({
   if (!canUseValidation) redirect("/app/corporate");
 
   const isN1 = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  const isAllPlants = isAllPlantsScope(plant);
+  const hasGlobalPlantAccess = session.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE);
+  const scopedPlantCodes = Array.from(
+    new Set(
+      session.user.plantRoles
+        .filter((entry) => entry.role === RoleCode.N3_SAFETY)
+        .map((entry) => entry.plantCode)
+        .filter((code): code is string => Boolean(code)),
+    ),
+  );
 
-  const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  const plantRows = isAllPlants
+    ? await prisma.plant.findMany({
+        where: hasGlobalPlantAccess ? { isActive: true } : { code: { in: scopedPlantCodes }, isActive: true },
+        orderBy: { code: "asc" },
+      })
+    : [await prisma.plant.findUniqueOrThrow({ where: { code: plant } })];
+  if (isAllPlants && plantRows.length <= 1) {
+    if (!plantRows[0]?.code && !scopedPlantCodes[0]) redirect("/app/corporate");
+    redirect(`/app/${plantRows[0]?.code ?? scopedPlantCodes[0]}/validation`);
+  }
   const uiLocale = await getServerUiLocale({
-    userLanguage: session?.user.language,
-    plantLanguage: plantRow.defaultLanguage,
+    userLanguage: session.user.language,
+    plantLanguage: isAllPlants ? undefined : plantRows[0]?.defaultLanguage,
   });
   const ui = getUiDictionary(uiLocale);
 
   const pending = await prisma.communication.findMany({
     where: {
-      plantId: plantRow.id,
+      plantId: { in: plantRows.map((row) => row.id) },
       status: {
         in: ["SUBMITTED", "PENDING_VALIDATION"],
       },
     },
     include: {
+      plant: true,
       area: true,
       workstation: true,
     },
@@ -55,7 +76,7 @@ export default async function ValidationPage({
     translateForViewer(uiLocale, pending.map((row) => row.description)),
     getLocalizedCommunicationUi(uiLocale),
     getLocalizedSewoUi(uiLocale),
-    isN1 ? getPendingSewoValidationRows({ userId: session.user.id, plantCode: plant }) : [],
+    isN1 ? getPendingSewoValidationRows({ userId: session.user.id, plantCode: isAllPlants ? undefined : plant }) : [],
   ]);
 
   return (
@@ -69,7 +90,7 @@ export default async function ValidationPage({
       {isN1 && (
         <section className="space-y-4">
           <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
-          <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={false} />
+          <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={isAllPlants} />
         </section>
       )}
 
@@ -77,8 +98,11 @@ export default async function ValidationPage({
         <AppSectionHeader title={sewoUiResult.ui.n1ValidationCommunicationSection} />
         <ValidationQueue
           plant={plant}
+          showPlant={isAllPlants}
           rows={pending.map((row, index) => ({
             id: row.id,
+            plantCode: row.plant.code,
+            plantName: row.plant.name,
             type: row.type,
             typeLabel: communicationUi.communicationTypeLabels[row.type] ?? row.type,
             reporterName: row.reporterName,

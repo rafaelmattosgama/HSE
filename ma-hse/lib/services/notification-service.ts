@@ -1,6 +1,7 @@
 import { NotificationStatus, RoleCode } from "@prisma/client";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { buildPlantRoleScope } from "@/lib/rbac/user-management";
 import { sendNotificationEmail } from "@/src/email/systemEmailHelpers.js";
 
 type EmailRecipient = {
@@ -82,7 +83,7 @@ export const NotificationService = {
   }) {
     const recipients = await prisma.userPlantRole.findMany({
       where: {
-        plantId: input.plantId,
+        ...buildPlantRoleScope(input.plantId, input.roles),
         role: {
           code: {
             in: input.roles,

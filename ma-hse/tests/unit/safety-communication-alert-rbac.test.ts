@@ -15,7 +15,6 @@ describe("safety communication alert recipient permissions", () => {
   it.each([
     RoleCode.N4_SUPERVISOR,
     RoleCode.N5_OPERATOR,
-    RoleCode.N6_QR_REPORTER,
     RoleCode.MEDICO,
     null,
     undefined,
