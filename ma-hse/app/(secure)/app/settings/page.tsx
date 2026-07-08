@@ -130,6 +130,28 @@ export default async function SettingsPage({
 
   const moduleParameter = selectedPlant?.systemParameters.find((entry) => entry.key === MODULE_TOGGLES_PARAMETER_KEY);
   const reportLayoutParameter = selectedPlant?.systemParameters.find((entry) => entry.key === "REPORT_LAYOUT");
+  const globalN1Users = selectedPlant
+    ? await prisma.userPlantRole.findMany({
+        where: {
+          plantId: null,
+          role: {
+            code: RoleCode.N1_CORPORATE,
+          },
+        },
+        include: {
+          role: true,
+          user: true,
+        },
+      })
+    : [];
+  const selectedPlantUsers = selectedPlant
+    ? [
+        ...selectedPlant.users,
+        ...globalN1Users.filter(
+          (globalRole) => !selectedPlant.users.some((plantRole) => plantRole.userId === globalRole.userId && plantRole.roleId === globalRole.roleId),
+        ),
+      ]
+    : [];
   const sewoRecipients = selectedPlant ? await listSewoReportRecipients(selectedPlant.id) : [];
   const safetyCommunicationRecipients = selectedPlant
     ? await SafetyCommunicationAlertService.listRecipients(selectedPlant.id)
@@ -284,7 +306,7 @@ export default async function SettingsPage({
 
           <UserManager
             plantCode={selectedPlant.code}
-            users={selectedPlant.users.map((entry) => ({
+            users={selectedPlantUsers.map((entry) => ({
               id: entry.user.id,
               email: entry.user.email,
               name: entry.user.name,

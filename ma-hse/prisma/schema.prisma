@@ -14,7 +14,6 @@ enum RoleCode {
   N3_SAFETY
   N4_SUPERVISOR
   N5_OPERATOR
-  N6_QR_REPORTER
   MEDICO
 }
 
@@ -1116,6 +1115,7 @@ model SEWOAttachment {
   fileKey      String
   fileName     String
   contentType  String
+  caption      String?
   createdAt    DateTime           @default(now())
   uploadedById String?
   sewo         SEWO               @relation(fields: [sewoId], references: [id], onDelete: Cascade)

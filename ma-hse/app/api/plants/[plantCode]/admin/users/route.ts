@@ -9,7 +9,7 @@ import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { canCreateRole, getCreatableRoles } from "@/lib/rbac/user-management";
+import { canCreateRole, getCreatableRoles, getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
 import { EmailService } from "@/lib/services/email-service";
 import { hashSensitiveValue } from "@/lib/security";
 import { createPlantUserInput } from "@/lib/validation/dtos";
@@ -20,6 +20,10 @@ function normalizeEmail(email: string) {
 
 function generateTemporaryPassword() {
   return crypto.randomBytes(9).toString("base64url");
+}
+
+function canManageGlobalN1(actorRole: RoleCode) {
+  return actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE;
 }
 
 function toUserRow(input: {
@@ -54,7 +58,10 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
 
   const rows = await prisma.userPlantRole.findMany({
     where: {
-      plantId: plant.id,
+      OR: [
+        { plantId: plant.id },
+        ...(canManageGlobalN1(actorRole) ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }] : []),
+      ],
     },
     include: {
       role: true,
@@ -182,26 +189,14 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
             },
           });
 
+      const rolePlantId = getRoleAssignmentPlantId(targetRole, plant.id);
       const beforePlantRole = await tx.userPlantRole.findFirst({
         where: {
           userId: user.id,
-          plantId: plant.id,
-        },
-      });
-
-      const plantRole = await tx.userPlantRole.upsert({
-        where: {
-          userId_plantId_roleId: {
-            userId: user.id,
-            plantId: plant.id,
-            roleId: role.id,
-          },
-        },
-        update: {},
-        create: {
-          userId: user.id,
-          plantId: plant.id,
-          roleId: role.id,
+          OR: [
+            { plantId: plant.id },
+            ...(canManageGlobalN1(actorRole) ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }] : []),
+          ],
         },
         include: {
           role: true,
@@ -211,12 +206,37 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       await tx.userPlantRole.deleteMany({
         where: {
           userId: user.id,
-          plantId: plant.id,
-          roleId: {
-            not: role.id,
-          },
+          OR: [
+            { plantId: plant.id },
+            ...(targetRole !== RoleCode.N1_CORPORATE && canManageGlobalN1(actorRole)
+              ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }]
+              : []),
+          ],
         },
       });
+
+      const existingPlantRole = await tx.userPlantRole.findFirst({
+        where: {
+          userId: user.id,
+          plantId: rolePlantId,
+          roleId: role.id,
+        },
+        include: {
+          role: true,
+        },
+      });
+      const plantRole =
+        existingPlantRole ??
+        (await tx.userPlantRole.create({
+          data: {
+            userId: user.id,
+            plantId: rolePlantId,
+            roleId: role.id,
+          },
+          include: {
+            role: true,
+          },
+        }));
 
       return {
         user,
@@ -293,12 +313,14 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
               userId: result.beforePlantRole.userId,
               plantId: result.beforePlantRole.plantId,
               roleId: result.beforePlantRole.roleId,
+              role: result.beforePlantRole.role.code,
             }
           : null,
         {
           userId: result.user.id,
-          plantId: plant.id,
+          plantId: result.plantRole.plantId,
           roleId: result.plantRole.roleId,
+          role: result.plantRole.role.code,
         },
       ),
     });

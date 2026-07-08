@@ -121,11 +121,11 @@ Pode:
 
 Nao acede a S-EWO API, validacao ou administracao.
 
-### N6_QR_REPORTER
+### Reporte publico por QR/link
 
-Reportador publico sem login.
+O reporte publico por QR/link nao e um role de utilizador.
 
-Pode submeter comunicacoes por link/QR Code publico. Os tipos atualmente permitidos pelo codigo sao:
+As submissoes publicas sao controladas por tokens de planta e registadas como origem publica. Os tipos atualmente permitidos pelo codigo sao:
 
 - Unsafe Act
 - Unsafe Condition

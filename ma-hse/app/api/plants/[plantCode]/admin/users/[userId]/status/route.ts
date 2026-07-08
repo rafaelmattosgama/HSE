@@ -11,6 +11,10 @@ const updateUserStatusInput = z.object({
   isActive: z.boolean(),
 });
 
+function canManageGlobalN1(actorRole: RoleCode) {
+  return actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE;
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ plantCode: string; userId: string }> },
@@ -28,7 +32,10 @@ export async function PATCH(
   const plantRoleRow = await prisma.userPlantRole.findFirst({
     where: {
       userId,
-      plantId: plant.id,
+      OR: [
+        { plantId: plant.id },
+        ...(canManageGlobalN1(actorRole) ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }] : []),
+      ],
     },
     include: {
       role: true,

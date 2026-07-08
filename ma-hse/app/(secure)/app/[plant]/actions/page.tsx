@@ -7,6 +7,7 @@ import {
   formatLocalizedActionSourceType,
 } from "@/lib/actions-ui";
 import { prisma } from "@/lib/prisma";
+import { isAllPlantsScope } from "@/lib/plant-scope";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { localizeCommunicationCatalogRows } from "@/lib/services/communication-catalog-localization";
 import { getLocalizedActionsUi } from "@/lib/services/actions-ui-localization";
@@ -14,6 +15,7 @@ import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-loc
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 
 const DELETE_ACTION_ROLES: RoleCode[] = [
   RoleCode.N0_ADMIN,
@@ -34,19 +36,36 @@ function isPresent<T>(value: T): value is NonNullable<T> {
 export default async function ActionsPage({ params }: { params: Promise<{ plant: string }> }) {
   const { plant } = await params;
   const session = await getServerSession(authOptions);
-  const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  if (!session?.user) redirect("/login");
+
+  const isAllPlants = isAllPlantsScope(plant);
+  const hasGlobalPlantAccess = session.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE);
+  const scopedPlantCodes = Array.from(
+    new Set(session.user.plantRoles.map((entry) => entry.plantCode).filter((code): code is string => Boolean(code))),
+  );
+  const plantRows = isAllPlants
+    ? await prisma.plant.findMany({
+        where: hasGlobalPlantAccess ? { isActive: true } : { code: { in: scopedPlantCodes }, isActive: true },
+        orderBy: { code: "asc" },
+      })
+    : [await prisma.plant.findUniqueOrThrow({ where: { code: plant } })];
+  if (isAllPlants && plantRows.length <= 1) {
+    if (!plantRows[0]?.code && !scopedPlantCodes[0]) redirect("/app/corporate");
+    redirect(`/app/${plantRows[0]?.code ?? scopedPlantCodes[0]}/actions`);
+  }
   const uiLocale = await getServerUiLocale({
-    userLanguage: session?.user.language,
-    plantLanguage: plantRow.defaultLanguage,
+    userLanguage: session.user.language,
+    plantLanguage: isAllPlants ? undefined : plantRows[0]?.defaultLanguage,
   });
   const ui = getUiDictionary(uiLocale);
 
   const [actions, owners, communications, sewoRecords, smatAudits] = await prisma.$transaction([
     prisma.action.findMany({
       where: {
-        plantId: plantRow.id,
+        plantId: { in: plantRows.map((row) => row.id) },
       },
       include: {
+        plant: true,
         ownerUser: true,
         evidenceAttachments: true,
         communication: {
@@ -76,7 +95,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
     }),
     prisma.userPlantRole.findMany({
       where: {
-        plantId: plantRow.id,
+        plantId: { in: plantRows.map((row) => row.id) },
         user: {
           isActive: true,
         },
@@ -92,7 +111,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
     }),
     prisma.communication.findMany({
       where: {
-        plantId: plantRow.id,
+        plantId: { in: plantRows.map((row) => row.id) },
         status: {
           in: LINKABLE_COMMUNICATION_STATUSES,
         },
@@ -104,14 +123,14 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
     }),
     prisma.sEWO.findMany({
       where: {
-        plantId: plantRow.id,
+        plantId: { in: plantRows.map((row) => row.id) },
       },
       orderBy: [{ analysisDate: "desc" }, { createdAt: "desc" }],
       take: 100,
     }),
     prisma.smatAudit.findMany({
       where: {
-        plantId: plantRow.id,
+        plantId: { in: plantRows.map((row) => row.id) },
       },
       orderBy: [{ auditDate: "desc" }, { createdAt: "desc" }],
       take: 100,
@@ -121,7 +140,9 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
     ? RoleCode.N0_ADMIN
     : session?.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
       ? RoleCode.N1_CORPORATE
-      : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role ?? null;
+      : isAllPlants
+        ? session.user.plantRoles.find((entry) => entry.plantCode)?.role ?? null
+        : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role ?? null;
   const canDeleteActions = Boolean(actorRole && DELETE_ACTION_ROLES.includes(actorRole));
 
   const communicationUi = await getLocalizedCommunicationUi(uiLocale);
@@ -158,25 +179,31 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
         <h1 className="text-2xl font-bold text-slate-900">{ui.modules.actions}</h1>
       </header>
 
-      <CreateActionQuick
-        owners={owners.map((entry) => ({
-          id: entry.userId,
-          label: entry.user.name,
-        }))}
-        communicationOptions={communications.map((entry) => ({
-          id: entry.id,
-          label: `${entry.codigoCompleto ?? entry.codigoAbreviado ?? "Requires code update"} | ${entry.eventDatetime.toISOString().slice(0, 10)} | ${communicationUi.communicationTypeLabels[entry.type] ?? entry.type} | ${entry.reporterName}`,
-        }))}
-        sewoOptions={sewoRecords.map((entry) => ({
-          id: entry.id,
-          label: `${entry.codigoSewo ?? "S-EWO"} | ${entry.analysisDate.toISOString().slice(0, 10)} | ${entry.whoText}`,
-        }))}
-        smatOptions={smatAudits.map((entry) => ({
-          id: entry.id,
-          label: `SMAT | ${entry.auditDate.toISOString().slice(0, 10)} | ${entry.auditorName} | ${entry.locationExamined || entry.areaExamined || "-"}`,
-        }))}
-        labels={communicationUi.createActionQuick}
-      />
+      {!isAllPlants ? (
+        <CreateActionQuick
+          owners={owners.map((entry) => ({
+            id: entry.userId,
+            label: entry.user.name,
+          }))}
+          communicationOptions={communications.map((entry) => ({
+            id: entry.id,
+            label: `${entry.codigoCompleto ?? entry.codigoAbreviado ?? "Requires code update"} | ${entry.eventDatetime.toISOString().slice(0, 10)} | ${communicationUi.communicationTypeLabels[entry.type] ?? entry.type} | ${entry.reporterName}`,
+          }))}
+          sewoOptions={sewoRecords.map((entry) => ({
+            id: entry.id,
+            label: `${entry.codigoSewo ?? "S-EWO"} | ${entry.analysisDate.toISOString().slice(0, 10)} | ${entry.whoText}`,
+          }))}
+          smatOptions={smatAudits.map((entry) => ({
+            id: entry.id,
+            label: `SMAT | ${entry.auditDate.toISOString().slice(0, 10)} | ${entry.auditorName} | ${entry.locationExamined || entry.areaExamined || "-"}`,
+          }))}
+          labels={communicationUi.createActionQuick}
+        />
+      ) : (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
+          Para criar acoes, selecione uma planta especifica no seletor.
+        </div>
+      )}
 
       <ActionsTable
         plant={plant}
@@ -184,8 +211,11 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
         labels={actionsUi.table}
         statusLabels={actionsUi.statusLabels}
         priorityLabels={actionsUi.priorityLabels}
+        showPlant={isAllPlants}
         actions={actions.map((row, index) => ({
           id: row.id,
+          plantCode: row.plant.code,
+          plantName: row.plant.name,
           sequenceNumber: row.sequenceNumber,
           title: translatedTitles[index] ?? row.title,
           description: row.description,
@@ -206,11 +236,11 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
                 : formatLocalizedActionSourceType(row.sourceType, actionsUi),
           sourceHref:
             row.communicationId
-              ? `/app/${plant}/communications/${row.communicationId}`
+              ? `/app/${row.plant.code}/communications/${row.communicationId}`
               : row.sewoId
-                ? `/app/${plant}/sewo?sewoId=${row.sewoId}`
+                ? `/app/${row.plant.code}/sewo?sewoId=${row.sewoId}`
                 : row.smatLinks.length > 0
-                  ? `/app/${plant}/smat`
+                  ? `/app/${row.plant.code}/smat`
                 : null,
           manualOrigin: formatLocalizedActionManualOrigin(row.manualOrigin, actionsUi),
           communicationId: row.communicationId,

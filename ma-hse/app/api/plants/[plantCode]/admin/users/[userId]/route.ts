@@ -6,7 +6,7 @@ import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { canCreateRole } from "@/lib/rbac/user-management";
+import { canCreateRole, getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
 import { updatePlantUserInput } from "@/lib/validation/dtos";
 
 function normalizeEmail(email: string) {
@@ -15,6 +15,10 @@ function normalizeEmail(email: string) {
 
 function manageableByN3(role: RoleCode) {
   return role === RoleCode.N4_SUPERVISOR || role === RoleCode.N5_OPERATOR || role === RoleCode.MEDICO;
+}
+
+function canManageGlobalN1(actorRole: RoleCode) {
+  return actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE;
 }
 
 export async function PATCH(
@@ -41,7 +45,10 @@ export async function PATCH(
   const plantRoleRow = await prisma.userPlantRole.findFirst({
     where: {
       userId,
-      plantId: plant.id,
+      OR: [
+        { plantId: plant.id },
+        ...(canManageGlobalN1(actorRole) ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }] : []),
+      ],
     },
     include: {
       role: true,
@@ -102,6 +109,7 @@ export async function PATCH(
   const passwordHash = parsed.data.password ? await hash(parsed.data.password, 12) : null;
 
   const updated = await prisma.$transaction(async (tx) => {
+    const rolePlantId = getRoleAssignmentPlantId(parsed.data.role, plant.id);
     const user = await tx.user.update({
       where: { id: userId },
       data: {
@@ -116,29 +124,37 @@ export async function PATCH(
     await tx.userPlantRole.deleteMany({
       where: {
         userId,
-        plantId: plant.id,
-        roleId: { not: role.id },
+        OR: [
+          { plantId: plant.id },
+          ...(parsed.data.role !== RoleCode.N1_CORPORATE && canManageGlobalN1(actorRole)
+            ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }]
+            : []),
+        ],
       },
     });
 
-    const plantRole = await tx.userPlantRole.upsert({
+    const existingPlantRole = await tx.userPlantRole.findFirst({
       where: {
-        userId_plantId_roleId: {
-          userId,
-          plantId: plant.id,
-          roleId: role.id,
-        },
-      },
-      update: {},
-      create: {
         userId,
-        plantId: plant.id,
+        plantId: rolePlantId,
         roleId: role.id,
       },
       include: {
         role: true,
       },
     });
+    const plantRole =
+      existingPlantRole ??
+      (await tx.userPlantRole.create({
+        data: {
+          userId,
+          plantId: rolePlantId,
+          roleId: role.id,
+        },
+        include: {
+          role: true,
+        },
+      }));
 
     return { user, plantRole };
   });
@@ -187,7 +203,10 @@ export async function DELETE(
   const plantRoleRow = await prisma.userPlantRole.findFirst({
     where: {
       userId,
-      plantId: plant.id,
+      OR: [
+        { plantId: plant.id },
+        ...(canManageGlobalN1(actorRole) ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }] : []),
+      ],
     },
     include: {
       role: true,
@@ -217,7 +236,12 @@ export async function DELETE(
   await prisma.userPlantRole.deleteMany({
     where: {
       userId,
-      plantId: plant.id,
+      OR: [
+        { plantId: plant.id },
+        ...(plantRoleRow.role.code === RoleCode.N1_CORPORATE && canManageGlobalN1(actorRole)
+          ? [{ plantId: null, role: { code: RoleCode.N1_CORPORATE } }]
+          : []),
+      ],
     },
   });
 

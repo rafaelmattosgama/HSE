@@ -35,6 +35,7 @@ type ExportAttachment = {
   fileName: string;
   contentType: string;
   fileKey: string;
+  caption?: string | null;
 };
 
 type CompleteReportOptions = {
@@ -84,6 +85,12 @@ function inferImageExtension(input: ExportAttachment) {
   if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "jpeg" as const;
 
   return null;
+}
+
+function formatAttachmentTitle(attachment: ExportAttachment) {
+  return attachment.caption?.trim()
+    ? `${attachment.fileName} - ${attachment.caption.trim()}`
+    : attachment.fileName;
 }
 
 async function loadAttachmentBuffers(attachments: ExportAttachment[]) {
@@ -1240,10 +1247,10 @@ export const SewoExportService = {
           } catch {
             doc.fillColor(INK).fontSize(7).text(ui.summaryReportNotApplicable, x + 6, 675, { width: 92, align: "center" });
           }
-          doc.fillColor(MUTED).fontSize(6.5).text(fitText(attachment.fileName, 34), x, 704, { width: 104, align: "center" });
+          doc.fillColor(MUTED).fontSize(6.5).text(fitText(formatAttachmentTitle(attachment), 34), x, 704, { width: 104, align: "center" });
         });
         if (nonImageAttachments.length) {
-          doc.fillColor(INK).fontSize(7).text(nonImageAttachments.map((attachment) => attachment.fileName).join("\n"), 410, 664, {
+          doc.fillColor(INK).fontSize(7).text(nonImageAttachments.map(formatAttachmentTitle).join("\n"), 410, 664, {
             width: 120,
             height: 40,
           });
@@ -1563,11 +1570,11 @@ export const SewoExportService = {
         photoAttachments.forEach((attachment) => {
           try {
             drawPhotoCard(doc, {
-              title: attachment.fileName,
+              title: formatAttachmentTitle(attachment),
               imageBuffer: attachment.buffer,
             });
           } catch {
-            drawParagraphCard(doc, attachment.fileName, ui.summaryReportNotApplicable);
+            drawParagraphCard(doc, formatAttachmentTitle(attachment), ui.summaryReportNotApplicable);
           }
         });
       }

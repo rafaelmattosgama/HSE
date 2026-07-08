@@ -11,6 +11,7 @@ import { DEFAULT_UNSAFE_CONDITION_TYPES } from "@/lib/defaults/unsafe-condition-
 import { parseBody } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac/guards";
+import { getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
 import { createCorporatePlantInput, updateCorporatePlantLanguageInput } from "@/lib/validation/dtos";
 
 const DEFAULT_MASTER_DATA = {
@@ -207,21 +208,24 @@ async function ensureUserWithRole(input: {
         },
       });
 
-  await prisma.userPlantRole.upsert({
+  const rolePlantId = getRoleAssignmentPlantId(input.roleCode, input.plantId);
+  const existingRole = await prisma.userPlantRole.findFirst({
     where: {
-      userId_plantId_roleId: {
-        userId: user.id,
-        plantId: input.plantId,
-        roleId: role.id,
-      },
-    },
-    update: {},
-    create: {
       userId: user.id,
-      plantId: input.plantId,
+      plantId: rolePlantId,
       roleId: role.id,
     },
   });
+
+  if (!existingRole) {
+    await prisma.userPlantRole.create({
+      data: {
+        userId: user.id,
+        plantId: rolePlantId,
+        roleId: role.id,
+      },
+    });
+  }
 
   return {
     id: user.id,

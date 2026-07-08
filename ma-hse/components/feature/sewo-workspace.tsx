@@ -30,6 +30,15 @@ type CommunicationActionOption = {
   status: string;
 };
 
+type SewoAttachmentOption = {
+  id: string;
+  fileKey: string;
+  fileName: string;
+  contentType: string;
+  caption: string | null;
+  downloadUrl: string;
+};
+
 type CommunicationOption = {
   id: string;
   codigoCompleto: string | null;
@@ -49,6 +58,7 @@ type CommunicationOption = {
   bodyPartId: string | null;
   description: string;
   suggestedAction: string | null;
+  attachments: SewoAttachmentOption[];
   linkedSewoId: string | null;
   linkedSewoCode: string | null;
   openActions: CommunicationActionOption[];
@@ -76,6 +86,7 @@ type SewoFormData = {
   approvalComment: string | null;
   approvedAt: string | null;
   approvedByName: string | null;
+  attachments: SewoAttachmentOption[];
   linkedActions: CommunicationActionOption[];
 };
 

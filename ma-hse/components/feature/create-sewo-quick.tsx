@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ActionCategory, ActionPriority, SEWOStatus } from "@prisma/client";
-import { ArrowRightCircle, ChevronDown, ChevronUp, Link2Off } from "lucide-react";
+import { ArrowRightCircle, ChevronDown, ChevronUp, FileImage, Link2Off, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
@@ -48,6 +48,15 @@ type CommunicationActionOption = {
   status: string;
 };
 
+type SewoAttachmentOption = {
+  id: string;
+  fileKey: string;
+  fileName: string;
+  contentType: string;
+  caption: string | null;
+  downloadUrl: string;
+};
+
 type CommunicationOption = {
   id: string;
   codigoCompleto: string | null;
@@ -67,6 +76,7 @@ type CommunicationOption = {
   bodyPartId: string | null;
   description: string;
   suggestedAction: string | null;
+  attachments: SewoAttachmentOption[];
   linkedSewoId: string | null;
   linkedSewoCode: string | null;
   openActions: CommunicationActionOption[];
@@ -99,6 +109,16 @@ type EditableCommunicationAction = CommunicationActionOption & {
   dirty?: boolean;
 };
 
+type EvidenceAttachment = {
+  id: string;
+  fileKey: string;
+  fileName: string;
+  contentType: string;
+  caption: string | null;
+  downloadUrl: string | null;
+  file?: File;
+};
+
 type SewoInitialData = {
   id: string;
   codigoSewo: string | null;
@@ -121,6 +141,7 @@ type SewoInitialData = {
   approvalComment: string | null;
   approvedAt: string | null;
   approvedByName: string | null;
+  attachments: SewoAttachmentOption[];
   linkedActions: CommunicationActionOption[];
 };
 
@@ -141,6 +162,47 @@ function createActionPlanRow(): ActionPlanRow {
     priority: ActionPriority.MEDIUM,
     category: ActionCategory.CORRECTIVE,
     dueDate: "",
+  };
+}
+
+function createEvidenceId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createPreviewUrl(file: File) {
+  if (!file.type.startsWith("image/") || typeof URL.createObjectURL !== "function") {
+    return null;
+  }
+
+  return URL.createObjectURL(file);
+}
+
+function revokePreviewUrl(attachment: EvidenceAttachment) {
+  if (attachment.file && attachment.downloadUrl && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(attachment.downloadUrl);
+  }
+}
+
+function createEvidenceAttachment(file: File): EvidenceAttachment {
+  return {
+    id: createEvidenceId(),
+    fileKey: "",
+    fileName: file.name,
+    contentType: file.type || "image/jpeg",
+    caption: "",
+    downloadUrl: createPreviewUrl(file),
+    file,
+  };
+}
+
+function mapStoredEvidenceAttachment(attachment: SewoAttachmentOption): EvidenceAttachment {
+  return {
+    id: attachment.id,
+    fileKey: attachment.fileKey,
+    fileName: attachment.fileName,
+    contentType: attachment.contentType,
+    caption: attachment.caption ?? "",
+    downloadUrl: attachment.downloadUrl,
   };
 }
 
@@ -358,7 +420,9 @@ export function CreateSewoQuick({
   const [previousDetectedDescription, setPreviousDetectedDescription] = useState(getTemplateString(initialSewo?.templateData, "previousDetectedDescription"));
   const [rootCauseDetails, setRootCauseDetails] = useState<RootCauseDetail[]>(() => normalizeRootCauseDetails(initialSewo?.templateData.rootCauseDetails));
   const [actionPlans, setActionPlans] = useState<ActionPlanRow[]>(() => normalizeActionPlans(initialSewo?.templateData.actionPlans));
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [evidenceAttachments, setEvidenceAttachments] = useState<EvidenceAttachment[]>(
+    () => initialSewo?.attachments.map(mapStoredEvidenceAttachment) ?? [],
+  );
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionsMessage, setActionsMessage] = useState("");
@@ -479,7 +543,7 @@ export function CreateSewoQuick({
     setPreviousDetectedDescription(getTemplateString(initialSewo.templateData, "previousDetectedDescription"));
     setRootCauseDetails(normalizeRootCauseDetails(initialSewo.templateData.rootCauseDetails));
     setActionPlans(normalizeActionPlans(initialSewo.templateData.actionPlans));
-    setPhotos([]);
+    setEvidenceAttachments(initialSewo.attachments.map(mapStoredEvidenceAttachment));
     setMessage("");
     setActionsMessage("");
     setStatusReason("");
@@ -505,6 +569,7 @@ export function CreateSewoQuick({
     setHowText(selectedCommunication.description ?? "");
     setAnalysisText(selectedCommunication.description ?? "");
     setImmediateAction(selectedCommunication.suggestedAction ?? "");
+    setEvidenceAttachments(selectedCommunication.attachments.map(mapStoredEvidenceAttachment));
     setEditableCommunicationActions(selectedCommunication.openActions.map((action) => ({ ...action, dirty: false })));
     setActionsMessage("");
   }, [initialSewo, selectedCommunication]);
@@ -628,10 +693,44 @@ export function CreateSewoQuick({
     }
   }
 
-  async function uploadPhotos() {
-    const uploaded = [];
+  function addEvidenceFiles(files: FileList | null) {
+    const selectedFiles = Array.from(files ?? []).filter((file) => file.type.startsWith("image/"));
+    if (!selectedFiles.length) return;
 
-    for (const photo of photos) {
+    setEvidenceAttachments((current) => [
+      ...current,
+      ...selectedFiles.map(createEvidenceAttachment),
+    ]);
+  }
+
+  function updateEvidenceCaption(id: string, caption: string) {
+    setEvidenceAttachments((current) =>
+      current.map((attachment) =>
+        attachment.id === id ? { ...attachment, caption: caption.slice(0, 200) } : attachment,
+      ),
+    );
+  }
+
+  function removeEvidenceAttachment(id: string) {
+    setEvidenceAttachments((current) => {
+      const attachment = current.find((entry) => entry.id === id);
+      if (attachment) revokePreviewUrl(attachment);
+      return current.filter((entry) => entry.id !== id);
+    });
+  }
+
+  async function uploadNewEvidenceAttachments() {
+    const uploaded: Array<{
+      id: string;
+      fileKey: string;
+      fileName: string;
+      contentType: string;
+      caption?: string;
+    }> = [];
+
+    for (const attachment of evidenceAttachments) {
+      if (!attachment.file) continue;
+      const photo = attachment.file;
       const presignResponse = await fetch("/api/storage/presign", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -666,9 +765,11 @@ export function CreateSewoQuick({
       }
 
       uploaded.push({
+        id: attachment.id,
         fileKey: presignData.key,
         fileName: photo.name,
         contentType: photo.type || "image/jpeg",
+        caption: attachment.caption?.trim() || undefined,
       });
     }
 
@@ -696,7 +797,28 @@ export function CreateSewoQuick({
     setMessage("");
 
     try {
-      const attachments = photos.length ? await uploadPhotos() : [];
+      const uploadedAttachments = await uploadNewEvidenceAttachments();
+      const uploadedById = new Map(uploadedAttachments.map((attachment) => [attachment.id, attachment]));
+      const attachments = evidenceAttachments.flatMap((attachment) => {
+        if (attachment.file) {
+          const uploaded = uploadedById.get(attachment.id);
+          return uploaded
+            ? [{
+                fileKey: uploaded.fileKey,
+                fileName: uploaded.fileName,
+                contentType: uploaded.contentType,
+                caption: uploaded.caption,
+              }]
+            : [];
+        }
+
+        return [{
+          fileKey: attachment.fileKey,
+          fileName: attachment.fileName,
+          contentType: attachment.contentType,
+          caption: attachment.caption?.trim() || undefined,
+        }];
+      });
       const isDraft = mode === "draft";
       const isSubmission = mode === "submit";
       const isResubmission = Boolean(initialSewo && initialSewo.status === SEWOStatus.REJECTED && isSubmission);
@@ -1037,6 +1159,7 @@ export function CreateSewoQuick({
                   setSkipCommunicationSelection((current) => !current);
                   setCommunicationId("");
                   setEditableCommunicationActions([]);
+                  setEvidenceAttachments([]);
                   setActionsMessage("");
                 }}
                 title={ui.continueWithoutLinkedCommunication}
@@ -1247,8 +1370,64 @@ export function CreateSewoQuick({
               <h4 className="text-sm font-semibold uppercase tracking-wide text-teal-900">{ui.evidenceUpload}</h4>
               <p className="text-sm text-slate-700">{ui.evidenceUploadDescription}</p>
             </div>
-            <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="mt-4 w-full rounded-md border border-teal-300 bg-white px-3 py-3 text-sm" />
-            {photos.length > 0 ? <p className="mt-2 text-sm text-slate-700">{photos.length} {ui.filesReadySuffix}</p> : null}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                addEvidenceFiles(event.currentTarget.files);
+                event.currentTarget.value = "";
+              }}
+              className="mt-4 w-full rounded-md border border-teal-300 bg-white px-3 py-3 text-sm"
+            />
+
+            {evidenceAttachments.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {evidenceAttachments.map((attachment) => (
+                  <article key={attachment.id} className="grid gap-3 rounded-lg border border-teal-200 bg-white p-3 sm:grid-cols-[96px_minmax(0,1fr)_auto]">
+                    <a
+                      href={attachment.downloadUrl ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                    >
+                      {attachment.downloadUrl && attachment.contentType.startsWith("image/") ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={attachment.downloadUrl} alt={attachment.fileName} className="h-full w-full object-cover" />
+                      ) : (
+                        <FileImage className="h-8 w-8 text-slate-400" />
+                      )}
+                    </a>
+
+                    <div className="min-w-0 space-y-2">
+                      <div>
+                        <p className="truncate text-sm font-semibold text-slate-900">{attachment.fileName}</p>
+                        <p className="text-xs text-slate-500">{attachment.contentType}</p>
+                      </div>
+                      <label className="block text-sm text-slate-700">
+                        <span className="mb-1 block font-medium">{ui.caption}</span>
+                        <input
+                          value={attachment.caption ?? ""}
+                          onChange={(event) => updateEvidenceCaption(attachment.id, event.target.value)}
+                          maxLength={200}
+                          placeholder={ui.captionPlaceholder}
+                          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                        />
+                      </label>
+                    </div>
+
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeEvidenceAttachment(attachment.id)} className="self-start gap-2">
+                      <Trash2 className="h-4 w-4" />
+                      <span>{ui.remove}</span>
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 rounded-lg border border-dashed border-teal-200 bg-white px-3 py-4 text-sm text-slate-500">
+                {ui.noEvidenceFiles}
+              </p>
+            )}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">

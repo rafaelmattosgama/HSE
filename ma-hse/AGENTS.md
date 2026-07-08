@@ -36,18 +36,20 @@ tests/e2e/                        Playwright smoke test
 
 ## RBAC Roles (privilege descending)
 1. **N0_ADMIN** — System admin, bypasses ALL plant checks (no plantId in session)
-2. **N1_CORPORATE** — Cross-plant, creates users, validates, approves S-EWO
+2. **N1_CORPORATE** — Cross-plant global role (no plantId in session), creates users, validates, approves S-EWO
 3. **N2_PLANT_MANAGER** — Plant-level, approves S-EWO
 4. **N3_SAFETY** — Validates communications, manages plant admin
 5. **N4_SUPERVISOR** — Creates/closes actions with evidence
 6. **N5_OPERATOR** — Creates communications/actions
-7. **N6_QR_REPORTER** — Token-based public submission only (no login)
-8. **MEDICO** — Read-only clinical data
+7. **MEDICO** — Read-only clinical data
+
+Public QR/link submissions are not user roles; they are represented by `PlantAccessTokenType` and `CommunicationSource`.
 
 ## Key Auth Patterns
 - Session type: `{ user: { id, language, mustChangePassword, plantRoles: [{ plantId, plantCode, role, canSeeClinical }] } }`
 - API guard: `const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, ...]); if ("error" in auth) return auth.error;`
-- N0 bypass: `hasPlantAccess()` always returns true for N0/N1 regardless of plant
+- N0 bypass: `hasPlantAccess()` always returns true for N0; N1 bypasses plant scope for non-N0-only routes
+- Scope rule: N0/N1 must have `plantId: null`; N2/N3/N4/N5/MEDICO must have a plant. Multi-plant N3 is represented by one `UserPlantRole` per plant.
 - Default admin created on login attempt in non-prod (`ensure-default-admin.ts`)
 - Login redirect: N0 → `/app/settings`, N1 → `/app/corporate`, others → `/app/{primaryPlant}/dashboards`
 

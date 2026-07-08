@@ -54,6 +54,7 @@ const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
     allDepartments: "Todos os departamentos",
     location: "Local",
     allLocations: "Todos os locais",
+    involvedWorker: "Trabalhador envolvido",
     unsafeActType: "Tipo de ato inseguro",
     allUnsafeActTypes: "Todos os tipos de ato inseguro",
     unsafeConditionType: "Tipo de condicao perigosa",

@@ -21,6 +21,8 @@ type EvidenceRow = {
 
 type ActionRow = {
   id: string;
+  plantCode?: string;
+  plantName?: string;
   sequenceNumber: number | null;
   title: string;
   description: string;
@@ -68,10 +70,12 @@ export function ActionsTable({
   labels,
   statusLabels,
   priorityLabels,
+  showPlant = false,
 }: {
   plant: string;
   actions: ActionRow[];
   canDelete?: boolean;
+  showPlant?: boolean;
   labels?: ActionsUi["table"];
   statusLabels?: ActionsUi["statusLabels"];
   priorityLabels?: ActionsUi["priorityLabels"];
@@ -142,14 +146,14 @@ export function ActionsTable({
     setSelectedIds((current) => current.filter((actionId) => visibleActionIds.has(actionId)));
   }, [filteredActions]);
 
-  async function uploadFiles(files: File[]) {
+  async function uploadFiles(files: File[], plantCode = plant) {
     const uploaded: Array<{ fileKey: string; fileName: string; contentType: string }> = [];
     for (const file of files) {
       const presignResponse = await fetch("/api/storage/presign", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          plantCode: plant,
+          plantCode,
           fileName: file.name,
           contentType: file.type || "application/octet-stream",
           folder: "actions",
@@ -184,6 +188,8 @@ export function ActionsTable({
   }
 
   async function closeAction(actionId: string) {
+    const action = actions.find((entry) => entry.id === actionId);
+    const actionPlant = action?.plantCode ?? plant;
     const comment = rowComments[actionId] ?? "";
     const closedAt = rowClosedDates[actionId] ?? todayDateInputValue();
     if (comment.trim().length < 5) {
@@ -198,8 +204,8 @@ export function ActionsTable({
     setBusyId(actionId);
     setMessage("");
     try {
-      const evidence = await uploadFiles(rowFiles[actionId] ?? []);
-      const response = await fetch(`/api/plants/${plant}/actions/${actionId}/close`, {
+      const evidence = await uploadFiles(rowFiles[actionId] ?? [], actionPlant);
+      const response = await fetch(`/api/plants/${actionPlant}/actions/${actionId}/close`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -221,6 +227,8 @@ export function ActionsTable({
   }
 
   async function deleteAction(actionId: string) {
+    const action = actions.find((entry) => entry.id === actionId);
+    const actionPlant = action?.plantCode ?? plant;
     if (!window.confirm(text.confirmDelete)) {
       return;
     }
@@ -228,7 +236,7 @@ export function ActionsTable({
     setDeletingId(actionId);
     setMessage("");
     try {
-      const response = await fetch(`/api/plants/${plant}/actions/${actionId}`, {
+      const response = await fetch(`/api/plants/${actionPlant}/actions/${actionId}`, {
         method: "DELETE",
       });
       const json = await parseApiResponse(response);
@@ -260,6 +268,9 @@ export function ActionsTable({
     setBusyId("bulk");
     setMessage("");
     try {
+      if (showPlant) {
+        throw new Error("Bulk closure is available after selecting a single plant.");
+      }
       const evidence = await uploadFiles(bulkFiles);
       const response = await fetch(`/api/plants/${plant}/actions/close-batch`, {
         method: "POST",
@@ -292,6 +303,10 @@ export function ActionsTable({
     setMessage("");
 
     try {
+      if (showPlant) {
+        throw new Error("Export is available after selecting a single plant.");
+      }
+
       const response = await fetch(`/api/plants/${plant}/actions/export?format=${format}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -337,73 +352,77 @@ export function ActionsTable({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.local}</span>
-            <select value={localFilter} onChange={(event) => setLocalFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">{text.allLocations}</option>
-              {localOptions.map((local) => (
-                <option key={local} value={local}>{local}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.status}</span>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">{text.allStatuses}</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>{formatLocalizedActionStatus(status, { statusLabels: localizedStatusLabels })}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.owner}</span>
-            <select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="all">{text.allOwners}</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner} value={owner}>{owner}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dueFrom}</span>
-            <input type="date" value={dateFromFilter} onChange={(event) => setDateFromFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-          </label>
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dueTo}</span>
-            <input type="date" value={dateToFilter} onChange={(event) => setDateToFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-          </label>
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dateOrder}</span>
-            <select value={dateSortDirection} onChange={(event) => setDateSortDirection(event.target.value as DateSortDirection)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-              <option value="asc">{text.dueDateAscending}</option>
-              <option value="desc">{text.dueDateDescending}</option>
-            </select>
-          </label>
-        </div>
-      </section>
+      {!showPlant ? (
+        <>
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <label className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.local}</span>
+                <select value={localFilter} onChange={(event) => setLocalFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="all">{text.allLocations}</option>
+                  {localOptions.map((local) => (
+                    <option key={local} value={local}>{local}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.status}</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="all">{text.allStatuses}</option>
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>{formatLocalizedActionStatus(status, { statusLabels: localizedStatusLabels })}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.owner}</span>
+                <select value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="all">{text.allOwners}</option>
+                  {ownerOptions.map((owner) => (
+                    <option key={owner} value={owner}>{owner}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dueFrom}</span>
+                <input type="date" value={dateFromFilter} onChange={(event) => setDateFromFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dueTo}</span>
+                <input type="date" value={dateToFilter} onChange={(event) => setDateToFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="space-y-1">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.dateOrder}</span>
+                <select value={dateSortDirection} onChange={(event) => setDateSortDirection(event.target.value as DateSortDirection)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="asc">{text.dueDateAscending}</option>
+                  <option value="desc">{text.dueDateDescending}</option>
+                </select>
+              </label>
+            </div>
+          </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end">
-          <div className="flex-1">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.bulkClosureComment}</label>
-            <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={text.bulkClosurePlaceholder} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</label>
-            <input type="date" value={bulkClosedAt} onChange={(event) => setBulkClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.photosDocuments}</label>
-            <input type="file" multiple onChange={(event) => setBulkFiles(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <Button type="button" size="sm" onClick={closeSelected} disabled={busyId === "bulk"}>
-            {busyId === "bulk" ? text.closing : text.closeSelected}
-          </Button>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">{text.bulkHelp}</p>
-      </section>
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end">
+              <div className="flex-1">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.bulkClosureComment}</label>
+                <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={text.bulkClosurePlaceholder} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</label>
+                <input type="date" value={bulkClosedAt} onChange={(event) => setBulkClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.photosDocuments}</label>
+                <input type="file" multiple onChange={(event) => setBulkFiles(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <Button type="button" size="sm" onClick={closeSelected} disabled={busyId === "bulk"}>
+                {busyId === "bulk" ? text.closing : text.closeSelected}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">{text.bulkHelp}</p>
+          </section>
+        </>
+      ) : null}
 
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -433,6 +452,7 @@ export function ActionsTable({
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">{text.select}</th>
+              {showPlant ? <th className="px-4 py-3">Plant</th> : null}
               <th className="px-4 py-3">{text.action}</th>
               <th className="px-4 py-3">{text.local}</th>
               <th className="px-4 py-3">{text.source}</th>
@@ -452,7 +472,7 @@ export function ActionsTable({
                 <Fragment key={row.id}>
                   <tr key={row.id} className="border-t border-slate-200">
                     <td className="px-4 py-3">
-                      {isOpen ? (
+                      {isOpen && !showPlant ? (
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(row.id)}
@@ -460,9 +480,10 @@ export function ActionsTable({
                         />
                       ) : null}
                     </td>
+                    {showPlant ? <td className="px-4 py-3 font-semibold text-slate-700">{row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</td> : null}
                     <td className="px-4 py-3">
-                      <div className="font-mono text-xs text-slate-500">{formatActionCode(plant, row.sequenceNumber)}</div>
-                      <Link href={`/app/${plant}/actions/${row.id}`} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline">
+                      <div className="font-mono text-xs text-slate-500">{formatActionCode(row.plantCode ?? plant, row.sequenceNumber)}</div>
+                      <Link href={`/app/${row.plantCode ?? plant}/actions/${row.id}`} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline">
                         {row.title}
                       </Link>
                     </td>
@@ -505,7 +526,7 @@ export function ActionsTable({
                   </tr>
                   {isExpanded ? (
                     <tr className="border-t border-slate-100 bg-slate-50">
-                      <td colSpan={canDelete ? 10 : 9} className="px-4 py-4">
+                      <td colSpan={(canDelete ? 10 : 9) + (showPlant ? 1 : 0)} className="px-4 py-4">
                         <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                           <div className="space-y-3">
                             <div>
@@ -569,7 +590,7 @@ export function ActionsTable({
             })}
             {filteredActions.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={canDelete ? 10 : 9} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={(canDelete ? 10 : 9) + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">
                   {text.noRows}
                 </td>
               </tr>

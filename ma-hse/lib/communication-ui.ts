@@ -47,6 +47,7 @@ export const BASE_COMMUNICATION_UI = {
     allDepartments: "All departments",
     location: "Location",
     allLocations: "All locations",
+    involvedWorker: "Involved worker",
     unsafeActType: "Unsafe act type",
     allUnsafeActTypes: "All unsafe act types",
     unsafeConditionType: "Unsafe condition type",
