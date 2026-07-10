@@ -2,10 +2,12 @@ import { ActionStatus, CommunicationStatus } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
   COMMUNICATION_IN_VALIDATION_STATUSES,
+  DASHBOARD_PYRAMID_COMMUNICATION_STATUSES,
   getCommunicationStatusFromLinkedActions,
   hasOpenLinkedActions,
   isCommunicationInValidationStatus,
   isCommunicationLinkableStatus,
+  isDashboardPyramidCommunicationStatus,
   isOpenLinkedActionStatus,
   LINKABLE_COMMUNICATION_STATUSES,
   OPEN_LINKED_ACTION_STATUSES,
@@ -45,5 +47,20 @@ describe("communication status synchronization helpers", () => {
     expect(isCommunicationInValidationStatus(CommunicationStatus.PENDING_VALIDATION)).toBe(true);
     expect(isCommunicationLinkableStatus(CommunicationStatus.PENDING_VALIDATION)).toBe(false);
     expect(isCommunicationLinkableStatus(CommunicationStatus.VALID_OPEN)).toBe(true);
+  });
+
+  it("includes pending validation statuses provisionally in dashboard pyramid counts", () => {
+    expect(DASHBOARD_PYRAMID_COMMUNICATION_STATUSES).toEqual([
+      CommunicationStatus.SUBMITTED,
+      CommunicationStatus.PENDING_VALIDATION,
+      CommunicationStatus.VALID_OPEN,
+      CommunicationStatus.ONGOING,
+      CommunicationStatus.CLOSED,
+    ]);
+    expect(isDashboardPyramidCommunicationStatus(CommunicationStatus.SUBMITTED)).toBe(true);
+    expect(isDashboardPyramidCommunicationStatus(CommunicationStatus.PENDING_VALIDATION)).toBe(true);
+    expect(isDashboardPyramidCommunicationStatus(CommunicationStatus.VALID_OPEN)).toBe(true);
+    expect(isDashboardPyramidCommunicationStatus(CommunicationStatus.REJECTED)).toBe(false);
+    expect(isDashboardPyramidCommunicationStatus(CommunicationStatus.INVALID)).toBe(false);
   });
 });

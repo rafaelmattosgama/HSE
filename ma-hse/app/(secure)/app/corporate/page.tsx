@@ -32,6 +32,7 @@ import { getGlobalRepeatabilityAlertConfig } from "@/lib/services/parameter-serv
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { buildSafetyDaysSummary } from "@/lib/safety-days";
+import { isDashboardPyramidCommunicationStatus } from "@/lib/communication-status";
 
 const KPI_COMMUNICATION_STATUSES: CommunicationStatus[] = [
   CommunicationStatus.VALID_OPEN,
@@ -345,6 +346,7 @@ export default async function CorporatePage({
       monthBuckets.map((bucket) => [bucket.key, createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label)]),
     );
     const validCommunications = plant.communications.filter((entry) => KPI_COMMUNICATION_STATUSES.includes(entry.status));
+    const pyramidCommunications = plant.communications.filter((entry) => isDashboardPyramidCommunicationStatus(entry.status));
     for (const entry of validCommunications) {
       const key = getMonthKey(entry.eventDatetime.getUTCFullYear(), entry.eventDatetime.getUTCMonth() + 1);
       const snapshot = monthlyMetricsMap.get(key);
@@ -434,13 +436,13 @@ export default async function CorporatePage({
       severityIndex,
       safetyDays,
       communicationPyramid: {
-        unsafeAct: plant.communications.filter((entry) => entry.type === "UNSAFE_ACT").length,
-        unsafeCondition: plant.communications.filter((entry) => entry.type === "UNSAFE_CONDITION").length,
-        nearMiss: plant.communications.filter((entry) => entry.type === "NEAR_MISS").length,
-        firstAid: plant.communications.filter((entry) => entry.type === "FIRST_AID").length,
-        minorInjury: plant.communications.filter((entry) => entry.type === "ACCIDENT" && entry.classification === "MINOR").length,
-        seriousInjury: plant.communications.filter((entry) => entry.type === "ACCIDENT" && entry.classification === "SERIOUS").length,
-        fatal: plant.communications.filter((entry) => entry.type === "ACCIDENT" && entry.classification === "FATAL").length,
+        unsafeAct: pyramidCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length,
+        unsafeCondition: pyramidCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length,
+        nearMiss: pyramidCommunications.filter((entry) => entry.type === "NEAR_MISS").length,
+        firstAid: pyramidCommunications.filter((entry) => entry.type === "FIRST_AID").length,
+        minorInjury: pyramidCommunications.filter((entry) => entry.type === "ACCIDENT" && entry.classification === "MINOR").length,
+        seriousInjury: pyramidCommunications.filter((entry) => entry.type === "ACCIDENT" && entry.classification === "SERIOUS").length,
+        fatal: pyramidCommunications.filter((entry) => entry.type === "ACCIDENT" && entry.classification === "FATAL").length,
       },
       leaders: plant.users
         .map((entry) => ({
