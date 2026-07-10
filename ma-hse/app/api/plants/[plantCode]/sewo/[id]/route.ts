@@ -6,7 +6,7 @@ import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { ActionService } from "@/lib/services/action-service";
-import { SewaService } from "@/lib/services/sewo-service";
+import { SewaService, SewoValidationError } from "@/lib/services/sewo-service";
 import { updateSEWOInput } from "@/lib/validation/dtos";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
@@ -93,6 +93,10 @@ export async function PUT(request: Request, context: { params: Promise<{ plantCo
 
     return ok(updated);
   } catch (error) {
+    if (error instanceof SewoValidationError) {
+      return fail(error.code, error.message, error.status);
+    }
+
     logger.error(
       {
         error,

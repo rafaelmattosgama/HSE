@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { CommunicationStatus, RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { CreateCommunicationQuick } from "@/components/feature/create-communication-quick";
@@ -88,7 +88,13 @@ export default async function CommunicationsPage({
       where: {
         plantId: { in: plantRows.map((row) => row.id) },
         status: {
-          in: ["VALID_OPEN", "ONGOING", "CLOSED"],
+          in: [
+            CommunicationStatus.SUBMITTED,
+            CommunicationStatus.PENDING_VALIDATION,
+            CommunicationStatus.VALID_OPEN,
+            CommunicationStatus.ONGOING,
+            CommunicationStatus.CLOSED,
+          ],
         },
       },
       include: {
@@ -194,7 +200,7 @@ export default async function CommunicationsPage({
           unsafeActTypes={localizedUnsafeActTypes.map((type) => ({ id: type.id, code: type.code, category: type.category, name: type.name }))}
           unsafeConditionTypes={(canManageClassification ? localizedUnsafeConditionTypes : []).map((type) => ({ id: type.id, code: type.code, category: type.category, name: type.name }))}
           nearMissTypes={(canManageClassification ? localizedNearMissTypes : []).map((type) => ({ id: type.id, code: type.code, name: type.name }))}
-          canLinkAction={actorRole ? LINKED_ACTION_ROLES.includes(actorRole) : false}
+          canLinkAction={actorRole === RoleCode.N3_SAFETY && LINKED_ACTION_ROLES.includes(actorRole)}
           canManageClassification={canManageClassification}
           labels={communicationUi.createCommunicationQuick}
           typeLabels={communicationUi.communicationTypeLabels}

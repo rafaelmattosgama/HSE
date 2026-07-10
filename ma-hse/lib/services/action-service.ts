@@ -4,6 +4,7 @@ import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { ActionAlertService } from "@/lib/services/action-alert-service";
+import { isCommunicationLinkableStatus } from "@/lib/communication-status";
 import { CommunicationService } from "@/lib/services/communication-service";
 import { getSlaConfig } from "@/lib/services/parameter-service";
 import { SewaService } from "@/lib/services/sewo-service";
@@ -18,6 +19,18 @@ function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriori
 }
 
 const OPEN_LINKED_ACTION_STATUSES = [ActionStatus.OPEN, ActionStatus.ONGOING] as const;
+const PENDING_COMMUNICATION_LINK_MESSAGE = "This communication must be validated before actions or S-EWO can be linked.";
+
+export class ActionValidationError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status = 422,
+  ) {
+    super(message);
+    this.name = "ActionValidationError";
+  }
+}
 
 async function lockCommunicationActionCreation(tx: Prisma.TransactionClient, communicationId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`action:communication:${communicationId}`}))`;
@@ -90,6 +103,23 @@ export const ActionService = {
     actorUserId: string;
     payload: CreateActionInput;
   }) {
+    if (input.payload.sourceType === ActionSourceType.COMMUNICATION && input.payload.communicationId) {
+      const communication = await prisma.communication.findFirst({
+        where: {
+          id: input.payload.communicationId,
+          plantId: input.plantId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!communication || !isCommunicationLinkableStatus(communication.status)) {
+        throw new ActionValidationError("INVALID_COMMUNICATION", PENDING_COMMUNICATION_LINK_MESSAGE);
+      }
+    }
+
     const sla = await getSlaConfig(input.plantId);
     let reusedExistingAction = false;
     const action = await prisma.$transaction(async (tx) => {

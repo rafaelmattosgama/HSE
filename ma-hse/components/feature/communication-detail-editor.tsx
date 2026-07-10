@@ -178,6 +178,9 @@ export function CommunicationDetailEditor({
   const communicationLabel = `${communicationCode} | ${typeLabels[communication.type] ?? communication.type} | ${statusLabel}`;
   const hasBlockingLinkedActions = hasOpenLinkedActions(communication.linkedActionStatuses);
   const canExportPdf = supportsCommunicationPdfReport(communication.type);
+  const isPendingValidation =
+    communication.status === CommunicationStatus.SUBMITTED ||
+    communication.status === CommunicationStatus.PENDING_VALIDATION;
 
   function getFileNameFromDisposition(disposition: string | null) {
     const match = disposition?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
@@ -553,7 +556,11 @@ export function CommunicationDetailEditor({
         )}
       </form>
 
-      {canEdit ? (
+      {isPendingValidation ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900 shadow-sm">
+          {text.pendingValidationLinkingBlocked}
+        </div>
+      ) : canEdit ? (
         <CreateActionQuick
           owners={actionOwners}
           communicationOptions={[]}
