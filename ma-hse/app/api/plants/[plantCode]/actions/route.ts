@@ -1,27 +1,15 @@
-import { CommunicationStatus, RoleCode } from "@prisma/client";
+import { RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { ActionService } from "@/lib/services/action-service";
+import { ActionService, ActionValidationError } from "@/lib/services/action-service";
+import { LINKABLE_COMMUNICATION_STATUSES } from "@/lib/communication-status";
 import { createActionInput } from "@/lib/validation/dtos";
 import { prisma } from "@/lib/prisma";
 
-const LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
-  CommunicationStatus.VALID_OPEN,
-  CommunicationStatus.ONGOING,
-  CommunicationStatus.CLOSED,
-];
-const VALIDATION_LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
-  CommunicationStatus.SUBMITTED,
-  CommunicationStatus.PENDING_VALIDATION,
-];
-const COMMUNICATION_VALIDATION_ROLES: RoleCode[] = [
-  RoleCode.N1_CORPORATE,
-  RoleCode.N2_PLANT_MANAGER,
-  RoleCode.N3_SAFETY,
-];
+const PENDING_COMMUNICATION_LINK_MESSAGE = "This communication must be validated before actions or S-EWO can be linked.";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -73,7 +61,6 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     RoleCode.N5_OPERATOR,
   ]);
   if ("error" in auth) return auth.error;
-  const actorRole = "role" in auth ? auth.role : null;
 
   const parsed = await parseBody(request, createActionInput);
   if ("error" in parsed) return parsed.error;
@@ -85,24 +72,14 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         id: parsed.data.communicationId,
         plantId: plant.id,
         status: {
-          in: [
-            ...LINKABLE_COMMUNICATION_STATUSES,
-            ...VALIDATION_LINKABLE_COMMUNICATION_STATUSES,
-          ],
+          in: [...LINKABLE_COMMUNICATION_STATUSES],
         },
       },
       select: { id: true, status: true },
     });
 
     if (!communication) {
-      return fail("INVALID_COMMUNICATION", "Only active or pending validation communications can be linked to a new action", 422);
-    }
-
-    if (
-      VALIDATION_LINKABLE_COMMUNICATION_STATUSES.includes(communication.status) &&
-      (!actorRole || !COMMUNICATION_VALIDATION_ROLES.includes(actorRole))
-    ) {
-      return fail("INVALID_COMMUNICATION", "Only validation roles can create actions for pending validation communications", 422);
+      return fail("INVALID_COMMUNICATION", PENDING_COMMUNICATION_LINK_MESSAGE, 422);
     }
   }
 
@@ -160,6 +137,10 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
 
     return ok(action, { status: action.idempotency.reusedExistingAction ? 200 : 201 });
   } catch (error) {
+    if (error instanceof ActionValidationError) {
+      return fail(error.code, error.message, error.status);
+    }
+
     logger.error(
       {
         error,

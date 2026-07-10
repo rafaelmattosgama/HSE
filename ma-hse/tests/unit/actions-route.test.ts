@@ -96,8 +96,6 @@ describe("actions route", () => {
             CommunicationStatus.VALID_OPEN,
             CommunicationStatus.ONGOING,
             CommunicationStatus.CLOSED,
-            CommunicationStatus.SUBMITTED,
-            CommunicationStatus.PENDING_VALIDATION,
           ],
         },
       },
@@ -171,7 +169,7 @@ describe("actions route", () => {
     });
   });
 
-  it("allows validation roles to create actions while the communication is pending validation", async () => {
+  it("rejects pending validation communications even for validation roles", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
       session: {
         user: {
@@ -181,20 +179,7 @@ describe("actions route", () => {
       role: RoleCode.N3_SAFETY,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
-    prismaMock.prisma.communication.findFirst.mockResolvedValue({
-      id: "11111111-1111-4111-8111-111111111111",
-      status: CommunicationStatus.PENDING_VALIDATION,
-    });
-    prismaMock.prisma.userPlantRole.findFirst.mockResolvedValue({
-      userId: "22222222-2222-4222-8222-222222222222",
-    });
-    actionServiceMock.ActionService.create.mockResolvedValue({
-      id: "action-1",
-      communicationId: "11111111-1111-4111-8111-111111111111",
-      idempotency: {
-        reusedExistingAction: false,
-      },
-    });
+    prismaMock.prisma.communication.findFirst.mockResolvedValue(null);
 
     const response = (await POST(
       new Request("http://localhost/api/plants/maap/actions", {
@@ -213,15 +198,12 @@ describe("actions route", () => {
       routeContext(),
     )) as Response;
 
-    expect(response.status).toBe(201);
-    expect(actionServiceMock.ActionService.create).toHaveBeenCalledWith({
-      plantId: "plant-1",
-      actorUserId: "user-1",
-      payload: expect.objectContaining({
-        sourceType: ActionSourceType.COMMUNICATION,
-        communicationId: "11111111-1111-4111-8111-111111111111",
-      }),
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      errorCode: "INVALID_COMMUNICATION",
     });
+    expect(actionServiceMock.ActionService.create).not.toHaveBeenCalled();
   });
 
   it("rejects pending validation communications for non-validation roles", async () => {
@@ -234,10 +216,7 @@ describe("actions route", () => {
       role: RoleCode.N4_SUPERVISOR,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
-    prismaMock.prisma.communication.findFirst.mockResolvedValue({
-      id: "11111111-1111-4111-8111-111111111111",
-      status: CommunicationStatus.PENDING_VALIDATION,
-    });
+    prismaMock.prisma.communication.findFirst.mockResolvedValue(null);
 
     const response = (await POST(
       new Request("http://localhost/api/plants/maap/actions", {

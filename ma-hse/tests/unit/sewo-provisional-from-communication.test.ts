@@ -1,4 +1,4 @@
-import { CommunicationType } from "@prisma/client";
+import { CommunicationStatus, CommunicationType } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const txMock = vi.hoisted(() => ({
@@ -26,10 +26,14 @@ const prismaMock = vi.hoisted(() => ({
     sEWO: {
       findFirst: vi.fn(),
     },
+    plant: {
+      findUniqueOrThrow: vi.fn(),
+    },
     user: {
       findUnique: vi.fn(),
     },
     communication: {
+      findFirst: vi.fn(),
       findUniqueOrThrow: vi.fn(),
     },
     sEWOCauseCatalogVersion: {
@@ -62,6 +66,17 @@ vi.mock("@/lib/public-report", () => ({
 vi.mock("@/lib/services/notification-service", () => ({
   NotificationService: {
     notifyPlantRoles: vi.fn(),
+  },
+}));
+vi.mock("@/lib/services/record-code-service", () => ({
+  RecordCodeService: {
+    allocateSewoCode: vi.fn(() => ({
+      codigoSewo: "PT11-SEWO-2026-0001",
+      tipo: "SEWO",
+      codigoFabrica: "PT11",
+      ano: 2026,
+      numeroSequencial: 1,
+    })),
   },
 }));
 vi.mock("@/lib/services/sewo-export", () => ({
@@ -232,6 +247,49 @@ describe("SewaService.createProvisionalFromCommunication", () => {
 
     expect(result).toMatchObject({ id: "existing-sewo", communicationId: "comm-1" });
     expect(prismaMock.prisma.communication.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(txMock.sEWO.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("SewaService manual communication linking", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects manual S-EWO creation from a communication still in validation", async () => {
+    prismaMock.prisma.plant.findUniqueOrThrow.mockResolvedValue({ code: "pt11" });
+    prismaMock.prisma.communication.findFirst.mockResolvedValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      type: CommunicationType.NEAR_MISS,
+      status: CommunicationStatus.PENDING_VALIDATION,
+    });
+
+    await expect(SewaService.create({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: {
+        communicationId: "11111111-1111-4111-8111-111111111111",
+        eventClassification: "Near miss",
+        analysisDate: new Date("2026-06-03T08:30:00.000Z"),
+        whatText: "Near miss",
+        whereText: "PT11",
+        whoText: "Worker",
+        usualWorkYesNo: true,
+        whichText: "NEAR_MISS",
+        howText: "Pending communication",
+        immediateCorrectiveActionText: "",
+        templateData: {},
+        attachments: [],
+        actionPlans: [],
+        causeCatalogVersionId: "11111111-1111-4111-8111-222222222222",
+        causeSelections: [],
+      },
+    })).rejects.toMatchObject({
+      name: "SewoValidationError",
+      code: "INVALID_COMMUNICATION",
+      status: 422,
+    });
+
     expect(txMock.sEWO.create).not.toHaveBeenCalled();
   });
 });

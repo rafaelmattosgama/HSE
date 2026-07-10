@@ -2,6 +2,7 @@ import { ActionStatus, Prisma, RoleCode, SEWOStatus } from "@prisma/client";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { isCommunicationLinkableStatus } from "@/lib/communication-status";
 import { prisma } from "@/lib/prisma";
 import { getLocalizedBodyPartName, getLocalizedInjuryTypeName } from "@/lib/public-report";
 import { NotificationService } from "@/lib/services/notification-service";
@@ -364,6 +365,7 @@ async function notifySewoRejected(input: {
 }
 
 const OPEN_LINKED_ACTIONS_MESSAGE = "Não é possível fechar este S-EWO porque existem ações associadas ainda em aberto.";
+const PENDING_COMMUNICATION_LINK_MESSAGE = "This communication must be validated before actions or S-EWO can be linked.";
 
 export class SewoValidationError extends Error {
   constructor(
@@ -373,6 +375,14 @@ export class SewoValidationError extends Error {
   ) {
     super(message);
     this.name = "SewoValidationError";
+  }
+}
+
+function assertCommunicationCanBeLinkedToManualSewo(input: {
+  communication: { id: string; status: string } | null;
+}) {
+  if (!input.communication || !isCommunicationLinkableStatus(input.communication.status)) {
+    throw new SewoValidationError("INVALID_COMMUNICATION", PENDING_COMMUNICATION_LINK_MESSAGE, 422);
   }
 }
 
@@ -774,11 +784,17 @@ export const SewaService = {
               plantId: input.plantId,
             },
             select: {
+              id: true,
               type: true,
+              status: true,
             },
           })
         : Promise.resolve(null),
     ]);
+    if (input.payload.communicationId) {
+      assertCommunicationCanBeLinkedToManualSewo({ communication: linkedCommunication });
+    }
+
     const requestedStatus = input.payload.status ?? SEWOStatus.DRAFT;
     const actorRole = requestedStatus === SEWOStatus.IN_APPROVAL
       ? await getUserHighestRoleForSewoPlant(input.actorUserId, input.plantId)
@@ -885,6 +901,21 @@ export const SewaService = {
         attachments: true,
       },
     });
+    if (input.payload.communicationId) {
+      const linkedCommunication = await prisma.communication.findFirst({
+        where: {
+          id: input.payload.communicationId,
+          plantId: before.plantId,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      assertCommunicationCanBeLinkedToManualSewo({ communication: linkedCommunication });
+    }
+
     const requestedStatus = input.payload.status ?? before.status;
     const isNewSubmission = before.status !== SEWOStatus.IN_APPROVAL && requestedStatus === SEWOStatus.IN_APPROVAL;
     const actorRole = isNewSubmission

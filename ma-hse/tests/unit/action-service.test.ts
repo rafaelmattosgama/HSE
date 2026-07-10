@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, ActionSourceType, ActionStatus } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, ActionSourceType, ActionStatus, CommunicationStatus } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const transactionMock = vi.hoisted(() => ({
@@ -16,6 +16,7 @@ const prismaMock = vi.hoisted(() => ({
   prisma: {
     $transaction: vi.fn((callback) => callback(transactionMock)),
     communication: {
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     action: {
@@ -63,7 +64,7 @@ vi.mock("@/lib/services/communication-service", () => communicationServiceMock);
 vi.mock("@/lib/services/sewo-service", () => sewoServiceMock);
 vi.mock("@/lib/services/action-alert-service", () => actionAlertServiceMock);
 
-import { ActionService } from "@/lib/services/action-service";
+import { ActionService, ActionValidationError } from "@/lib/services/action-service";
 
 describe("ActionService", () => {
   afterEach(() => {
@@ -75,6 +76,10 @@ describe("ActionService", () => {
       LOW: 3,
       MEDIUM: 7,
       HIGH: 14,
+    });
+    prismaMock.prisma.communication.findFirst.mockResolvedValue({
+      id: "communication-1",
+      status: CommunicationStatus.VALID_OPEN,
     });
     transactionMock.action.findFirst.mockResolvedValueOnce({
       id: "action-existing",
@@ -119,6 +124,33 @@ describe("ActionService", () => {
     expect(actionAlertServiceMock.ActionAlertService.sendNewActionAlerts).not.toHaveBeenCalled();
     expect(prismaMock.prisma.communication.update).not.toHaveBeenCalled();
     expect(communicationServiceMock.CommunicationService.syncStatusWithActions).toHaveBeenCalledWith("communication-1");
+  });
+
+  it("rejects communication actions while the communication is still in validation", async () => {
+    prismaMock.prisma.communication.findFirst.mockResolvedValue({
+      id: "communication-1",
+      status: CommunicationStatus.PENDING_VALIDATION,
+    });
+
+    await expect(ActionService.create({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: {
+        sourceType: ActionSourceType.COMMUNICATION,
+        communicationId: "communication-1",
+        category: ActionCategory.CORRECTIVE,
+        priority: ActionPriority.LOW,
+        title: "Pendente",
+        description: "Nao deve criar acao.",
+        ownerUserId: "owner-1",
+      },
+    })).rejects.toMatchObject({
+      name: "ActionValidationError",
+      code: "INVALID_COMMUNICATION",
+      status: 422,
+    } satisfies Partial<ActionValidationError>);
+
+    expect(transactionMock.action.create).not.toHaveBeenCalled();
   });
 
   it("stores manual origin for manual actions", async () => {

@@ -230,6 +230,7 @@ export function CommunicationsTable({
           <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.status}</span>
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
             <option value="all">{text.allStatuses}</option>
+            <option value="in_validation">{text.inValidation}</option>
             <option value="to_do">{text.toDo}</option>
             <option value="on_going">{text.onGoing}</option>
             <option value="closed">{text.closed}</option>

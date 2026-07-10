@@ -196,7 +196,7 @@ export default async function CommunicationDetailPage({
   const canManageClassification = canManageCommunicationClassification(actorRole);
   const canValidate = Boolean(
     actorRole &&
-    (actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N2_PLANT_MANAGER || actorRole === RoleCode.N3_SAFETY) &&
+    (actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY) &&
     (communication.status === CommunicationStatus.SUBMITTED || communication.status === CommunicationStatus.PENDING_VALIDATION),
   );
   const typeLabel = communicationUi.communicationTypeLabels[communication.type] ?? communication.type;

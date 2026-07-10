@@ -51,8 +51,8 @@ export function formatCommunicationStatus(status: CommunicationStatus | string) 
     VALID_OPEN: "To Do",
     CLOSED: "Closed",
     ONGOING: "On Going",
-    SUBMITTED: "To Do",
-    PENDING_VALIDATION: "Pending Validation",
+    SUBMITTED: "In validation",
+    PENDING_VALIDATION: "In validation",
     REJECTED: "Reject",
     INVALID: "Reject",
   };
@@ -61,12 +61,12 @@ export function formatCommunicationStatus(status: CommunicationStatus | string) 
 }
 
 export function normalizeCommunicationStatus(status: CommunicationStatus | string) {
-  const labels: Record<string, "to_do" | "closed" | "on_going" | "pending_validation" | "reject"> = {
-    SUBMITTED: "to_do",
+  const labels: Record<string, "to_do" | "closed" | "on_going" | "in_validation" | "reject"> = {
+    SUBMITTED: "in_validation",
     VALID_OPEN: "to_do",
     CLOSED: "closed",
     ONGOING: "on_going",
-    PENDING_VALIDATION: "pending_validation",
+    PENDING_VALIDATION: "in_validation",
     REJECTED: "reject",
     INVALID: "reject",
   };
@@ -81,7 +81,7 @@ export function getCommunicationStatusClasses(status: CommunicationStatus | stri
     return "bg-emerald-100 text-emerald-700";
   }
 
-  if (normalized === "on_going" || normalized === "pending_validation") {
+  if (normalized === "on_going" || normalized === "in_validation") {
     return "bg-amber-100 text-amber-700";
   }
 

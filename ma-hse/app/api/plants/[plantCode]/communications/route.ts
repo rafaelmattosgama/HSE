@@ -1,4 +1,4 @@
-import { ActionCategory, ActionSourceType, RoleCode } from "@prisma/client";
+import { ActionCategory, ActionSourceType, CommunicationStatus, RoleCode } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api";
 import {
@@ -15,6 +15,8 @@ import { requirePlantAccess } from "@/lib/rbac/guards";
 import { createCommunicationInput } from "@/lib/validation/dtos";
 import { ActionService } from "@/lib/services/action-service";
 import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
+import { isCommunicationLinkableStatus } from "@/lib/communication-status";
+import { initialStatusForCommunicationCreation } from "@/lib/services/workflow";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -32,11 +34,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
 
   const plant = await getPlantByCode(plantCode);
   const status = request.nextUrl.searchParams.get("status") ?? undefined;
+  const defaultStatuses = [
+    CommunicationStatus.SUBMITTED,
+    CommunicationStatus.PENDING_VALIDATION,
+    CommunicationStatus.VALID_OPEN,
+    CommunicationStatus.ONGOING,
+    CommunicationStatus.CLOSED,
+  ];
 
   const communications = await prisma.communication.findMany({
     where: {
       plantId: plant.id,
-      status: status ? (status as never) : undefined,
+      status: status ? (status as never) : { in: defaultStatuses },
     },
     include: {
       riskTheme: true,
@@ -86,6 +95,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pl
 
   const plant = await getPlantByCode(plantCode);
   const actorRole = "role" in auth ? auth.role : undefined;
+  const initialStatus = initialStatusForCommunicationCreation(actorRole);
+
+  if (parsed.data.quickAction && !isCommunicationLinkableStatus(initialStatus)) {
+    return fail("COMMUNICATION_PENDING_VALIDATION", "This communication must be validated before actions or S-EWO can be linked.", 422);
+  }
 
   const communication = await (async () => {
     try {
