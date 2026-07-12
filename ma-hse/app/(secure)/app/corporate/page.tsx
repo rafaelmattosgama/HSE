@@ -32,7 +32,10 @@ import { getGlobalRepeatabilityAlertConfig } from "@/lib/services/parameter-serv
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { buildSafetyDaysSummary } from "@/lib/safety-days";
-import { isDashboardPyramidCommunicationStatus } from "@/lib/communication-status";
+import {
+  COMMUNICATION_IN_VALIDATION_STATUSES,
+  isDashboardPyramidCommunicationStatus,
+} from "@/lib/communication-status";
 
 const KPI_COMMUNICATION_STATUSES: CommunicationStatus[] = [
   CommunicationStatus.VALID_OPEN,
@@ -162,10 +165,23 @@ export default async function CorporatePage({
       include: {
         communications: {
           where: {
-            eventDatetime: {
-              gte: period.from,
-              lte: period.to,
-            },
+            OR: [
+              {
+                eventDatetime: {
+                  gte: period.from,
+                  lte: period.to,
+                },
+              },
+              {
+                status: {
+                  in: [...COMMUNICATION_IN_VALIDATION_STATUSES],
+                },
+                reportedAt: {
+                  gte: period.from,
+                  lte: period.to,
+                },
+              },
+            ],
           },
           select: {
             id: true,
