@@ -28,6 +28,10 @@ import { buildSafetyDaysSummary } from "@/lib/safety-days";
 import { getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
 import { AppCard, AppHero, AppKpiCard } from "@/components/ui/app-surface";
 import { isDashboardOpenAction, isDashboardOverdueAction } from "@/lib/dashboard-actions";
+import {
+  COMMUNICATION_IN_VALIDATION_STATUSES,
+  isDashboardPyramidCommunicationStatus,
+} from "@/lib/communication-status";
 
 function buildPyramidCounts(
   rows: Array<{
@@ -160,6 +164,7 @@ export default async function DashboardsPage({
 
   const [
     communicationRows,
+    pyramidCommunicationRows,
     actionRows,
     sewoRows,
     hoursWorkedRows,
@@ -211,6 +216,33 @@ export default async function DashboardsPage({
             name: true,
           },
         },
+      },
+    }),
+    prisma.communication.findMany({
+      where: {
+        plantId: plantRow.id,
+        OR: [
+          {
+            eventDatetime: {
+              gte: period.from,
+              lte: period.to,
+            },
+          },
+          {
+            status: {
+              in: [...COMMUNICATION_IN_VALIDATION_STATUSES],
+            },
+            reportedAt: {
+              gte: period.from,
+              lte: period.to,
+            },
+          },
+        ],
+      },
+      select: {
+        type: true,
+        status: true,
+        classification: true,
       },
     }),
     prisma.action.findMany({
@@ -310,7 +342,8 @@ export default async function DashboardsPage({
 
   const employeeByNo = new Map(employeeRows.map((entry) => [entry.employeeNo, entry]));
   const validCommunications = communicationRows.filter((entry) => ["VALID_OPEN", "ONGOING", "CLOSED"].includes(entry.status));
-  const pyramidCounts = buildPyramidCounts(validCommunications);
+  const pyramidCommunications = pyramidCommunicationRows.filter((entry) => isDashboardPyramidCommunicationStatus(entry.status));
+  const pyramidCounts = buildPyramidCounts(pyramidCommunications);
   const pendingValidation = communicationRows.filter((entry) => ["SUBMITTED", "PENDING_VALIDATION"].includes(entry.status)).length;
   const openCommunications = communicationRows.filter((entry) => ["VALID_OPEN", "ONGOING"].includes(entry.status)).length;
   const dashboardReferenceDate = new Date();

@@ -10,6 +10,13 @@ export const LINKABLE_COMMUNICATION_STATUSES = [
   CommunicationStatus.ONGOING,
   CommunicationStatus.CLOSED,
 ] as const;
+export const DASHBOARD_PYRAMID_COMMUNICATION_STATUSES = [
+  CommunicationStatus.SUBMITTED,
+  CommunicationStatus.PENDING_VALIDATION,
+  CommunicationStatus.VALID_OPEN,
+  CommunicationStatus.ONGOING,
+  CommunicationStatus.CLOSED,
+] as const;
 
 export function isCommunicationInValidationStatus(status: CommunicationStatus | string | null | undefined) {
   return Boolean(status && COMMUNICATION_IN_VALIDATION_STATUSES.includes(status as (typeof COMMUNICATION_IN_VALIDATION_STATUSES)[number]));
@@ -17,6 +24,12 @@ export function isCommunicationInValidationStatus(status: CommunicationStatus | 
 
 export function isCommunicationLinkableStatus(status: CommunicationStatus | string | null | undefined) {
   return Boolean(status && LINKABLE_COMMUNICATION_STATUSES.includes(status as (typeof LINKABLE_COMMUNICATION_STATUSES)[number]));
+}
+
+export function isDashboardPyramidCommunicationStatus(status: CommunicationStatus | string | null | undefined) {
+  return Boolean(
+    status && DASHBOARD_PYRAMID_COMMUNICATION_STATUSES.includes(status as (typeof DASHBOARD_PYRAMID_COMMUNICATION_STATUSES)[number]),
+  );
 }
 
 export function isOpenLinkedActionStatus(status: ActionStatus | string | null | undefined) {
