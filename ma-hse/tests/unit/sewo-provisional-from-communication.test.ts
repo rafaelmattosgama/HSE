@@ -163,6 +163,28 @@ function buildCommunication(type: CommunicationType) {
     },
     description: `${type} communication description`,
     suggestedAction: "Clean and isolate area",
+    attachments: [
+      {
+        id: "attachment-1",
+        fileKey: "maap/communications/public-reports/photo-1.jpg",
+        fileName: "photo-1.jpg",
+        originalName: "photo-1-original.jpg",
+        contentType: "image/jpeg",
+        size: 1234,
+        createdAt: new Date("2026-06-03T08:31:00.000Z"),
+        uploadedByUserId: null,
+      },
+      {
+        id: "attachment-2",
+        fileKey: "maap/communications/public-reports/photo-2.png",
+        fileName: "photo-2.png",
+        originalName: "photo-2-original.png",
+        contentType: "image/png",
+        size: 2345,
+        createdAt: new Date("2026-06-03T08:32:00.000Z"),
+        uploadedByUserId: null,
+      },
+    ],
     actions: [
       {
         id: "action-1",
@@ -207,6 +229,28 @@ describe("SewaService.createProvisionalFromCommunication", () => {
         whoText: "Maria Lopes",
         howText: `${type} communication description`,
         immediateCorrectiveActionText: "Clean and isolate area",
+        attachments: {
+          createMany: {
+            data: [
+              {
+                type: "EVENT_EVIDENCE",
+                fileKey: "maap/communications/public-reports/photo-1.jpg",
+                fileName: "photo-1.jpg",
+                contentType: "image/jpeg",
+                caption: null,
+                uploadedById: "user-1",
+              },
+              {
+                type: "EVENT_EVIDENCE",
+                fileKey: "maap/communications/public-reports/photo-2.png",
+                fileName: "photo-2.png",
+                contentType: "image/png",
+                caption: null,
+                uploadedById: "user-1",
+              },
+            ],
+          },
+        },
         templateData: expect.objectContaining({
           sourceCommunicationId: communication.id,
           eventType: type,

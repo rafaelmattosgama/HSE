@@ -496,6 +496,7 @@ export function CreateSewoQuick({
     : communicationId
       ? "Requires code update"
       : ui.manualWithoutCommunication;
+  const associatedCommunicationHref = communicationId ? `/app/${plant}/communications/${communicationId}` : null;
   const showAssociatedCommunicationSummary = Boolean(selectedCommunication || skipCommunicationSelection || initialSewo);
 
   useEffect(() => {
@@ -1130,9 +1131,20 @@ export function CreateSewoQuick({
             </div>
             <div className="flex items-center gap-2">
               {showAssociatedCommunicationSummary ? (
-                <div className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedCommunication ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-700"}`}>
-                  {associatedCommunicationSummary}
-                </div>
+                associatedCommunicationHref ? (
+                  <Link
+                    href={associatedCommunicationHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`rounded-full px-3 py-1 text-xs font-semibold hover:underline ${selectedCommunication ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-700"}`}
+                  >
+                    {associatedCommunicationSummary}
+                  </Link>
+                ) : (
+                  <div className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedCommunication ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-700"}`}>
+                    {associatedCommunicationSummary}
+                  </div>
+                )
               ) : null}
               <Button
                 type="button"
