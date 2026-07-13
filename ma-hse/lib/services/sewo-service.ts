@@ -1323,6 +1323,11 @@ export const SewaService = {
           targetEmployee: true,
           bodyPart: true,
           injuryType: true,
+          attachments: {
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
           actions: {
             select: {
               id: true,
@@ -1411,6 +1416,20 @@ export const SewaService = {
             analysisText: communication.description,
             suggestedAction: communication.suggestedAction ?? "",
           },
+          attachments: communication.attachments.length
+            ? {
+                createMany: {
+                  data: communication.attachments.map((attachment) => ({
+                    type: "EVENT_EVIDENCE",
+                    fileKey: attachment.fileKey,
+                    fileName: attachment.fileName,
+                    contentType: attachment.contentType,
+                    caption: null,
+                    uploadedById: input.actorUserId,
+                  })),
+                },
+              }
+            : undefined,
         },
       });
 
