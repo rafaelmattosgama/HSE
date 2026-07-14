@@ -44,6 +44,61 @@ type SewoApprovedExternalEmailCopy = {
   priorityNotice: string;
 };
 
+type AttachmentSyncClient = Pick<Prisma.TransactionClient, "communicationAttachment" | "sEWOAttachment">;
+
+export async function syncCommunicationAttachmentsToSewo(input: {
+  communicationId: string;
+  sewoId: string;
+  actorUserId?: string | null;
+  tx?: AttachmentSyncClient;
+}) {
+  const client = input.tx ?? prisma;
+  const communicationAttachments = await client.communicationAttachment.findMany({
+    where: {
+      communicationId: input.communicationId,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  if (!communicationAttachments.length) {
+    return { created: 0 };
+  }
+
+  const existingAttachments = await client.sEWOAttachment.findMany({
+    where: {
+      sewoId: input.sewoId,
+      fileKey: {
+        in: communicationAttachments.map((attachment) => attachment.fileKey),
+      },
+    },
+    select: {
+      fileKey: true,
+    },
+  });
+  const existingFileKeys = new Set(existingAttachments.map((attachment) => attachment.fileKey));
+  const attachmentsToCreate = communicationAttachments.filter((attachment) => !existingFileKeys.has(attachment.fileKey));
+
+  if (!attachmentsToCreate.length) {
+    return { created: 0 };
+  }
+
+  const result = await client.sEWOAttachment.createMany({
+    data: attachmentsToCreate.map((attachment) => ({
+      sewoId: input.sewoId,
+      type: "EVENT_EVIDENCE",
+      fileKey: attachment.fileKey,
+      fileName: attachment.fileName,
+      contentType: attachment.contentType,
+      caption: null,
+      uploadedById: attachment.uploadedByUserId ?? input.actorUserId ?? null,
+    })),
+  });
+
+  return { created: result.count };
+}
+
 const SEWO_APPROVED_EXTERNAL_EMAIL_COPY: Record<string, SewoApprovedExternalEmailCopy> = {
   pt: {
     subject: "Relatorio S-EWO aprovado",
@@ -1304,6 +1359,14 @@ export const SewaService = {
     });
 
     if (existing) {
+      await prisma.$transaction((tx) =>
+        syncCommunicationAttachmentsToSewo({
+          communicationId: input.communicationId,
+          sewoId: existing.id,
+          actorUserId: input.actorUserId,
+          tx,
+        }),
+      );
       return existing;
     }
 
@@ -1323,11 +1386,6 @@ export const SewaService = {
           targetEmployee: true,
           bodyPart: true,
           injuryType: true,
-          attachments: {
-            orderBy: {
-              createdAt: "asc",
-            },
-          },
           actions: {
             select: {
               id: true,
@@ -1416,21 +1474,14 @@ export const SewaService = {
             analysisText: communication.description,
             suggestedAction: communication.suggestedAction ?? "",
           },
-          attachments: communication.attachments.length
-            ? {
-                createMany: {
-                  data: communication.attachments.map((attachment) => ({
-                    type: "EVENT_EVIDENCE",
-                    fileKey: attachment.fileKey,
-                    fileName: attachment.fileName,
-                    contentType: attachment.contentType,
-                    caption: null,
-                    uploadedById: input.actorUserId,
-                  })),
-                },
-              }
-            : undefined,
         },
+      });
+
+      await syncCommunicationAttachmentsToSewo({
+        communicationId: communication.id,
+        sewoId: sewo.id,
+        actorUserId: input.actorUserId,
+        tx,
       });
 
       if (communication.actions.length > 0) {
