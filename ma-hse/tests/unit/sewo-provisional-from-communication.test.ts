@@ -5,6 +5,13 @@ const txMock = vi.hoisted(() => ({
   sEWO: {
     create: vi.fn(),
   },
+  communicationAttachment: {
+    findMany: vi.fn(),
+  },
+  sEWOAttachment: {
+    findMany: vi.fn(),
+    createMany: vi.fn(),
+  },
   sEWOActionLink: {
     createMany: vi.fn(),
   },
@@ -35,6 +42,13 @@ const prismaMock = vi.hoisted(() => ({
     communication: {
       findFirst: vi.fn(),
       findUniqueOrThrow: vi.fn(),
+    },
+    communicationAttachment: {
+      findMany: vi.fn(),
+    },
+    sEWOAttachment: {
+      findMany: vi.fn(),
+      createMany: vi.fn(),
     },
     sEWOCauseCatalogVersion: {
       findFirst: vi.fn(),
@@ -109,7 +123,7 @@ vi.mock("@/lib/services/sewo-validation-service", () => ({
   isSewoSubmitterRole: vi.fn(() => true),
 }));
 
-import { SewaService } from "@/lib/services/sewo-service";
+import { SewaService, syncCommunicationAttachmentsToSewo } from "@/lib/services/sewo-service";
 
 function buildCommunication(type: CommunicationType) {
   return {
@@ -209,6 +223,9 @@ describe("SewaService.createProvisionalFromCommunication", () => {
     prismaMock.prisma.communication.findUniqueOrThrow.mockResolvedValue(communication);
     prismaMock.prisma.sEWOCauseCatalogVersion.findFirst.mockResolvedValue({ id: "catalog-1" });
     txMock.sEWO.create.mockResolvedValue({ id: "sewo-1", communicationId: communication.id });
+    txMock.communicationAttachment.findMany.mockResolvedValue(communication.attachments);
+    txMock.sEWOAttachment.findMany.mockResolvedValue([]);
+    txMock.sEWOAttachment.createMany.mockResolvedValue({ count: 2 });
     txMock.sEWOActionLink.createMany.mockResolvedValue({ count: 1 });
 
     const result = await SewaService.createProvisionalFromCommunication({
@@ -229,28 +246,6 @@ describe("SewaService.createProvisionalFromCommunication", () => {
         whoText: "Maria Lopes",
         howText: `${type} communication description`,
         immediateCorrectiveActionText: "Clean and isolate area",
-        attachments: {
-          createMany: {
-            data: [
-              {
-                type: "EVENT_EVIDENCE",
-                fileKey: "maap/communications/public-reports/photo-1.jpg",
-                fileName: "photo-1.jpg",
-                contentType: "image/jpeg",
-                caption: null,
-                uploadedById: "user-1",
-              },
-              {
-                type: "EVENT_EVIDENCE",
-                fileKey: "maap/communications/public-reports/photo-2.png",
-                fileName: "photo-2.png",
-                contentType: "image/png",
-                caption: null,
-                uploadedById: "user-1",
-              },
-            ],
-          },
-        },
         templateData: expect.objectContaining({
           sourceCommunicationId: communication.id,
           eventType: type,
@@ -270,6 +265,28 @@ describe("SewaService.createProvisionalFromCommunication", () => {
         }),
       }),
     });
+    expect(txMock.sEWOAttachment.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          sewoId: "sewo-1",
+          type: "EVENT_EVIDENCE",
+          fileKey: "maap/communications/public-reports/photo-1.jpg",
+          fileName: "photo-1.jpg",
+          contentType: "image/jpeg",
+          caption: null,
+          uploadedById: "user-1",
+        },
+        {
+          sewoId: "sewo-1",
+          type: "EVENT_EVIDENCE",
+          fileKey: "maap/communications/public-reports/photo-2.png",
+          fileName: "photo-2.png",
+          contentType: "image/png",
+          caption: null,
+          uploadedById: "user-1",
+        },
+      ],
+    });
     expect(txMock.sEWOActionLink.createMany).toHaveBeenCalledWith({
       data: [
         {
@@ -281,8 +298,32 @@ describe("SewaService.createProvisionalFromCommunication", () => {
     });
   });
 
+  it("creates an automatic S-EWO normally when the communication has no photos", async () => {
+    const communication = {
+      ...buildCommunication(CommunicationType.FIRST_AID),
+      attachments: [],
+      actions: [],
+    };
+    prismaMock.prisma.sEWO.findFirst.mockResolvedValue(null);
+    prismaMock.prisma.user.findUnique.mockResolvedValue({ language: "en" });
+    prismaMock.prisma.communication.findUniqueOrThrow.mockResolvedValue(communication);
+    prismaMock.prisma.sEWOCauseCatalogVersion.findFirst.mockResolvedValue({ id: "catalog-1" });
+    txMock.sEWO.create.mockResolvedValue({ id: "sewo-no-photos", communicationId: communication.id });
+    txMock.communicationAttachment.findMany.mockResolvedValue([]);
+
+    const result = await SewaService.createProvisionalFromCommunication({
+      communicationId: communication.id,
+      actorUserId: "user-1",
+    });
+
+    expect(result).toMatchObject({ id: "sewo-no-photos", communicationId: communication.id });
+    expect(txMock.sEWO.create).toHaveBeenCalled();
+    expect(txMock.sEWOAttachment.createMany).not.toHaveBeenCalled();
+  });
+
   it("does not create duplicate S-EWO records for the same communication", async () => {
     prismaMock.prisma.sEWO.findFirst.mockResolvedValue({ id: "existing-sewo", communicationId: "comm-1" });
+    txMock.communicationAttachment.findMany.mockResolvedValue([]);
 
     const result = await SewaService.createProvisionalFromCommunication({
       communicationId: "comm-1",
@@ -292,6 +333,56 @@ describe("SewaService.createProvisionalFromCommunication", () => {
     expect(result).toMatchObject({ id: "existing-sewo", communicationId: "comm-1" });
     expect(prismaMock.prisma.communication.findUniqueOrThrow).not.toHaveBeenCalled();
     expect(txMock.sEWO.create).not.toHaveBeenCalled();
+    expect(txMock.communicationAttachment.findMany).toHaveBeenCalledWith({
+      where: {
+        communicationId: "comm-1",
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+  });
+});
+
+describe("syncCommunicationAttachmentsToSewo", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("does not create duplicate S-EWO attachments when synchronization runs twice", async () => {
+    const attachments = buildCommunication(CommunicationType.NEAR_MISS).attachments;
+    txMock.communicationAttachment.findMany.mockResolvedValue(attachments);
+    txMock.sEWOAttachment.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(attachments.map((attachment) => ({ fileKey: attachment.fileKey })));
+    txMock.sEWOAttachment.createMany.mockResolvedValue({ count: 2 });
+
+    await syncCommunicationAttachmentsToSewo({
+      communicationId: "comm-near_miss",
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      tx: txMock,
+    });
+    await syncCommunicationAttachmentsToSewo({
+      communicationId: "comm-near_miss",
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      tx: txMock,
+    });
+
+    expect(txMock.sEWOAttachment.createMany).toHaveBeenCalledTimes(1);
+    expect(txMock.sEWOAttachment.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          sewoId: "sewo-1",
+          fileKey: "maap/communications/public-reports/photo-1.jpg",
+        }),
+        expect.objectContaining({
+          sewoId: "sewo-1",
+          fileKey: "maap/communications/public-reports/photo-2.png",
+        }),
+      ]),
+    });
   });
 });
 
