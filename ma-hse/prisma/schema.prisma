@@ -17,6 +17,13 @@ enum RoleCode {
   MEDICO
 }
 
+enum AgentPendingConfirmationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
 enum PlantAccessTokenType {
   REPORT
   KIOSK
@@ -256,6 +263,7 @@ model Plant {
   mapLayers                          MapLayer[]
   mapFeatures                        MapFeature[]
   smatAudits                         SmatAudit[]
+  agentPendingConfirmations          AgentPendingConfirmation[]
 }
 
 model User {
@@ -299,6 +307,7 @@ model User {
   contractorInvitationsSent                 ExternalCompanyInvitation[]         @relation("ExternalInvitationSponsor")
   reviewedExternalCompanyDocuments          ExternalCompanyDocument[]           @relation("ExternalCompanyDocumentReviewer")
   reviewedExternalWorkerDocuments           ExternalWorkerDocument[]            @relation("ExternalWorkerDocumentReviewer")
+  agentPendingConfirmations                  AgentPendingConfirmation[]
 }
 
 model Role {
@@ -1307,6 +1316,27 @@ model IdempotencyKey {
 
   @@unique([scope, key])
   @@index([expiresAt])
+}
+
+model AgentPendingConfirmation {
+  id           String                         @id @default(uuid())
+  userId       String
+  plantCode    String
+  plantId      String
+  toolName     String
+  summary      String
+  payloadJson  Json
+  allowedRoles RoleCode[]
+  status       AgentPendingConfirmationStatus @default(PENDING)
+  createdAt    DateTime                       @default(now())
+  expiresAt    DateTime
+  resolvedAt   DateTime?
+  user         User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plant        Plant                          @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, expiresAt])
+  @@index([plantId, status, expiresAt])
+  @@index([toolName, status])
 }
 
 model AuditLog {

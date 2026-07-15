@@ -1,0 +1,336 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Ban, Bot, Check, MessageCircle, Send, User, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { parseApiResponse } from "@/lib/client-api";
+
+type ChatMessage = {
+  id: string;
+  role: "user" | "agent" | "system";
+  text: string;
+};
+
+type PendingConfirmation = {
+  confirmationId: string;
+  summary?: string;
+  status: "pending" | "confirmed" | "cancelled" | "expired";
+};
+
+type AgentResponseData = {
+  type?: string;
+  message?: string;
+  plantCode?: string;
+  confirmation?: {
+    confirmationId: string;
+    summary?: string;
+    status?: PendingConfirmation["status"];
+  } | null;
+  confirmationId?: string;
+  summary?: string;
+  toolName?: string;
+  result?: unknown;
+  status?: PendingConfirmation["status"];
+};
+
+class AgentChatError extends Error {
+  constructor(
+    message: string,
+    public readonly errorCode?: string,
+  ) {
+    super(message);
+    this.name = "AgentChatError";
+  }
+}
+
+function createMessageId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function resultText(value: unknown) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (record.ok === false && typeof record.message === "string") return record.message;
+    if (record.data && typeof record.data === "object") {
+      const data = record.data as Record<string, unknown>;
+      if (typeof data.title === "string" && typeof data.status === "string") return `${data.title} ficou com estado ${data.status}.`;
+    }
+  }
+  return "Pedido concluido.";
+}
+
+function normalizeAgentReply(data: AgentResponseData) {
+  if (data.type === "confirmation_executed") {
+    return {
+      text: [data.summary ? `Confirmado: ${data.summary}` : "Confirmacao executada.", resultText(data.result)].filter(Boolean).join("\n"),
+      confirmation: null,
+    };
+  }
+
+  if (data.type === "confirmation_cancelled") {
+    return {
+      text: data.summary ? `Cancelado: ${data.summary}` : "Confirmacao cancelada.",
+      confirmation: null,
+    };
+  }
+
+  if (data.type === "confirmation_required" && data.confirmationId) {
+    return {
+      text: data.message ?? data.summary ?? "Esta acao exige confirmacao.",
+      confirmation: {
+        confirmationId: data.confirmationId,
+        summary: data.summary ?? data.message,
+        status: "pending" as const,
+      },
+    };
+  }
+
+  if (data.confirmation?.confirmationId) {
+    return {
+      text: data.message || data.confirmation.summary || "Esta acao exige confirmacao.",
+      confirmation: {
+        confirmationId: data.confirmation.confirmationId,
+        summary: data.confirmation.summary,
+        status: data.confirmation.status ?? "pending",
+      },
+    };
+  }
+
+  return {
+    text: data.message ?? "Sem resposta do agente.",
+    confirmation: null,
+  };
+}
+
+export function InternalAgentChat({ plantCode }: { plantCode: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: createMessageId(),
+      role: "agent",
+      text: "Como posso ajudar nesta planta?",
+    },
+  ]);
+  const [draft, setDraft] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const canSubmit = useMemo(() => draft.trim().length > 0 && !isBusy, [draft, isBusy]);
+  const canActOnConfirmation = pendingConfirmation?.status === "pending" && !isBusy;
+
+  async function postAgent(body: {
+    plantCode: string;
+    message?: string;
+    confirmationId?: string;
+    confirmationAction?: "confirm" | "cancel";
+  }) {
+    const response = await fetch("/api/agent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const json = await parseApiResponse<AgentResponseData>(response);
+    if (!json) throw new AgentChatError("Nao foi possivel contactar o agente.");
+    if (!response.ok || !json.ok) {
+      throw new AgentChatError(json.message ?? "Nao foi possivel contactar o agente.", json.errorCode);
+    }
+    return json.data ?? { message: "Sem resposta do agente." };
+  }
+
+  function appendMessage(message: Omit<ChatMessage, "id">) {
+    setMessages((current) => [...current, { ...message, id: createMessageId() }]);
+  }
+
+  async function sendMessage(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const message = draft.trim();
+    if (!message || isBusy) return;
+
+    setDraft("");
+    setError("");
+    setIsBusy(true);
+    appendMessage({ role: "user", text: message });
+
+    try {
+      const data = await postAgent({ plantCode, message });
+      const normalized = normalizeAgentReply(data);
+      appendMessage({ role: "agent", text: normalized.text });
+      setPendingConfirmation(normalized.confirmation);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao contactar o agente.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function actOnConfirmation(action: "confirm" | "cancel") {
+    if (!pendingConfirmation || pendingConfirmation.status !== "pending" || isBusy) return;
+
+    const confirmationId = pendingConfirmation.confirmationId;
+    setIsBusy(true);
+    setError("");
+    setPendingConfirmation((current) =>
+      current?.confirmationId === confirmationId
+        ? { ...current, status: action === "confirm" ? "confirmed" : "cancelled" }
+        : current,
+    );
+
+    appendMessage({
+      role: "user",
+      text: action === "confirm" ? "Confirmar" : "Cancelar",
+    });
+
+    try {
+      const data = await postAgent({
+        plantCode,
+        confirmationId,
+        confirmationAction: action,
+      });
+      const normalized = normalizeAgentReply(data);
+      appendMessage({ role: "agent", text: normalized.text });
+      setPendingConfirmation(normalized.confirmation);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao processar confirmacao.");
+      setPendingConfirmation((current) =>
+        current?.confirmationId === confirmationId
+          ? {
+              ...current,
+              status:
+                err instanceof AgentChatError && err.errorCode === "CONFIRMATION_EXPIRED"
+                  ? "expired"
+                  : err instanceof AgentChatError && err.errorCode === "CONFIRMATION_CANCELLED"
+                    ? "cancelled"
+                    : err instanceof AgentChatError && err.errorCode === "CONFIRMATION_CONFIRMED"
+                      ? "confirmed"
+                      : "pending",
+            }
+          : current,
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="fixed bottom-5 right-5 z-[95] inline-flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition hover:bg-slate-800"
+        aria-label="Abrir chat do agente"
+        title="Agente"
+      >
+        <MessageCircle className="h-6 w-6" />
+      </button>
+    );
+  }
+
+  return (
+    <section className="fixed bottom-5 right-5 z-[95] flex h-[min(680px,calc(100vh-40px))] w-[min(420px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <header className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
+        <div className="flex min-w-0 items-center gap-2">
+          <Bot className="h-5 w-5 shrink-0" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">Agente interno</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-300">{plantCode}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(false)}
+          className="rounded-full p-1 text-slate-300 hover:bg-white/10 hover:text-white"
+          aria-label="Fechar chat"
+          title="Fechar"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </header>
+
+      <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4">
+        {messages.map((message) => {
+          const isUser = message.role === "user";
+          const Icon = isUser ? User : Bot;
+          return (
+            <div key={message.id} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
+              {!isUser ? (
+                <div className="mt-1 rounded-full bg-white p-1.5 text-slate-600 shadow-sm">
+                  <Icon className="h-4 w-4" />
+                </div>
+              ) : null}
+              <p
+                className={`max-w-[82%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm leading-5 shadow-sm ${
+                  isUser ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-800"
+                }`}
+              >
+                {message.text}
+              </p>
+            </div>
+          );
+        })}
+        {isBusy ? (
+          <div className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
+            A processar...
+          </div>
+        ) : null}
+      </div>
+
+      {pendingConfirmation?.status === "pending" ? (
+        <div className="border-t border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-950">{pendingConfirmation.summary ?? "Confirmar acao pendente?"}</p>
+          <div className="mt-3 flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void actOnConfirmation("confirm")}
+              disabled={!canActOnConfirmation}
+            >
+              <Check className="h-4 w-4" />
+              Confirmar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => void actOnConfirmation("cancel")}
+              disabled={!canActOnConfirmation}
+            >
+              <Ban className="h-4 w-4" />
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</p>
+      ) : null}
+
+      <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-slate-200 bg-white p-3">
+        <label className="sr-only" htmlFor="agent-chat-message">
+          Mensagem
+        </label>
+        <textarea
+          id="agent-chat-message"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+          className="min-h-11 max-h-32 flex-1 resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+          placeholder="Escreva uma mensagem..."
+          disabled={isBusy}
+        />
+        <Button type="submit" size="sm" disabled={!canSubmit} aria-label="Enviar mensagem" title="Enviar">
+          <Send className="h-4 w-4" />
+        </Button>
+      </form>
+    </section>
+  );
+}
