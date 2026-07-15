@@ -11,8 +11,11 @@ import {
 import { AGGREGATE_PLANT_MODULES, ALL_PLANTS_SCOPE, isAllPlantsScope } from "@/lib/plant-scope";
 import { PlantNav } from "@/components/layout/plant-nav";
 import { PlantSwitcher } from "@/components/layout/plant-switcher";
+import { InternalAgentChat } from "@/components/feature/internal-agent-chat";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
+import { shouldShowInternalAgentChat } from "@/lib/agent/ui-access";
+import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 
@@ -187,6 +190,11 @@ export default async function PlantLayout({
             : []),
         ]
       : [];
+  const showInternalAgentChat = shouldShowInternalAgentChat({
+    agentEnabled: env.AGENT_ENABLED,
+    isAllPlants,
+    role: plantRole,
+  });
 
   return (
     <>
@@ -227,6 +235,7 @@ export default async function PlantLayout({
         />
       ) : null}
       <SafetyCommunicationFloatingAlert plantCode={plant} enabled={!isAllPlants && hasSafetyCommunicationAlerts} />
+      {showInternalAgentChat ? <InternalAgentChat plantCode={plant} /> : null}
     </>
   );
 }

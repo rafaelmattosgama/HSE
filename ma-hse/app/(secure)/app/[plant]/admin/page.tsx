@@ -1,5 +1,6 @@
 import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
@@ -63,6 +64,8 @@ export default async function AdminPage({
     : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
 
   const canManageUsers =
+    actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
+  const canViewAgentAudit =
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const canManageSafetyCommunicationRecipients = canManageSafetyCommunicationAlertRecipients(actorRole);
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
@@ -199,7 +202,14 @@ export default async function AdminPage({
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.modules.settings}</h2>
-        <LanguageSelector currentLocale={uiLocale} label={ui.dashboard.language} />
+        <div className="flex flex-wrap items-center gap-3">
+          <LanguageSelector currentLocale={uiLocale} label={ui.dashboard.language} />
+          {canViewAgentAudit ? (
+            <Link href={`/app/${plant}/admin/agent-audit`} className="app-toolbar">
+              Audit logs do agente
+            </Link>
+          ) : null}
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">

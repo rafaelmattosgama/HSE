@@ -35,7 +35,26 @@ const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().default("EHS <noreply@ehs.local>"),
+    AGENT_ENABLED: z
+      .string()
+      .optional()
+      .transform((value) => value === "true"),
+    AGENT_MOCK_MODE: z
+      .string()
+      .optional()
+      .transform((value) => value === "true"),
+    AGENT_RATE_LIMIT_ENABLED: z
+      .string()
+      .optional()
+      .transform((value) => value !== "false"),
+    AGENT_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+    AGENT_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(20),
+    AGENT_MAX_MESSAGE_CHARS: z.coerce.number().int().positive().default(4000),
+    AGENT_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    AGENT_MAX_TOOL_CALLS: z.coerce.number().int().positive().default(8),
+    AGENT_MAX_OUTPUT_CHARS: z.coerce.number().int().positive().default(4000),
     OPENAI_API_KEY: z.string().optional(),
+    OPENAI_AGENT_MODEL: z.string().default("gpt-5.4-mini"),
     OPENAI_TRANSLATION_MODEL: z.string().default("gpt-5.2"),
     OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
     S3_ENDPOINT: z.string().url().default("http://localhost:9000"),
