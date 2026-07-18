@@ -891,7 +891,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
   }
 
   const [
-    { PlantAccessTokenType },
+    { MasterDataEntityType, PlantAccessTokenType },
     { buildRateLimitKey },
     { logger },
     { findPlantByCode },
@@ -906,6 +906,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
       getPublicReportText,
     },
     { ensureDefaultShifts },
+    { localizeMasterDataRows },
   ] = await Promise.all([
     import("@prisma/client"),
     import("@/lib/helpers"),
@@ -916,6 +917,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     import("@/lib/auth/plant-token"),
     import("@/lib/public-report"),
     import("@/lib/services/shift-service"),
+    import("@/lib/services/master-data-translation-service"),
   ]);
 
   const plant = await findPlantByCode(plantCode);
@@ -956,12 +958,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
   await ensureDefaultShifts(plant.id);
 
   const [areas, workstations, shifts, employeesRaw, bodyPartsRaw, injuryTypesRaw] = await prisma.$transaction([
-    prisma.area.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.workstation.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.area.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, sourceLanguage: true } }),
+    prisma.workstation.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, sourceLanguage: true } }),
     prisma.shift.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.employeeDirectory.findMany({ where: { plantId: plant.id, isActive: true }, select: { id: true, name: true, employeeNo: true } }),
     prisma.bodyPart.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true } }),
     prisma.injuryType.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }], select: { id: true, code: true, name: true } }),
+  ]);
+
+  const [localizedAreas, localizedWorkstations] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, plant.defaultLanguage),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, plant.defaultLanguage),
   ]);
 
   const shiftsLocalized = shifts.map((shift) => ({ id: shift.id, name: getLocalizedShiftName(shift, plant.defaultLanguage) }));
@@ -978,7 +985,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     .sort(compareByName(getPublicReportText(plant.defaultLanguage).locale));
   const reportCopy = getPublicReportText(plant.defaultLanguage);
 
-  return new NextResponse(renderHtml(plantCode, token, { areas, workstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes }, reportCopy), {
+  return new NextResponse(renderHtml(plantCode, token, { areas: localizedAreas, workstations: localizedWorkstations, shifts: shiftsLocalized, employees, bodyParts, injuryTypes }, reportCopy), {
     status: 200,
     headers: {
       "content-type": "text/html; charset=utf-8",

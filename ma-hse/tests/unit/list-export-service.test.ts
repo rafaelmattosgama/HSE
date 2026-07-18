@@ -12,6 +12,7 @@ describe("ListExportService", () => {
   it("builds communication Excel exports with only the provided visible rows", async () => {
     const workbook = await readWorkbook(await ListExportService.buildCommunicationsXlsx([
       {
+        code: "NM_PT11_2026_01",
         event: "2026-05-31 08:00",
         level: "N2",
         type: "Near Miss",
@@ -27,6 +28,7 @@ describe("ListExportService", () => {
     expect(sheet?.rowCount).toBe(2);
     expect(sheet?.getRow(1).values).toEqual([
       undefined,
+      "Code",
       "Event",
       "Level",
       "Type",
@@ -34,10 +36,11 @@ describe("ListExportService", () => {
       "Reporter",
       "Department",
       "Location",
-      "Descrição",
+      "Description",
     ]);
     expect(sheet?.getRow(2).values).toEqual([
       undefined,
+      "NM_PT11_2026_01",
       "2026-05-31 08:00",
       "N2",
       "Near Miss",
@@ -66,5 +69,26 @@ describe("ListExportService", () => {
 
     expect(pdf.length).toBeGreaterThan(100);
     expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  it("keeps localized master data and headers in the selected export language", async () => {
+    const workbook = await readWorkbook(await ListExportService.buildCommunicationsXlsx([
+      {
+        code: "UC_PT11_2026_01",
+        event: "2026-06-01 09:00",
+        level: "N3",
+        type: "Condição perigosa",
+        status: "Por tratar",
+        reporter: "Ana Silva",
+        department: "Produção",
+        location: "Armazém de produto acabado",
+        description: "Piso escorregadio.",
+      },
+    ], { locale: "pt" }));
+
+    const sheet = workbook.getWorksheet("Comunicações");
+    expect(sheet?.getRow(1).values).toContain("Departamento");
+    expect(sheet?.getRow(2).values).toContain("Produção");
+    expect(sheet?.getRow(2).values).toContain("Armazém de produto acabado");
   });
 });

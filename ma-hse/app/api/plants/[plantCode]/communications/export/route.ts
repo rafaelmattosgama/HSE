@@ -25,7 +25,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const format = new URL(request.url).searchParams.get("format") ?? "xlsx";
   if (format === "pdf") {
     try {
-      const pdf = await ListExportService.buildCommunicationsPdf(parsed.data.rows);
+      const pdf = await ListExportService.buildCommunicationsPdf(parsed.data.rows, { locale: auth.session.user.language });
       return new Response(new Uint8Array(pdf), {
         headers: {
           "content-type": "application/pdf",
@@ -41,7 +41,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     return fail("INVALID_FORMAT", "Export format must be xlsx or pdf.", 400);
   }
 
-  const xlsx = await ListExportService.buildCommunicationsXlsx(parsed.data.rows);
+  const xlsx = await ListExportService.buildCommunicationsXlsx(parsed.data.rows, { locale: auth.session.user.language });
   return new Response(new Uint8Array(xlsx), {
     headers: {
       "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

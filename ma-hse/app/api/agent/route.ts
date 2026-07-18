@@ -5,6 +5,7 @@ import { fail, ok } from "@/lib/api";
 import { buildAgentRequestSummary, createAgentRequestId, writeAgentAuditEvent } from "@/lib/agent/audit";
 import { cancelPendingConfirmation, executePendingConfirmation } from "@/lib/agent/confirmations";
 import { createInternalHseAgent } from "@/lib/agent/agent";
+import { getInternalAgentCopy } from "@/lib/agent/i18n";
 import {
   classifyAgentRunError,
   configureAgentExecutionGuardrails,
@@ -289,7 +290,11 @@ export async function POST(request: Request) {
     if (ctx.guardrails?.toolCallLimitExceeded) {
       throw new Error("AGENT_MAX_TOOL_CALLS_EXCEEDED");
     }
-    const output = truncateAgentOutput(finalOutput, env.AGENT_MAX_OUTPUT_CHARS);
+    const output = truncateAgentOutput(
+      finalOutput,
+      env.AGENT_MAX_OUTPUT_CHARS,
+      getInternalAgentCopy(ctx.session.user.language).ui.truncated,
+    );
 
     if (output.truncated) {
       await writeAgentAuditEvent({

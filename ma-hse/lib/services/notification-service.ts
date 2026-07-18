@@ -1,7 +1,9 @@
 import { NotificationStatus, RoleCode } from "@prisma/client";
+import type { AppLocale } from "@/lib/i18n/routing";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { buildPlantRoleScope } from "@/lib/rbac/user-management";
+import { normalizeUiLocale } from "@/lib/ui-language";
 import { sendNotificationEmail } from "@/src/email/systemEmailHelpers.js";
 
 type EmailRecipient = {
@@ -80,6 +82,7 @@ export const NotificationService = {
     title: string;
     body: string;
     channel?: string;
+    localizedContent?: Partial<Record<AppLocale, { title: string; body: string }>>;
   }) {
     const recipients = await prisma.userPlantRole.findMany({
       where: {
@@ -98,8 +101,11 @@ export const NotificationService = {
       },
     });
 
-    const userIds = recipients.map((entry) => entry.userId);
-    const emailRecipients = recipients.flatMap((entry) =>
+    const uniqueRecipients = Array.from(
+      new Map(recipients.map((entry) => [entry.userId, entry])).values(),
+    );
+    const userIds = uniqueRecipients.map((entry) => entry.userId);
+    const emailRecipients = uniqueRecipients.flatMap((entry) =>
       entry.user.email
         ? [{
             email: entry.user.email,
@@ -110,6 +116,30 @@ export const NotificationService = {
     );
 
     if (!userIds.length && !emailRecipients.length) {
+      return;
+    }
+
+    if (input.localizedContent) {
+      const recipientsByLocale = new Map<AppLocale, typeof uniqueRecipients>();
+      for (const recipient of uniqueRecipients) {
+        const locale = normalizeUiLocale(recipient.user.language) as AppLocale;
+        recipientsByLocale.set(locale, [...(recipientsByLocale.get(locale) ?? []), recipient]);
+      }
+      await Promise.all(
+        Array.from(recipientsByLocale.entries()).map(([locale, localeRecipients]) => {
+          const content = input.localizedContent?.[locale] ?? { title: input.title, body: input.body };
+          return this.notify({
+            plantId: input.plantId,
+            userIds: localeRecipients.map((entry) => entry.userId),
+            emailRecipients: localeRecipients.flatMap((entry) => entry.user.email
+              ? [{ email: entry.user.email, name: entry.user.name, language: entry.user.language }]
+              : []),
+            title: content.title,
+            body: content.body,
+            channel: input.channel,
+          });
+        }),
+      );
       return;
     }
 

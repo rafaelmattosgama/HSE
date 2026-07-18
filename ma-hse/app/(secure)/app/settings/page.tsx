@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
@@ -24,6 +24,7 @@ import { getServerUiDictionary, getServerUiLocale } from "@/lib/server-ui-langua
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
 import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
@@ -168,6 +169,15 @@ export default async function SettingsPage({
     plantLanguage: selectedPlant?.defaultLanguage,
   });
   const masterDataUi = await getLocalizedN0MasterDataUi(uiLocale);
+  const [localizedAreas, localizedWorkstations, localizedEquipments, localizedRiskThemes] = selectedPlant
+    ? await Promise.all([
+        localizeMasterDataRows(MasterDataEntityType.AREA, selectedPlant.areas, uiLocale),
+        localizeMasterDataRows(MasterDataEntityType.WORKSTATION, selectedPlant.workstations, uiLocale),
+        localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, selectedPlant.equipments, uiLocale),
+        localizeMasterDataRows(MasterDataEntityType.RISK_THEME, selectedPlant.riskThemes, uiLocale),
+      ])
+    : [[], [], [], []];
+  const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
   const moduleLabels = {
     MAPA: ui.modules.mapa,
     VALIDATIONS: ui.modules.validation,
@@ -182,7 +192,7 @@ export default async function SettingsPage({
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-6 py-6">
-      <section className="rounded-2xl bg-white p-6 shadow-sm">
+      <section className="rounded-2xl bg-white p-6 shadow-sm" data-onboarding="system-settings">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{masterDataUi.n0Admin}</p>
@@ -200,19 +210,21 @@ export default async function SettingsPage({
         </div>
       </section>
 
-      <CorporatePlantForm
-        plants={allPlants.map((plant) => ({
-          id: plant.id,
-          code: plant.code,
-          name: plant.name,
-          timezone: plant.timezone,
-          defaultLanguage: plant.defaultLanguage as "pt" | "it" | "en" | "pl" | "de" | "ro" | "fr",
-          isActive: plant.isActive,
-        }))}
-        selectedPlantId={selectedPlant?.id ?? null}
-        labels={masterDataUi}
-        showPlantSelector={false}
-      />
+      <div data-onboarding="settings-plants">
+        <CorporatePlantForm
+          plants={allPlants.map((plant) => ({
+            id: plant.id,
+            code: plant.code,
+            name: plant.name,
+            timezone: plant.timezone,
+            defaultLanguage: plant.defaultLanguage as "pt" | "it" | "en" | "pl" | "de" | "ro" | "fr",
+            isActive: plant.isActive,
+          }))}
+          selectedPlantId={selectedPlant?.id ?? null}
+          labels={masterDataUi}
+          showPlantSelector={false}
+        />
+      </div>
 
       {selectedPlant ? (
         <>
@@ -225,7 +237,7 @@ export default async function SettingsPage({
             labels={masterDataUi}
           />
 
-          <section className="space-y-4">
+          <section className="space-y-4" data-onboarding="settings-modules">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{masterDataUi.settingsSectionTitle}</p>
@@ -275,9 +287,9 @@ export default async function SettingsPage({
           <N0MasterDataManager
             key={selectedPlant.code}
             plantCode={selectedPlant.code}
-            initialAreas={selectedPlant.areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-            initialWorkstations={selectedPlant.workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-            initialEquipments={selectedPlant.equipments.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+            initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
+            initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
+            initialEquipments={localizedEquipments.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
             initialWorkers={selectedPlant.employees.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
             initialNearMissTypes={selectedPlant.nearMissTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
             initialUnsafeActTypes={selectedPlant.unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
@@ -294,37 +306,47 @@ export default async function SettingsPage({
 
           <ProfessionalRisksManager
             plantCode={selectedPlant.code}
-            initialRisks={selectedPlant.riskThemes.map((risk) => ({
+            initialRisks={localizedRiskThemes.map((risk) => ({
               id: risk.id,
               code: risk.code,
               category: risk.category,
               name: risk.name,
+              originalName: risk.originalName,
+              originalCategory: risk.originalCategory,
               isActive: risk.isActive,
             }))}
             labels={masterDataUi}
           />
 
-          <UserManager
-            plantCode={selectedPlant.code}
-            users={selectedPlantUsers.map((entry) => ({
-              id: entry.user.id,
-              email: entry.user.email,
-              name: entry.user.name,
-              language: entry.user.language,
-              isActive: entry.user.isActive,
-              role: entry.role.code,
-              createdAt: entry.user.createdAt,
-              updatedAt: entry.user.updatedAt,
-            }))}
-            allowedCreateRoles={getCreatableRoles(RoleCode.N0_ADMIN)}
-            labels={masterDataUi}
-          />
+          <div data-onboarding="settings-users">
+            <UserManager
+              plantCode={selectedPlant.code}
+              users={selectedPlantUsers.map((entry) => ({
+                id: entry.user.id,
+                email: entry.user.email,
+                name: entry.user.name,
+                language: entry.user.language,
+                isActive: entry.user.isActive,
+                role: entry.role.code,
+                createdAt: entry.user.createdAt,
+                updatedAt: entry.user.updatedAt,
+              }))}
+              allowedCreateRoles={getCreatableRoles(RoleCode.N0_ADMIN)}
+              labels={masterDataUi}
+            />
+          </div>
 
           <SafetyCommunicationRecipientManager
             plantCode={selectedPlant.code}
-            initialRecipients={safetyCommunicationRecipients}
+            initialRecipients={safetyCommunicationRecipients.map((recipient) => ({
+              ...recipient,
+              departmentName: localizedAreaById.get(recipient.departmentId) ?? recipient.departmentName,
+            }))}
             users={safetyCommunicationRecipientOptions.users}
-            departments={safetyCommunicationRecipientOptions.departments}
+            departments={safetyCommunicationRecipientOptions.departments.map((department) => ({
+              ...department,
+              name: localizedAreaById.get(department.id) ?? department.name,
+            }))}
             labels={masterDataUi}
           />
 

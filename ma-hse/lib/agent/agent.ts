@@ -1,4 +1,5 @@
 import { Agent } from "@openai/agents";
+import { getInternalAgentLanguageInstructions } from "@/lib/agent/i18n";
 import { env } from "@/lib/env";
 import type { AgentToolContext } from "@/lib/agent/permissions";
 import { createActionTools } from "@/lib/agent/tools/actions";
@@ -20,7 +21,7 @@ export function createInternalHseAgent(ctx: AgentToolContext) {
       "When creating records, ask for missing required operational fields instead of guessing them.",
       "For sensitive operations that return requiresConfirmation, tell the user exactly what must be confirmed and include the confirmationId.",
       "Do not perform deletes, occupational health changes, S-EWO approvals, Excel imports, email sends, QR token operations, or password operations.",
-      "Respond in the user's language when clear; Portuguese is acceptable by default in this application.",
+      getInternalAgentLanguageInstructions(ctx.session.user.language),
     ].join("\n"),
     tools: [
       ...createCommunicationTools(ctx),

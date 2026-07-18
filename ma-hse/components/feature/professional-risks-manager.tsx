@@ -13,6 +13,8 @@ type ProfessionalRisk = {
   code: string;
   category: string;
   name: string;
+  originalName?: string;
+  originalCategory?: string | null;
   isActive: boolean;
 };
 
@@ -76,8 +78,8 @@ export function ProfessionalRisksManager({
   function startEdit(risk: ProfessionalRisk) {
     setEditingId(risk.id);
     setCode(risk.code);
-    setCategory(risk.category);
-    setName(risk.name);
+    setCategory(risk.originalCategory ?? risk.category);
+    setName(risk.originalName ?? risk.name);
     setMessage(formatMasterDataMessage(labels.professionalRisks.editing, { code: risk.code }));
   }
 

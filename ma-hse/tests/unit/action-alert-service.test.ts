@@ -93,7 +93,7 @@ describe("ActionAlertService", () => {
         data: expect.objectContaining({
           userId: owner.id,
           channel: "ACTION_ALERT",
-          title: expect.stringContaining("Nova comunicacao aberta"),
+          title: expect.stringContaining("Nova ação aberta"),
           body: expect.stringContaining("Local: Press 01"),
         }),
       }),
@@ -156,7 +156,7 @@ describe("ActionAlertService", () => {
     );
     expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        tituloNotificacao: expect.stringContaining("Acao a 3 dias da data limite"),
+        tituloNotificacao: expect.stringContaining("Ação a 3 dias da data limite"),
       }),
     );
   });

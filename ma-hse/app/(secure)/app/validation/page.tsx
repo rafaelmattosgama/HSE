@@ -20,6 +20,7 @@ export default async function GlobalValidationPage() {
     getLocalizedSewoUi(uiLocale),
     getPendingSewoValidationRows({
       userId: session.user.id,
+      locale: uiLocale,
     }),
   ]);
 

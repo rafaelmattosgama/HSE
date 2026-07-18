@@ -17,6 +17,13 @@ enum RoleCode {
   MEDICO
 }
 
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DISMISSED
+}
+
 enum AgentPendingConfirmationStatus {
   PENDING
   CONFIRMED
@@ -73,6 +80,24 @@ enum CommunicationSource {
   BACKOFFICE
   TOKEN_REPORT
   TOKEN_KIOSK
+}
+
+enum MasterDataEntityType {
+  AREA
+  WORKSTATION
+  EQUIPMENT
+  RISK_THEME
+}
+
+enum MasterDataTranslationField {
+  NAME
+  CATEGORY
+}
+
+enum MasterDataTranslationStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
 
 enum ActionSourceType {
@@ -274,6 +299,11 @@ model User {
   language                                  String                              @default("pt")
   isActive                                  Boolean                             @default(true)
   forcePasswordChange                       Boolean                             @default(false)
+  onboardingStatus                          OnboardingStatus                    @default(NOT_STARTED)
+  onboardingVersion                         Int                                 @default(0)
+  onboardingStartedAt                       DateTime?
+  onboardingCompletedAt                     DateTime?
+  currentOnboardingStep                     Int                                 @default(0)
   createdAt                                 DateTime                            @default(now())
   updatedAt                                 DateTime                            @updatedAt
   emailVerified                             DateTime?
@@ -307,7 +337,7 @@ model User {
   contractorInvitationsSent                 ExternalCompanyInvitation[]         @relation("ExternalInvitationSponsor")
   reviewedExternalCompanyDocuments          ExternalCompanyDocument[]           @relation("ExternalCompanyDocumentReviewer")
   reviewedExternalWorkerDocuments           ExternalWorkerDocument[]            @relation("ExternalWorkerDocumentReviewer")
-  agentPendingConfirmations                  AgentPendingConfirmation[]
+  agentPendingConfirmations                 AgentPendingConfirmation[]
 }
 
 model Role {
@@ -353,6 +383,7 @@ model Area {
   plantId                            String
   code                               String
   name                               String
+  sourceLanguage                     String?
   isActive                           Boolean                             @default(true)
   plant                              Plant                               @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications                     Communication[]
@@ -382,6 +413,7 @@ model Workstation {
   plantId        String
   code           String
   name           String
+  sourceLanguage String?
   isActive       Boolean         @default(true)
   plant          Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
@@ -395,6 +427,7 @@ model Equipment {
   plantId        String
   code           String
   name           String
+  sourceLanguage String?
   isActive       Boolean         @default(true)
   plant          Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications Communication[]
@@ -417,17 +450,40 @@ model Shift {
 }
 
 model RiskTheme {
-  id             String          @id @default(uuid())
-  plantId        String
-  code           String
-  category       String          @default("General")
-  name           String
-  isActive       Boolean         @default(true)
-  plant          Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  communications Communication[]
+  id                     String          @id @default(uuid())
+  plantId                String
+  code                   String
+  category               String          @default("General")
+  name                   String
+  sourceLanguage         String?
+  categorySourceLanguage String?
+  isActive               Boolean         @default(true)
+  plant                  Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  communications         Communication[]
 
   @@unique([plantId, code])
   @@index([plantId, category])
+}
+
+model MasterDataTranslation {
+  id           String                      @id @default(uuid())
+  entityType   MasterDataEntityType
+  entityId     String
+  field        MasterDataTranslationField  @default(NAME)
+  locale       String
+  value        String?
+  sourceHash   String
+  status       MasterDataTranslationStatus @default(PENDING)
+  isManual     Boolean                     @default(false)
+  attempts     Int                         @default(0)
+  lastError    String?
+  translatedAt DateTime?
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+
+  @@unique([entityType, entityId, field, locale])
+  @@index([entityType, entityId])
+  @@index([status, updatedAt])
 }
 
 model UnsafeActType {
@@ -495,20 +551,20 @@ model InjuryType {
 }
 
 model EmployeeDirectory {
-  id                           String            @id @default(uuid())
+  id                           String                          @id @default(uuid())
   plantId                      String
   employeeNo                   String
   name                         String
   dept                         String?
   shiftId                      String?
-  isActive                     Boolean           @default(true)
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @updatedAt
-  plant                        Plant             @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  shift                        Shift?            @relation(fields: [shiftId], references: [id])
-  targetCommunications         Communication[]   @relation("TargetEmployee")
+  isActive                     Boolean                         @default(true)
+  createdAt                    DateTime                        @default(now())
+  updatedAt                    DateTime                        @updatedAt
+  plant                        Plant                           @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  shift                        Shift?                          @relation(fields: [shiftId], references: [id])
+  targetCommunications         Communication[]                 @relation("TargetEmployee")
   involvedCommunications       CommunicationInvolvedEmployee[]
-  contractorCompanyAssignments ExternalCompany[] @relation("ExternalContractorSponsor")
+  contractorCompanyAssignments ExternalCompany[]               @relation("ExternalContractorSponsor")
 
   @@unique([plantId, employeeNo])
   @@index([plantId, name])
@@ -1270,37 +1326,37 @@ model SystemParameter {
 }
 
 model ReportRun {
-  id          String     @id @default(uuid())
-  plantId     String?
-  type        ReportType
-  codigoCompleto   String? @unique
+  id               String     @id @default(uuid())
+  plantId          String?
+  type             ReportType
+  codigoCompleto   String?    @unique
   codigoAbreviado  String?
   tipo             String?
   codigoFabrica    String?
   ano              Int?
   numeroSequencial Int?
-  periodStart DateTime
-  periodEnd   DateTime
-  fileKeys    Json
-  recipients  Json
-  status      String
-  error       String?
-  createdAt   DateTime   @default(now())
-  completedAt DateTime?
-  plant       Plant?     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  periodStart      DateTime
+  periodEnd        DateTime
+  fileKeys         Json
+  recipients       Json
+  status           String
+  error            String?
+  createdAt        DateTime   @default(now())
+  completedAt      DateTime?
+  plant            Plant?     @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@index([tipo, codigoFabrica, ano, numeroSequencial])
 }
 
 model RecordCodeSequence {
-  id              String   @id @default(uuid())
-  entityType      String
-  tipo            String
-  codigoFabrica   String
-  ano             Int
-  currentValue    Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String   @id @default(uuid())
+  entityType    String
+  tipo          String
+  codigoFabrica String
+  ano           Int
+  currentValue  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([entityType, tipo, codigoFabrica, ano])
   @@index([entityType, codigoFabrica, ano])

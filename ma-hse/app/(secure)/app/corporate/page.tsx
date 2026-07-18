@@ -797,7 +797,7 @@ export default async function CorporatePage({
 
   return (
     <main className="mx-auto w-full max-w-7xl px-6 py-6">
-      <div className="app-hero mb-6 rounded-2xl p-6">
+      <div className="app-hero mb-6 rounded-2xl p-6" data-onboarding="corporate-overview">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{ui.dashboard.corporateTitle}</h1>
@@ -812,7 +812,7 @@ export default async function CorporatePage({
                 <span>{ui.dashboard.backToPlant.replace("{plant}", defaultPlantRole.plantCode.toUpperCase())}</span>
               </Link>
             ) : null}
-            <Link href="/app/corporate/reports" className="app-toolbar text-teal-700">
+            <Link href="/app/corporate/reports" data-onboarding="corporate-reports" className="app-toolbar text-teal-700">
               <History className="h-4 w-4" />
               {ui.dashboard.openReportHistory}
             </Link>
@@ -907,29 +907,31 @@ export default async function CorporatePage({
         labels={ui.dashboard}
       />
 
-      <CorporatePlantManager
-        totalPlants={plantSummaries.length}
-        totalValidatedEvents={totalValidatedEvents}
-        totalOpenActions={totalOpenActions}
-        totalClosedActions={totalClosedActions}
-        totalActionsToClose={totalActionsToClose}
-        totalClosedActionsPercent={totalClosedActionsPercent}
-        totalActionsToClosePercent={totalActionsToClosePercent}
-        totalNearMisses={totalNearMisses}
-        totalInjuries={totalInjuries}
-        totalRootCauses={totalRootCauses}
-        totalFrequencyIndex={totalFrequencyIndex}
-        totalSeverityIndex={totalSeverityIndex}
-        totalCommunicationPyramid={totalCommunicationPyramid}
-        rankings={rankings}
-        rankingMonthlySeries={rankingMonthlySeries}
-        initialPlants={plantSummaries}
-        title={ui.dashboard.corporateIndicators}
-        plantListTitle={ui.dashboard.corporatePlants}
-        pyramidDescription={ui.dashboard.corporatePyramidDescription}
-        rootCauseMetricLabel={ui.dashboard.sewoRootCauses}
-        labels={ui.dashboard}
-      />
+      <div data-onboarding="corporate-comparison">
+        <CorporatePlantManager
+          totalPlants={plantSummaries.length}
+          totalValidatedEvents={totalValidatedEvents}
+          totalOpenActions={totalOpenActions}
+          totalClosedActions={totalClosedActions}
+          totalActionsToClose={totalActionsToClose}
+          totalClosedActionsPercent={totalClosedActionsPercent}
+          totalActionsToClosePercent={totalActionsToClosePercent}
+          totalNearMisses={totalNearMisses}
+          totalInjuries={totalInjuries}
+          totalRootCauses={totalRootCauses}
+          totalFrequencyIndex={totalFrequencyIndex}
+          totalSeverityIndex={totalSeverityIndex}
+          totalCommunicationPyramid={totalCommunicationPyramid}
+          rankings={rankings}
+          rankingMonthlySeries={rankingMonthlySeries}
+          initialPlants={plantSummaries}
+          title={ui.dashboard.corporateIndicators}
+          plantListTitle={ui.dashboard.corporatePlants}
+          pyramidDescription={ui.dashboard.corporatePyramidDescription}
+          rootCauseMetricLabel={ui.dashboard.sewoRootCauses}
+          labels={ui.dashboard}
+        />
+      </div>
 
       {canManageGlobalRepeatability ? (
         <div className="mt-6">
@@ -943,22 +945,24 @@ export default async function CorporatePage({
         </div>
       ) : null}
 
-      <CorporateActionPlans
-        actions={corporateActions.map((row) => ({
-          id: row.id,
-          displayId: formatActionCode(row.plant.code, row.sequenceNumber),
-          title: row.title,
-          category: row.category,
-          priority: row.priority,
-          status: row.status,
-          ownerName: row.ownerUser.name,
-          dueDate: row.dueDate.toISOString().slice(0, 10),
-          evidenceCount: row.evidenceAttachments.length,
-          plantName: row.plant.name,
-          plantCode: row.plant.code.toUpperCase(),
-          plantRouteCode: row.plant.code,
-        }))}
-      />
+      <div data-onboarding="corporate-actions">
+        <CorporateActionPlans
+          actions={corporateActions.map((row) => ({
+            id: row.id,
+            displayId: formatActionCode(row.plant.code, row.sequenceNumber),
+            title: row.title,
+            category: row.category,
+            priority: row.priority,
+            status: row.status,
+            ownerName: row.ownerUser.name,
+            dueDate: row.dueDate.toISOString().slice(0, 10),
+            evidenceCount: row.evidenceAttachments.length,
+            plantName: row.plant.name,
+            plantCode: row.plant.code.toUpperCase(),
+            plantRouteCode: row.plant.code,
+          }))}
+        />
+      </div>
     </main>
   );
 }

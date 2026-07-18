@@ -1,5 +1,11 @@
+import { MasterDataEntityType } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth/options";
+import { getFixedCommunicationLabels } from "@/lib/communication-labels";
 import { formatCommunicationType } from "@/lib/helpers";
 import { prisma } from "@/lib/prisma";
+import { getServerUiLocale } from "@/lib/server-ui-language";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { StorageService } from "@/lib/services/storage-service";
 import { MapaManager } from "@/components/feature/mapa-manager";
 
@@ -9,6 +15,7 @@ export default async function MapaPage({
   params: Promise<{ plant: string }>;
 }) {
   const { plant } = await params;
+  const session = await getServerSession(authOptions);
   const plantRow = await prisma.plant.findUniqueOrThrow({
     where: { code: plant },
   });
@@ -47,6 +54,17 @@ export default async function MapaPage({
       },
     }),
   ]);
+  const uiLocale = await getServerUiLocale({
+    userLanguage: session?.user.language,
+    plantLanguage: plantRow.defaultLanguage,
+  });
+  const [localizedAreas, localizedWorkstations] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, uiLocale),
+  ]);
+  const areaNameById = new Map(localizedAreas.map((row) => [row.id, row.name]));
+  const workstationNameById = new Map(localizedWorkstations.map((row) => [row.id, row.name]));
+  const communicationTypeLabels = getFixedCommunicationLabels(uiLocale).communicationTypeLabels;
 
   const sourceDocuments = await Promise.all(
     documents.map(async (document) => ({
@@ -81,12 +99,12 @@ export default async function MapaPage({
     const existing = groupedIncidentMap.get(key);
     if (existing) {
       existing.count += 1;
-      existing.label = `${formatCommunicationType(communication.type)} (${existing.count})`;
+      existing.label = `${communicationTypeLabels[communication.type] ?? formatCommunicationType(communication.type)} (${existing.count})`;
       continue;
     }
     groupedIncidentMap.set(key, {
       key,
-      label: `${formatCommunicationType(communication.type)} (1)`,
+      label: `${communicationTypeLabels[communication.type] ?? formatCommunicationType(communication.type)} (1)`,
       positionX: anchor.positionX,
       positionY: anchor.positionY,
       count: 1,
@@ -122,15 +140,17 @@ export default async function MapaPage({
           id: feature.id,
           layerId: feature.layerId,
           featureType: feature.featureType,
-          label: feature.label,
+          label: (feature.workstationId ? workstationNameById.get(feature.workstationId) : null)
+            ?? (feature.areaId ? areaNameById.get(feature.areaId) : null)
+            ?? feature.label,
           icon: feature.icon,
           color: feature.color,
           positionX: feature.positionX,
           positionY: feature.positionY,
         }))}
         autoIncidentFeatures={autoIncidentFeatures}
-        areas={areas}
-        workstations={workstations}
+        areas={localizedAreas}
+        workstations={localizedWorkstations}
       />
     </>
   );

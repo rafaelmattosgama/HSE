@@ -4,6 +4,7 @@ import { Sora, IBM_Plex_Mono } from "next/font/google";
 import { getLocale, getMessages } from "next-intl/server";
 import { Providers } from "@/components/layout/providers";
 import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
+import "driver.js/dist/driver.css";
 import "./globals.css";
 
 const sora = Sora({

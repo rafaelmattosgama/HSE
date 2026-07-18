@@ -1,9 +1,10 @@
-import type { CommunicationImprovementSubtype, SeverityPotential } from "@prisma/client";
+import { MasterDataEntityType } from "@prisma/client";
 import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import { prisma } from "@/lib/prisma";
 import { getReadableCommunicationCode } from "@/lib/record-code";
 import { supportsCommunicationPdfReport } from "@/lib/communication-report";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { StorageService } from "@/lib/services/storage-service";
 
 type PdfDocument = ReturnType<typeof createPdfDocument>;
@@ -14,20 +15,6 @@ const MUTED = "#64748b";
 const PANEL = "#e2e8f0";
 const SOFT = "#f8fafc";
 const WHITE = "#ffffff";
-
-const severityLabels: Record<SeverityPotential, { en: string; pt: string }> = {
-  LOW: { en: "Low", pt: "Baixa" },
-  MED: { en: "Medium", pt: "Media" },
-  HIGH: { en: "High", pt: "Alta" },
-};
-
-const subtypeLabels: Record<CommunicationImprovementSubtype, { en: string; pt: string }> = {
-  FIVE_S_AREA_IMPROVEMENT: { en: "Area improvement", pt: "Melhoria de area" },
-  FIVE_S_DISORGANIZATION: { en: "Disorganization", pt: "Desorganizacao" },
-  IMPROVEMENT_SAFETY: { en: "Safety", pt: "Seguranca" },
-  IMPROVEMENT_HEALTH: { en: "Health", pt: "Saude" },
-  IMPROVEMENT_ENVIRONMENT: { en: "Environment", pt: "Ambiente" },
-};
 
 type ExportAttachment = {
   fileName: string;
@@ -370,6 +357,17 @@ export const CommunicationReportExportService = {
       throw new Error("Unsupported communication type for PDF report");
     }
 
+    const [localizedAreas, localizedWorkstations, localizedEquipments, localizedRiskThemes] = await Promise.all([
+      localizeMasterDataRows(MasterDataEntityType.AREA, communication.area ? [communication.area] : [], locale),
+      localizeMasterDataRows(MasterDataEntityType.WORKSTATION, communication.workstation ? [communication.workstation] : [], locale),
+      localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, communication.equipment ? [communication.equipment] : [], locale),
+      localizeMasterDataRows(MasterDataEntityType.RISK_THEME, communication.riskTheme ? [communication.riskTheme] : [], locale),
+    ]);
+    const localizedArea = localizedAreas[0] ?? communication.area;
+    const localizedWorkstation = localizedWorkstations[0] ?? communication.workstation;
+    const localizedEquipment = localizedEquipments[0] ?? communication.equipment;
+    const localizedRiskTheme = localizedRiskThemes[0] ?? communication.riskTheme;
+
     const text = labelsFor(locale);
     const reference = getReadableCommunicationCode(communication);
     const typeLabel = communicationUi.communicationTypeLabels[communication.type] ?? communication.type;
@@ -387,10 +385,10 @@ export const CommunicationReportExportService = {
       ),
     );
     const severity = communication.severityPotential
-      ? severityLabels[communication.severityPotential]?.[locale === "pt" ? "pt" : "en"] ?? communication.severityPotential
+      ? ({ LOW: communicationUi.detailEditor.low, MED: communicationUi.detailEditor.medium, HIGH: communicationUi.detailEditor.high } as const)[communication.severityPotential]
       : text.noRecords;
     const subtype = communication.improvementSubtype
-      ? subtypeLabels[communication.improvementSubtype]?.[locale === "pt" ? "pt" : "en"] ?? communication.improvementSubtype
+      ? communicationUi.communicationImprovementSubtypeLabels[communication.improvementSubtype] ?? communication.improvementSubtype
       : text.noRecords;
 
     const doc = createPdfDocument({ margin: 40, size: "A4" });
@@ -411,7 +409,7 @@ export const CommunicationReportExportService = {
       [text.dateTime, formatDateTime(communication.eventDatetime, text.noRecords)],
       [text.severity, severity],
       [text.subtype, subtype],
-      [text.classification, getDisplayValue(communication.level ?? communication.riskTheme?.category, text.noRecords)],
+      [text.classification, getDisplayValue(communication.level ?? localizedRiskTheme?.category, text.noRecords)],
     ]);
 
     drawSectionTitle(doc, text.peopleAndPlace);
@@ -420,10 +418,10 @@ export const CommunicationReportExportService = {
       [text.reporterNumber, getDisplayValue(communication.reporterEmployeeNo, text.noRecords)],
       [text.involvedWorker, getDisplayValue(communication.targetText ?? communication.targetEmployee?.name, text.noRecords)],
       [text.involvedWorkerNumber, getDisplayValue(communication.targetEmployeeNo ?? communication.targetEmployee?.employeeNo, text.noRecords)],
-      [text.department, getDisplayValue(communication.area?.name, text.noRecords)],
+      [text.department, getDisplayValue(localizedArea?.name, text.noRecords)],
       [text.line, getDisplayValue(communication.line?.name, text.noRecords)],
-      [text.location, getDisplayValue(communication.workstation?.name, text.noRecords)],
-      [text.equipment, getDisplayValue(communication.equipment?.name, text.noRecords)],
+      [text.location, getDisplayValue(localizedWorkstation?.name, text.noRecords)],
+      [text.equipment, getDisplayValue(localizedEquipment?.name, text.noRecords)],
     ]);
     drawParagraphCard(doc, text.involvedWorkers, involvedWorkers);
 
@@ -433,7 +431,7 @@ export const CommunicationReportExportService = {
 
     drawSectionTitle(doc, text.classification);
     drawFieldGrid(doc, [
-      [text.riskTheme, getDisplayValue(communication.riskTheme?.name, text.noRecords)],
+      [text.riskTheme, getDisplayValue(localizedRiskTheme?.name, text.noRecords)],
       [text.unsafeActType, getDisplayValue(communication.unsafeActType?.name, text.noRecords)],
       [text.unsafeConditionType, getDisplayValue(communication.unsafeConditionType?.name, text.noRecords)],
       [text.location, getDisplayValue(communication.nearMissType?.name, text.noRecords)],

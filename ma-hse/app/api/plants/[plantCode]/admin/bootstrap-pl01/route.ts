@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import {
   isPl01Code,
@@ -9,6 +9,7 @@ import {
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 
 export async function POST(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -31,12 +32,14 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
         },
         update: {
           name,
+          sourceLanguage: plant.defaultLanguage,
           isActive: true,
         },
         create: {
           plantId: plant.id,
           code: `PL01-WS-${String(index + 1).padStart(3, "0")}`,
           name,
+          sourceLanguage: plant.defaultLanguage,
           isActive: true,
         },
       });
@@ -105,6 +108,14 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
       orderBy: { name: "asc" },
     }),
   ]);
+  await Promise.all(
+    workstations.map((workstation) =>
+      scheduleMasterDataTranslations({
+        entityType: MasterDataEntityType.WORKSTATION,
+        entityId: workstation.id,
+      }),
+    ),
+  );
 
   return ok({
     workstations,

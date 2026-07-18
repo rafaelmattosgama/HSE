@@ -64,9 +64,11 @@ function buildSummary(log: AgentAuditLog) {
 }
 
 export function AgentAuditLogViewer({ plantCode }: { plantCode: string }) {
-  const [data, setData] = useState<AgentAuditResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [requestState, setRequestState] = useState<{
+    query: string;
+    data: AgentAuditResponse | null;
+    error: string;
+  }>({ query: "", data: null, error: "" });
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     dateFrom: "",
@@ -87,11 +89,12 @@ export function AgentAuditLogViewer({ plantCode }: { plantCode: string }) {
     }
     return params.toString();
   }, [filters, page]);
+  const loading = requestState.query !== query;
+  const data = requestState.data;
+  const error = loading ? "" : requestState.error;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
 
     fetch(`/api/plants/${plantCode}/agent-audit?${query}`)
       .then(async (response) => {
@@ -102,13 +105,16 @@ export function AgentAuditLogViewer({ plantCode }: { plantCode: string }) {
         return json.data as AgentAuditResponse;
       })
       .then((payload) => {
-        if (!cancelled) setData(payload);
+        if (!cancelled) setRequestState({ query, data: payload, error: "" });
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Nao foi possivel carregar os logs do agente.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setRequestState((current) => ({
+            query,
+            data: current.data,
+            error: err instanceof Error ? err.message : "Nao foi possivel carregar os logs do agente.",
+          }));
+        }
       });
 
     return () => {

@@ -1,6 +1,7 @@
-import { CommunicationType, RoleCode, SEWOStatus, type Prisma } from "@prisma/client";
+import { CommunicationType, MasterDataEntityType, RoleCode, SEWOStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getReadableSewoCode } from "@/lib/record-code";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import {
   SIF_PSIF_EXPOSURE_KEYS,
   createEmptySifPsifDecision,
@@ -194,7 +195,11 @@ function getSubmitterRoleFromRecord(record: SewoValidationRecord): RoleCode | nu
   return plantRole?.role.code ?? null;
 }
 
-function toValidationRow(record: SewoValidationRecord): SewoValidationRow {
+function toValidationRow(
+  record: SewoValidationRecord,
+  localizedAreas: ReadonlyMap<string, string>,
+  localizedWorkstations: ReadonlyMap<string, string>,
+): SewoValidationRow {
   const templateData = getSewoTemplateRecord(record.templateData);
   const occurrenceType = formatSewoOccurrenceType({
     communicationType: record.communication?.type,
@@ -202,10 +207,14 @@ function toValidationRow(record: SewoValidationRecord): SewoValidationRow {
     eventClassification: record.eventClassification,
   });
   const location =
-    record.communication?.workstation?.name ??
-    record.communication?.area?.name ??
+    (record.communication?.workstation
+      ? localizedWorkstations.get(record.communication.workstation.id) ?? record.communication.workstation.name
+      : null) ??
+    (record.communication?.area
+      ? localizedAreas.get(record.communication.area.id) ?? record.communication.area.name
+      : null) ??
     record.whereText ??
-    record.area?.name ??
+    (record.area ? localizedAreas.get(record.area.id) ?? record.area.name : null) ??
     record.line?.name ??
     "-";
 
@@ -231,6 +240,7 @@ export async function getPendingSewoValidationRows(input: {
   userId: string;
   plantCode?: string;
   limit?: number;
+  locale?: string | null;
 }) {
   const userRoles = await prisma.userPlantRole.findMany({
     where: {
@@ -296,7 +306,34 @@ export async function getPendingSewoValidationRows(input: {
     take: input.limit ?? 200,
   });
 
+  const areas = Array.from(
+    new Map(
+      records.flatMap((record) =>
+        [record.communication?.area, record.area]
+          .filter((area): area is NonNullable<typeof area> => Boolean(area))
+          .map((area) => [area.id, area] as const),
+      ),
+    ).values(),
+  );
+  const workstations = Array.from(
+    new Map(
+      records.flatMap((record) =>
+        record.communication?.workstation
+          ? [[record.communication.workstation.id, record.communication.workstation] as const]
+          : [],
+      ),
+    ).values(),
+  );
+  const [localizedAreas, localizedWorkstations] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, input.locale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, input.locale),
+  ]);
+  const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
+  const localizedWorkstationById = new Map(
+    localizedWorkstations.map((workstation) => [workstation.id, workstation.name]),
+  );
+
   return records
-    .map(toValidationRow)
+    .map((record) => toValidationRow(record, localizedAreaById, localizedWorkstationById))
     .filter((row) => isSewoSubmitterRole(row.submittedByRole));
 }

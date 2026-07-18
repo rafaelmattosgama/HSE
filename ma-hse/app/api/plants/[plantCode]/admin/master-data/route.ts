@@ -1,21 +1,21 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
+import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { canManagePlantEquipment, MASTER_DATA_ADMIN_ROLES } from "@/lib/rbac/master-data";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { ensureDefaultShifts } from "@/lib/services/shift-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
+import {
+  localizeMasterDataRows,
+  matchesMasterDataSearch,
+  scheduleMasterDataTranslations,
+} from "@/lib/services/master-data-translation-service";
 import { createMasterDataItemInput, deleteMasterDataItemInput } from "@/lib/validation/dtos";
-
-const ADMIN_MASTER_DATA_ROLES = [
-  RoleCode.N0_ADMIN,
-  RoleCode.N1_CORPORATE,
-  RoleCode.N2_PLANT_MANAGER,
-  RoleCode.N3_SAFETY,
-] as const;
 
 type MasterDataType =
   | "area"
@@ -28,6 +28,31 @@ type MasterDataType =
 
 function supportsCategory(type: MasterDataType) {
   return type === "unsafeActType" || type === "unsafeConditionType";
+}
+
+function getTranslatableEntityType(type: MasterDataType) {
+  if (type === "area") return MasterDataEntityType.AREA;
+  if (type === "workstation") return MasterDataEntityType.WORKSTATION;
+  if (type === "equipment") return MasterDataEntityType.EQUIPMENT;
+  return null;
+}
+
+function canManageType(role: RoleCode, type: MasterDataType) {
+  return type !== "equipment" || canManagePlantEquipment(role);
+}
+
+function toAuditRecord(value: unknown) {
+  return value as Record<string, unknown>;
+}
+
+function auditEntityType(type: MasterDataType) {
+  return `MasterData:${type}`;
+}
+
+function forbiddenTypeMessage(type: MasterDataType) {
+  return type === "equipment"
+    ? "Equipment management requires N0 or N3 access for the selected plant."
+    : "Insufficient permission for this master data type.";
 }
 
 function duplicateMessage(type: MasterDataType) {
@@ -121,14 +146,14 @@ async function findByCode(type: MasterDataType, plantId: string, code: string, e
   }
 }
 
-async function createItem(type: MasterDataType, plantId: string, data: ReturnType<typeof buildData>) {
+async function createItem(type: MasterDataType, plantId: string, data: ReturnType<typeof buildData>, sourceLanguage: string) {
   switch (type) {
     case "area":
-      return prisma.area.create({ data: { plantId, ...data } });
+      return prisma.area.create({ data: { plantId, ...data, sourceLanguage } });
     case "workstation":
-      return prisma.workstation.create({ data: { plantId, ...data } });
+      return prisma.workstation.create({ data: { plantId, ...data, sourceLanguage } });
     case "equipment":
-      return prisma.equipment.create({ data: { plantId, ...data } });
+      return prisma.equipment.create({ data: { plantId, ...data, sourceLanguage } });
     case "nearMissType":
       return prisma.nearMissType.create({ data: { plantId, ...data } });
     case "unsafeActType":
@@ -140,14 +165,14 @@ async function createItem(type: MasterDataType, plantId: string, data: ReturnTyp
   }
 }
 
-async function updateItem(type: MasterDataType, id: string, data: ReturnType<typeof buildData>) {
+async function updateItem(type: MasterDataType, id: string, data: ReturnType<typeof buildData>, sourceLanguage: string) {
   switch (type) {
     case "area":
-      return prisma.area.update({ where: { id }, data });
+      return prisma.area.update({ where: { id }, data: { ...data, sourceLanguage } });
     case "workstation":
-      return prisma.workstation.update({ where: { id }, data });
+      return prisma.workstation.update({ where: { id }, data: { ...data, sourceLanguage } });
     case "equipment":
-      return prisma.equipment.update({ where: { id }, data });
+      return prisma.equipment.update({ where: { id }, data: { ...data, sourceLanguage } });
     case "nearMissType":
       return prisma.nearMissType.update({ where: { id }, data });
     case "unsafeActType":
@@ -197,10 +222,11 @@ async function deactivateAllItems(type: MasterDataType, plantId: string) {
   }
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [...ADMIN_MASTER_DATA_ROLES]);
-  if ("error" in auth) return auth.error;
+  const auth = await requirePlantAccess(plantCode, [...MASTER_DATA_ADMIN_ROLES]);
+  if ("error" in auth && auth.error) return auth.error;
+  if (!("role" in auth)) return fail("FORBIDDEN", "Plant role could not be resolved.", 403);
 
   const plant = await getPlantByCode(plantCode);
   await ensureDefaultShifts(plant.id);
@@ -213,7 +239,13 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
       prisma.area.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }] }),
       prisma.line.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }] }),
       prisma.workstation.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }] }),
-      prisma.equipment.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }] }),
+      prisma.equipment.findMany({
+        where: {
+          plantId: plant.id,
+          ...(canManagePlantEquipment(auth.role) ? {} : { isActive: true }),
+        },
+        orderBy: [{ code: "asc" }, { name: "asc" }],
+      }),
       prisma.shift.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: { code: "asc" } }),
       prisma.riskTheme.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }] }),
       prisma.unsafeActType.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }] }),
@@ -223,13 +255,24 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
       prisma.injuryType.findMany({ where: { plantId: plant.id, isActive: true }, orderBy: [{ code: "asc" }, { name: "asc" }] }),
     ]);
 
+  const accessibleEquipments = canManagePlantEquipment(auth.role) ? equipments : [];
+  const [localizedAreas, localizedWorkstations, localizedEquipments, localizedRiskThemes] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, auth.session.user.language),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, auth.session.user.language),
+    localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, accessibleEquipments, auth.session.user.language),
+    localizeMasterDataRows(MasterDataEntityType.RISK_THEME, riskThemes, auth.session.user.language),
+  ]);
+  const query = new URL(request.url).searchParams.get("q") ?? "";
+  const filterLocalized = <T extends { originalName: string; localizedName: string; code?: string | null }>(rows: T[]) =>
+    query ? rows.filter((row) => matchesMasterDataSearch(row, query)) : rows;
+
   return ok({
-    areas,
+    areas: filterLocalized(localizedAreas),
     lines,
-    workstations,
-    equipments,
+    workstations: filterLocalized(localizedWorkstations),
+    equipments: filterLocalized(localizedEquipments),
     shifts,
-    riskThemes,
+    riskThemes: filterLocalized(localizedRiskThemes),
     unsafeActTypes,
     unsafeCondTypes,
     nearMissTypes,
@@ -240,11 +283,16 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [...ADMIN_MASTER_DATA_ROLES]);
-  if ("error" in auth) return auth.error;
+  const auth = await requirePlantAccess(plantCode, [...MASTER_DATA_ADMIN_ROLES]);
+  if ("error" in auth && auth.error) return auth.error;
+  if (!("role" in auth)) return fail("FORBIDDEN", "Plant role could not be resolved.", 403);
 
   const parsed = await parseBody(request, createMasterDataItemInput);
   if ("error" in parsed) return parsed.error;
+
+  if (!canManageType(auth.role, parsed.data.type)) {
+    return fail("FORBIDDEN", forbiddenTypeMessage(parsed.data.type), 403);
+  }
 
   const plant = await getPlantByCode(plantCode);
   const type = parsed.data.type;
@@ -255,6 +303,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     name,
     category: parsed.data.category,
   });
+  const sourceLanguage = auth.session.user.language ?? plant.defaultLanguage ?? "en";
 
   if (parsed.data.id) {
     const existing = await findById(type, plant.id, parsed.data.id);
@@ -267,7 +316,17 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       return fail("DUPLICATE_CODE", duplicateMessage(type), 409);
     }
 
-    const item = await updateItem(type, parsed.data.id, data);
+    const item = await updateItem(type, parsed.data.id, data, sourceLanguage);
+    const entityType = getTranslatableEntityType(type);
+    if (entityType) await scheduleMasterDataTranslations({ entityType, entityId: item.id });
+    await writeAuditLog({
+      entityType: auditEntityType(type),
+      entityId: item.id,
+      action: existing.isActive === false ? "ACTIVATE" : "UPDATE",
+      actorUserId: auth.session.user.id,
+      plantId: plant.id,
+      diff: buildDiff(toAuditRecord(existing), toAuditRecord(item)),
+    });
     return ok({ item });
   }
 
@@ -277,26 +336,64 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   }
 
   if (duplicate && !duplicate.isActive) {
-    const item = await updateItem(type, duplicate.id, data);
+    const item = await updateItem(type, duplicate.id, data, sourceLanguage);
+    const entityType = getTranslatableEntityType(type);
+    if (entityType) await scheduleMasterDataTranslations({ entityType, entityId: item.id });
+    await writeAuditLog({
+      entityType: auditEntityType(type),
+      entityId: item.id,
+      action: "ACTIVATE",
+      actorUserId: auth.session.user.id,
+      plantId: plant.id,
+      diff: buildDiff(toAuditRecord(duplicate), toAuditRecord(item)),
+    });
     return ok({ item }, { status: 201 });
   }
 
-  const item = await createItem(type, plant.id, data);
+  const item = await createItem(type, plant.id, data, sourceLanguage);
+  const entityType = getTranslatableEntityType(type);
+  if (entityType) await scheduleMasterDataTranslations({ entityType, entityId: item.id });
+  await writeAuditLog({
+    entityType: auditEntityType(type),
+    entityId: item.id,
+    action: "CREATE",
+    actorUserId: auth.session.user.id,
+    plantId: plant.id,
+    diff: buildDiff(null, toAuditRecord(item)),
+  });
   return ok({ item }, { status: 201 });
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [...ADMIN_MASTER_DATA_ROLES]);
-  if ("error" in auth) return auth.error;
+  const auth = await requirePlantAccess(plantCode, [...MASTER_DATA_ADMIN_ROLES]);
+  if ("error" in auth && auth.error) return auth.error;
+  if (!("role" in auth)) return fail("FORBIDDEN", "Plant role could not be resolved.", 403);
 
   const parsed = await parseBody(request, deleteMasterDataItemInput);
   if ("error" in parsed) return parsed.error;
 
+  if (!canManageType(auth.role, parsed.data.type)) {
+    return fail("FORBIDDEN", forbiddenTypeMessage(parsed.data.type), 403);
+  }
+
   const plant = await getPlantByCode(plantCode);
   if (parsed.data.deleteAll) {
     const result = await deactivateAllItems(parsed.data.type, plant.id);
+    await writeAuditLog({
+      entityType: auditEntityType(parsed.data.type),
+      entityId: `${plant.id}:${parsed.data.type}`,
+      action: "DEACTIVATE_ALL",
+      actorUserId: auth.session.user.id,
+      plantId: plant.id,
+      diff: buildDiff({ activeCount: result.count }, { activeCount: 0 }),
+    });
     return ok({ deletedType: parsed.data.type, deletedCount: result.count, deleteAll: true });
+  }
+
+  const existing = await findById(parsed.data.type, plant.id, parsed.data.id!);
+  if (!existing) {
+    return fail("NOT_FOUND", notFoundMessage(parsed.data.type), 404);
   }
 
   const result = await deactivateItem(parsed.data.type, plant.id, parsed.data.id!);
@@ -304,6 +401,18 @@ export async function DELETE(request: Request, context: { params: Promise<{ plan
   if (result.count === 0) {
     return fail("NOT_FOUND", notFoundMessage(parsed.data.type), 404);
   }
+
+  await writeAuditLog({
+    entityType: auditEntityType(parsed.data.type),
+    entityId: parsed.data.id!,
+    action: "DEACTIVATE",
+    actorUserId: auth.session.user.id,
+    plantId: plant.id,
+    diff: buildDiff(toAuditRecord(existing), {
+      ...toAuditRecord(existing),
+      isActive: false,
+    }),
+  });
 
   return ok({ deletedId: parsed.data.id, type: parsed.data.type });
 }

@@ -12,7 +12,7 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
-  const workers = await OccupationalHealthService.list(plant.id);
+  const workers = await OccupationalHealthService.list(plant.id, auth.session.user.language);
   return ok({ workers });
 }
 

@@ -9,7 +9,11 @@ export async function GET(_: Request, context: { params: Promise<{ plantCode: st
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
-  const template = await OccupationalHealthService.buildImportTemplate(plant.id, plantCode);
+  const template = await OccupationalHealthService.buildImportTemplate(
+    plant.id,
+    plantCode,
+    auth.session.user.language,
+  );
 
   return new Response(new Uint8Array(template), {
     headers: {

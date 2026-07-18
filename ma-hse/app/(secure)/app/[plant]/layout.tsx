@@ -15,6 +15,7 @@ import { InternalAgentChat } from "@/components/feature/internal-agent-chat";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
 import { shouldShowInternalAgentChat } from "@/lib/agent/ui-access";
+import { normalizeInternalAgentLocale } from "@/lib/agent/i18n";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
@@ -161,6 +162,7 @@ export default async function PlantLayout({
     userLanguage: session.user.language,
     plantLanguage: plantRecord?.defaultLanguage,
   });
+  const agentLocale = normalizeInternalAgentLocale(session.user.language);
   const visibleItems = items
     .filter((item) => (plantRole ? item.roles.includes(plantRole) : false))
     .filter((item) => (isAllPlants ? AGGREGATE_PLANT_MODULES.has(item.href) : true))
@@ -172,6 +174,7 @@ export default async function PlantLayout({
       href: `/app/${plant}/${item.href}`,
       label: ui.modules[item.label as keyof typeof ui.modules] ?? item.label,
       spotlight: item.spotlight,
+      onboardingId: `sidebar-${item.href}`,
     }));
   const utilityItems =
     plantRole && CORPORATE_ROLES.includes(plantRole)
@@ -179,12 +182,14 @@ export default async function PlantLayout({
           {
             href: "/app/corporate",
             label: ui.modules.corporate,
+            onboardingId: "sidebar-corporate",
           },
           ...(plantRole === RoleCode.N0_ADMIN
             ? [
                 {
                   href: "/app/settings",
                   label: ui.modules.settings,
+                  onboardingId: "sidebar-settings",
                 },
               ]
             : []),
@@ -199,7 +204,7 @@ export default async function PlantLayout({
   return (
     <>
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[240px_1fr]">
-        <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:sticky md:top-6 md:max-h-[calc(100vh-48px)] md:self-start md:overflow-y-auto">
+        <aside data-onboarding="sidebar" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:sticky md:top-6 md:max-h-[calc(100vh-48px)] md:self-start md:overflow-y-auto">
           <PlantSwitcher
             currentPlant={isAllPlants ? ALL_PLANTS_SCOPE : plant}
             plants={accessiblePlants.map((entry) => ({ code: entry.code, name: entry.name }))}
@@ -235,7 +240,7 @@ export default async function PlantLayout({
         />
       ) : null}
       <SafetyCommunicationFloatingAlert plantCode={plant} enabled={!isAllPlants && hasSafetyCommunicationAlerts} />
-      {showInternalAgentChat ? <InternalAgentChat plantCode={plant} /> : null}
+      {showInternalAgentChat ? <InternalAgentChat key={agentLocale} plantCode={plant} locale={agentLocale} /> : null}
     </>
   );
 }

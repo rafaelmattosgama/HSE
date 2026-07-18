@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { ValidationQueue } from "@/components/feature/validation-queue";
 import { SewoValidationQueue } from "@/components/feature/sewo-validation-queue";
 import { AppHero, AppSectionHeader } from "@/components/ui/app-surface";
@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { isAllPlantsScope } from "@/lib/plant-scope";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
 import { getPendingSewoValidationRows } from "@/lib/services/sewo-validation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
@@ -72,12 +73,24 @@ export default async function ValidationPage({
     ],
     take: 100,
   });
-  const [translatedDescriptions, communicationUi, sewoUiResult, pendingSewoRows] = await Promise.all([
+  const uniqueAreas = Array.from(new Map(pending.flatMap((row) => row.area ? [[row.area.id, row.area] as const] : [])).values());
+  const uniqueWorkstations = Array.from(new Map(pending.flatMap((row) => row.workstation ? [[row.workstation.id, row.workstation] as const] : [])).values());
+  const [translatedDescriptions, communicationUi, sewoUiResult, pendingSewoRows, localizedAreas, localizedWorkstations] = await Promise.all([
     translateForViewer(uiLocale, pending.map((row) => row.description)),
     getLocalizedCommunicationUi(uiLocale),
     getLocalizedSewoUi(uiLocale),
-    isN1 ? getPendingSewoValidationRows({ userId: session.user.id, plantCode: isAllPlants ? undefined : plant }) : [],
+    isN1
+      ? getPendingSewoValidationRows({
+          userId: session.user.id,
+          plantCode: isAllPlants ? undefined : plant,
+          locale: uiLocale,
+        })
+      : [],
+    localizeMasterDataRows(MasterDataEntityType.AREA, uniqueAreas, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, uniqueWorkstations, uiLocale),
   ]);
+  const localizedAreaById = new Map(localizedAreas.map((row) => [row.id, row.name]));
+  const localizedWorkstationById = new Map(localizedWorkstations.map((row) => [row.id, row.name]));
 
   return (
     <>
@@ -107,8 +120,8 @@ export default async function ValidationPage({
             typeLabel: communicationUi.communicationTypeLabels[row.type] ?? row.type,
             reporterName: row.reporterName,
             eventDatetime: row.eventDatetime.toISOString(),
-            department: row.area?.name ?? "-",
-            location: row.workstation?.name ?? "-",
+            department: (row.areaId ? localizedAreaById.get(row.areaId) : null) ?? row.area?.name ?? "-",
+            location: (row.workstationId ? localizedWorkstationById.get(row.workstationId) : null) ?? row.workstation?.name ?? "-",
             description: translatedDescriptions[index] ?? row.description,
           }))}
           labels={communicationUi.validationQueue}

@@ -223,7 +223,7 @@ describe("public report route", () => {
     const addWorker = dom.window.document.getElementById("add-worker") as HTMLButtonElement;
 
     expect(Array.from(typeSelect.options).map((option) => option.textContent)).toContain("5S Improvement");
-    expect(Array.from(typeSelect.options).map((option) => option.textContent)).toContain("Improvement suggestion");
+    expect(Array.from(typeSelect.options).map((option) => option.textContent)).toContain("Improvement Suggestion");
     expect(addWorker.textContent).toBe("Add involved worker");
     expect(addWorker.style.display).toBe("none");
 

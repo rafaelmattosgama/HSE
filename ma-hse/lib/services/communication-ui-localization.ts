@@ -1,4 +1,5 @@
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
+import { getFixedCommunicationLabels } from "@/lib/communication-labels";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 
 type PartialDeep<T> = {
@@ -197,7 +198,7 @@ const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
     NEAR_MISS: "Near miss",
     FIRST_AID: "Primeiros socorros",
     ACCIDENT: "Acidente",
-    FIVE_S_IMPROVEMENT: "Melhoria 5S's",
+    FIVE_S_IMPROVEMENT: "Melhoria 5S",
     IMPROVEMENT_SUGGESTION: "Sugestão de melhoria",
   },
   communicationImprovementSubtypeLabels: {
@@ -297,13 +298,21 @@ async function translateStructured<T>(locale: string, base: T): Promise<T> {
 }
 
 export async function getLocalizedCommunicationUi(locale: string): Promise<CommunicationUi> {
+  const fixedLabels = getFixedCommunicationLabels(locale);
+
   if (locale === "pt") {
-    return mergeWithFallback(BASE_COMMUNICATION_UI, PT_COMMUNICATION_UI);
+    return {
+      ...mergeWithFallback(BASE_COMMUNICATION_UI, PT_COMMUNICATION_UI),
+      ...fixedLabels,
+    };
   }
 
   if (locale === "en") {
-    return BASE_COMMUNICATION_UI;
+    return { ...BASE_COMMUNICATION_UI, ...fixedLabels };
   }
 
-  return translateStructured(locale, BASE_COMMUNICATION_UI) as Promise<CommunicationUi>;
+  return {
+    ...(await translateStructured(locale, BASE_COMMUNICATION_UI)),
+    ...fixedLabels,
+  };
 }

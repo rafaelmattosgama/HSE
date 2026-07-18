@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { hash } from "bcryptjs";
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { DEFAULT_SHIFT_MASTER_DATA } from "@/lib/defaults/shifts";
 import { DEFAULT_INJURY_TYPES } from "@/lib/defaults/injury-types";
@@ -11,6 +11,7 @@ import { DEFAULT_UNSAFE_CONDITION_TYPES } from "@/lib/defaults/unsafe-condition-
 import { parseBody } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac/guards";
+import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 import { getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
 import { createCorporatePlantInput, updateCorporatePlantLanguageInput } from "@/lib/validation/dtos";
 
@@ -87,8 +88,8 @@ async function ensurePlantDefaults(plantId: string) {
     for (const row of DEFAULT_MASTER_DATA.areas) {
       await tx.area.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { name: row.name, isActive: true },
-        create: { plantId, ...row },
+        update: { name: row.name, sourceLanguage: "en", isActive: true },
+        create: { plantId, ...row, sourceLanguage: "en" },
       });
     }
 
@@ -103,16 +104,16 @@ async function ensurePlantDefaults(plantId: string) {
     for (const row of DEFAULT_MASTER_DATA.workstations) {
       await tx.workstation.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { name: row.name, isActive: true },
-        create: { plantId, ...row },
+        update: { name: row.name, sourceLanguage: "en", isActive: true },
+        create: { plantId, ...row, sourceLanguage: "en" },
       });
     }
 
     for (const row of DEFAULT_MASTER_DATA.equipments) {
       await tx.equipment.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { name: row.name, isActive: true },
-        create: { plantId, ...row },
+        update: { name: row.name, sourceLanguage: "en", isActive: true },
+        create: { plantId, ...row, sourceLanguage: "en" },
       });
     }
 
@@ -127,8 +128,8 @@ async function ensurePlantDefaults(plantId: string) {
     for (const row of DEFAULT_MASTER_DATA.riskThemes) {
       await tx.riskTheme.upsert({
         where: { plantId_code: { plantId, code: row.code } },
-        update: { category: row.category, name: row.name, isActive: true },
-        create: { plantId, ...row },
+        update: { category: row.category, name: row.name, sourceLanguage: "pt", categorySourceLanguage: "en", isActive: true },
+        create: { plantId, ...row, sourceLanguage: "pt", categorySourceLanguage: "en" },
       });
     }
 
@@ -172,6 +173,19 @@ async function ensurePlantDefaults(plantId: string) {
       });
     }
   });
+
+  const [areas, workstations, equipments, riskThemes] = await prisma.$transaction([
+    prisma.area.findMany({ where: { plantId }, select: { id: true } }),
+    prisma.workstation.findMany({ where: { plantId }, select: { id: true } }),
+    prisma.equipment.findMany({ where: { plantId }, select: { id: true } }),
+    prisma.riskTheme.findMany({ where: { plantId }, select: { id: true } }),
+  ]);
+  await Promise.all([
+    ...areas.map((row) => scheduleMasterDataTranslations({ entityType: MasterDataEntityType.AREA, entityId: row.id })),
+    ...workstations.map((row) => scheduleMasterDataTranslations({ entityType: MasterDataEntityType.WORKSTATION, entityId: row.id })),
+    ...equipments.map((row) => scheduleMasterDataTranslations({ entityType: MasterDataEntityType.EQUIPMENT, entityId: row.id })),
+    ...riskThemes.map((row) => scheduleMasterDataTranslations({ entityType: MasterDataEntityType.RISK_THEME, entityId: row.id })),
+  ]);
 }
 
 async function ensureUserWithRole(input: {

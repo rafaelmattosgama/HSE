@@ -102,6 +102,7 @@ async function main() {
   const nextDevLockPath = path.join(process.cwd(), ".next", "dev", "lock");
 
   const env = buildChildEnv({
+    APP_ENV: "development",
     APP_URL: baseUrl,
     NEXTAUTH_URL: baseUrl,
     NEXT_PUBLIC_APP_URL: baseUrl,

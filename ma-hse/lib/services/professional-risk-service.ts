@@ -1,5 +1,7 @@
+import { MasterDataEntityType } from "@prisma/client";
 import { DEFAULT_PROFESSIONAL_RISKS } from "@/lib/defaults/professional-risks";
 import { prisma } from "@/lib/prisma";
+import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 
 export async function ensureDefaultProfessionalRisks(plantId: string) {
   const existingDefaults = await prisma.riskTheme.count({
@@ -15,7 +17,7 @@ export async function ensureDefaultProfessionalRisks(plantId: string) {
     return;
   }
 
-  await prisma.$transaction(
+  const risks = await prisma.$transaction(
     DEFAULT_PROFESSIONAL_RISKS.map((risk) =>
       prisma.riskTheme.upsert({
         where: {
@@ -27,6 +29,8 @@ export async function ensureDefaultProfessionalRisks(plantId: string) {
         update: {
           category: risk.category,
           name: risk.name,
+          sourceLanguage: "pt",
+          categorySourceLanguage: "en",
           isActive: true,
         },
         create: {
@@ -34,7 +38,18 @@ export async function ensureDefaultProfessionalRisks(plantId: string) {
           code: risk.code,
           category: risk.category,
           name: risk.name,
+          sourceLanguage: "pt",
+          categorySourceLanguage: "en",
         },
+      }),
+    ),
+  );
+
+  await Promise.all(
+    risks.map((risk) =>
+      scheduleMasterDataTranslations({
+        entityType: MasterDataEntityType.RISK_THEME,
+        entityId: risk.id,
       }),
     ),
   );

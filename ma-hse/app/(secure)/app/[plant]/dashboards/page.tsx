@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CommunicationType, RoleCode } from "@prisma/client";
+import { CommunicationType, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { AlertTriangle, CheckCircle2, Clock3, ClipboardCheck, Inbox, Stethoscope, UserCheck } from "lucide-react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
@@ -26,6 +26,7 @@ import { getUiDictionary } from "@/lib/ui-language";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { buildSafetyDaysSummary } from "@/lib/safety-days";
 import { getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { AppCard, AppHero, AppKpiCard } from "@/components/ui/app-surface";
 import { isDashboardOpenAction, isDashboardOverdueAction } from "@/lib/dashboard-actions";
 import {
@@ -198,7 +199,9 @@ export default async function DashboardsPage({
         },
         workstation: {
           select: {
+            id: true,
             name: true,
+            sourceLanguage: true,
           },
         },
         unsafeActType: {
@@ -331,6 +334,16 @@ export default async function DashboardsPage({
       },
     }),
   ]);
+  const localizedWorkstations = await localizeMasterDataRows(
+    MasterDataEntityType.WORKSTATION,
+    Array.from(
+      new Map(
+        communicationRows.flatMap((row) => row.workstation ? [[row.workstation.id, row.workstation] as const] : []),
+      ).values(),
+    ),
+    uiLocale,
+  );
+  const localizedWorkstationById = new Map(localizedWorkstations.map((row) => [row.id, row.name]));
   const safetyDaysConfig = await getPlantSafetyDaysConfig(plantRow.id);
   const safetyDays = buildSafetyDaysSummary({
     plantCreatedAt: plantRow.createdAt,
@@ -388,7 +401,7 @@ export default async function DashboardsPage({
       increment(reportingWorkers, reporterEmployee ? `${reporterEmployee.employeeNo} - ${reporterEmployee.name}` : row.reporterEmployeeNo);
     }
     increment(involvedDepartments, row.targetEmployee?.dept);
-    increment(involvedLocations, row.workstation?.name);
+    increment(involvedLocations, row.workstation ? localizedWorkstationById.get(row.workstation.id) ?? row.workstation.name : null);
 
     const reporterEmployee = row.reporterEmployeeNo ? employeeByNo.get(row.reporterEmployeeNo) : null;
     increment(reportingDepartments, reporterEmployee?.dept);
@@ -575,7 +588,7 @@ export default async function DashboardsPage({
             const reporterEmployee = row.reporterEmployeeNo ? employeeByNo.get(row.reporterEmployeeNo) : null;
             increment(monthMap, reporterEmployee?.dept);
           } else if (group.id === "locations-involved") {
-            increment(monthMap, row.workstation?.name);
+            increment(monthMap, row.workstation ? localizedWorkstationById.get(row.workstation.id) ?? row.workstation.name : null);
           }
         }
 
@@ -634,12 +647,14 @@ export default async function DashboardsPage({
 
   return (
     <>
-      <AppHero
-        eyebrow={ui.modules.safetyDashboard}
-        title={ui.dashboard.plantTitle}
-        description={ui.dashboard.plantDescription}
-        helpLabel={ui.dashboard.help}
-      />
+      <div data-onboarding="dashboard-overview">
+        <AppHero
+          eyebrow={ui.modules.safetyDashboard}
+          title={ui.dashboard.plantTitle}
+          description={ui.dashboard.plantDescription}
+          helpLabel={ui.dashboard.help}
+        />
+      </div>
 
       <section className="app-panel rounded-2xl p-5">
         <form className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">

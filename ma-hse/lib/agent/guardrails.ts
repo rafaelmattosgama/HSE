@@ -144,7 +144,7 @@ export function classifyAgentRunError(error: unknown): {
   };
 }
 
-export function truncateAgentOutput(output: string, maxChars: number) {
+export function truncateAgentOutput(output: string, maxChars: number, truncatedMessage = "Resposta truncada por limite de seguranca. Reformule o pedido para obter uma resposta mais curta.") {
   if (output.length <= maxChars) {
     return {
       output,
@@ -153,7 +153,7 @@ export function truncateAgentOutput(output: string, maxChars: number) {
     };
   }
 
-  const suffix = "\n\n[Resposta truncada por limite de seguranca. Reformule o pedido para obter uma resposta mais curta.]";
+  const suffix = `\n\n[${truncatedMessage}]`;
   const sliceLength = Math.max(0, maxChars - suffix.length);
   return {
     output: `${output.slice(0, sliceLength)}${suffix}`,

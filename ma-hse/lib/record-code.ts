@@ -24,6 +24,7 @@ export function getCommunicationRecordType(type: CommunicationType | string | nu
 }
 
 export function getReportRecordType(_type: ReportType | string): RecordCodeType {
+  void _type;
   return "IN";
 }
 
@@ -104,12 +105,12 @@ export function getReadableCommunicationCode(record: {
   codigoAbreviado?: string | null;
   id: string;
 }) {
-  return record.codigoCompleto ?? record.codigoAbreviado ?? "Requires code update";
+  return record.codigoCompleto ?? record.codigoAbreviado ?? record.id;
 }
 
 export function getReadableSewoCode(record: {
   codigoSewo?: string | null;
   id: string;
 }) {
-  return record.codigoSewo ?? "Requires code update";
+  return record.codigoSewo ?? record.id;
 }

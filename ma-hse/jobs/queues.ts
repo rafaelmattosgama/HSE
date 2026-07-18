@@ -13,6 +13,7 @@ export const QUEUE_NAMES = {
   ACTIONS_OVERDUE: "actions-overdue",
   ALERTS_REPETITIVE: "alerts-repetitive",
   SEWO_APPROVED_NOTIFICATION: "sewo-approved-notification",
+  MASTER_DATA_TRANSLATION: "master-data-translation",
 } as const;
 
 export const digestWeeklyQueue = new Queue(QUEUE_NAMES.DIGEST_WEEKLY, { connection });
@@ -21,6 +22,7 @@ export const reportAnnualQueue = new Queue(QUEUE_NAMES.REPORT_ANNUAL, { connecti
 export const actionsOverdueQueue = new Queue(QUEUE_NAMES.ACTIONS_OVERDUE, { connection });
 export const alertsRepetitiveQueue = new Queue(QUEUE_NAMES.ALERTS_REPETITIVE, { connection });
 export const sewoApprovedNotificationQueue = new Queue(QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, { connection });
+export const masterDataTranslationQueue = new Queue(QUEUE_NAMES.MASTER_DATA_TRANSLATION, { connection });
 
 export function getQueueConnection() {
   return connection;

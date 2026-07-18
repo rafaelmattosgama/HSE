@@ -1,4 +1,4 @@
-import { ActionCategory, ActionSourceType, CommunicationStatus, RoleCode } from "@prisma/client";
+import { ActionCategory, ActionSourceType, CommunicationStatus, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api";
 import {
@@ -17,6 +17,7 @@ import { ActionService } from "@/lib/services/action-service";
 import { CommunicationService, CommunicationValidationError } from "@/lib/services/communication-service";
 import { isCommunicationLinkableStatus } from "@/lib/communication-status";
 import { initialStatusForCommunicationCreation } from "@/lib/services/workflow";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -59,10 +60,28 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     },
     take: 200,
   });
+  const localizedRiskThemes = await localizeMasterDataRows(
+    MasterDataEntityType.RISK_THEME,
+    Array.from(
+      new Map(
+        communications.flatMap((communication) =>
+          communication.riskTheme ? [[communication.riskTheme.id, communication.riskTheme] as const] : [],
+        ),
+      ).values(),
+    ),
+    auth.session.user.language,
+  );
+  const localizedRiskThemeById = new Map(localizedRiskThemes.map((risk) => [risk.id, risk]));
+  const localizedCommunications = communications.map((communication) => ({
+    ...communication,
+    riskTheme: communication.riskThemeId
+      ? localizedRiskThemeById.get(communication.riskThemeId) ?? communication.riskTheme
+      : communication.riskTheme,
+  }));
 
   if (!canManageCommunicationClassification(actorRole)) {
     return ok(
-      communications.map((communication) => ({
+      localizedCommunications.map((communication) => ({
         ...communication,
         riskThemeId: shouldDeferPublicReportProfessionalRisk(communication.type) ? null : communication.riskThemeId,
         riskTheme: shouldDeferPublicReportProfessionalRisk(communication.type) ? null : communication.riskTheme,
@@ -75,7 +94,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     );
   }
 
-  return ok(communications);
+  return ok(localizedCommunications);
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ plantCode: string }> }) {

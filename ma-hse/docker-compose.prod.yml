@@ -65,7 +65,8 @@ services:
       context: .
       target: runner
       args:
-        GIT_COMMIT: ${GIT_COMMIT:-N/A}
+        APP_ENV: ${APP_ENV:-production}
+        DEPLOY_VERSION: ${DEPLOY_VERSION:-}
     restart: unless-stopped
     env_file:
       - ${APP_ENV_FILE:-.env.production}
@@ -100,7 +101,8 @@ services:
       context: .
       target: runner
       args:
-        GIT_COMMIT: ${GIT_COMMIT:-N/A}
+        APP_ENV: ${APP_ENV:-production}
+        DEPLOY_VERSION: ${DEPLOY_VERSION:-}
     restart: unless-stopped
     env_file:
       - ${APP_ENV_FILE:-.env.production}

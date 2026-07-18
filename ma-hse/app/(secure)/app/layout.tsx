@@ -10,8 +10,13 @@ import { ProfileAlertsButton } from "@/components/layout/profile-alerts-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
 import { UserMenu } from "@/components/layout/user-menu";
+import { ONBOARDING_PERMISSIONS } from "@/components/onboarding/onboarding-config";
+import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
+import { canUseAgent } from "@/lib/agent/permissions";
 import { authOptions } from "@/lib/auth/options";
+import { env } from "@/lib/env";
 import { ALL_PLANTS_SCOPE, LAST_PLANT_COOKIE } from "@/lib/plant-scope";
+import { prisma } from "@/lib/prisma";
 import { ProfileAlertService } from "@/lib/services/profile-alert-service";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { parseTheme, THEME_STORAGE_KEY } from "@/lib/theme";
@@ -39,6 +44,22 @@ export default async function SecureAppLayout({
     lastPlant && availablePlantCodes.includes(lastPlant)
       ? lastPlant
       : session.user.plantRoles.find((entry) => entry.plantCode)?.plantCode;
+  const hasN0Role = session.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN);
+  const hasN1Role = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  const fallbackGlobalPlant = !primaryPlantCode && (hasN0Role || hasN1Role)
+    ? await prisma.plant.findFirst({
+        where: { isActive: true },
+        orderBy: { code: "asc" },
+        select: { code: true },
+      })
+    : null;
+  const onboardingPlantCode = primaryPlantCode ?? fallbackGlobalPlant?.code ?? null;
+  const onboardingRole = hasN0Role
+    ? RoleCode.N0_ADMIN
+    : hasN1Role
+      ? RoleCode.N1_CORPORATE
+      : session.user.plantRoles.find((entry) => entry.plantCode === onboardingPlantCode)?.role
+        ?? session.user.plantRoles[0]?.role;
   const homeHref = lastPlant === ALL_PLANTS_SCOPE && availablePlantCodes.length > 1
     ? "/app/all/communications"
     : primaryPlantCode
@@ -49,15 +70,20 @@ export default async function SecureAppLayout({
   const uiLocale = await getServerUiLocale({ userLanguage: session.user.language });
   const ui = getUiDictionary(uiLocale);
   const theme = parseTheme(cookieStore.get(THEME_STORAGE_KEY)?.value);
-  const hasN1Validation = session.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE);
+  const hasN1Validation = hasN1Role;
   const hasProfileAlerts = ProfileAlertService.canUseAlerts(session.user);
   const profileAlertScopeLabel = ProfileAlertService.getScopeLabel(session.user);
   const unreadProfileAlertCount = hasProfileAlerts ? await ProfileAlertService.countUnreadForUser(session.user) : 0;
+  const onboardingPermissions = [
+    ...(onboardingPlantCode ? [ONBOARDING_PERMISSIONS.PLANT_CONTEXT] : []),
+    ...(hasProfileAlerts ? [ONBOARDING_PERMISSIONS.PROFILE_ALERTS] : []),
+    ...(env.AGENT_ENABLED && canUseAgent({ role: onboardingRole }) ? [ONBOARDING_PERMISSIONS.AI_ASSISTANT] : []),
+  ];
 
-  return (
+  const appShell = (
     <div className="app-shell">
       <UiLanguageRuntime locale={uiLocale} />
-      <header className="app-topbar">
+      <header className="app-topbar" data-onboarding="topbar">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
           <Link href={homeHref} className="flex items-center gap-3 text-[var(--brand-700)]">
             <div className="app-panel flex h-14 w-20 items-center justify-center rounded-2xl px-2 py-1">
@@ -90,4 +116,17 @@ export default async function SecureAppLayout({
       <div className="app-content">{children}</div>
     </div>
   );
+
+  return onboardingRole ? (
+    <OnboardingProvider
+      userContext={{
+        role: onboardingRole,
+        plantCode: onboardingPlantCode,
+        permissions: onboardingPermissions,
+        locale: uiLocale,
+      }}
+    >
+      {appShell}
+    </OnboardingProvider>
+  ) : appShell;
 }

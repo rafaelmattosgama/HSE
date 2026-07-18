@@ -77,6 +77,8 @@ Variaveis obrigatorias principais:
 ```text
 APP_PORT
 NODE_ENV
+APP_ENV
+DEPLOY_VERSION
 APP_URL
 NEXT_PUBLIC_APP_URL
 NEXTAUTH_URL
@@ -126,9 +128,22 @@ A aplicacao bloqueia o runtime em producao se esses defaults forem usados.
 
 ## Build Das Imagens
 
+Antes de cada publicacao, editar `.env.production` e definir manualmente a
+identificacao que deve aparecer no rodape do login:
+
+```text
+APP_ENV=production
+DEPLOY_VERSION=Release 2026.07
+```
+
+`DEPLOY_VERSION` aceita uma versao semantica ou um nome de release. O valor e
+incorporado no build; por isso, deve ser atualizado antes do comando `build`.
+Se estiver vazio, o build apresenta um aviso claro, mas a pagina de login e o
+processo de autenticacao continuam disponiveis sem texto de versao.
+
 ```bash
 cd /opt/ma-hse
-GIT_COMMIT=$(git rev-parse --short HEAD) docker compose --env-file .env.production -f docker-compose.prod.yml build
+docker compose --env-file .env.production -f docker-compose.prod.yml build
 ```
 
 ## Primeira Subida Sem Importar Dump
@@ -426,10 +441,13 @@ Usa este procedimento apenas se tens certeza de que a base pode ser substituida.
 
 Para atualizar codigo sem reimportar dados:
 
+Primeiro, atualizar `DEPLOY_VERSION` em `.env.production` para o nome da nova
+publicacao. Depois executar:
+
 ```bash
 cd /opt/ma-hse
 git pull
-GIT_COMMIT=$(git rev-parse --short HEAD) docker compose --env-file .env.production -f docker-compose.prod.yml build
+docker compose --env-file .env.production -f docker-compose.prod.yml build
 docker compose --env-file .env.production -f docker-compose.prod.yml --profile tasks run --rm migrate
 docker compose --env-file .env.production -f docker-compose.prod.yml --profile tasks run --rm scheduler
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d app worker
