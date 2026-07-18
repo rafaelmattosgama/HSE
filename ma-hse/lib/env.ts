@@ -11,6 +11,11 @@ const productionRequiredValues = {
   NEXT_PUBLIC_APP_URL: "http://localhost:3000",
 } as const;
 
+const optionalTrimmedString = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().trim().min(1).optional(),
+);
+
 function isProductionRuntime(nodeEnv: string) {
   return (
     nodeEnv === "production" &&
@@ -24,7 +29,7 @@ const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     APP_ENV: z.enum(["development", "production"]).default("development"),
-    DEPLOY_VERSION: z.string().trim().min(1).optional(),
+    DEPLOY_VERSION: optionalTrimmedString,
     APP_URL: z.string().url().default("http://localhost:3000"),
     NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
     NEXTAUTH_URL: z.string().url().default("http://localhost:3000"),
