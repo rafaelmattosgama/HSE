@@ -152,6 +152,94 @@ html[data-theme] .bg-white\/80 {
   background-color: color-mix(in srgb, var(--surface) 80%, transparent) !important;
 }
 
+.driver-popover.ma-hse-onboarding-popover {
+  min-width: min(320px, calc(100vw - 32px));
+  max-width: min(380px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--text-default);
+  padding: 1.25rem;
+  font-family: var(--font-sans);
+  box-shadow: 0 24px 64px rgba(2, 6, 23, 0.28);
+}
+
+.ma-hse-onboarding-popover .driver-popover-title {
+  padding-right: 2rem;
+  color: var(--text-strong);
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.ma-hse-onboarding-popover .driver-popover-description {
+  color: var(--text-default);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.ma-hse-onboarding-popover .driver-popover-progress-text {
+  color: var(--text-muted);
+}
+
+.ma-hse-onboarding-popover .driver-popover-close-btn {
+  color: var(--text-muted);
+}
+
+.ma-hse-onboarding-popover .driver-popover-close-btn:hover,
+.ma-hse-onboarding-popover .driver-popover-close-btn:focus-visible {
+  color: var(--text-strong);
+}
+
+.ma-hse-onboarding-popover .driver-popover-footer-btn {
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--text-default);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.ma-hse-onboarding-popover .driver-popover-navigation-btns button:last-child {
+  border-color: var(--brand-700);
+  background: var(--brand-700);
+  color: var(--primary-foreground);
+}
+
+.ma-hse-onboarding-popover .driver-popover-footer-btn:hover,
+.ma-hse-onboarding-popover .driver-popover-footer-btn:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: 2px;
+}
+
+.ma-hse-onboarding-popover .driver-popover-arrow {
+  border-color: var(--surface);
+}
+
+.ma-hse-onboarding-popover .driver-popover-arrow-side-left {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  border-right-color: transparent;
+}
+
+.ma-hse-onboarding-popover .driver-popover-arrow-side-right {
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+}
+
+.ma-hse-onboarding-popover .driver-popover-arrow-side-top {
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+}
+
+.ma-hse-onboarding-popover .driver-popover-arrow-side-bottom {
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-left-color: transparent;
+}
+
 html[data-theme] .bg-white\/90 {
   background-color: color-mix(in srgb, var(--surface) 90%, transparent) !important;
 }

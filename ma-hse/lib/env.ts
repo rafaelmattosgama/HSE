@@ -23,6 +23,8 @@ function isProductionRuntime(nodeEnv: string) {
 const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    APP_ENV: z.enum(["development", "production"]).default("development"),
+    DEPLOY_VERSION: z.string().trim().min(1).optional(),
     APP_URL: z.string().url().default("http://localhost:3000"),
     NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
     NEXTAUTH_URL: z.string().url().default("http://localhost:3000"),
@@ -54,6 +56,7 @@ const envSchema = z
     AGENT_MAX_TOOL_CALLS: z.coerce.number().int().positive().default(8),
     AGENT_MAX_OUTPUT_CHARS: z.coerce.number().int().positive().default(4000),
     OPENAI_API_KEY: z.string().optional(),
+    TRANSLATION_PROVIDER: z.enum(["openai", "disabled"]).default("openai"),
     OPENAI_AGENT_MODEL: z.string().default("gpt-5.4-mini"),
     OPENAI_TRANSLATION_MODEL: z.string().default("gpt-5.2"),
     OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),

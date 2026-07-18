@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
+import { MasterDataEntityType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 
 type CatalogWorkbookRow = {
   code: string;
@@ -17,6 +19,20 @@ type MasterDataWorkbookData = {
   workstations?: CatalogWorkbookRow[];
   equipments?: CatalogWorkbookRow[];
   workers?: WorkerWorkbookRow[];
+};
+
+type MasterDataImportOptions = {
+  sourceLanguage?: string;
+  includeEquipments?: boolean;
+};
+
+type MasterDataExportOptions = {
+  includeEquipments?: boolean;
+};
+
+type TranslationTarget = {
+  entityType: MasterDataEntityType;
+  entityId: string;
 };
 
 function normalizeText(value: unknown) {
@@ -177,7 +193,7 @@ async function buildWorkbook(data: MasterDataWorkbookData = {}) {
   return Buffer.from(buffer as ArrayBuffer);
 }
 
-async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet) {
+async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string, translationTargets: TranslationTarget[]) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
 
@@ -190,7 +206,7 @@ async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet) {
     const name = getCellText(row, headerMap, ["name", "nome", "department", "departamento", "area"], 2);
     if (!code || !name) continue;
 
-    await prisma.area.upsert({
+    const item = await prisma.area.upsert({
       where: {
         plantId_code: {
           plantId,
@@ -199,14 +215,18 @@ async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet) {
       },
       update: {
         name,
+        sourceLanguage,
         isActive: true,
       },
       create: {
         plantId,
         code,
         name,
+        sourceLanguage,
       },
     });
+
+    if (item.id) translationTargets.push({ entityType: MasterDataEntityType.AREA, entityId: item.id });
 
     imported += 1;
   }
@@ -214,7 +234,7 @@ async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet) {
   return imported;
 }
 
-async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet) {
+async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string, translationTargets: TranslationTarget[]) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
 
@@ -227,7 +247,7 @@ async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet) {
     const name = getCellText(row, headerMap, ["name", "nome", "workstation", "posto"], 2);
     if (!code || !name) continue;
 
-    await prisma.workstation.upsert({
+    const item = await prisma.workstation.upsert({
       where: {
         plantId_code: {
           plantId,
@@ -236,14 +256,18 @@ async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet) {
       },
       update: {
         name,
+        sourceLanguage,
         isActive: true,
       },
       create: {
         plantId,
         code,
         name,
+        sourceLanguage,
       },
     });
+
+    if (item.id) translationTargets.push({ entityType: MasterDataEntityType.WORKSTATION, entityId: item.id });
 
     imported += 1;
   }
@@ -251,7 +275,7 @@ async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet) {
   return imported;
 }
 
-async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet) {
+async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string, translationTargets: TranslationTarget[]) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
 
@@ -264,7 +288,7 @@ async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet) {
     const name = getCellText(row, headerMap, ["name", "nome", "equipment", "equipamento"], 2);
     if (!code || !name) continue;
 
-    await prisma.equipment.upsert({
+    const item = await prisma.equipment.upsert({
       where: {
         plantId_code: {
           plantId,
@@ -273,14 +297,18 @@ async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet) {
       },
       update: {
         name,
+        sourceLanguage,
         isActive: true,
       },
       create: {
         plantId,
         code,
         name,
+        sourceLanguage,
       },
     });
+
+    if (item.id) translationTargets.push({ entityType: MasterDataEntityType.EQUIPMENT, entityId: item.id });
 
     imported += 1;
   }
@@ -339,24 +367,46 @@ async function importWorkers(plantId: string, sheet: ExcelJS.Worksheet) {
 }
 
 export const MasterDataImportService = {
-  async importFromExcel(plantId: string, fileBuffer: Uint8Array) {
+  async importFromExcel(plantId: string, fileBuffer: Uint8Array, options: MasterDataImportOptions = {}) {
     const workbook = new ExcelJS.Workbook();
     await ((workbook.xlsx as unknown) as { load: (input: Uint8Array) => Promise<void> }).load(fileBuffer);
 
+    const plantDelegate = (prisma as typeof prisma & {
+      plant?: typeof prisma.plant;
+    }).plant;
+    const plant = options.sourceLanguage || !plantDelegate
+      ? null
+      : await plantDelegate.findUnique({
+          where: { id: plantId },
+          select: { defaultLanguage: true },
+        });
+    const sourceLanguage = options.sourceLanguage ?? plant?.defaultLanguage ?? "en";
+    const translationTargets: TranslationTarget[] = [];
+
     const departmentSheet = findSheetByNames(workbook, ["depart", "area"]);
     const workstationSheet = findSheetByNames(workbook, ["workstation", "posto"]);
-    const equipmentSheet = findSheetByNames(workbook, ["equipment", "equipamento"]);
+    const equipmentSheet = options.includeEquipments === false
+      ? undefined
+      : findSheetByNames(workbook, ["equipment", "equipamento"]);
     const workerSheet = findSheetByNames(workbook, ["worker", "trabalhador", "employee"]) ?? findWorkerSheetByHeaders(workbook);
 
     const summary = {
-      departments: departmentSheet ? await importDepartments(plantId, departmentSheet) : 0,
-      workstations: workstationSheet ? await importWorkstations(plantId, workstationSheet) : 0,
-      equipments: equipmentSheet ? await importEquipments(plantId, equipmentSheet) : 0,
+      departments: departmentSheet ? await importDepartments(plantId, departmentSheet, sourceLanguage, translationTargets) : 0,
+      workstations: workstationSheet ? await importWorkstations(plantId, workstationSheet, sourceLanguage, translationTargets) : 0,
+      equipments: equipmentSheet ? await importEquipments(plantId, equipmentSheet, sourceLanguage, translationTargets) : 0,
       workers: workerSheet ? await importWorkers(plantId, workerSheet) : 0,
     };
 
     if (summary.departments + summary.workstations + summary.equipments + summary.workers === 0) {
       throw new Error("Excel file does not contain valid Departments, Workstations, Equipment or Workers sheets");
+    }
+
+    for (let index = 0; index < translationTargets.length; index += 25) {
+      await Promise.all(
+        translationTargets
+          .slice(index, index + 25)
+          .map((target) => scheduleMasterDataTranslations(target)),
+      );
     }
 
     return summary;
@@ -366,7 +416,7 @@ export const MasterDataImportService = {
     return buildWorkbook();
   },
 
-  async buildExport(plantId: string) {
+  async buildExport(plantId: string, options: MasterDataExportOptions = {}) {
     const [departments, workstations, equipments, workers] = await prisma.$transaction([
       prisma.area.findMany({
         where: { plantId, isActive: true },
@@ -379,7 +429,11 @@ export const MasterDataImportService = {
         select: { code: true, name: true },
       }),
       prisma.equipment.findMany({
-        where: { plantId, isActive: true },
+        where: {
+          plantId,
+          isActive: true,
+          ...(options.includeEquipments === false ? { id: { in: [] } } : {}),
+        },
         orderBy: [{ code: "asc" }, { name: "asc" }],
         select: { code: true, name: true },
       }),

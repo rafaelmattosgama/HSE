@@ -93,6 +93,7 @@ function ctx(overrides: Record<string, unknown> = {}) {
     session: {
       user: {
         id: "user-1",
+        language: "pt",
         plantRoles: [{ plantId: "plant-1", plantCode: "pl01", role: RoleCode.N3_SAFETY }],
       },
       expires: "2099-01-01T00:00:00.000Z",
@@ -398,7 +399,7 @@ describe("agent route security abuse cases", () => {
     expect(openAiMock.run).not.toHaveBeenCalled();
   });
 
-  it("rejects userId, role, plantId and permissions fields sent by the frontend", async () => {
+  it("rejects userId, role, plantId, permissions and language fields sent by the frontend", async () => {
     const response = await POST(
       request({
         plantCode: "pl01",
@@ -407,6 +408,7 @@ describe("agent route security abuse cases", () => {
         role: "N1_CORPORATE",
         plantId: "plant-2",
         permissions: ["*"],
+        language: "en",
       }),
     );
 

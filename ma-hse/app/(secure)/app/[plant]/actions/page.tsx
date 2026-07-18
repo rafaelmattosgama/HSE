@@ -1,4 +1,4 @@
-import { CommunicationStatus, RoleCode } from "@prisma/client";
+import { CommunicationStatus, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { CreateActionQuick } from "@/components/feature/create-action-quick";
 import { ActionsTable } from "@/components/feature/actions-table";
 import { authOptions } from "@/lib/auth/options";
@@ -9,9 +9,9 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isAllPlantsScope } from "@/lib/plant-scope";
 import { getServerUiLocale } from "@/lib/server-ui-language";
-import { localizeCommunicationCatalogRows } from "@/lib/services/communication-catalog-localization";
 import { getLocalizedActionsUi } from "@/lib/services/actions-ui-localization";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerSession } from "next-auth";
@@ -148,12 +148,23 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
   const communicationUi = await getLocalizedCommunicationUi(uiLocale);
   const actionsUi = await getLocalizedActionsUi(uiLocale);
   const translatedTitles = await translateForViewer(uiLocale, actions.map((action) => action.title));
-  const [localizedCommunicationAreas, localizedActionLocals] = await Promise.all([
-    localizeCommunicationCatalogRows(
+  const [localizedCommunicationAreas, localizedCommunicationWorkstations, localizedActionLocals] = await Promise.all([
+    localizeMasterDataRows(
+      MasterDataEntityType.AREA,
       actions
         .flatMap((action) => [
           action.communication?.area,
           action.sewo?.communication?.area,
+        ])
+        .filter(isPresent),
+      uiLocale,
+    ),
+    localizeMasterDataRows(
+      MasterDataEntityType.WORKSTATION,
+      actions
+        .flatMap((action) => [
+          action.communication?.workstation,
+          action.sewo?.communication?.workstation,
         ])
         .filter(isPresent),
       uiLocale,
@@ -164,11 +175,12 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
     ),
   ]);
   const localizedAreaById = new Map(localizedCommunicationAreas.map((area) => [area.id, area.name]));
+  const localizedWorkstationById = new Map(localizedCommunicationWorkstations.map((workstation) => [workstation.id, workstation.name]));
 
   function resolveLocalLabel(row: (typeof actions)[number], index: number) {
-    if (row.communication?.workstation?.name) return row.communication.workstation.name;
+    if (row.communication?.workstationId) return localizedWorkstationById.get(row.communication.workstationId) ?? row.communication.workstation?.name ?? "-";
     if (row.communication?.areaId) return localizedAreaById.get(row.communication.areaId) ?? row.communication.area?.name ?? "-";
-    if (row.sewo?.communication?.workstation?.name) return row.sewo.communication.workstation.name;
+    if (row.sewo?.communication?.workstationId) return localizedWorkstationById.get(row.sewo.communication.workstationId) ?? row.sewo.communication.workstation?.name ?? "-";
     if (row.sewo?.communication?.areaId) return localizedAreaById.get(row.sewo.communication.areaId) ?? row.sewo.communication.area?.name ?? "-";
     return localizedActionLocals[index] || row.sewo?.whereText || "-";
   }

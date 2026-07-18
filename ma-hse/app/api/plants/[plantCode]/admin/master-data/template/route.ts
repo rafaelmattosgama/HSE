@@ -1,15 +1,19 @@
-import { RoleCode } from "@prisma/client";
 import { getPlantByCode } from "@/lib/plant";
+import { fail } from "@/lib/api";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { canManagePlantEquipment, MASTER_DATA_ADMIN_ROLES } from "@/lib/rbac/master-data";
 import { MasterDataImportService } from "@/lib/services/master-data-import-service";
 
 export async function GET(_: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
-  if ("error" in auth) return auth.error;
+  const auth = await requirePlantAccess(plantCode, [...MASTER_DATA_ADMIN_ROLES]);
+  if ("error" in auth && auth.error) return auth.error;
+  if (!("role" in auth)) return fail("FORBIDDEN", "Plant role could not be resolved.", 403);
 
   const plant = await getPlantByCode(plantCode);
-  const template = await MasterDataImportService.buildExport(plant.id);
+  const template = await MasterDataImportService.buildExport(plant.id, {
+    includeEquipments: canManagePlantEquipment(auth.role),
+  });
 
   return new Response(new Uint8Array(template), {
     headers: {

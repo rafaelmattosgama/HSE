@@ -1,9 +1,10 @@
-import { ActionStatus } from "@prisma/client";
+import { ActionStatus, MasterDataEntityType } from "@prisma/client";
 import { SewoWorkspace } from "@/components/feature/sewo-workspace";
 import { prisma } from "@/lib/prisma";
 import { localizeBodyPartRows, localizeInjuryTypeRows } from "@/lib/public-report";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { ensureDefaultShifts } from "@/lib/services/shift-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { formatLocalizedCommunicationType, formatLocalizedSewoStatus } from "@/lib/sewo-ui";
@@ -165,14 +166,18 @@ export default async function SewoPage({
   ]);
   const localizedBodyParts = localizeBodyPartRows(bodyParts, uiLocale);
   const localizedInjuryTypes = localizeInjuryTypeRows(injuryTypes, uiLocale);
-  const [{ ui, rootCauseGroups }, translatedSewoDescriptions, translatedStandaloneTypes] = await Promise.all([
+  const [{ ui, rootCauseGroups }, translatedSewoDescriptions, translatedStandaloneTypes, localizedAreas, localizedWorkstations] = await Promise.all([
     getLocalizedSewoUi(uiLocale),
     translateForViewer(uiLocale, sewoRecords.map((record) => record.howText)),
     translateForViewer(
       uiLocale,
       sewoRecords.map((record) => (record.communication ? "" : record.eventClassification)),
     ),
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, uiLocale),
   ]);
+  const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
+  const localizedWorkstationById = new Map(localizedWorkstations.map((workstation) => [workstation.id, workstation.name]));
 
   const currentCatalog = catalogVersions[0];
 
@@ -209,7 +214,13 @@ export default async function SewoPage({
           involvedWorkerDepartment: getRecordString(templateData, "involvedWorkerDepartment") ?? communication?.targetEmployee?.dept ?? null,
           natureId: getRecordString(templateData, "natureId") ?? communication?.injuryTypeId ?? null,
           bodyPartId: getRecordString(templateData, "bodyPartId") ?? communication?.bodyPartId ?? null,
-          whereText: getRecordString(templateData, "whereText") ?? (record.whereText || communication?.workstation?.name || communication?.area?.name || ""),
+          whereText: (getRecordString(templateData, "workstationId") ? localizedWorkstationById.get(getRecordString(templateData, "workstationId")!) : null)
+            ?? (communication?.workstationId ? localizedWorkstationById.get(communication.workstationId) : null)
+            ?? (record.areaId ? localizedAreaById.get(record.areaId) : null)
+            ?? (communication?.areaId ? localizedAreaById.get(communication.areaId) : null)
+            ?? getRecordString(templateData, "whereText")
+            ?? record.whereText
+            ?? "",
           analysisText: getRecordString(templateData, "analysisText") ?? (record.howText || communication?.description || ""),
           suggestedAction: getRecordString(templateData, "suggestedAction") ?? communication?.suggestedAction ?? "",
         };
@@ -218,7 +229,12 @@ export default async function SewoPage({
           id: record.id,
           codigoSewo: record.codigoSewo,
           date: record.analysisDate.toISOString().slice(0, 10),
-          local: record.whereText || record.communication?.workstation?.name || record.communication?.area?.name || "",
+          local: (getRecordString(templateData, "workstationId") ? localizedWorkstationById.get(getRecordString(templateData, "workstationId")!) : null)
+            ?? (record.communication?.workstationId ? localizedWorkstationById.get(record.communication.workstationId) : null)
+            ?? (record.areaId ? localizedAreaById.get(record.areaId) : null)
+            ?? (record.communication?.areaId ? localizedAreaById.get(record.communication.areaId) : null)
+            ?? record.whereText
+            ?? "",
           typeLabel: record.communication
             ? formatLocalizedCommunicationType(record.communication.type, ui)
             : translatedStandaloneTypes[index] ?? record.eventClassification,
@@ -288,7 +304,11 @@ export default async function SewoPage({
           monthKey,
           monthLabel: monthLabel(communication.eventDatetime, uiLocale),
           typeLabel: formatLocalizedCommunicationType(communication.type, ui),
-          locationLabel: communication.workstation?.name ?? communication.area?.name ?? "-",
+          locationLabel: (communication.workstationId ? localizedWorkstationById.get(communication.workstationId) : null)
+            ?? (communication.areaId ? localizedAreaById.get(communication.areaId) : null)
+            ?? communication.workstation?.name
+            ?? communication.area?.name
+            ?? "-",
           type: communication.type,
           areaId: communication.areaId,
           workstationId: communication.workstationId,
@@ -322,8 +342,8 @@ export default async function SewoPage({
           })),
         };
       })}
-      areas={areas.map((area) => ({ id: area.id, name: area.name }))}
-      workstations={workstations.map((workstation) => ({ id: workstation.id, name: workstation.name }))}
+      areas={localizedAreas.map((area) => ({ id: area.id, name: area.name }))}
+      workstations={localizedWorkstations.map((workstation) => ({ id: workstation.id, name: workstation.name }))}
       shifts={shifts.map((shift) => ({ id: shift.id, name: shift.name }))}
       workers={workers.map((worker) => ({ id: worker.id, employeeNo: worker.employeeNo, name: worker.name, dept: worker.dept }))}
       bodyParts={localizedBodyParts.map((bodyPart) => ({ id: bodyPart.id, code: bodyPart.code ?? undefined, name: bodyPart.name }))}

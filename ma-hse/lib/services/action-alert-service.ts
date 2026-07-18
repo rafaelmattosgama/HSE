@@ -2,6 +2,7 @@ import {
   ActionAlertChannel,
   ActionAlertType,
   ActionStatus,
+  MasterDataEntityType,
   type Prisma,
   type User,
 } from "@prisma/client";
@@ -10,6 +11,11 @@ import { toZonedTime } from "date-fns-tz";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { type AppLocale } from "@/lib/i18n/routing";
+import {
+  localizeMasterDataRows,
+  normalizeMasterDataLocale,
+} from "@/lib/services/master-data-translation-service";
 import { sendNotificationEmail } from "@/src/email/systemEmailHelpers.js";
 
 export const ACTION_ALERT_NOTIFICATION_CHANNEL = "ACTION_ALERT";
@@ -68,48 +74,90 @@ function getActionRecipients(action: ActionAlertRecord): ActionAlertRecipient[] 
   );
 }
 
-function getActionLocation(action: ActionAlertRecord) {
-  return action.communication?.workstation?.name
-    ?? action.communication?.area?.name
+async function getActionLocation(action: ActionAlertRecord, locale: AppLocale) {
+  const areas = Array.from(
+    new Map(
+      [action.communication?.area, action.sewo?.area]
+        .filter((area): area is NonNullable<typeof area> => Boolean(area))
+        .map((area) => [area.id, area] as const),
+    ).values(),
+  );
+  const [localizedAreas, localizedWorkstations] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, locale),
+    localizeMasterDataRows(
+      MasterDataEntityType.WORKSTATION,
+      action.communication?.workstation ? [action.communication.workstation] : [],
+      locale,
+    ),
+  ]);
+  const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
+
+  return localizedWorkstations[0]?.name
+    ?? (action.communication?.area
+      ? localizedAreaById.get(action.communication.area.id) ?? action.communication.area.name
+      : null)
     ?? action.sewo?.whereText
-    ?? action.sewo?.area?.name
+    ?? (action.sewo?.area ? localizedAreaById.get(action.sewo.area.id) ?? action.sewo.area.name : null)
     ?? action.sewo?.line?.name
     ?? action.plant.name;
 }
 
-function formatLisbonDateTime(value: Date) {
-  return new Intl.DateTimeFormat("pt-PT", {
+function formatLisbonDateTime(value: Date, locale: AppLocale) {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: ACTION_ALERT_TIMEZONE,
   }).format(value);
 }
 
-function getAlertLabel(alertType: ActionAlertType) {
-  if (alertType === ActionAlertType.NEW_ACTION) return "Nova comunicacao aberta";
-  if (alertType === ActionAlertType.THREE_DAYS_BEFORE_DUE_DATE) return "Acao a 3 dias da data limite";
-  return "Acao fora de prazo";
+const actionAlertCopy: Record<AppLocale, {
+  newAction: string;
+  threeDays: string;
+  overdue: string;
+  alertType: string;
+  location: string;
+  description: string;
+  dueDate: string;
+  action: string;
+  communication: string;
+}> = {
+  en: { newAction: "New action opened", threeDays: "Action due in 3 days", overdue: "Overdue action", alertType: "Alert type", location: "Location", description: "Action description", dueDate: "Due date", action: "Action", communication: "Related communication" },
+  pt: { newAction: "Nova ação aberta", threeDays: "Ação a 3 dias da data limite", overdue: "Ação fora de prazo", alertType: "Tipo de alerta", location: "Local", description: "Descrição da ação", dueDate: "Data limite", action: "Ação", communication: "Comunicação associada" },
+  it: { newAction: "Nuova azione aperta", threeDays: "Azione in scadenza tra 3 giorni", overdue: "Azione scaduta", alertType: "Tipo di avviso", location: "Luogo", description: "Descrizione dell'azione", dueDate: "Scadenza", action: "Azione", communication: "Comunicazione associata" },
+  pl: { newAction: "Otwarto nowe działanie", threeDays: "Działanie z terminem za 3 dni", overdue: "Działanie po terminie", alertType: "Typ alertu", location: "Lokalizacja", description: "Opis działania", dueDate: "Termin", action: "Działanie", communication: "Powiązane zgłoszenie" },
+  de: { newAction: "Neue Maßnahme eröffnet", threeDays: "Maßnahme in 3 Tagen fällig", overdue: "Überfällige Maßnahme", alertType: "Warnungstyp", location: "Ort", description: "Maßnahmenbeschreibung", dueDate: "Fälligkeitsdatum", action: "Maßnahme", communication: "Zugehörige Meldung" },
+  ro: { newAction: "Acțiune nouă deschisă", threeDays: "Acțiune scadentă în 3 zile", overdue: "Acțiune restantă", alertType: "Tip alertă", location: "Locație", description: "Descrierea acțiunii", dueDate: "Termen limită", action: "Acțiune", communication: "Comunicare asociată" },
+  fr: { newAction: "Nouvelle action ouverte", threeDays: "Action à échéance dans 3 jours", overdue: "Action en retard", alertType: "Type d'alerte", location: "Lieu", description: "Description de l'action", dueDate: "Échéance", action: "Action", communication: "Communication associée" },
+};
+
+function getAlertLabel(alertType: ActionAlertType, locale: AppLocale) {
+  const copy = actionAlertCopy[locale];
+  if (alertType === ActionAlertType.NEW_ACTION) return copy.newAction;
+  if (alertType === ActionAlertType.THREE_DAYS_BEFORE_DUE_DATE) return copy.threeDays;
+  return copy.overdue;
 }
 
 function getActionUrl(action: ActionAlertRecord) {
   return `/app/${action.plant.code}/actions/${action.id}`;
 }
 
-function buildAlertContent(action: ActionAlertRecord, alertType: ActionAlertType) {
-  const alertLabel = getAlertLabel(alertType);
-  const location = getActionLocation(action);
-  const dueDate = formatLisbonDateTime(action.dueDate);
+async function buildAlertContent(action: ActionAlertRecord, alertType: ActionAlertType, userLanguage?: string | null) {
+  const locale = normalizeMasterDataLocale(userLanguage);
+  const copy = actionAlertCopy[locale];
+  const alertLabel = getAlertLabel(alertType, locale);
+  const location = await getActionLocation(action, locale);
+  const dueDate = formatLisbonDateTime(action.dueDate, locale);
   const actionUrl = getActionUrl(action);
   const communicationLine = action.communicationId
-    ? [`Comunicacao associada: ${action.communicationId}`]
+    ? [`${copy.communication}: ${action.communicationId}`]
     : [];
 
   const body = [
-    `Tipo de alerta: ${alertLabel}`,
-    `Local: ${location}`,
-    `Descricao da acao: ${action.description}`,
-    `Data limite: ${dueDate}`,
-    `Acao: ${action.title}`,
+    `${copy.alertType}: ${alertLabel}`,
+    `${copy.location}: ${location}`,
+    `${copy.description}: ${action.description}`,
+    `${copy.dueDate}: ${dueDate}`,
+    `${copy.action}: ${action.title}`,
     ...communicationLine,
   ].join("\n");
 
@@ -151,8 +199,9 @@ async function createSoftwareAlert(input: {
   action: ActionAlertRecord;
   user: ActionAlertRecipient;
   alertType: ActionAlertType;
+  content: Awaited<ReturnType<typeof buildAlertContent>>;
 }) {
-  const content = buildAlertContent(input.action, input.alertType);
+  const { content } = input;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -189,6 +238,7 @@ async function sendEmailAlert(input: {
   action: ActionAlertRecord;
   user: ActionAlertRecipient;
   alertType: ActionAlertType;
+  content: Awaited<ReturnType<typeof buildAlertContent>>;
 }) {
   if (!input.user.email) return false;
 
@@ -206,7 +256,7 @@ async function sendEmailAlert(input: {
     throw error;
   }
 
-  const content = buildAlertContent(input.action, input.alertType);
+  const { content } = input;
   await sendNotificationEmail({
     user: input.user,
     tituloNotificacao: content.title,
@@ -232,10 +282,11 @@ async function dispatchActionAlert(input: {
 
   for (const user of recipients) {
     try {
-      if (await createSoftwareAlert({ action: input.action, user, alertType: input.alertType })) {
+      const content = await buildAlertContent(input.action, input.alertType, user.language);
+      if (await createSoftwareAlert({ action: input.action, user, alertType: input.alertType, content })) {
         created += 1;
       }
-      if (await sendEmailAlert({ action: input.action, user, alertType: input.alertType })) {
+      if (await sendEmailAlert({ action: input.action, user, alertType: input.alertType, content })) {
         created += 1;
       }
     } catch (error) {

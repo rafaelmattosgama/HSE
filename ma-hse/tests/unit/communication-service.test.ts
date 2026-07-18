@@ -2,6 +2,10 @@ import { CommunicationImprovementSubtype, CommunicationSource, CommunicationStat
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
+  $transaction: vi.fn(),
+  plant: {
+    findUniqueOrThrow: vi.fn(),
+  },
   employeeDirectory: {
     findFirst: vi.fn(),
     findMany: vi.fn(),
@@ -58,12 +62,19 @@ const auditMock = vi.hoisted(() => ({
   buildDiff: vi.fn(() => ({})),
 }));
 
+const recordCodeServiceMock = vi.hoisted(() => ({
+  RecordCodeService: {
+    allocateCommunicationCode: vi.fn(),
+  },
+}));
+
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/services/notification-service", () => notificationServiceMock);
 vi.mock("@/lib/services/sewo-service", () => sewoServiceMock);
 vi.mock("@/lib/services/repeatability-alert-service", () => repeatabilityAlertMock);
 vi.mock("@/lib/services/safety-communication-alert-service", () => safetyCommunicationAlertServiceMock);
 vi.mock("@/lib/audit", () => auditMock);
+vi.mock("@/lib/services/record-code-service", () => recordCodeServiceMock);
 vi.mock("@/lib/env", () => ({
   env: {
     APP_URL: "http://localhost:3000",
@@ -74,6 +85,11 @@ import { CommunicationService } from "@/lib/services/communication-service";
 
 describe("CommunicationService approved communication alerts", () => {
   beforeEach(() => {
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof prismaMock) => Promise<unknown>) => callback(prismaMock),
+    );
+    prismaMock.plant.findUniqueOrThrow.mockResolvedValue({ code: "MAAP" });
+    recordCodeServiceMock.RecordCodeService.allocateCommunicationCode.mockResolvedValue(null);
     prismaMock.communication.findUnique.mockResolvedValue(null);
     prismaMock.userPlantRole.findMany.mockResolvedValue([]);
     notificationServiceMock.NotificationService.notifyPlantRoles.mockResolvedValue(undefined);

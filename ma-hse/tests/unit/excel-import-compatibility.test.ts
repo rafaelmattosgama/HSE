@@ -114,6 +114,42 @@ describe("importable Excel compatibility", () => {
     expect(workbook.getWorksheet("Workers")!.getRow(4).values).toEqual([, "1001", "Maria Silva", "Producao"]);
   });
 
+  it("includes equipment in N3-compatible imports and can exclude it for roles without permission", async () => {
+    const template = await MasterDataImportService.buildTemplate();
+    const workbook = await loadWorkbook(template);
+
+    workbook.getWorksheet("Departments")!.getRow(4).values = ["DEP1", "Producao"];
+    workbook.getWorksheet("Equipment")!.getRow(4).values = ["EQ1", "Empilhador 1"];
+
+    const summary = await MasterDataImportService.importFromExcel(
+      "plant-1",
+      new Uint8Array(await workbookBuffer(workbook)),
+      { includeEquipments: false },
+    );
+
+    expect(summary).toEqual({
+      departments: 1,
+      workstations: 0,
+      equipments: 0,
+      workers: 0,
+    });
+    expect(prismaMock.equipment.upsert).not.toHaveBeenCalled();
+  });
+
+  it("does not expose equipment in exports for roles without equipment permission", async () => {
+    prismaMock.equipment.findMany.mockResolvedValueOnce([]);
+
+    const exported = await MasterDataImportService.buildExport("plant-1", { includeEquipments: false });
+    const workbook = await loadWorkbook(exported);
+
+    expect(prismaMock.equipment.findMany).toHaveBeenCalledWith({
+      where: { plantId: "plant-1", isActive: true, id: { in: [] } },
+      orderBy: [{ code: "asc" }, { name: "asc" }],
+      select: { code: true, name: true },
+    });
+    expect(workbook.getWorksheet("Equipment")!.getRow(4).values).toEqual([, "", ""]);
+  });
+
   it("imports data filled into the downloaded occupational health template", async () => {
     const template = await OccupationalHealthService.buildImportTemplate("plant-1", "pl01");
     const workbook = await loadWorkbook(template);

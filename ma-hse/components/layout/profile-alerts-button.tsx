@@ -59,6 +59,7 @@ export function ProfileAlertsButton({
   return (
     <Link
       href="/app/alerts"
+      data-onboarding="notifications"
       className="app-toolbar relative inline-flex h-10 w-10 items-center justify-center rounded-full px-0"
       aria-label={`Alertas ${scopeLabel}${unreadCount > 0 ? `, ${unreadCount} por ler` : ""}`}
       title={`Alertas ${scopeLabel}`}

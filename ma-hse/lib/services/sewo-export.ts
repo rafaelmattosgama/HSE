@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { MasterDataEntityType } from "@prisma/client";
 import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
@@ -12,6 +13,7 @@ import {
   type YesNoAnswer,
 } from "@/lib/sewo-sif-psif";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import {
   formatSewoOccurrenceType,
   getSewoTemplateRecord,
@@ -22,6 +24,36 @@ import { formatLocalizedSewoStatus, type SewoUi } from "@/lib/sewo-ui";
 import { getReadableCommunicationCode, getReadableSewoCode } from "@/lib/record-code";
 
 type PdfDocument = ReturnType<typeof createPdfDocument>;
+
+type MasterDataNameRow = { id: string; name: string; sourceLanguage?: string | null };
+
+async function localizeSewoMasterData<T extends {
+  area?: MasterDataNameRow | null;
+  communication?: {
+    area?: MasterDataNameRow | null;
+    workstation?: MasterDataNameRow | null;
+  } | null;
+}>(sewo: T, locale: string) {
+  const areas = [sewo.area, sewo.communication?.area].filter(
+    (row): row is MasterDataNameRow => Boolean(row),
+  );
+  const workstations = [sewo.communication?.workstation].filter(
+    (row): row is MasterDataNameRow => Boolean(row),
+  );
+  const [localizedAreas, localizedWorkstations] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, locale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, locale),
+  ]);
+  const areaById = new Map(localizedAreas.map((row) => [row.id, row.name]));
+  const workstationById = new Map(localizedWorkstations.map((row) => [row.id, row.name]));
+  if (sewo.area) sewo.area.name = areaById.get(sewo.area.id) ?? sewo.area.name;
+  if (sewo.communication?.area) {
+    sewo.communication.area.name = areaById.get(sewo.communication.area.id) ?? sewo.communication.area.name;
+  }
+  if (sewo.communication?.workstation) {
+    sewo.communication.workstation.name = workstationById.get(sewo.communication.workstation.id) ?? sewo.communication.workstation.name;
+  }
+}
 
 const BRAND = "#002663";
 const INK = "#0f172a";
@@ -895,6 +927,7 @@ export const SewoExportService = {
         shift: true,
       },
     });
+    await localizeSewoMasterData(sewo, locale);
 
     const templateData = (sewo.templateData as Record<string, unknown> | null) ?? {};
     const sewoCode = getReadableSewoCode(sewo);
@@ -1437,6 +1470,7 @@ export const SewoExportService = {
         line: true,
       },
     });
+    await localizeSewoMasterData(sewo, locale);
     const templateData = getSewoTemplateRecord(sewo.templateData);
     const sewoCode = getReadableSewoCode(sewo);
     const occurrenceType = formatSewoOccurrenceType({

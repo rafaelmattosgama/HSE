@@ -35,7 +35,7 @@ async function buildWorkbook<T extends Record<string, string>>(sheetName: string
   return Buffer.from(buffer as ArrayBuffer);
 }
 
-async function buildPdf<T extends Record<string, string>>(title: string, columns: ExportColumn<T>[], rows: T[]) {
+async function buildPdf<T extends Record<string, string>>(title: string, columns: ExportColumn<T>[], rows: T[], noRecords = "No records for the selected filters.") {
   const doc = createPdfDocument({ margin: 36, size: "A4", layout: "landscape" });
   doc.fontSize(16).text(title);
   doc.moveDown();
@@ -82,23 +82,40 @@ async function buildPdf<T extends Record<string, string>>(title: string, columns
   });
 
   if (rows.length === 0) {
-    doc.text("No records for the selected filters.");
+    doc.text(noRecords);
   }
 
   return pdfBufferFromDocument(doc);
 }
 
-const communicationColumns: ExportColumn<CommunicationExportRow>[] = [
-  { key: "code", header: "Code", width: 16 },
-  { key: "event", header: "Event", width: 14 },
-  { key: "level", header: "Level", width: 7 },
-  { key: "type", header: "Type", width: 14 },
-  { key: "status", header: "Status", width: 12 },
-  { key: "reporter", header: "Reporter", width: 18 },
-  { key: "department", header: "Department", width: 15 },
-  { key: "location", header: "Location", width: 15 },
-  { key: "description", header: "Descrição", width: 30 },
-];
+const communicationExportCopy = {
+  en: { sheet: "Communications", title: "Filtered communications", noRecords: "No records for the selected filters.", headers: ["Code", "Event", "Level", "Type", "Status", "Reporter", "Department", "Location", "Description"] },
+  it: { sheet: "Comunicazioni", title: "Comunicazioni filtrate", noRecords: "Nessun record per i filtri selezionati.", headers: ["Codice", "Evento", "Livello", "Tipo", "Stato", "Segnalante", "Reparto", "Luogo", "Descrizione"] },
+  pt: { sheet: "Comunicações", title: "Comunicações filtradas", noRecords: "Sem registos para os filtros selecionados.", headers: ["Código", "Evento", "Nível", "Tipo", "Estado", "Comunicante", "Departamento", "Local", "Descrição"] },
+  pl: { sheet: "Zgłoszenia", title: "Filtrowane zgłoszenia", noRecords: "Brak rekordów dla wybranych filtrów.", headers: ["Kod", "Zdarzenie", "Poziom", "Typ", "Status", "Zgłaszający", "Dział", "Lokalizacja", "Opis"] },
+  de: { sheet: "Meldungen", title: "Gefilterte Meldungen", noRecords: "Keine Datensätze für die ausgewählten Filter.", headers: ["Code", "Ereignis", "Ebene", "Typ", "Status", "Melder", "Abteilung", "Ort", "Beschreibung"] },
+  ro: { sheet: "Comunicări", title: "Comunicări filtrate", noRecords: "Nu există înregistrări pentru filtrele selectate.", headers: ["Cod", "Eveniment", "Nivel", "Tip", "Stare", "Raportor", "Departament", "Loc", "Descriere"] },
+  fr: { sheet: "Communications", title: "Communications filtrées", noRecords: "Aucun enregistrement pour les filtres sélectionnés.", headers: ["Code", "Événement", "Niveau", "Type", "Statut", "Déclarant", "Département", "Lieu", "Description"] },
+} as const;
+
+function getCommunicationExportCopy(locale = "en") {
+  return communicationExportCopy[locale as keyof typeof communicationExportCopy] ?? communicationExportCopy.en;
+}
+
+function getCommunicationColumns(locale?: string): ExportColumn<CommunicationExportRow>[] {
+  const copy = getCommunicationExportCopy(locale);
+  return [
+    { key: "code", header: copy.headers[0], width: 16 },
+    { key: "event", header: copy.headers[1], width: 14 },
+    { key: "level", header: copy.headers[2], width: 7 },
+    { key: "type", header: copy.headers[3], width: 14 },
+    { key: "status", header: copy.headers[4], width: 12 },
+    { key: "reporter", header: copy.headers[5], width: 18 },
+    { key: "department", header: copy.headers[6], width: 15 },
+    { key: "location", header: copy.headers[7], width: 15 },
+    { key: "description", header: copy.headers[8], width: 30 },
+  ];
+}
 
 const actionColumns: ExportColumn<ActionExportRow>[] = [
   { key: "action", header: "Action", width: 24 },
@@ -137,12 +154,14 @@ export type ActionExportRow = {
 };
 
 export const ListExportService = {
-  buildCommunicationsXlsx(rows: CommunicationExportRow[]) {
-    return buildWorkbook("Communications", communicationColumns, rows);
+  buildCommunicationsXlsx(rows: CommunicationExportRow[], options: { locale?: string } = {}) {
+    const copy = getCommunicationExportCopy(options.locale);
+    return buildWorkbook(copy.sheet, getCommunicationColumns(options.locale), rows);
   },
 
-  buildCommunicationsPdf(rows: CommunicationExportRow[]) {
-    return buildPdf("Filtered communications", communicationColumns, rows);
+  buildCommunicationsPdf(rows: CommunicationExportRow[], options: { locale?: string } = {}) {
+    const copy = getCommunicationExportCopy(options.locale);
+    return buildPdf(copy.title, getCommunicationColumns(options.locale), rows, copy.noRecords);
   },
 
   buildActionsXlsx(rows: ActionExportRow[]) {

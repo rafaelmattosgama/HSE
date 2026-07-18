@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   CommunicationType,
   CommunicationStatus,
+  MasterDataEntityType,
   NotificationStatus,
   Prisma,
   RoleCode,
@@ -9,11 +10,16 @@ import {
   SafetyCommunicationNotificationDeliveryStatus,
   SafetyCommunicationNotificationType,
 } from "@prisma/client";
+import { getFixedCommunicationLabels } from "@/lib/communication-labels";
 import { env } from "@/lib/env";
+import type { AppLocale } from "@/lib/i18n/routing";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
-  formatSewoOccurrenceType,
+  localizeMasterDataRows,
+  normalizeMasterDataLocale,
+} from "@/lib/services/master-data-translation-service";
+import {
   getSifPsifDisplayLabel,
   getSifPsifResultFromTemplateData,
 } from "@/lib/services/sewo-validation-service";
@@ -450,12 +456,14 @@ function buildApprovedAlertContent(input: {
   workerName: string;
   sifPsifLabel: string;
   description: string;
+  locale: AppLocale;
 }) {
+  const copy = safetyAlertCopy[input.locale];
   const { relativePath, absoluteUrl } = buildCommunicationDetailPaths({
     plantCode: input.plantCode,
     communicationId: input.communicationId,
   });
-  const title = `Comunicacao de Seguranca - ${input.typeLabel}`;
+  const title = `${copy.safetyCommunication} - ${input.typeLabel}`;
   const escapedTitle = escapeHtml(title);
   const escapedTypeLabel = escapeHtml(input.typeLabel);
   const escapedWorkstation = escapeHtml(input.workstation);
@@ -463,29 +471,29 @@ function buildApprovedAlertContent(input: {
   const escapedSifPsifLabel = escapeHtml(input.sifPsifLabel);
   const escapedDescription = escapeHtml(input.description);
   const lines = [
-    "A comunicacao foi aprovada pelo nivel N3.",
-    `Tipo de ocorrencia: ${input.typeLabel}`,
-    `Workstation: ${input.workstation}`,
-    `Data: ${formatDate(input.occurredAt)}`,
-    `Trabalhador envolvido: ${input.workerName}`,
+    copy.approved,
+    `${copy.occurrenceType}: ${input.typeLabel}`,
+    `${copy.workstation}: ${input.workstation}`,
+    `${copy.date}: ${formatDate(input.occurredAt)}`,
+    `${copy.worker}: ${input.workerName}`,
     `SIF/PSIF: ${input.sifPsifLabel}`,
-    `Descricao: ${input.description}`,
+    `${copy.description}: ${input.description}`,
   ];
   const body = lines.join("\n");
   const html = `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.5;">
       <h2 style="margin:0 0 12px;color:#002663;">${escapedTitle}</h2>
-      <p>A comunicacao foi aprovada pelo nivel N3.</p>
+      <p>${escapeHtml(copy.approved)}</p>
       <table style="border-collapse:collapse;margin-top:12px;width:100%;max-width:640px;">
-        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Tipo de ocorrencia</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedTypeLabel}</td></tr>
-        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Workstation</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedWorkstation}</td></tr>
-        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Data</td><td style="padding:8px;border:1px solid #e2e8f0;">${formatDate(input.occurredAt)}</td></tr>
-        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Trabalhador envolvido</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedWorkerName}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.occurrenceType)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedTypeLabel}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.workstation)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedWorkstation}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.date)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${formatDate(input.occurredAt)}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.worker)}</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedWorkerName}</td></tr>
         <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">SIF / PSIF</td><td style="padding:8px;border:1px solid #e2e8f0;">${escapedSifPsifLabel}</td></tr>
-        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">Descricao</td><td style="padding:8px;border:1px solid #e2e8f0;white-space:pre-line;">${escapedDescription}</td></tr>
+        <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:bold;">${escapeHtml(copy.description)}</td><td style="padding:8px;border:1px solid #e2e8f0;white-space:pre-line;">${escapedDescription}</td></tr>
       </table>
       <p style="margin-top:16px;">
-        <a href="${escapeHtml(absoluteUrl)}" style="display:inline-block;border-radius:8px;background:#0f766e;color:#ffffff;padding:10px 16px;text-decoration:none;font-weight:bold;">Abrir comunicacao</a>
+        <a href="${escapeHtml(absoluteUrl)}" style="display:inline-block;border-radius:8px;background:#0f766e;color:#ffffff;padding:10px 16px;text-decoration:none;font-weight:bold;">${escapeHtml(copy.openCommunication)}</a>
       </p>
     </div>
   `;
@@ -499,15 +507,33 @@ function buildApprovedAlertContent(input: {
   };
 }
 
-function formatCommunicationTypeLabel(type: CommunicationType) {
-  if (type === CommunicationType.UNSAFE_ACT) return "Ato inseguro";
-  if (type === CommunicationType.UNSAFE_CONDITION) return "Condicao perigosa";
-  if (type === CommunicationType.NEAR_MISS) return "Quase Acidente";
-  if (type === CommunicationType.FIRST_AID) return "Primeiros Socorros";
-  if (type === CommunicationType.ACCIDENT) return "Acidente";
-  if (type === CommunicationType.FIVE_S_IMPROVEMENT) return "Melhoria 5S's";
-  if (type === CommunicationType.IMPROVEMENT_SUGGESTION) return "Sugestão de melhoria";
-  return type;
+const safetyAlertCopy: Record<AppLocale, {
+  safetyCommunication: string;
+  approved: string;
+  occurrenceType: string;
+  communicationType: string;
+  workstation: string;
+  location: string;
+  date: string;
+  worker: string;
+  description: string;
+  reporter: string;
+  involvedPerson: string;
+  openCommunication: string;
+  n3Alert: string;
+  newCommunication: string;
+}> = {
+  en: { safetyCommunication: "Safety Communication", approved: "The communication was approved by level N3.", occurrenceType: "Occurrence type", communicationType: "Communication type", workstation: "Workstation", location: "Location", date: "Date", worker: "Worker involved", description: "Description", reporter: "Reporter", involvedPerson: "Person involved", openCommunication: "Open communication", n3Alert: "N3 alert", newCommunication: "New communication registered" },
+  pt: { safetyCommunication: "Comunicação de Segurança", approved: "A comunicação foi aprovada pelo nível N3.", occurrenceType: "Tipo de ocorrência", communicationType: "Tipo de comunicação", workstation: "Posto de trabalho", location: "Local", date: "Data", worker: "Trabalhador envolvido", description: "Descrição", reporter: "Autor da comunicação", involvedPerson: "Pessoa envolvida", openCommunication: "Abrir comunicação", n3Alert: "Alerta N3", newCommunication: "Nova comunicação registada" },
+  it: { safetyCommunication: "Comunicazione di sicurezza", approved: "La comunicazione è stata approvata dal livello N3.", occurrenceType: "Tipo di evento", communicationType: "Tipo di comunicazione", workstation: "Postazione di lavoro", location: "Luogo", date: "Data", worker: "Lavoratore coinvolto", description: "Descrizione", reporter: "Segnalatore", involvedPerson: "Persona coinvolta", openCommunication: "Apri comunicazione", n3Alert: "Avviso N3", newCommunication: "Nuova comunicazione registrata" },
+  pl: { safetyCommunication: "Zgłoszenie bezpieczeństwa", approved: "Zgłoszenie zostało zatwierdzone przez poziom N3.", occurrenceType: "Typ zdarzenia", communicationType: "Typ zgłoszenia", workstation: "Stanowisko pracy", location: "Lokalizacja", date: "Data", worker: "Zaangażowany pracownik", description: "Opis", reporter: "Zgłaszający", involvedPerson: "Osoba zaangażowana", openCommunication: "Otwórz zgłoszenie", n3Alert: "Alert N3", newCommunication: "Zarejestrowano nowe zgłoszenie" },
+  de: { safetyCommunication: "Sicherheitsmeldung", approved: "Die Meldung wurde von Ebene N3 genehmigt.", occurrenceType: "Ereignistyp", communicationType: "Meldungstyp", workstation: "Arbeitsplatz", location: "Ort", date: "Datum", worker: "Betroffener Mitarbeiter", description: "Beschreibung", reporter: "Meldende Person", involvedPerson: "Beteiligte Person", openCommunication: "Meldung öffnen", n3Alert: "N3-Warnung", newCommunication: "Neue Meldung erfasst" },
+  ro: { safetyCommunication: "Comunicare de siguranță", approved: "Comunicarea a fost aprobată de nivelul N3.", occurrenceType: "Tipul evenimentului", communicationType: "Tipul comunicării", workstation: "Post de lucru", location: "Locație", date: "Data", worker: "Lucrător implicat", description: "Descriere", reporter: "Raportor", involvedPerson: "Persoană implicată", openCommunication: "Deschide comunicarea", n3Alert: "Alertă N3", newCommunication: "Comunicare nouă înregistrată" },
+  fr: { safetyCommunication: "Communication de sécurité", approved: "La communication a été approuvée par le niveau N3.", occurrenceType: "Type d'événement", communicationType: "Type de communication", workstation: "Poste de travail", location: "Lieu", date: "Date", worker: "Travailleur concerné", description: "Description", reporter: "Déclarant", involvedPerson: "Personne concernée", openCommunication: "Ouvrir la communication", n3Alert: "Alerte N3", newCommunication: "Nouvelle communication enregistrée" },
+};
+
+function formatCommunicationTypeLabel(type: CommunicationType, locale: AppLocale) {
+  return getFixedCommunicationLabels(locale).communicationTypeLabels[type] ?? type;
 }
 
 function getN3SoftwareAlertType(type: CommunicationType) {
@@ -531,6 +557,41 @@ function joinLocationParts(parts: Array<string | null | undefined>) {
   return location || "-";
 }
 
+type LocalizableAlertMasterData = {
+  id: string;
+  name: string;
+  sourceLanguage?: string | null;
+};
+
+async function getLocalizedCommunicationLocation(input: {
+  locale: AppLocale;
+  area?: LocalizableAlertMasterData | null;
+  lineName?: string | null;
+  workstation?: LocalizableAlertMasterData | null;
+  equipment?: LocalizableAlertMasterData | null;
+}) {
+  const [areas, workstations, equipment] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, input.area ? [input.area] : [], input.locale),
+    localizeMasterDataRows(
+      MasterDataEntityType.WORKSTATION,
+      input.workstation ? [input.workstation] : [],
+      input.locale,
+    ),
+    localizeMasterDataRows(
+      MasterDataEntityType.EQUIPMENT,
+      input.equipment ? [input.equipment] : [],
+      input.locale,
+    ),
+  ]);
+
+  return joinLocationParts([
+    areas[0]?.name,
+    input.lineName,
+    workstations[0]?.name,
+    equipment[0]?.name,
+  ]);
+}
+
 function buildN3CommunicationAlertContent(input: {
   plantCode: string;
   communicationId: string;
@@ -540,24 +601,26 @@ function buildN3CommunicationAlertContent(input: {
   description: string;
   reporterName: string;
   involvedPerson: string;
+  locale: AppLocale;
 }) {
-  const typeLabel = formatCommunicationTypeLabel(input.communicationType);
+  const copy = safetyAlertCopy[input.locale];
+  const typeLabel = formatCommunicationTypeLabel(input.communicationType, input.locale);
   const { relativePath, absoluteUrl } = buildCommunicationDetailPaths({
     plantCode: input.plantCode,
     communicationId: input.communicationId,
   });
   const lines = [
-    `Tipo de comunicacao: ${typeLabel}`,
-    `Local: ${input.location}`,
-    `Data: ${formatDate(input.occurredAt)}`,
-    `Descricao: ${input.description.trim() || "-"}`,
-    `Reporter: ${input.reporterName.trim() || "-"}`,
-    `Pessoa envolvida: ${input.involvedPerson.trim() || "-"}`,
+    `${copy.communicationType}: ${typeLabel}`,
+    `${copy.location}: ${input.location}`,
+    `${copy.date}: ${formatDate(input.occurredAt)}`,
+    `${copy.description}: ${input.description.trim() || "-"}`,
+    `${copy.reporter}: ${input.reporterName.trim() || "-"}`,
+    `${copy.involvedPerson}: ${input.involvedPerson.trim() || "-"}`,
   ];
 
   return {
-    title: `Alerta N3 - ${typeLabel}`,
-    emailTitle: `Nova comunicacao registada - ${typeLabel}`,
+    title: `${copy.n3Alert} - ${typeLabel}`,
+    emailTitle: `${copy.newCommunication} - ${typeLabel}`,
     body: lines.join("\n"),
     actionUrl: relativePath,
     absoluteUrl,
@@ -605,7 +668,9 @@ async function loadApprovedCommunicationContext(communicationId: string) {
       },
       workstation: {
         select: {
+          id: true,
           name: true,
+          sourceLanguage: true,
         },
       },
       targetEmployee: {
@@ -671,7 +736,9 @@ async function loadCreatedCommunicationContext(communicationId: string) {
       },
       area: {
         select: {
+          id: true,
           name: true,
+          sourceLanguage: true,
         },
       },
       line: {
@@ -681,12 +748,16 @@ async function loadCreatedCommunicationContext(communicationId: string) {
       },
       workstation: {
         select: {
+          id: true,
           name: true,
+          sourceLanguage: true,
         },
       },
       equipment: {
         select: {
+          id: true,
           name: true,
+          sourceLanguage: true,
         },
       },
       targetEmployee: {
@@ -1387,25 +1458,35 @@ export const SafetyCommunicationAlertService = {
       ?? communication.targetText
       ?? communication.targetEmployeeNo
       ?? "-";
-    const content = buildN3CommunicationAlertContent({
-      plantCode: communication.plant.code,
-      communicationId: communication.id,
-      communicationType: communication.type,
-      location: joinLocationParts([
-        communication.area?.name,
-        communication.line?.name,
-        communication.workstation?.name,
-        communication.equipment?.name,
-      ]),
-      occurredAt: communication.eventDatetime,
-      description: communication.description,
-      reporterName: communication.reporterName,
-      involvedPerson,
-    });
+    const contentByLocale = new Map<AppLocale, Promise<ReturnType<typeof buildN3CommunicationAlertContent>>>();
+    const getContent = (locale: AppLocale) => {
+      const cached = contentByLocale.get(locale);
+      if (cached) return cached;
+      const content = getLocalizedCommunicationLocation({
+        locale,
+        area: communication.area,
+        lineName: communication.line?.name,
+        workstation: communication.workstation,
+        equipment: communication.equipment,
+      }).then((location) => buildN3CommunicationAlertContent({
+        plantCode: communication.plant.code,
+        communicationId: communication.id,
+        communicationType: communication.type,
+        location,
+        occurredAt: communication.eventDatetime,
+        description: communication.description,
+        reporterName: communication.reporterName,
+        involvedPerson,
+        locale,
+      }));
+      contentByLocale.set(locale, content);
+      return content;
+    };
     const softwareAlertType = getN3SoftwareAlertType(communication.type);
 
     await Promise.all(
       users.map(async (user) => {
+        const content = await getContent(normalizeMasterDataLocale(user.language));
         const deliveries = [
           sendEmailNotification({
             plantId: communication.plantId,
@@ -1605,23 +1686,33 @@ export const SafetyCommunicationAlertService = {
       return;
     }
 
-    const typeLabel = formatSewoOccurrenceType({
-      communicationType: communication.type,
-    });
     const sifPsifLabel = getSifPsifDisplayLabel(getSifPsifResultFromTemplateData(sewo.templateData));
-    const content = buildApprovedAlertContent({
-      plantCode: communication.plant.code,
-      communicationId: communication.id,
-      typeLabel,
-      workstation: communication.workstation?.name ?? "-",
-      occurredAt: communication.eventDatetime,
-      workerName: targetEmployee.name ?? communication.targetText ?? "-",
-      sifPsifLabel,
-      description: communication.description.trim() || "-",
-    });
+    const contentByLocale = new Map<AppLocale, Promise<ReturnType<typeof buildApprovedAlertContent>>>();
+    const getContent = (locale: AppLocale) => {
+      const cached = contentByLocale.get(locale);
+      if (cached) return cached;
+      const content = localizeMasterDataRows(
+        MasterDataEntityType.WORKSTATION,
+        communication.workstation ? [communication.workstation] : [],
+        locale,
+      ).then((workstations) => buildApprovedAlertContent({
+        plantCode: communication.plant.code,
+        communicationId: communication.id,
+        typeLabel: formatCommunicationTypeLabel(communication.type, locale),
+        workstation: workstations[0]?.name ?? communication.workstation?.name ?? "-",
+        occurredAt: communication.eventDatetime,
+        workerName: targetEmployee.name ?? communication.targetText ?? "-",
+        sifPsifLabel,
+        description: communication.description.trim() || "-",
+        locale,
+      }));
+      contentByLocale.set(locale, content);
+      return content;
+    };
 
     await Promise.all(
       recipients.map(async (recipient) => {
+        const content = await getContent(normalizeMasterDataLocale(recipient.user.language));
         await Promise.all([
           sendEmailNotification({
             plantId: communication.plantId,

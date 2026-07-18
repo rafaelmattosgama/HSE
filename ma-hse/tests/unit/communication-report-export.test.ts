@@ -17,6 +17,10 @@ const communicationUiMock = vi.hoisted(() => ({
   getLocalizedCommunicationUi: vi.fn(),
 }));
 
+const masterDataLocalizationMock = vi.hoisted(() => ({
+  localizeMasterDataRows: vi.fn(async (_entityType: string, rows: unknown[]) => rows),
+}));
+
 const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   y = 40;
   page = {
@@ -131,18 +135,27 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/services/storage-service", () => storageMock);
 vi.mock("@/lib/services/communication-ui-localization", () => communicationUiMock);
+vi.mock("@/lib/services/master-data-translation-service", () => masterDataLocalizationMock);
 
 import { CommunicationReportExportService } from "@/lib/services/communication-report-export";
 
 const communicationUi = {
   communicationTypeLabels: {
-    FIVE_S_IMPROVEMENT: "Melhoria 5S's",
+    FIVE_S_IMPROVEMENT: "Melhoria 5S",
+  },
+  communicationImprovementSubtypeLabels: {
+    FIVE_S_AREA_IMPROVEMENT: "Melhoria da área",
   },
   communicationStatusLabels: {
     VALID_OPEN: "Por tratar",
   },
   actionStatusLabels: {
     OPEN: "Aberta",
+  },
+  detailEditor: {
+    low: "Baixa",
+    medium: "Média",
+    high: "Alta",
   },
 };
 
@@ -153,6 +166,15 @@ describe("CommunicationReportExportService", () => {
 
   it("builds a 5S communication report with QR photo attachments", async () => {
     communicationUiMock.getLocalizedCommunicationUi.mockResolvedValue(communicationUi);
+    masterDataLocalizationMock.localizeMasterDataRows.mockImplementation(async (entityType: string, rows: unknown[]) =>
+      rows.map((entry) => {
+        const row = entry as Record<string, unknown>;
+        return ({
+        ...row,
+        name: entityType === "AREA" ? "Produção" : entityType === "WORKSTATION" ? "Área 5S" : row.name,
+        });
+      }),
+    );
     storageMock.StorageService.getObjectBuffer.mockResolvedValue(Buffer.from("image-1"));
     prismaMock.communication.findUniqueOrThrow.mockResolvedValue({
       id: "comm-1",
@@ -183,10 +205,12 @@ describe("CommunicationReportExportService", () => {
       involvedEmployees: [],
       shift: null,
       area: {
+        id: "area-1",
         name: "Production",
       },
       line: null,
       workstation: {
+        id: "workstation-1",
         name: "PT17",
       },
       equipment: null,
@@ -221,7 +245,9 @@ describe("CommunicationReportExportService", () => {
     expect(rendered.imageCount).toBe(1);
     expect(rendered.texts).toContain("Comunicacao de Seguranca - Summary Report");
     expect(rendered.texts).toContain("Referencia: 5S_MAAP_2026_01");
-    expect(rendered.texts).toContain("Melhoria 5S's");
+    expect(rendered.texts).toContain("Melhoria 5S");
+    expect(rendered.texts).toContain("Produção");
+    expect(rendered.texts).toContain("Área 5S");
     expect(rendered.texts).toContain("5S improvement from public QR form with photo.");
     expect(rendered.texts).toContain("five-s-photo.jpg");
   });

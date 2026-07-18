@@ -10,7 +10,11 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
 
   const plant = await getPlantByCode(plantCode);
   const format = new URL(request.url).searchParams.get("format") ?? "xlsx";
-  const exported = await OccupationalHealthService.buildExport(plant.id, plantCode);
+  const exported = await OccupationalHealthService.buildExport(
+    plant.id,
+    plantCode,
+    auth.session.user.language,
+  );
 
   if (format === "pdf") {
     return new Response(new Uint8Array(exported.pdf), {

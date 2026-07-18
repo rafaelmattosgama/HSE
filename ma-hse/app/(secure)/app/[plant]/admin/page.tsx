@@ -1,4 +1,4 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,11 +20,13 @@ import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { isAllPlantsScope } from "@/lib/plant-scope";
 import { canManageSafetyCommunicationAlertRecipients } from "@/lib/rbac/safety-communication-alerts";
+import { canManagePlantEquipment } from "@/lib/rbac/master-data";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getPlantRepeatabilityAlertConfig, getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
@@ -121,7 +123,10 @@ export default async function AdminPage({
       orderBy: { name: "asc" },
     }),
     prisma.equipment.findMany({
-      where: { plantId: plantRow.id, isActive: true },
+      where: {
+        plantId: plantRow.id,
+        ...(canManagePlantEquipment(actorRole) ? {} : { isActive: true }),
+      },
       orderBy: { name: "asc" },
     }),
     prisma.employeeDirectory.findMany({
@@ -154,6 +159,12 @@ export default async function AdminPage({
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
   ]);
+  const [localizedAreas, localizedWorkstations, localizedEquipments] = await Promise.all([
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, equipments, uiLocale),
+  ]);
+  const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
 
   const userPlantRoles = canManageUsers
     ? await prisma.userPlantRole.findMany({
@@ -205,7 +216,7 @@ export default async function AdminPage({
         <div className="flex flex-wrap items-center gap-3">
           <LanguageSelector currentLocale={uiLocale} label={ui.dashboard.language} />
           {canViewAgentAudit ? (
-            <Link href={`/app/${plant}/admin/agent-audit`} className="app-toolbar">
+            <Link href={`/app/${plant}/admin/agent-audit`} data-onboarding="agent-audit" className="app-toolbar">
               Audit logs do agente
             </Link>
           ) : null}
@@ -238,26 +249,37 @@ export default async function AdminPage({
         labels={ui.dashboard}
       />
 
-      {actorRole === RoleCode.N0_ADMIN ? (
+      {actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N3_SAFETY ? (
         <N0MasterDataManager
           key={plant}
           plantCode={plant}
-          initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-          initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-          initialEquipments={equipments.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
+          initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
+          initialEquipments={localizedEquipments.map((item) => ({
+            id: item.id,
+            code: item.code,
+            name: item.name,
+            originalName: item.originalName,
+            isActive: item.isActive,
+          }))}
           initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
           initialNearMissTypes={nearMissTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
           initialUnsafeActTypes={unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
           initialUnsafeConditionTypes={unsafeConditionTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
           initialInjuryTypes={injuryTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          visibleCatalogTypes={
+            actorRole === RoleCode.N3_SAFETY && canManagePlantEquipment(actorRole)
+              ? ["area", "workstation", "equipment"]
+              : undefined
+          }
           labels={masterDataUi}
         />
       ) : (
         <MasterDataManager
           key={plant}
           plantCode={plant}
-          initialAreas={areas.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-          initialWorkstations={workstations.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+          initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
+          initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
           initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
           labels={masterDataUi}
         />
@@ -292,9 +314,15 @@ export default async function AdminPage({
       {canManageSafetyCommunicationRecipients ? (
         <SafetyCommunicationRecipientManager
           plantCode={plant}
-          initialRecipients={safetyCommunicationRecipients}
+          initialRecipients={safetyCommunicationRecipients.map((recipient) => ({
+            ...recipient,
+            departmentName: localizedAreaById.get(recipient.departmentId) ?? recipient.departmentName,
+          }))}
           users={safetyCommunicationRecipientOptions.users}
-          departments={safetyCommunicationRecipientOptions.departments}
+          departments={safetyCommunicationRecipientOptions.departments.map((department) => ({
+            ...department,
+            name: localizedAreaById.get(department.id) ?? department.name,
+          }))}
           labels={masterDataUi}
         />
       ) : null}

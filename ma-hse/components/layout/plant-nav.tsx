@@ -8,6 +8,7 @@ type NavItem = {
   href: string;
   label: string;
   spotlight?: boolean;
+  onboardingId?: string;
 };
 
 export function PlantNav({
@@ -28,6 +29,7 @@ export function PlantNav({
           <Link
             key={item.href}
             href={item.href}
+            data-onboarding={item.onboardingId}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "block rounded-lg border px-3 py-2.5 text-sm leading-5 transition",
@@ -53,6 +55,7 @@ export function PlantNav({
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-onboarding={item.onboardingId}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "block rounded-lg px-3 py-2.5 text-sm leading-5 transition",

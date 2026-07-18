@@ -20,6 +20,11 @@ docker compose up -d
 npm run dev:all
 
 
+cd C:\HSE\ma-hse
+docker compose --env-file .env.example up -d
+docker compose --env-file .env.example ps
+npm run dev:all
+
 Teste
 
 user: admin@maxsafety.com

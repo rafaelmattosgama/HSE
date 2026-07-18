@@ -1,8 +1,14 @@
 import { randomUUID } from "crypto";
 import ExcelJS from "exceljs";
 import { createPdfDocument } from "@/lib/services/pdfkit-helper";
-import { Prisma } from "@prisma/client";
+import {
+  MasterDataEntityType,
+  MasterDataTranslationField,
+  MasterDataTranslationStatus,
+  Prisma,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import {
   calculateAgeOnDate,
   calculateOccupationalHealthExamValidUntil,
@@ -178,11 +184,31 @@ async function findWorkstationId(plantId: string, workstationName: string) {
     },
     select: { id: true },
   });
-  return workstation?.id ?? null;
+  if (workstation) return workstation.id;
+
+  const translationDelegate = (prisma as typeof prisma & {
+    masterDataTranslation?: typeof prisma.masterDataTranslation;
+  }).masterDataTranslation;
+  if (!translationDelegate) return null;
+  const translation = await translationDelegate.findFirst({
+    where: {
+      entityType: MasterDataEntityType.WORKSTATION,
+      field: MasterDataTranslationField.NAME,
+      status: MasterDataTranslationStatus.COMPLETED,
+      value: { equals: workstationName.trim(), mode: "insensitive" },
+    },
+    select: { entityId: true },
+  });
+  if (!translation) return null;
+  const translatedWorkstation = await prisma.workstation.findFirst({
+    where: { id: translation.entityId, plantId },
+    select: { id: true },
+  });
+  return translatedWorkstation?.id ?? null;
 }
 
 export const OccupationalHealthService = {
-  async list(plantId: string) {
+  async list(plantId: string, locale?: string | null) {
     const rows = await prisma.$queryRaw<OccupationalHealthWorkerRow[]>(Prisma.sql`
       SELECT
         ohw."id",
@@ -210,7 +236,31 @@ export const OccupationalHealthService = {
       ORDER BY ohw."name" ASC
     `);
 
-    return rows.map(mapWorker);
+    const workers = rows.map(mapWorker);
+    if (!locale) return workers;
+    const workstationIds = Array.from(
+      new Set(workers.flatMap((worker) => (worker.workstationId ? [worker.workstationId] : []))),
+    );
+    if (!workstationIds.length) return workers;
+
+    const workstations = await prisma.workstation.findMany({
+      where: { id: { in: workstationIds } },
+      select: { id: true, name: true, sourceLanguage: true },
+    });
+    const localizedWorkstations = await localizeMasterDataRows(
+      MasterDataEntityType.WORKSTATION,
+      workstations,
+      locale,
+    );
+    const localizedWorkstationById = new Map(
+      localizedWorkstations.map((workstation) => [workstation.id, workstation.name]),
+    );
+    return workers.map((worker) => ({
+      ...worker,
+      workstationName: worker.workstationId
+        ? localizedWorkstationById.get(worker.workstationId) ?? worker.workstationName
+        : worker.workstationName,
+    }));
   },
 
   async upsert(plantId: string, input: UpsertOccupationalHealthWorkerInput, workerId?: string) {
@@ -398,8 +448,8 @@ export const OccupationalHealthService = {
     return { imported, skipped };
   },
 
-  async buildExport(plantId: string, plantCode: string) {
-    const workers = await this.list(plantId);
+  async buildExport(plantId: string, plantCode: string, locale?: string | null) {
+    const workers = await this.list(plantId, locale);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Medicina do Trabalho");
@@ -502,7 +552,7 @@ export const OccupationalHealthService = {
     };
   },
 
-  async buildImportTemplate(plantId: string, plantCode: string) {
+  async buildImportTemplate(plantId: string, plantCode: string, locale?: string | null) {
     const workbook = new ExcelJS.Workbook();
 
     const sheet = workbook.addWorksheet("Medicina do Trabalho");
@@ -598,14 +648,19 @@ export const OccupationalHealthService = {
     const workstations = await prisma.workstation.findMany({
       where: { plantId, isActive: true },
       orderBy: [{ name: "asc" }],
-      select: { code: true, name: true },
+      select: { id: true, code: true, name: true, sourceLanguage: true },
     });
+    const localizedWorkstations = await localizeMasterDataRows(
+      MasterDataEntityType.WORKSTATION,
+      workstations,
+      locale,
+    );
 
     referenceSheet.addRow({});
     referenceSheet.addRow({ field: "Active workstations", value: "" });
     const headerRow = referenceSheet.addRow({ field: "Code", value: "Name" });
     headerRow.font = { bold: true };
-    for (const workstation of workstations) {
+    for (const workstation of localizedWorkstations) {
       referenceSheet.addRow({ field: workstation.code, value: workstation.name });
     }
 

@@ -8,6 +8,7 @@ export async function GET() {
 
   const rows = await getPendingSewoValidationRows({
     userId: auth.session.user.id,
+    locale: auth.session.user.language,
     limit: 20,
   });
 

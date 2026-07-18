@@ -156,7 +156,7 @@ describe("mock internal agent", () => {
     const result = await runMockAgent(ctx(), "lista comunicacoes");
 
     expect(result.message).toContain("UC-1");
-    expect(result.message).toContain("comunicacao");
+    expect(result.message).toContain("comunicação");
     expect(prismaMock.prisma.communication.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ plantId: "plant-1" }),
@@ -269,7 +269,7 @@ describe("mock internal agent", () => {
 
     const result = await runMockAgent(ctx({ role: RoleCode.N1_CORPORATE }), "gera relatorio do mes atual");
 
-    expect(result.message).toContain("Relatorio gerado");
+    expect(result.message).toContain("Relatório gerado");
     expect(result.message).not.toContain("secret pdf");
     expect(reportServiceMock.ReportService.generateCorporatePeriodReport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -320,5 +320,15 @@ describe("mock internal agent", () => {
 
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) expect(blocked.errorCode).toBe("CONFIRMATION_CANCELLED");
+  });
+
+  it("returns mock-mode guidance in the authenticated user's language", async () => {
+    const germanContext = ctx();
+    germanContext.session.user.language = "de";
+
+    const result = await runMockAgent(germanContext, "Hilfe");
+
+    expect(result.message).toContain("Mock-/Entwicklungsmodus");
+    expect(result.message).toContain("Maßnahmen");
   });
 });

@@ -16,6 +16,9 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   }
 
   const plant = await getPlantByCode(plantCode);
-  const imported = await OccupationalHealthService.importFromExcel(plant.id, new Uint8Array(await file.arrayBuffer()));
+  const imported = await OccupationalHealthService.importFromExcel(
+    plant.id,
+    new Uint8Array(await file.arrayBuffer()),
+  );
   return ok(imported);
 }

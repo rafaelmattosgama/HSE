@@ -1,9 +1,10 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { DEFAULT_PROFESSIONAL_RISKS } from "@/lib/defaults/professional-risks";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { localizeMasterDataRows, scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 
 const MANAGE_ROLES = [RoleCode.N0_ADMIN];
 
@@ -25,6 +26,8 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
         update: {
           category: risk.category,
           name: risk.name,
+          sourceLanguage: "pt",
+          categorySourceLanguage: "en",
           isActive: true,
         },
         create: {
@@ -32,7 +35,17 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
           code: risk.code,
           category: risk.category,
           name: risk.name,
+          sourceLanguage: "pt",
+          categorySourceLanguage: "en",
         },
+      }),
+    ),
+  );
+  await Promise.all(
+    syncedRisks.map((risk) =>
+      scheduleMasterDataTranslations({
+        entityType: MasterDataEntityType.RISK_THEME,
+        entityId: risk.id,
       }),
     ),
   );
@@ -42,9 +55,14 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
     },
     orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
   });
+  const localizedRisks = await localizeMasterDataRows(
+    MasterDataEntityType.RISK_THEME,
+    risks,
+    auth.session.user.language,
+  );
 
   return ok({
-    risks,
+    risks: localizedRisks,
     summary: {
       professionalRisks: syncedRisks.length,
     },

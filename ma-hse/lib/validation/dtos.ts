@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, RoleCode, SEWOStatus } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus } from "@prisma/client";
 import { z } from "zod";
 import {
   SMAT_ATTACHMENT_LIMITS,
@@ -695,6 +695,14 @@ export const deleteWorkerInput = z.object({
   }
 });
 
+export const upsertMasterDataTranslationInput = z.object({
+  entityType: z.nativeEnum(MasterDataEntityType),
+  entityId: z.string().uuid(),
+  field: z.nativeEnum(MasterDataTranslationField),
+  locale: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+  value: z.string().trim().min(1).max(240),
+});
+
 export const upsertOccupationalHealthWorkerInput = z.object({
   employeeNo: z.string().min(1),
   name: z.string().min(2),
@@ -775,6 +783,10 @@ export const changePasswordInput = z
 export const updateOwnProfileInput = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters").max(120, "Name is too long"),
   language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]),
+});
+
+export const updateOnboardingProgressInput = z.object({
+  step: z.number().int().min(0).max(1000),
 });
 
 const nullableMonthlyNumber = z
@@ -895,4 +907,5 @@ export type UpdateCorporatePlantLanguageInput = z.infer<typeof updateCorporatePl
 export type UpdateCorporatePlantInput = z.infer<typeof updateCorporatePlantInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
 export type UpdateOwnProfileInput = z.infer<typeof updateOwnProfileInput>;
+export type UpdateOnboardingProgressInput = z.infer<typeof updateOnboardingProgressInput>;
 export type UpdatePlantMonthlyInputsInput = z.infer<typeof updatePlantMonthlyInputsInput>;

@@ -1,3 +1,4 @@
+import { MasterDataEntityType } from "@prisma/client";
 import { z } from "zod";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
@@ -8,6 +9,7 @@ import {
   SafetyCommunicationAlertRecipientError,
   SafetyCommunicationAlertService,
 } from "@/lib/services/safety-communication-alert-service";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 
 const upsertRecipientInput = z.object({
   userId: z.string().uuid(),
@@ -28,11 +30,20 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
     SafetyCommunicationAlertService.listRecipients(plant.id),
     SafetyCommunicationAlertService.listRecipientOptions(plant.id),
   ]);
+  const localizedDepartments = await localizeMasterDataRows(
+    MasterDataEntityType.AREA,
+    options.departments,
+    auth.session.user.language,
+  );
+  const localizedDepartmentById = new Map(localizedDepartments.map((department) => [department.id, department.name]));
 
   return ok({
-    recipients,
+    recipients: recipients.map((recipient) => ({
+      ...recipient,
+      departmentName: localizedDepartmentById.get(recipient.departmentId) ?? recipient.departmentName,
+    })),
     users: options.users,
-    departments: options.departments,
+    departments: localizedDepartments,
   });
 }
 
@@ -52,8 +63,18 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       departmentId: parsed.data.departmentId,
       actorUserId: auth.session.user.id,
     });
+    const [localizedDepartment] = await localizeMasterDataRows(
+      MasterDataEntityType.AREA,
+      [{ id: recipient.departmentId, name: recipient.departmentName }],
+      auth.session.user.language,
+    );
 
-    return ok({ recipient }, { status: 201 });
+    return ok({
+      recipient: {
+        ...recipient,
+        departmentName: localizedDepartment?.name ?? recipient.departmentName,
+      },
+    }, { status: 201 });
   } catch (error) {
     if (error instanceof SafetyCommunicationAlertRecipientError) {
       return fail(error.code, error.message, error.status);

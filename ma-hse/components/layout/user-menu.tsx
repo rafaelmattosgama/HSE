@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Settings, ChevronDown } from "lucide-react";
+import { ChevronDown, LogOut, RotateCcw, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
+import { useOnboarding } from "@/components/onboarding/onboarding-provider";
 
 type UserMenuProps = {
   userName: string;
@@ -14,6 +15,7 @@ export function UserMenu({ userName }: UserMenuProps) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const { restartOnboarding, restarting, restartLabel, restartingLabel } = useOnboarding();
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -52,8 +54,18 @@ export function UserMenu({ userName }: UserMenuProps) {
     }
   }
 
+  async function onRestartOnboarding() {
+    setError("");
+    try {
+      await restartOnboarding();
+      setOpen(false);
+    } catch (restartError) {
+      setError(restartError instanceof Error ? restartError.message : "Não foi possível reiniciar a visita guiada.");
+    }
+  }
+
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative" data-onboarding="user-menu">
       <button
         type="button"
         aria-expanded={open}
@@ -79,6 +91,15 @@ export function UserMenu({ userName }: UserMenuProps) {
               <Settings className="h-4 w-4" />
               Definições
             </Link>
+            <button
+              type="button"
+              onClick={() => void onRestartOnboarding()}
+              disabled={restarting}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RotateCcw className="h-4 w-4" />
+              <span data-no-translate>{restarting ? restartingLabel : restartLabel}</span>
+            </button>
             <button
               type="button"
               onClick={() => void onLogout()}

@@ -58,7 +58,7 @@ export function PlantSwitcher({
   const canUseAllPlants = allowAllPlants && currentModule !== "admin" && plants.length > 1;
 
   return (
-    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3" data-onboarding="plant-switcher">
       <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
         <Building2 className="h-3.5 w-3.5" />
         <span>Planta selecionada</span>

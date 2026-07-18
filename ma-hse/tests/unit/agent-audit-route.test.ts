@@ -89,7 +89,7 @@ function row(overrides: Record<string, unknown> = {}) {
 }
 
 async function json(response: Response) {
-  return response.json() as Promise<Record<string, any>>;
+  return response.json() as Promise<Record<string, unknown>>;
 }
 
 describe("agent audit route", () => {

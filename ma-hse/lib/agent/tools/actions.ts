@@ -9,6 +9,7 @@ import {
   type AgentToolContext,
   runAgentTool,
 } from "@/lib/agent/permissions";
+import { formatInternalAgentCopy, getInternalAgentCopy } from "@/lib/agent/i18n";
 import { LINKABLE_COMMUNICATION_STATUSES } from "@/lib/communication-status";
 import { prisma } from "@/lib/prisma";
 import { ActionService } from "@/lib/services/action-service";
@@ -139,7 +140,11 @@ export async function prepareCloseActionForAgent(ctx: AgentToolContext, input: u
         toolName: "close_action",
         payload,
         allowedRoles: AGENT_ACTION_ROLES,
-        summary: `Close action "${action.title}" (${action.id}) with comment: ${payload.closureComment}`,
+        summary: formatInternalAgentCopy(getInternalAgentCopy(ctx.session.user.language).closeActionSummary, {
+          title: action.title,
+          id: action.id,
+          comment: payload.closureComment,
+        }),
         execute: executeCloseActionConfirmation,
       });
 

@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import { Ban, Bot, Check, MessageCircle, Send, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  formatInternalAgentCopy,
+  getInternalAgentCopy,
+  getInternalAgentErrorMessage,
+  type InternalAgentCopy,
+} from "@/lib/agent/i18n";
 import { parseApiResponse } from "@/lib/client-api";
+import type { AppLocale } from "@/lib/i18n/routing";
 
 type ChatMessage = {
   id: string;
@@ -47,7 +54,7 @@ function createMessageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function resultText(value: unknown) {
+function resultText(value: unknown, copy: InternalAgentCopy["ui"]) {
   if (!value) return "";
   if (typeof value === "string") return value;
   if (typeof value === "object") {
@@ -55,30 +62,39 @@ function resultText(value: unknown) {
     if (record.ok === false && typeof record.message === "string") return record.message;
     if (record.data && typeof record.data === "object") {
       const data = record.data as Record<string, unknown>;
-      if (typeof data.title === "string" && typeof data.status === "string") return `${data.title} ficou com estado ${data.status}.`;
+      if (typeof data.title === "string" && typeof data.status === "string") {
+        return formatInternalAgentCopy(copy.statusChanged, { title: data.title, status: data.status });
+      }
     }
   }
-  return "Pedido concluido.";
+  return copy.completed;
 }
 
-function normalizeAgentReply(data: AgentResponseData) {
+function normalizeAgentReply(data: AgentResponseData, copy: InternalAgentCopy["ui"]) {
   if (data.type === "confirmation_executed") {
     return {
-      text: [data.summary ? `Confirmado: ${data.summary}` : "Confirmacao executada.", resultText(data.result)].filter(Boolean).join("\n"),
+      text: [
+        data.summary
+          ? formatInternalAgentCopy(copy.confirmationExecutedWithSummary, { summary: data.summary })
+          : copy.confirmationExecuted,
+        resultText(data.result, copy),
+      ].filter(Boolean).join("\n"),
       confirmation: null,
     };
   }
 
   if (data.type === "confirmation_cancelled") {
     return {
-      text: data.summary ? `Cancelado: ${data.summary}` : "Confirmacao cancelada.",
+      text: data.summary
+        ? formatInternalAgentCopy(copy.confirmationCancelledWithSummary, { summary: data.summary })
+        : copy.confirmationCancelled,
       confirmation: null,
     };
   }
 
   if (data.type === "confirmation_required" && data.confirmationId) {
     return {
-      text: data.message ?? data.summary ?? "Esta acao exige confirmacao.",
+      text: data.message ?? data.summary ?? copy.confirmationRequired,
       confirmation: {
         confirmationId: data.confirmationId,
         summary: data.summary ?? data.message,
@@ -89,7 +105,7 @@ function normalizeAgentReply(data: AgentResponseData) {
 
   if (data.confirmation?.confirmationId) {
     return {
-      text: data.message || data.confirmation.summary || "Esta acao exige confirmacao.",
+      text: data.message || data.confirmation.summary || copy.confirmationRequired,
       confirmation: {
         confirmationId: data.confirmation.confirmationId,
         summary: data.confirmation.summary,
@@ -99,18 +115,19 @@ function normalizeAgentReply(data: AgentResponseData) {
   }
 
   return {
-    text: data.message ?? "Sem resposta do agente.",
+    text: data.message ?? copy.noResponse,
     confirmation: null,
   };
 }
 
-export function InternalAgentChat({ plantCode }: { plantCode: string }) {
+export function InternalAgentChat({ plantCode, locale }: { plantCode: string; locale: AppLocale }) {
+  const copy = useMemo(() => getInternalAgentCopy(locale), [locale]);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: createMessageId(),
       role: "agent",
-      text: "Como posso ajudar nesta planta?",
+      text: copy.ui.welcome,
     },
   ]);
   const [draft, setDraft] = useState("");
@@ -134,11 +151,11 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
     });
 
     const json = await parseApiResponse<AgentResponseData>(response);
-    if (!json) throw new AgentChatError("Nao foi possivel contactar o agente.");
+    if (!json) throw new AgentChatError(copy.ui.contactError);
     if (!response.ok || !json.ok) {
-      throw new AgentChatError(json.message ?? "Nao foi possivel contactar o agente.", json.errorCode);
+      throw new AgentChatError(getInternalAgentErrorMessage(locale, json.errorCode), json.errorCode);
     }
-    return json.data ?? { message: "Sem resposta do agente." };
+    return json.data ?? { message: copy.ui.noResponse };
   }
 
   function appendMessage(message: Omit<ChatMessage, "id">) {
@@ -157,11 +174,11 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
 
     try {
       const data = await postAgent({ plantCode, message });
-      const normalized = normalizeAgentReply(data);
+      const normalized = normalizeAgentReply(data, copy.ui);
       appendMessage({ role: "agent", text: normalized.text });
       setPendingConfirmation(normalized.confirmation);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao contactar o agente.");
+      setError(err instanceof Error ? err.message : copy.ui.genericError);
     } finally {
       setIsBusy(false);
     }
@@ -181,7 +198,7 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
 
     appendMessage({
       role: "user",
-      text: action === "confirm" ? "Confirmar" : "Cancelar",
+      text: action === "confirm" ? copy.ui.confirm : copy.ui.cancel,
     });
 
     try {
@@ -190,11 +207,11 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
         confirmationId,
         confirmationAction: action,
       });
-      const normalized = normalizeAgentReply(data);
+      const normalized = normalizeAgentReply(data, copy.ui);
       appendMessage({ role: "agent", text: normalized.text });
       setPendingConfirmation(normalized.confirmation);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao processar confirmacao.");
+      setError(err instanceof Error ? err.message : copy.ui.confirmationError);
       setPendingConfirmation((current) =>
         current?.confirmationId === confirmationId
           ? {
@@ -219,10 +236,12 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
     return (
       <button
         type="button"
+        data-onboarding="ai-assistant"
+        data-no-translate
         onClick={() => setIsOpen(true)}
         className="fixed bottom-5 right-5 z-[95] inline-flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition hover:bg-slate-800"
-        aria-label="Abrir chat do agente"
-        title="Agente"
+        aria-label={copy.ui.openChat}
+        title={copy.ui.title}
       >
         <MessageCircle className="h-6 w-6" />
       </button>
@@ -230,12 +249,12 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
   }
 
   return (
-    <section className="fixed bottom-5 right-5 z-[95] flex h-[min(680px,calc(100vh-40px))] w-[min(420px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <section data-onboarding="ai-assistant" data-no-translate className="fixed bottom-5 right-5 z-[95] flex h-[min(680px,calc(100vh-40px))] w-[min(420px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
       <header className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
         <div className="flex min-w-0 items-center gap-2">
           <Bot className="h-5 w-5 shrink-0" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Agente interno</p>
+            <p className="truncate text-sm font-semibold">{copy.ui.title}</p>
             <p className="text-xs uppercase tracking-[0.18em] text-slate-300">{plantCode}</p>
           </div>
         </div>
@@ -243,8 +262,8 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
           type="button"
           onClick={() => setIsOpen(false)}
           className="rounded-full p-1 text-slate-300 hover:bg-white/10 hover:text-white"
-          aria-label="Fechar chat"
-          title="Fechar"
+          aria-label={copy.ui.closeChat}
+          title={copy.ui.close}
         >
           <X className="h-5 w-5" />
         </button>
@@ -273,14 +292,14 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
         })}
         {isBusy ? (
           <div className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
-            A processar...
+            {copy.ui.processing}
           </div>
         ) : null}
       </div>
 
       {pendingConfirmation?.status === "pending" ? (
         <div className="border-t border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-semibold text-amber-950">{pendingConfirmation.summary ?? "Confirmar acao pendente?"}</p>
+          <p className="text-sm font-semibold text-amber-950">{pendingConfirmation.summary ?? copy.ui.pendingConfirmation}</p>
           <div className="mt-3 flex gap-2">
             <Button
               type="button"
@@ -289,7 +308,7 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
               disabled={!canActOnConfirmation}
             >
               <Check className="h-4 w-4" />
-              Confirmar
+              {copy.ui.confirm}
             </Button>
             <Button
               type="button"
@@ -299,7 +318,7 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
               disabled={!canActOnConfirmation}
             >
               <Ban className="h-4 w-4" />
-              Cancelar
+              {copy.ui.cancel}
             </Button>
           </div>
         </div>
@@ -311,7 +330,7 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
 
       <form onSubmit={sendMessage} className="flex items-end gap-2 border-t border-slate-200 bg-white p-3">
         <label className="sr-only" htmlFor="agent-chat-message">
-          Mensagem
+          {copy.ui.messageLabel}
         </label>
         <textarea
           id="agent-chat-message"
@@ -324,10 +343,10 @@ export function InternalAgentChat({ plantCode }: { plantCode: string }) {
             }
           }}
           className="min-h-11 max-h-32 flex-1 resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-          placeholder="Escreva uma mensagem..."
+          placeholder={copy.ui.placeholder}
           disabled={isBusy}
         />
-        <Button type="submit" size="sm" disabled={!canSubmit} aria-label="Enviar mensagem" title="Enviar">
+        <Button type="submit" size="sm" disabled={!canSubmit} aria-label={copy.ui.send} title={copy.ui.send}>
           <Send className="h-4 w-4" />
         </Button>
       </form>

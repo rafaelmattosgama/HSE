@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CommunicationStatus, RoleCode } from "@prisma/client";
+import { CommunicationStatus, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { CommunicationDetailEditor } from "@/components/feature/communication-detail-editor";
@@ -15,6 +15,7 @@ import {
   localizeCommunicationCategorizedCatalogRows,
 } from "@/lib/services/communication-catalog-localization";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
@@ -160,6 +161,8 @@ export default async function CommunicationDetailPage({
   if (!communication) notFound();
   const [
     localizedAreas,
+    localizedWorkstations,
+    localizedEquipments,
     localizedRiskThemes,
     localizedUnsafeActTypes,
     localizedUnsafeConditionTypes,
@@ -170,8 +173,10 @@ export default async function CommunicationDetailPage({
     communicationUi,
     { ui: sewoUi },
   ] = await Promise.all([
-    localizeCommunicationCatalogRows(areas, uiLocale),
-    localizeCommunicationCategorizedCatalogRows(riskThemes, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, equipments, uiLocale),
+    localizeMasterDataRows(MasterDataEntityType.RISK_THEME, riskThemes, uiLocale),
     localizeCommunicationCategorizedCatalogRows(unsafeActTypes, uiLocale),
     localizeCommunicationCategorizedCatalogRows(unsafeConditionTypes, uiLocale),
     localizeCommunicationCatalogRows(nearMissTypes, uiLocale),
@@ -254,8 +259,8 @@ export default async function CommunicationDetailPage({
         canManageStatus={canManageStatus}
         canManageClassification={canManageClassification}
         areas={localizedAreas.map((entry) => ({ id: entry.id, name: entry.name }))}
-        workstations={workstations.map((entry) => ({ id: entry.id, name: entry.name }))}
-        equipments={equipments.map((entry) => ({ id: entry.id, name: entry.name }))}
+        workstations={localizedWorkstations.map((entry) => ({ id: entry.id, name: entry.name }))}
+        equipments={localizedEquipments.map((entry) => ({ id: entry.id, name: entry.name }))}
         riskThemes={(canManageClassification || communication.type === "ACCIDENT" ? localizedRiskThemes : []).map((entry) => ({ id: entry.id, name: entry.name, code: entry.code, category: entry.category }))}
         unsafeActTypes={localizedUnsafeActTypes.map((entry) => ({ id: entry.id, code: entry.code, category: entry.category, name: entry.name }))}
         unsafeConditionTypes={(canManageClassification ? localizedUnsafeConditionTypes : []).map((entry) => ({ id: entry.id, code: entry.code, category: entry.category, name: entry.name }))}

@@ -12,6 +12,7 @@ type Item = {
   id: string;
   code: string;
   name: string;
+  originalName?: string;
 };
 
 type Worker = {
@@ -317,14 +318,14 @@ export function MasterDataManager({
 
   function startAreaEdit(item: Item) {
     setAreaCode(item.code);
-    setAreaName(item.name);
+    setAreaName(item.originalName ?? item.name);
     setEditing((current) => ({ ...current, areaId: item.id }));
     setMessage(formatMasterDataMessage(labels.itemEditMessage, { section: labels.sections.area.title, code: item.code }));
   }
 
   function startWorkstationEdit(item: Item) {
     setWorkstationCode(item.code);
-    setWorkstationName(item.name);
+    setWorkstationName(item.originalName ?? item.name);
     setEditing((current) => ({ ...current, workstationId: item.id }));
     setMessage(formatMasterDataMessage(labels.itemEditMessage, { section: labels.sections.workstation.title, code: item.code }));
   }

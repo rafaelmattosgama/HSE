@@ -13,7 +13,10 @@ type CatalogItem = {
   id: string;
   code: string;
   name: string;
+  originalName?: string;
   category?: string | null;
+  originalCategory?: string | null;
+  isActive?: boolean;
 };
 
 type Worker = {
@@ -23,7 +26,7 @@ type Worker = {
   dept: string | null;
 };
 
-type MasterDataType =
+export type MasterDataType =
   | "area"
   | "workstation"
   | "equipment"
@@ -142,6 +145,7 @@ export function N0MasterDataManager({
   initialUnsafeActTypes,
   initialUnsafeConditionTypes,
   initialInjuryTypes,
+  visibleCatalogTypes,
   plantCode,
   labels,
 }: {
@@ -153,12 +157,22 @@ export function N0MasterDataManager({
   initialUnsafeActTypes: CatalogItem[];
   initialUnsafeConditionTypes: CatalogItem[];
   initialInjuryTypes: CatalogItem[];
+  visibleCatalogTypes?: readonly MasterDataType[];
   plantCode?: string;
   labels: N0MasterDataUi;
 }) {
   const pathname = usePathname();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const plant = plantCode ?? pathname.split("/")[2];
+  const catalogTypes = visibleCatalogTypes ?? [
+    "area",
+    "workstation",
+    "equipment",
+    "unsafeActType",
+    "unsafeConditionType",
+    "nearMissType",
+    "injuryType",
+  ];
 
   const [catalogs, setCatalogs] = useState<CatalogsState>(() =>
     buildInitialCatalogs({
@@ -257,8 +271,8 @@ export function N0MasterDataManager({
     updateForm(type, {
       id: item.id,
       code: item.code,
-      name: item.name,
-      category: item.category ?? "",
+      name: item.originalName ?? item.name,
+      category: item.originalCategory ?? item.category ?? "",
     });
     setCatalogMessage(
       type,
@@ -390,7 +404,12 @@ export function N0MasterDataManager({
         throw new Error(getCatalogErrorMessage(type, response, json));
       }
 
-      setCatalog(type, catalogs[type].filter((entry) => entry.id !== item.id));
+      setCatalog(
+        type,
+        type === "equipment"
+          ? catalogs[type].map((entry) => (entry.id === item.id ? { ...entry, isActive: false } : entry))
+          : catalogs[type].filter((entry) => entry.id !== item.id),
+      );
       if (forms[type].id === item.id) {
         clearForm(type);
       }
@@ -404,6 +423,52 @@ export function N0MasterDataManager({
       );
     } finally {
       setDeletingKey(null);
+    }
+  }
+
+  async function activateEquipment(item: CatalogItem) {
+    setSavingKey(`catalog:equipment:${item.id}:activate`);
+    setCatalogMessage("equipment", "");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          type: "equipment",
+          code: item.code,
+          name: item.originalName ?? item.name,
+        }),
+      });
+      const json = await parseApiResponse<{ item: CatalogItem }>(response);
+
+      if (!response.ok || !json?.ok || !json.data?.item) {
+        throw new Error(getCatalogErrorMessage("equipment", response, json));
+      }
+
+      setCatalog("equipment", [
+        ...catalogs.equipment.filter((entry) => entry.id !== item.id),
+        {
+          ...json.data.item,
+          name: item.name,
+          originalName: item.originalName ?? json.data.item.name,
+          isActive: true,
+        },
+      ]);
+      setCatalogMessage(
+        "equipment",
+        formatMasterDataMessage(labels.itemUpdated, { section: getSection(labels, "equipment").title }),
+      );
+    } catch (error) {
+      setCatalogMessage(
+        "equipment",
+        error instanceof Error
+          ? error.message
+          : formatMasterDataMessage(labels.failedToUpdateItem, { section: getSection(labels, "equipment").title.toLowerCase() }),
+      );
+    } finally {
+      setSavingKey(null);
     }
   }
 
@@ -427,7 +492,12 @@ export function N0MasterDataManager({
         throw new Error(getCatalogErrorMessage(type, response, json));
       }
 
-      setCatalog(type, []);
+      setCatalog(
+        type,
+        type === "equipment"
+          ? catalogs[type].map((entry) => ({ ...entry, isActive: false }))
+          : [],
+      );
       clearForm(type);
       setCatalogMessage(type, getSection(labels, type).deleteAllSuccess);
     } catch (error) {
@@ -653,6 +723,7 @@ export function N0MasterDataManager({
   function renderCatalogCard(type: MasterDataType) {
     const section = getSection(labels, type);
     const form = forms[type];
+    const hasActiveItems = catalogs[type].some((item) => item.isActive !== false);
 
     return (
       <form key={type} onSubmit={(event) => void submitCatalog(type, event)} className="space-y-3 rounded-lg border border-slate-200 p-4">
@@ -666,7 +737,7 @@ export function N0MasterDataManager({
               type="button"
               className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
               onClick={() => void deactivateAllCatalog(type)}
-              disabled={catalogs[type].length === 0 || Boolean(deletingKey)}
+              disabled={!hasActiveItems || Boolean(deletingKey)}
             >
               {deletingKey === `catalog:${type}:all` ? labels.deactivatingAll : labels.deactivateAll}
             </button>
@@ -719,19 +790,33 @@ export function N0MasterDataManager({
                   {supportsCategory(type) && item.category ? <span>{item.category} | </span> : null}
                   <span data-no-translate>{item.code}</span>
                   <span> - {item.name}</span>
+                  {type === "equipment" && item.isActive === false ? (
+                    <span className="ml-1 text-slate-400">({labels.users.inactiveStatus})</span>
+                  ) : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-2">
                   <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => startEdit(type, item)} disabled={Boolean(deletingKey)}>
                     {labels.edit}
                   </button>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
-                    onClick={() => void deactivateCatalog(type, item)}
-                    disabled={Boolean(deletingKey)}
-                  >
-                    {deletingKey === `catalog:${type}:${item.id}` ? labels.updating : labels.deactivate}
-                  </button>
+                  {type === "equipment" && item.isActive === false ? (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-emerald-700 hover:text-emerald-900 disabled:opacity-50"
+                      onClick={() => void activateEquipment(item)}
+                      disabled={Boolean(deletingKey) || Boolean(savingKey)}
+                    >
+                      {savingKey === `catalog:equipment:${item.id}:activate` ? labels.updating : labels.users.activate}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
+                      onClick={() => void deactivateCatalog(type, item)}
+                      disabled={Boolean(deletingKey) || Boolean(savingKey)}
+                    >
+                      {deletingKey === `catalog:${type}:${item.id}` ? labels.updating : labels.deactivate}
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -780,9 +865,7 @@ export function N0MasterDataManager({
       {globalMessage ? <p className="text-xs text-slate-600" aria-live="polite">{globalMessage}</p> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {renderCatalogCard("area")}
-        {renderCatalogCard("workstation")}
-        {renderCatalogCard("equipment")}
+        {catalogTypes.filter((type) => type === "area" || type === "workstation" || type === "equipment").map(renderCatalogCard)}
         <form onSubmit={(event) => void submitWorker(event)} className="space-y-3 rounded-lg border border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -863,10 +946,9 @@ export function N0MasterDataManager({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {renderCatalogCard("unsafeActType")}
-        {renderCatalogCard("unsafeConditionType")}
-        {renderCatalogCard("nearMissType")}
-        {renderCatalogCard("injuryType")}
+        {catalogTypes
+          .filter((type) => type !== "area" && type !== "workstation" && type !== "equipment")
+          .map(renderCatalogCard)}
       </div>
     </section>
   );

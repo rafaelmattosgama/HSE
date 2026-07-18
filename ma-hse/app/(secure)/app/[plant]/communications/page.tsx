@@ -1,4 +1,4 @@
-import { CommunicationStatus, RoleCode } from "@prisma/client";
+import { CommunicationStatus, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { CreateCommunicationQuick } from "@/components/feature/create-communication-quick";
@@ -15,6 +15,7 @@ import {
   localizeCommunicationCategorizedCatalogRows,
 } from "@/lib/services/communication-catalog-localization";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
@@ -157,6 +158,7 @@ export default async function CommunicationsPage({
   ]);
   const [
     localizedAreas,
+    localizedWorkstations,
     localizedInjuryTypes,
     localizedRiskThemes,
     localizedUnsafeActTypes,
@@ -165,9 +167,10 @@ export default async function CommunicationsPage({
     localizedBodyParts,
     communicationUi,
   ] = await Promise.all([
-    localizeCommunicationCatalogRows(areas, userLanguage),
+    localizeMasterDataRows(MasterDataEntityType.AREA, areas, userLanguage),
+    localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, userLanguage),
     Promise.resolve(localizeInjuryTypeRows(injuryTypes, userLanguage)),
-    localizeCommunicationCategorizedCatalogRows(riskThemes, userLanguage),
+    localizeMasterDataRows(MasterDataEntityType.RISK_THEME, riskThemes, userLanguage),
     localizeCommunicationCategorizedCatalogRows(unsafeActTypes, userLanguage),
     localizeCommunicationCategorizedCatalogRows(unsafeConditionTypes, userLanguage),
     localizeCommunicationCatalogRows(nearMissTypes, userLanguage),
@@ -175,6 +178,7 @@ export default async function CommunicationsPage({
     getLocalizedCommunicationUi(uiLocale),
   ]);
   const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
+  const localizedWorkstationById = new Map(localizedWorkstations.map((workstation) => [workstation.id, workstation.name]));
   const localizedUnsafeActTypeById = new Map(localizedUnsafeActTypes.map((type) => [type.id, type.name]));
   const localizedUnsafeConditionTypeById = new Map(localizedUnsafeConditionTypes.map((type) => [type.id, type.name]));
   const localizedNearMissTypeById = new Map(localizedNearMissTypes.map((type) => [type.id, type.name]));
@@ -191,7 +195,7 @@ export default async function CommunicationsPage({
       {!isAllPlants ? (
         <CreateCommunicationQuick
           areas={localizedAreas.map((area) => ({ id: area.id, name: area.name }))}
-          workstations={workstations.map((workstation) => ({ id: workstation.id, name: workstation.name }))}
+          workstations={localizedWorkstations.map((workstation) => ({ id: workstation.id, name: workstation.name }))}
           actionOwners={plantUsers.map((entry) => ({ id: entry.user.id, name: entry.user.name }))}
           employees={employees.map((employee) => ({ id: employee.id, name: employee.name, employeeNo: employee.employeeNo }))}
           bodyParts={localizedBodyParts.map((bodyPart) => ({ id: bodyPart.id, code: bodyPart.code ?? undefined, name: bodyPart.name }))}
@@ -239,7 +243,7 @@ export default async function CommunicationsPage({
             status: row.status,
             reporterName: reporterEmployee ? `${reporterEmployee.employeeNo} - ${reporterEmployee.name}` : row.reporterName,
             department: (row.areaId ? localizedAreaById.get(row.areaId) : null) ?? row.area?.name ?? "-",
-            location: row.workstation?.name ?? "-",
+            location: (row.workstationId ? localizedWorkstationById.get(row.workstationId) : null) ?? row.workstation?.name ?? "-",
             involvedWorker: involvedWorkers.length > 0 ? involvedWorkers.join(", ") : fallbackInvolvedWorker || "-",
             description: row.description,
             unsafeActType:

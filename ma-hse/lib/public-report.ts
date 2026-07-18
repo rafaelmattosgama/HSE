@@ -1,3 +1,5 @@
+import { getFixedCommunicationLabels } from "@/lib/communication-labels";
+
 type SupportedReportLocale = "pt" | "it" | "en" | "pl" | "de" | "ro" | "fr";
 
 type ReportText = {
@@ -106,7 +108,7 @@ const REPORT_TEXTS: Record<SupportedReportLocale, ReportText> = {
     typeUnsafeCondition: "Condição insegura",
     typeNearMiss: "Quase acidente",
     typeFirstAid: "Primeiros socorros",
-    typeFiveSImprovement: "Melhoria 5S's",
+    typeFiveSImprovement: "Melhoria 5S",
     typeImprovementSuggestion: "Sugestão de melhoria",
     improvementSubtype: "Subtipo",
     selectImprovementSubtype: "Selecionar subtipo",
@@ -936,9 +938,24 @@ function injuryTypeIndexFromCode(code?: string | null) {
 
 export function getPublicReportText(language: string | null | undefined) {
   const locale = normalizeLocale(language);
+  const fixed = getFixedCommunicationLabels(locale);
+  const base = REPORT_TEXTS[locale];
   return {
     locale,
-    text: REPORT_TEXTS[locale],
+    text: {
+      ...base,
+      typeUnsafeAct: fixed.communicationTypeLabels.UNSAFE_ACT,
+      typeUnsafeCondition: fixed.communicationTypeLabels.UNSAFE_CONDITION,
+      typeNearMiss: fixed.communicationTypeLabels.NEAR_MISS,
+      typeFirstAid: fixed.communicationTypeLabels.FIRST_AID,
+      typeFiveSImprovement: fixed.communicationTypeLabels.FIVE_S_IMPROVEMENT,
+      typeImprovementSuggestion: fixed.communicationTypeLabels.IMPROVEMENT_SUGGESTION,
+      fiveSAreaImprovement: fixed.communicationImprovementSubtypeLabels.FIVE_S_AREA_IMPROVEMENT,
+      fiveSDisorganization: fixed.communicationImprovementSubtypeLabels.FIVE_S_DISORGANIZATION,
+      improvementSafety: fixed.communicationImprovementSubtypeLabels.IMPROVEMENT_SAFETY,
+      improvementHealth: fixed.communicationImprovementSubtypeLabels.IMPROVEMENT_HEALTH,
+      improvementEnvironment: fixed.communicationImprovementSubtypeLabels.IMPROVEMENT_ENVIRONMENT,
+    },
   };
 }
 

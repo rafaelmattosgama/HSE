@@ -1,9 +1,13 @@
-import { RoleCode } from "@prisma/client";
+import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import {
+  localizeMasterDataRows,
+  scheduleMasterDataTranslations,
+} from "@/lib/services/master-data-translation-service";
 import { deleteProfessionalRiskInput, upsertProfessionalRiskInput } from "@/lib/validation/dtos";
 
 const MANAGE_ROLES = [RoleCode.N0_ADMIN];
@@ -21,7 +25,12 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
     orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
   });
 
-  return ok({ risks });
+  const localizedRisks = await localizeMasterDataRows(
+    MasterDataEntityType.RISK_THEME,
+    risks,
+    auth.session.user.language,
+  );
+  return ok({ risks: localizedRisks });
 }
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
@@ -36,6 +45,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const code = parsed.data.code.trim();
   const name = parsed.data.name.trim();
   const category = parsed.data.category.trim();
+  const sourceLanguage = auth.session.user.language;
 
   if (parsed.data.id) {
     const existing = await prisma.riskTheme.findFirst({
@@ -77,10 +87,16 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         code,
         category,
         name,
+        sourceLanguage,
+        categorySourceLanguage: sourceLanguage,
         isActive: true,
       },
     });
 
+    await scheduleMasterDataTranslations({
+      entityType: MasterDataEntityType.RISK_THEME,
+      entityId: risk.id,
+    });
     return ok({ risk });
   }
 
@@ -94,6 +110,8 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     update: {
       category,
       name,
+      sourceLanguage,
+      categorySourceLanguage: sourceLanguage,
       isActive: true,
     },
     create: {
@@ -101,9 +119,15 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       code,
       category,
       name,
+      sourceLanguage,
+      categorySourceLanguage: sourceLanguage,
     },
   });
 
+  await scheduleMasterDataTranslations({
+    entityType: MasterDataEntityType.RISK_THEME,
+    entityId: risk.id,
+  });
   return ok({ risk }, { status: 201 });
 }
 

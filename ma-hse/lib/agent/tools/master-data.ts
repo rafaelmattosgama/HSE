@@ -1,4 +1,5 @@
 import { tool } from "@openai/agents";
+import { MasterDataEntityType } from "@prisma/client";
 import { z } from "zod";
 import {
   AGENT_MASTER_DATA_READ_ROLES,
@@ -6,6 +7,7 @@ import {
   runAgentTool,
 } from "@/lib/agent/permissions";
 import { prisma } from "@/lib/prisma";
+import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { ensureDefaultShifts } from "@/lib/services/shift-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
@@ -64,14 +66,20 @@ export function createMasterDataTools(ctx: AgentToolContext) {
                 orderBy: { user: { name: "asc" } },
               }),
             ]);
+            const [localizedAreas, localizedWorkstations, localizedEquipment, localizedRiskThemes] = await Promise.all([
+              localizeMasterDataRows(MasterDataEntityType.AREA, areas, ctx.session.user.language),
+              localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, ctx.session.user.language),
+              localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, equipments, ctx.session.user.language),
+              localizeMasterDataRows(MasterDataEntityType.RISK_THEME, riskThemes, ctx.session.user.language),
+            ]);
 
             return {
-              areas,
+              areas: localizedAreas,
               lines,
-              workstations,
-              equipments,
+              workstations: localizedWorkstations,
+              equipments: localizedEquipment,
               shifts,
-              riskThemes,
+              riskThemes: localizedRiskThemes,
               unsafeActTypes,
               unsafeCondTypes,
               nearMissTypes,

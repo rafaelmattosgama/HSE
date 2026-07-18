@@ -184,15 +184,15 @@ describe("SafetyCommunicationAlertService", () => {
       1,
       expect.objectContaining({
         user: expect.objectContaining({ email: "sup1@example.com" }),
-        tituloNotificacao: "Comunicacao de Seguranca - Injury",
-        mensagem: expect.stringContaining("Descricao: Worker slipped near the conveyor guard."),
+        tituloNotificacao: "Safety Communication - Accident",
+        mensagem: expect.stringContaining("Description: Worker slipped near the conveyor guard."),
       }),
     );
     expect(emailMock.sendNotificationEmail).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         user: expect.objectContaining({ email: "sup2@example.com" }),
-        mensagem: expect.stringContaining("Trabalhador envolvido: Ana Silva"),
+        mensagem: expect.stringContaining("Worker involved: Ana Silva"),
       }),
     );
 
@@ -211,8 +211,8 @@ describe("SafetyCommunicationAlertService", () => {
         data: expect.objectContaining({
           userId: "supervisor-1",
           plantId: "plant-1",
-          title: "Comunicacao de Seguranca - Injury",
-          body: expect.stringContaining("Descricao: Worker slipped near the conveyor guard."),
+          title: "Safety Communication - Accident",
+          body: expect.stringContaining("Description: Worker slipped near the conveyor guard."),
         }),
       }),
     );
@@ -351,8 +351,8 @@ describe("SafetyCommunicationAlertService", () => {
     expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         user: expect.objectContaining({ email: "n3@example.com" }),
-        tituloNotificacao: "Nova comunicacao registada - Quase Acidente",
-        mensagem: expect.stringContaining("Tipo de comunicacao: Quase Acidente"),
+        tituloNotificacao: "Nova comunicação registada - Quase acidente",
+        mensagem: expect.stringContaining("Tipo de comunicação: Quase acidente"),
         actionUrl: "http://localhost:3000/app/pl1/communications/comm-near-miss",
       }),
     );
@@ -363,7 +363,7 @@ describe("SafetyCommunicationAlertService", () => {
     );
     expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        mensagem: expect.stringContaining("Reporter: Operator One"),
+        mensagem: expect.stringContaining("Autor da comunicação: Operator One"),
       }),
     );
     expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
@@ -402,8 +402,8 @@ describe("SafetyCommunicationAlertService", () => {
         data: expect.objectContaining({
           userId: "n3-1",
           plantId: "plant-1",
-          title: "Alerta N3 - Quase Acidente",
-          body: expect.stringContaining("Descricao: Forklift passed close to a pedestrian."),
+          title: "Alerta N3 - Quase acidente",
+          body: expect.stringContaining("Descrição: Forklift passed close to a pedestrian."),
           channel: "SAFETY_COMMUNICATION_N3_ALERT",
         }),
       }),
@@ -462,7 +462,7 @@ describe("SafetyCommunicationAlertService", () => {
 
     expect(emailMock.sendNotificationEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        tituloNotificacao: "Nova comunicacao registada - Primeiros Socorros",
+        tituloNotificacao: "Nova comunicação registada - Primeiros socorros",
         mensagem: expect.stringContaining("Pessoa envolvida: Visitor"),
       }),
     );

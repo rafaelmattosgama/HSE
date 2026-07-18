@@ -1,4 +1,5 @@
 import { ActionPriority, ActionStatus } from "@prisma/client";
+import { formatInternalAgentCopy, getInternalAgentCopy, type InternalAgentCopy } from "@/lib/agent/i18n";
 import type { AgentPendingConfirmationSummary, AgentToolContext, AgentToolResult } from "@/lib/agent/permissions";
 import { createActionTools, prepareCloseActionForAgent } from "@/lib/agent/tools/actions";
 import { createCommunicationTools } from "@/lib/agent/tools/communications";
@@ -21,6 +22,10 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function includesAny(value: string, terms: string[]) {
+  return terms.some((term) => value.includes(term));
 }
 
 function getTool(tools: unknown[], name: string) {
@@ -46,59 +51,75 @@ async function invokeTool<T>(tool: InvokableTool, input: unknown): Promise<Agent
   return result as AgentToolResult<T>;
 }
 
-function formatToolFailure(result: AgentToolResult<unknown>) {
-  return result.ok ? "Pedido concluido." : result.message;
+function formatToolFailure(result: AgentToolResult<unknown>, copy: InternalAgentCopy) {
+  return result.ok ? copy.ui.completed : copy.mock.operationFailed;
 }
 
-function formatActionRows(rows: Array<{ id: string; sequenceNumber?: number | null; title: string; status: string; dueDate?: Date | string | null }>) {
-  if (rows.length === 0) return "Nao encontrei acoes abertas nesta planta.";
+function formatActionRows(
+  rows: Array<{ id: string; sequenceNumber?: number | null; title: string; status: string; dueDate?: Date | string | null }>,
+  copy: InternalAgentCopy,
+) {
+  if (rows.length === 0) return copy.mock.noOpenActions;
 
   return [
-    `Encontrei ${rows.length} acao(oes) aberta(s) nesta planta:`,
+    formatInternalAgentCopy(copy.mock.openActionsFound, { count: rows.length }),
     ...rows.slice(0, 10).map((row) => {
       const code = row.sequenceNumber ? `#${row.sequenceNumber}` : row.id;
-      const dueDate = row.dueDate ? `, prazo ${new Date(row.dueDate).toLocaleDateString("pt-PT")}` : "";
+      const dueDate = row.dueDate
+        ? `, ${formatInternalAgentCopy(copy.mock.dueDate, { date: new Date(row.dueDate).toLocaleDateString(copy.locale) })}`
+        : "";
       return `- ${code}: ${row.title} (${row.status}${dueDate})`;
     }),
   ].join("\n");
 }
 
-function formatCommunicationRows(rows: Array<{ code?: string | null; id: string; type: string; status: string; description?: string | null }>) {
-  if (rows.length === 0) return "Nao encontrei comunicacoes nesta planta.";
+function formatCommunicationRows(
+  rows: Array<{ code?: string | null; id: string; type: string; status: string; description?: string | null }>,
+  copy: InternalAgentCopy,
+) {
+  if (rows.length === 0) return copy.mock.noCommunications;
 
   return [
-    `Encontrei ${rows.length} comunicacao(oes) nesta planta:`,
-    ...rows.slice(0, 10).map((row) => `- ${row.code ?? row.id}: ${row.type} (${row.status}) - ${row.description ?? "sem descricao"}`),
+    formatInternalAgentCopy(copy.mock.communicationsFound, { count: rows.length }),
+    ...rows.slice(0, 10).map((row) => `- ${row.code ?? row.id}: ${row.type} (${row.status}) - ${row.description ?? copy.mock.noDescription}`),
   ].join("\n");
 }
 
-function formatKpiResult(data: unknown) {
-  if (!data || typeof data !== "object") return "KPIs obtidos para esta planta.";
-  return `KPIs obtidos para esta planta:\n${JSON.stringify(data, null, 2).slice(0, 1800)}`;
+function formatKpiResult(data: unknown, copy: InternalAgentCopy) {
+  if (!data || typeof data !== "object") return copy.mock.kpisFound;
+  return `${copy.mock.kpisFound}\n${JSON.stringify(data, null, 2).slice(0, 1800)}`;
 }
 
 function formatOverdueActionRows(data: {
   count: number;
   actions: Array<{ id: string; sequenceNumber?: number | null; title: string; priority: string; status: string; dueDate?: Date | string | null }>;
-}) {
-  if (data.count === 0) return "Nao encontrei acoes em atraso nesta planta.";
+}, copy: InternalAgentCopy) {
+  if (data.count === 0) return copy.mock.noOverdueActions;
 
   return [
-    `Encontrei ${data.count} acao(oes) em atraso nesta planta:`,
+    formatInternalAgentCopy(copy.mock.overdueActionsFound, { count: data.count }),
     ...data.actions.slice(0, 10).map((row) => {
       const code = row.sequenceNumber ? `#${row.sequenceNumber}` : row.id;
-      const dueDate = row.dueDate ? `, prazo ${new Date(row.dueDate).toLocaleDateString("pt-PT")}` : "";
+      const dueDate = row.dueDate
+        ? `, ${formatInternalAgentCopy(copy.mock.dueDate, { date: new Date(row.dueDate).toLocaleDateString(copy.locale) })}`
+        : "";
       return `- ${code}: ${row.title} (${row.priority}, ${row.status}${dueDate})`;
     }),
   ].join("\n");
 }
 
-function formatReportResult(data: { title?: string; fileName?: string; periodStart?: Date | string; periodEnd?: Date | string }) {
+function formatReportResult(
+  data: { title?: string; fileName?: string; periodStart?: Date | string; periodEnd?: Date | string },
+  copy: InternalAgentCopy,
+) {
   const period =
     data.periodStart && data.periodEnd
-      ? ` (${new Date(data.periodStart).toLocaleDateString("pt-PT")} a ${new Date(data.periodEnd).toLocaleDateString("pt-PT")})`
+      ? ` (${new Date(data.periodStart).toLocaleDateString(copy.locale)} – ${new Date(data.periodEnd).toLocaleDateString(copy.locale)})`
       : "";
-  return `Relatorio gerado${period}: ${data.title ?? data.fileName ?? "metadata disponivel"}.`;
+  return formatInternalAgentCopy(copy.mock.reportGenerated, {
+    period,
+    title: data.title ?? data.fileName ?? copy.mock.metadataAvailable,
+  });
 }
 
 function extractActionReference(message: string) {
@@ -128,16 +149,19 @@ async function resolveActionIdForClose(ctx: AgentToolContext, message: string) {
 
 function extractPriority(message: string) {
   const normalized = normalizeText(message);
-  if (normalized.includes("alta") || normalized.includes("high")) return ActionPriority.HIGH;
-  if (normalized.includes("media") || normalized.includes("medium")) return ActionPriority.MEDIUM;
-  if (normalized.includes("baixa") || normalized.includes("low")) return ActionPriority.LOW;
+  if (includesAny(normalized, ["alta", "high", "hoch", "wysok", "ridicat", "eleve"])) return ActionPriority.HIGH;
+  if (includesAny(normalized, ["media", "medium", "mittel", "sred", "medie", "moyen"])) return ActionPriority.MEDIUM;
+  if (includesAny(normalized, ["baixa", "bassa", "low", "niedrig", "nisk", "scazut", "faible"])) return ActionPriority.LOW;
   return null;
 }
 
 export async function runMockAgent(ctx: AgentToolContext, message: string): Promise<MockAgentResult> {
+  const copy = getInternalAgentCopy(ctx.session.user.language);
   const normalized = normalizeText(message);
+  const mentionsAction = includesAny(normalized, ["aco", "acao", "action", "azione", "dzialan", "massnahm", "actiune"]);
+  const requestsList = includesAny(normalized, ["lista", "list", "elenca", "auflist", "afis", "affich"]);
 
-  if (normalized.includes("atraso") || normalized.includes("overdue")) {
+  if (includesAny(normalized, ["atraso", "overdue", "scadut", "zalegl", "uberfall", "intarzi", "retard"])) {
     const findOverdueActions = getTool(createActionTools(ctx), "find_overdue_actions");
     const result = await invokeTool<{
       count: number;
@@ -145,17 +169,17 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
     }>(findOverdueActions, { limit: 25 });
 
     return {
-      message: result.ok ? formatOverdueActionRows(result.data) : result.message,
+      message: result.ok ? formatOverdueActionRows(result.data, copy) : copy.mock.operationFailed,
       confirmation: null,
     };
   }
 
-  if ((normalized.includes("atualiza") || normalized.includes("actualiza") || normalized.includes("update")) && normalized.includes("acao")) {
+  if (includesAny(normalized, ["atualiza", "actualiza", "update", "aggiorna", "aktualiz", "actualize", "mettre a jour"]) && mentionsAction) {
     const actionId = await resolveActionIdForClose(ctx, message);
     const priority = extractPriority(message);
     if (!actionId || !priority) {
       return {
-        message: "Indica a acao e a prioridade pretendida. Exemplo: atualiza a acao ACT-1 para prioridade alta.",
+        message: copy.mock.specifyActionPriority,
         confirmation: null,
       };
     }
@@ -168,13 +192,17 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
 
     return {
       message: result.ok
-        ? `Acao atualizada: ${result.data.sequenceNumber ? `#${result.data.sequenceNumber}` : result.data.id} - ${result.data.title} (${result.data.priority}).`
-        : result.message,
+        ? formatInternalAgentCopy(copy.mock.actionUpdated, {
+            reference: result.data.sequenceNumber ? `#${result.data.sequenceNumber}` : result.data.id,
+            title: result.data.title,
+            priority: result.data.priority,
+          })
+        : copy.mock.operationFailed,
       confirmation: null,
     };
   }
 
-  if (normalized.includes("relatorio") || normalized.includes("report")) {
+  if (includesAny(normalized, ["relatorio", "report", "rapporto", "raport", "bericht"])) {
     const generatePeriodReport = getTool(createReportTools(ctx), "generate_period_report");
     const result = await invokeTool<{
       title?: string;
@@ -184,36 +212,36 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
     }>(generatePeriodReport, { reportType: "MONTHLY" });
 
     return {
-      message: result.ok ? formatReportResult(result.data) : result.message,
+      message: result.ok ? formatReportResult(result.data, copy) : copy.mock.operationFailed,
       confirmation: null,
     };
   }
 
-  if (normalized.includes("fecha") || normalized.includes("fechar") || normalized.includes("close")) {
+  if (includesAny(normalized, ["fecha", "fechar", "close", "chiud", "zamkn", "schliess", "inchid", "fermer", "clotur"])) {
     const actionId = await resolveActionIdForClose(ctx, message);
     if (!actionId) {
       return {
-        message: "Indica o ID UUID da acao ou o numero/codigo da acao desta planta para eu preparar o fecho.",
+        message: copy.mock.specifyActionToClose,
         confirmation: null,
       };
     }
 
     const result = await prepareCloseActionForAgent(ctx, {
       actionId,
-      closureComment: "Fecho preparado pelo agente mock/dev. Confirmacao explicita necessaria.",
+      closureComment: copy.mock.closureComment,
       closedAt: new Date().toISOString(),
       evidence: [],
     });
 
-    if (!result.ok) return { message: formatToolFailure(result), confirmation: null };
+    if (!result.ok) return { message: formatToolFailure(result, copy), confirmation: null };
 
     return {
-      message: ctx.pendingConfirmation?.summary ?? "Esta acao exige confirmacao antes de executar.",
+      message: ctx.pendingConfirmation?.summary ?? copy.mock.confirmationRequired,
       confirmation: ctx.pendingConfirmation ?? null,
     };
   }
 
-  if (normalized.includes("lista") && normalized.includes("comunic")) {
+  if (requestsList && includesAny(normalized, ["comunic", "meldung", "zglosz"])) {
     const listCommunications = getTool(createCommunicationTools(ctx), "list_communications");
     const result = await invokeTool<Array<{ code?: string | null; id: string; type: string; status: string; description?: string | null }>>(
       listCommunications,
@@ -221,12 +249,12 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
     );
 
     return {
-      message: result.ok ? formatCommunicationRows(result.data) : result.message,
+      message: result.ok ? formatCommunicationRows(result.data, copy) : copy.mock.operationFailed,
       confirmation: null,
     };
   }
 
-  if (normalized.includes("lista") && normalized.includes("aco")) {
+  if (requestsList && mentionsAction) {
     const listActions = getTool(createActionTools(ctx), "list_actions");
     const [openResult, ongoingResult] = await Promise.all([
       invokeTool<Array<{ id: string; sequenceNumber?: number | null; title: string; status: string; dueDate?: Date | string | null }>>(listActions, {
@@ -239,11 +267,11 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
       }),
     ]);
 
-    if (!openResult.ok) return { message: openResult.message, confirmation: null };
-    if (!ongoingResult.ok) return { message: ongoingResult.message, confirmation: null };
+    if (!openResult.ok) return { message: copy.mock.operationFailed, confirmation: null };
+    if (!ongoingResult.ok) return { message: copy.mock.operationFailed, confirmation: null };
 
     return {
-      message: formatActionRows([...openResult.data, ...ongoingResult.data]),
+      message: formatActionRows([...openResult.data, ...ongoingResult.data], copy),
       confirmation: null,
     };
   }
@@ -257,14 +285,13 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
     });
 
     return {
-      message: result.ok ? formatKpiResult(result.data) : result.message,
+      message: result.ok ? formatKpiResult(result.data, copy) : copy.mock.operationFailed,
       confirmation: null,
     };
   }
 
   return {
-    message:
-      "Modo mock/dev ativo. Comandos suportados: lista acoes abertas, acoes em atraso, lista comunicacoes, kpis, atualiza a acao <id ou codigo> para prioridade alta/media/baixa, gera relatorio do mes atual, fecha a acao <id ou codigo>.",
+    message: copy.mock.help,
     confirmation: null,
   };
 }

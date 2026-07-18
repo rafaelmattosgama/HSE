@@ -266,8 +266,39 @@ describe("N0MasterDataManager", () => {
       deleteAll: true,
     });
     expect(await within(form).findByText(labels.sections.equipment.deleteAllSuccess)).toBeTruthy();
-    expect(within(form).queryByText("EQ1")).toBeNull();
-    expect(within(form).queryByText("EQ2")).toBeNull();
+    expect(within(form).getByText("EQ1")).toBeTruthy();
+    expect(within(form).getByText("EQ2")).toBeTruthy();
+    expect(within(form).getAllByRole("button", { name: labels.users.activate })).toHaveLength(2);
+  });
+
+  it("allows N3 to explicitly reactivate inactive equipment through the shared manager", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(
+      buildResponse({
+        ok: true,
+        data: {
+          item: { id: "eq-1", code: "EQ1", name: "Forklift 1", isActive: true },
+        },
+      }),
+    );
+
+    renderManager({
+      visibleCatalogTypes: ["area", "workstation", "equipment"],
+      initialEquipments: [{ id: "eq-1", code: "EQ1", name: "Forklift 1", isActive: false }],
+    });
+
+    const form = getSectionForm("Equipment");
+    fireEvent.click(within(form).getByRole("button", { name: labels.users.activate }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/plants/pl1/admin/master-data");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      id: "eq-1",
+      type: "equipment",
+      code: "EQ1",
+      name: "Forklift 1",
+    });
+    expect(await within(form).findByRole("button", { name: labels.deactivate })).toBeTruthy();
   });
 
   it("allows admin to deactivate all workers in the section", async () => {
@@ -300,5 +331,51 @@ describe("N0MasterDataManager", () => {
     expect(await within(form).findByText(labels.workerDeleteAllSuccess)).toBeTruthy();
     expect(within(form).queryByText("1001")).toBeNull();
     expect(within(form).queryByText("1002")).toBeNull();
+  });
+
+  it("shows the shared localized equipment subsection for the N3 configuration", () => {
+    const ptLabels = getStaticN0MasterDataUi("pt");
+
+    renderManager({
+      labels: ptLabels,
+      visibleCatalogTypes: ["area", "workstation", "equipment"],
+      initialEquipments: [{ id: "eq-1", code: "EQ1", name: "Empilhador 1" }],
+    });
+
+    const form = getSectionForm(ptLabels.sections.equipment.title);
+    expect(within(form).getByPlaceholderText(ptLabels.sections.equipment.codePlaceholder)).toBeTruthy();
+    expect(within(form).getByPlaceholderText(ptLabels.sections.equipment.namePlaceholder)).toBeTruthy();
+    expect(within(form).getByRole("button", { name: ptLabels.sections.equipment.createLabel })).toBeTruthy();
+    expect(within(form).getByRole("button", { name: ptLabels.deactivateAll })).toBeTruthy();
+    expect(within(form).getByText("EQ1")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: ptLabels.sections.unsafeActType.title })).toBeNull();
+  });
+
+  it("refreshes the equipment list when the selected authorized plant changes", async () => {
+    const baseProps: ComponentProps<typeof N0MasterDataManager> = {
+      plantCode: "pl1",
+      initialAreas: [],
+      initialWorkstations: [],
+      initialEquipments: [{ id: "eq-1", code: "PL1-EQ", name: "Plant 1 equipment" }],
+      initialWorkers: [],
+      initialNearMissTypes: [],
+      initialUnsafeActTypes: [],
+      initialUnsafeConditionTypes: [],
+      initialInjuryTypes: [],
+      visibleCatalogTypes: ["area", "workstation", "equipment"],
+      labels,
+    };
+    const view = render(createElement(N0MasterDataManager, baseProps));
+
+    expect(screen.getByText("PL1-EQ")).toBeTruthy();
+
+    view.rerender(createElement(N0MasterDataManager, {
+      ...baseProps,
+      plantCode: "pl2",
+      initialEquipments: [{ id: "eq-2", code: "PL2-EQ", name: "Plant 2 equipment" }],
+    }));
+
+    await waitFor(() => expect(screen.queryByText("PL1-EQ")).toBeNull());
+    expect(screen.getByText("PL2-EQ")).toBeTruthy();
   });
 });
