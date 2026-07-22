@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { Button } from "@/components/ui/button";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { getNextSewoSubmissionStatus } from "@/lib/sewo-status";
@@ -1572,8 +1573,13 @@ export function CreateSewoQuick({
 
           <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
+              <div className="flex min-w-0 items-center gap-2">
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.sifPsifDecisionTree}</h4>
+                <HelpPopover
+                  title={ui.sifPsifInformationTitle}
+                  body={ui.sifPsifInformationBody}
+                  buttonLabel={ui.sifPsifInformationButtonLabel}
+                />
               </div>
               <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${getSifPsifResultClassName(sifPsifResult)}`}>
                 {ui.sifPsifResult}: {getSifPsifResultLabel(sifPsifResult, ui)}

@@ -1,6 +1,7 @@
 import {
   BASE_ROOT_CAUSE_GROUPS,
   BASE_SEWO_UI,
+  getSifPsifInformationCopy,
   type RootCauseGroup,
   type SewoUi,
 } from "@/lib/sewo-ui";
@@ -71,6 +72,7 @@ export async function getLocalizedSewoUi(locale: string): Promise<{
   return {
     ui: {
       ...ui,
+      ...getSifPsifInformationCopy(locale),
       locale,
     } as SewoUi,
     rootCauseGroups,

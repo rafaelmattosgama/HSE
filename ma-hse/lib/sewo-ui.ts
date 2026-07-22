@@ -1,4 +1,5 @@
 import type { ActionCategory, ActionPriority, SEWOStatus } from "@prisma/client";
+import type { AppLocale } from "@/lib/i18n/routing";
 
 export type RootCauseGroup = {
   heading: string;
@@ -157,6 +158,9 @@ export const BASE_SEWO_UI = {
   whyLabel: "Why",
   answerLabel: "Answer",
   sifPsifDecisionTree: "SIF / PSIF Decision Tree",
+  sifPsifInformationTitle: "SIF / PSIF classification",
+  sifPsifInformationBody: "The tree classifies the event according to the actual consequence and the potential severity. A fatality or serious injury corresponds to a SIF. When there is no serious consequence, but the event involved an exposure realistically capable of causing a serious injury or fatality, it may be classified as PSIF. Answer based on the actual conditions of the event and the existing controls.",
+  sifPsifInformationButtonLabel: "Information about SIF/PSIF classification",
   eventReported: "Event reported",
   actualSifQuestion: "Was it an actual SIF event? Did a fatality or life altering/threatening injury/illness occur?",
   sifPsifExposureQuestions: {
@@ -288,6 +292,53 @@ export type SewoUiBase = WidenStrings<typeof BASE_SEWO_UI>;
 export type SewoUi = SewoUiBase & {
   locale: string;
 };
+
+type SifPsifInformationCopy = Pick<
+  SewoUiBase,
+  "sifPsifInformationTitle" | "sifPsifInformationBody" | "sifPsifInformationButtonLabel"
+>;
+
+const SIF_PSIF_INFORMATION_COPY: Record<AppLocale, SifPsifInformationCopy> = {
+  en: {
+    sifPsifInformationTitle: "SIF / PSIF classification",
+    sifPsifInformationBody: "The tree classifies the event according to the actual consequence and the potential severity. A fatality or serious injury corresponds to a SIF. When there is no serious consequence, but the event involved an exposure realistically capable of causing a serious injury or fatality, it may be classified as PSIF. Answer based on the actual conditions of the event and the existing controls.",
+    sifPsifInformationButtonLabel: "Information about SIF/PSIF classification",
+  },
+  it: {
+    sifPsifInformationTitle: "Classificazione SIF / PSIF",
+    sifPsifInformationBody: "L’albero classifica l’evento in base alla conseguenza reale e al potenziale di gravità. Un decesso o una lesione grave corrisponde a un SIF. Quando non si è verificata una conseguenza grave, ma l’evento ha comportato un’esposizione realisticamente in grado di causare una lesione grave o un decesso, può essere classificato come PSIF. Rispondere in base alle condizioni reali dell’evento e ai controlli esistenti.",
+    sifPsifInformationButtonLabel: "Informazioni sulla classificazione SIF/PSIF",
+  },
+  pt: {
+    sifPsifInformationTitle: "Classificação SIF / PSIF",
+    sifPsifInformationBody: "A árvore classifica o evento pela consequência real e pelo potencial de gravidade. Uma fatalidade ou lesão grave corresponde a um SIF. Quando não existe uma consequência grave, mas o evento envolveu uma exposição capaz de causar realisticamente uma lesão grave ou fatalidade, poderá ser classificado como PSIF. Responda com base nas condições reais do evento e nos controlos existentes.",
+    sifPsifInformationButtonLabel: "Informação sobre a classificação SIF/PSIF",
+  },
+  pl: {
+    sifPsifInformationTitle: "Klasyfikacja SIF / PSIF",
+    sifPsifInformationBody: "Drzewo klasyfikuje zdarzenie na podstawie rzeczywistych skutków i potencjalnej dotkliwości. Wypadek śmiertelny lub poważny uraz odpowiada klasyfikacji SIF. Jeśli nie wystąpiły poważne skutki, ale zdarzenie wiązało się z narażeniem, które realnie mogło spowodować poważny uraz lub śmierć, może zostać sklasyfikowane jako PSIF. Odpowiadaj na podstawie rzeczywistych warunków zdarzenia i istniejących środków kontroli.",
+    sifPsifInformationButtonLabel: "Informacje o klasyfikacji SIF/PSIF",
+  },
+  de: {
+    sifPsifInformationTitle: "SIF-/PSIF-Klassifizierung",
+    sifPsifInformationBody: "Der Entscheidungsbaum klassifiziert das Ereignis anhand der tatsächlichen Folgen und des Schwerepotenzials. Ein Todesfall oder eine schwere Verletzung entspricht einem SIF. Wenn keine schwerwiegenden Folgen eingetreten sind, das Ereignis jedoch eine Exposition beinhaltete, die realistischerweise eine schwere Verletzung oder einen Todesfall hätte verursachen können, kann es als PSIF eingestuft werden. Beantworten Sie die Fragen auf Grundlage der tatsächlichen Bedingungen des Ereignisses und der vorhandenen Kontrollen.",
+    sifPsifInformationButtonLabel: "Informationen zur SIF-/PSIF-Klassifizierung",
+  },
+  ro: {
+    sifPsifInformationTitle: "Clasificare SIF / PSIF",
+    sifPsifInformationBody: "Arborele clasifică evenimentul în funcție de consecința reală și de potențialul de gravitate. Un deces sau o vătămare gravă corespunde unui SIF. Atunci când nu există o consecință gravă, dar evenimentul a implicat o expunere capabilă în mod realist să provoace o vătămare gravă sau un deces, acesta poate fi clasificat drept PSIF. Răspundeți pe baza condițiilor reale ale evenimentului și a măsurilor de control existente.",
+    sifPsifInformationButtonLabel: "Informații despre clasificarea SIF/PSIF",
+  },
+  fr: {
+    sifPsifInformationTitle: "Classification SIF / PSIF",
+    sifPsifInformationBody: "L’arbre classe l’événement selon la conséquence réelle et le potentiel de gravité. Un décès ou une blessure grave correspond à un SIF. Lorsqu’il n’y a pas eu de conséquence grave, mais que l’événement a impliqué une exposition pouvant réellement provoquer une blessure grave ou un décès, il peut être classé comme PSIF. Répondez en vous fondant sur les conditions réelles de l’événement et les mesures de maîtrise existantes.",
+    sifPsifInformationButtonLabel: "Informations sur la classification SIF/PSIF",
+  },
+};
+
+export function getSifPsifInformationCopy(locale: string): SifPsifInformationCopy {
+  return SIF_PSIF_INFORMATION_COPY[locale as AppLocale] ?? SIF_PSIF_INFORMATION_COPY.en;
+}
 
 export type BodyZonePickerLabels = SewoUi["bodyZonePicker"];
 
