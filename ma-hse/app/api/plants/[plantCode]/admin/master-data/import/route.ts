@@ -22,7 +22,6 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     plant.id,
     new Uint8Array(await file.arrayBuffer()),
     {
-      sourceLanguage: auth.session.user.language,
       includeEquipments: canManagePlantEquipment(auth.role),
     },
   );

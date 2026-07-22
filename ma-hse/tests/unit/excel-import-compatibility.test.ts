@@ -1,4 +1,9 @@
 import ExcelJS from "exceljs";
+import {
+  MasterDataEntityType,
+  MasterDataTranslationField,
+  MasterDataTranslationStatus,
+} from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
@@ -18,6 +23,9 @@ const prismaMock = vi.hoisted(() => ({
     findFirst: vi.fn(),
     findMany: vi.fn(),
     upsert: vi.fn(),
+  },
+  masterDataTranslation: {
+    findMany: vi.fn(),
   },
   $transaction: vi.fn(),
   $executeRaw: vi.fn(),
@@ -67,15 +75,16 @@ async function workbookBuffer(workbook: ExcelJS.Workbook) {
 describe("importable Excel compatibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prismaMock.area.findMany.mockResolvedValue([{ code: "DEP1", name: "Producao" }]);
+    prismaMock.area.findMany.mockResolvedValue([{ id: "area-1", code: "DEP1", name: "Producao", sourceLanguage: "pt" }]);
     prismaMock.area.upsert.mockResolvedValue({});
-    prismaMock.equipment.findMany.mockResolvedValue([{ code: "EQ1", name: "Empilhador 1" }]);
+    prismaMock.equipment.findMany.mockResolvedValue([{ id: "equipment-1", code: "EQ1", name: "Empilhador 1", sourceLanguage: "pt" }]);
     prismaMock.equipment.upsert.mockResolvedValue({});
     prismaMock.employeeDirectory.findMany.mockResolvedValue([{ employeeNo: "1001", name: "Maria Silva", dept: "Producao" }]);
     prismaMock.employeeDirectory.upsert.mockResolvedValue({});
     prismaMock.workstation.findFirst.mockResolvedValue({ id: "ws-1" });
-    prismaMock.workstation.findMany.mockResolvedValue([{ code: "WS1", name: "Linha 1" }]);
+    prismaMock.workstation.findMany.mockResolvedValue([{ id: "workstation-1", code: "WS1", name: "Linha 1", sourceLanguage: "pt" }]);
     prismaMock.workstation.upsert.mockResolvedValue({});
+    prismaMock.masterDataTranslation.findMany.mockResolvedValue([]);
     prismaMock.$transaction.mockImplementation((operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
     prismaMock.$executeRaw.mockResolvedValue(1);
     prismaMock.$queryRaw.mockResolvedValue([occupationalWorkerRow]);
@@ -102,6 +111,10 @@ describe("importable Excel compatibility", () => {
     expect(prismaMock.workstation.upsert).toHaveBeenCalledTimes(1);
     expect(prismaMock.equipment.upsert).toHaveBeenCalledTimes(1);
     expect(prismaMock.employeeDirectory.upsert).toHaveBeenCalledTimes(1);
+    expect(prismaMock.area.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({ sourceLanguage: null }),
+      create: expect.objectContaining({ sourceLanguage: null }),
+    }));
   });
 
   it("exports master data with the equipment sheet populated", async () => {
@@ -112,6 +125,31 @@ describe("importable Excel compatibility", () => {
     expect(workbook.getWorksheet("Workstations")!.getRow(4).values).toEqual([, "WS1", "Linha 1"]);
     expect(workbook.getWorksheet("Equipment")!.getRow(4).values).toEqual([, "EQ1", "Empilhador 1"]);
     expect(workbook.getWorksheet("Workers")!.getRow(4).values).toEqual([, "1001", "Maria Silva", "Producao"]);
+  });
+
+  it("exports master data names and matching worker departments in the viewer language", async () => {
+    const translatedNames: Record<string, string> = {
+      "area-1": "Production",
+      "workstation-1": "Line 1",
+      "equipment-1": "Forklift 1",
+    };
+    prismaMock.masterDataTranslation.findMany.mockImplementation(async (query: {
+      where: { entityType: MasterDataEntityType; entityId: { in: string[] } };
+    }) => query.where.entityId.in.map((entityId) => ({
+      entityId,
+      field: MasterDataTranslationField.NAME,
+      locale: "en",
+      value: translatedNames[entityId],
+      status: MasterDataTranslationStatus.COMPLETED,
+    })));
+
+    const exported = await MasterDataImportService.buildExport("plant-1", { locale: "en" });
+    const workbook = await loadWorkbook(exported);
+
+    expect(workbook.getWorksheet("Departments")!.getRow(4).values).toEqual([, "DEP1", "Production"]);
+    expect(workbook.getWorksheet("Workstations")!.getRow(4).values).toEqual([, "WS1", "Line 1"]);
+    expect(workbook.getWorksheet("Equipment")!.getRow(4).values).toEqual([, "EQ1", "Forklift 1"]);
+    expect(workbook.getWorksheet("Workers")!.getRow(4).values).toEqual([, "1001", "Maria Silva", "Production"]);
   });
 
   it("includes equipment in N3-compatible imports and can exclude it for roles without permission", async () => {
@@ -145,7 +183,7 @@ describe("importable Excel compatibility", () => {
     expect(prismaMock.equipment.findMany).toHaveBeenCalledWith({
       where: { plantId: "plant-1", isActive: true, id: { in: [] } },
       orderBy: [{ code: "asc" }, { name: "asc" }],
-      select: { code: true, name: true },
+      select: { id: true, code: true, name: true, sourceLanguage: true },
     });
     expect(workbook.getWorksheet("Equipment")!.getRow(4).values).toEqual([, "", ""]);
   });

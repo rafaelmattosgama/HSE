@@ -1,7 +1,10 @@
 import ExcelJS from "exceljs";
 import { MasterDataEntityType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
+import {
+  localizeMasterDataRows,
+  scheduleMasterDataTranslations,
+} from "@/lib/services/master-data-translation-service";
 
 type CatalogWorkbookRow = {
   code: string;
@@ -28,6 +31,7 @@ type MasterDataImportOptions = {
 
 type MasterDataExportOptions = {
   includeEquipments?: boolean;
+  locale?: string | null;
 };
 
 type TranslationTarget = {
@@ -193,7 +197,7 @@ async function buildWorkbook(data: MasterDataWorkbookData = {}) {
   return Buffer.from(buffer as ArrayBuffer);
 }
 
-async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string, translationTargets: TranslationTarget[]) {
+async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string | null, translationTargets: TranslationTarget[]) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
 
@@ -234,7 +238,7 @@ async function importDepartments(plantId: string, sheet: ExcelJS.Worksheet, sour
   return imported;
 }
 
-async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string, translationTargets: TranslationTarget[]) {
+async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string | null, translationTargets: TranslationTarget[]) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
 
@@ -275,7 +279,7 @@ async function importWorkstations(plantId: string, sheet: ExcelJS.Worksheet, sou
   return imported;
 }
 
-async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string, translationTargets: TranslationTarget[]) {
+async function importEquipments(plantId: string, sheet: ExcelJS.Worksheet, sourceLanguage: string | null, translationTargets: TranslationTarget[]) {
   const headerRow = findHeaderRow(sheet, ["code", "name"]);
   if (!headerRow) return 0;
 
@@ -371,16 +375,7 @@ export const MasterDataImportService = {
     const workbook = new ExcelJS.Workbook();
     await ((workbook.xlsx as unknown) as { load: (input: Uint8Array) => Promise<void> }).load(fileBuffer);
 
-    const plantDelegate = (prisma as typeof prisma & {
-      plant?: typeof prisma.plant;
-    }).plant;
-    const plant = options.sourceLanguage || !plantDelegate
-      ? null
-      : await plantDelegate.findUnique({
-          where: { id: plantId },
-          select: { defaultLanguage: true },
-        });
-    const sourceLanguage = options.sourceLanguage ?? plant?.defaultLanguage ?? "en";
+    const sourceLanguage = options.sourceLanguage ?? null;
     const translationTargets: TranslationTarget[] = [];
 
     const departmentSheet = findSheetByNames(workbook, ["depart", "area"]);
@@ -421,12 +416,12 @@ export const MasterDataImportService = {
       prisma.area.findMany({
         where: { plantId, isActive: true },
         orderBy: [{ code: "asc" }, { name: "asc" }],
-        select: { code: true, name: true },
+        select: { id: true, code: true, name: true, sourceLanguage: true },
       }),
       prisma.workstation.findMany({
         where: { plantId, isActive: true },
         orderBy: [{ code: "asc" }, { name: "asc" }],
-        select: { code: true, name: true },
+        select: { id: true, code: true, name: true, sourceLanguage: true },
       }),
       prisma.equipment.findMany({
         where: {
@@ -435,7 +430,7 @@ export const MasterDataImportService = {
           ...(options.includeEquipments === false ? { id: { in: [] } } : {}),
         },
         orderBy: [{ code: "asc" }, { name: "asc" }],
-        select: { code: true, name: true },
+        select: { id: true, code: true, name: true, sourceLanguage: true },
       }),
       prisma.employeeDirectory.findMany({
         where: { plantId, isActive: true },
@@ -444,11 +439,29 @@ export const MasterDataImportService = {
       }),
     ]);
 
+    const [localizedDepartments, localizedWorkstations, localizedEquipments] = await Promise.all([
+      localizeMasterDataRows(MasterDataEntityType.AREA, departments, options.locale),
+      localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, options.locale),
+      localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, equipments, options.locale),
+    ]);
+    const localizedDepartmentByReference = new Map<string, string>();
+    for (const department of localizedDepartments) {
+      localizedDepartmentByReference.set(normalizeText(department.code), department.name);
+      localizedDepartmentByReference.set(normalizeText(department.originalName), department.name);
+      localizedDepartmentByReference.set(normalizeText(department.name), department.name);
+    }
+    const localizedWorkers = workers.map((worker) => ({
+      ...worker,
+      dept: worker.dept
+        ? localizedDepartmentByReference.get(normalizeText(worker.dept)) ?? worker.dept
+        : null,
+    }));
+
     return buildWorkbook({
-      departments,
-      workstations,
-      equipments,
-      workers,
+      departments: localizedDepartments,
+      workstations: localizedWorkstations,
+      equipments: localizedEquipments,
+      workers: localizedWorkers,
     });
   },
 };

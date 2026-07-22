@@ -256,7 +256,7 @@ async function getMasterDataSnapshot(
         plantLanguage: row.plant.defaultLanguage,
         fields: [
           { field: MasterDataTranslationField.NAME, value: row.name, sourceLanguage: row.sourceLanguage },
-          { field: MasterDataTranslationField.CATEGORY, value: row.category, sourceLanguage: row.categorySourceLanguage ?? row.sourceLanguage },
+          { field: MasterDataTranslationField.CATEGORY, value: row.category, sourceLanguage: row.categorySourceLanguage },
         ],
       }
     : null;
@@ -273,21 +273,9 @@ export async function prepareMasterDataTranslations(input: {
 }) {
   const snapshot = await getMasterDataSnapshot(input.entityType, input.entityId);
   if (!snapshot) return null;
-  const sourceLanguage = normalizeMasterDataLocale(
-    snapshot.sourceLanguage ?? snapshot.plantLanguage ?? MASTER_DATA_FALLBACK_LOCALE,
-  );
-  if (!snapshot.sourceLanguage) {
-    if (input.entityType === MasterDataEntityType.AREA) {
-      await prisma.area.update({ where: { id: input.entityId }, data: { sourceLanguage } });
-    } else if (input.entityType === MasterDataEntityType.WORKSTATION) {
-      await prisma.workstation.update({ where: { id: input.entityId }, data: { sourceLanguage } });
-    } else if (input.entityType === MasterDataEntityType.EQUIPMENT) {
-      await prisma.equipment.update({ where: { id: input.entityId }, data: { sourceLanguage } });
-    } else {
-      await prisma.riskTheme.update({ where: { id: input.entityId }, data: { sourceLanguage } });
-    }
-    snapshot.sourceLanguage = sourceLanguage;
-  }
+  const sourceLanguage = snapshot.sourceLanguage
+    ? normalizeMasterDataLocale(snapshot.sourceLanguage)
+    : null;
   const existing = await prisma.masterDataTranslation.findMany({
     where: { entityType: input.entityType, entityId: input.entityId },
   });
@@ -301,9 +289,9 @@ export async function prepareMasterDataTranslations(input: {
 
   for (const field of snapshot.fields) {
     const sourceHash = hashMasterDataSource(field.value);
-    const fieldSourceLanguage = normalizeMasterDataLocale(
-      field.sourceLanguage ?? sourceLanguage,
-    );
+    const fieldSourceLanguage = field.sourceLanguage
+      ? normalizeMasterDataLocale(field.sourceLanguage)
+      : null;
     for (const locale of MASTER_DATA_TRANSLATION_LOCALES) {
       const current = existingByKey.get(`${field.field}:${locale}`);
       if (current?.isManual) continue;
@@ -365,12 +353,91 @@ export async function prepareMasterDataTranslations(input: {
   return { ...snapshot, sourceLanguage };
 }
 
+async function detectAndPersistMasterDataSourceLanguages(
+  entityType: MasterDataEntityType,
+  snapshot: MasterDataSnapshot,
+) {
+  const fieldsToDetect = snapshot.fields.filter(
+    (field) => !field.sourceLanguage && !isTechnicalReference(field.value),
+  );
+  if (fieldsToDetect.length === 0) return false;
+
+  let detectedLocales: Array<AppLocale | null>;
+  try {
+    detectedLocales = await getTranslationProvider().detectLocales(
+      fieldsToDetect.map((field) => field.value),
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, entityId: snapshot.id },
+      "failed to detect master data source language; translations will continue without a source hint",
+    );
+    return false;
+  }
+
+  const detectedByField = new Map(
+    fieldsToDetect.map((field, index) => [field.field, detectedLocales[index] ?? null]),
+  );
+  const detectedNameLocale = detectedByField.get(MasterDataTranslationField.NAME) ?? null;
+  const detectedCategoryLocale = detectedByField.get(MasterDataTranslationField.CATEGORY) ?? null;
+  const detectedFields = fieldsToDetect
+    .filter((field, index) => Boolean(detectedLocales[index]))
+    .map((field) => field.field);
+
+  if (!detectedNameLocale && !detectedCategoryLocale) return false;
+
+  let sourceLanguageUpdate: Prisma.PrismaPromise<unknown>;
+  if (entityType === MasterDataEntityType.RISK_THEME) {
+    sourceLanguageUpdate = prisma.riskTheme.update({
+      where: { id: snapshot.id },
+      data: {
+        ...(detectedNameLocale ? { sourceLanguage: detectedNameLocale } : {}),
+        ...(detectedCategoryLocale ? { categorySourceLanguage: detectedCategoryLocale } : {}),
+      },
+    });
+  } else {
+    if (!detectedNameLocale) return false;
+    const data = { sourceLanguage: detectedNameLocale };
+    if (entityType === MasterDataEntityType.AREA) {
+      sourceLanguageUpdate = prisma.area.update({ where: { id: snapshot.id }, data });
+    } else if (entityType === MasterDataEntityType.WORKSTATION) {
+      sourceLanguageUpdate = prisma.workstation.update({ where: { id: snapshot.id }, data });
+    } else {
+      sourceLanguageUpdate = prisma.equipment.update({ where: { id: snapshot.id }, data });
+    }
+  }
+
+  await prisma.$transaction([
+    sourceLanguageUpdate,
+    prisma.masterDataTranslation.updateMany({
+      where: {
+        entityType,
+        entityId: snapshot.id,
+        field: { in: detectedFields },
+        isManual: false,
+      },
+      data: {
+        value: null,
+        status: MasterDataTranslationStatus.PENDING,
+        attempts: 0,
+        lastError: null,
+        translatedAt: null,
+      },
+    }),
+  ]);
+  return true;
+}
+
 export async function processMasterDataTranslations(input: {
   entityType: MasterDataEntityType;
   entityId: string;
 }) {
-  const snapshot = await prepareMasterDataTranslations(input);
+  let snapshot = await prepareMasterDataTranslations(input);
   if (!snapshot) return { translated: 0, skipped: 0 };
+
+  if (await detectAndPersistMasterDataSourceLanguages(input.entityType, snapshot)) {
+    snapshot = (await prepareMasterDataTranslations(input)) ?? snapshot;
+  }
 
   const pending = await prisma.masterDataTranslation.findMany({
     where: {

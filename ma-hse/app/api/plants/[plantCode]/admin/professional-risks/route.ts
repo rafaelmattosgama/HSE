@@ -45,8 +45,6 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const code = parsed.data.code.trim();
   const name = parsed.data.name.trim();
   const category = parsed.data.category.trim();
-  const sourceLanguage = auth.session.user.language;
-
   if (parsed.data.id) {
     const existing = await prisma.riskTheme.findFirst({
       where: {
@@ -55,6 +53,10 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       },
       select: {
         id: true,
+        name: true,
+        category: true,
+        sourceLanguage: true,
+        categorySourceLanguage: true,
       },
     });
 
@@ -87,8 +89,9 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         code,
         category,
         name,
-        sourceLanguage,
-        categorySourceLanguage: sourceLanguage,
+        sourceLanguage: existing.name === name ? existing.sourceLanguage : null,
+        categorySourceLanguage:
+          existing.category === category ? existing.categorySourceLanguage : null,
         isActive: true,
       },
     });
@@ -110,8 +113,8 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     update: {
       category,
       name,
-      sourceLanguage,
-      categorySourceLanguage: sourceLanguage,
+      sourceLanguage: null,
+      categorySourceLanguage: null,
       isActive: true,
     },
     create: {
@@ -119,8 +122,8 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       code,
       category,
       name,
-      sourceLanguage,
-      categorySourceLanguage: sourceLanguage,
+      sourceLanguage: null,
+      categorySourceLanguage: null,
     },
   });
 

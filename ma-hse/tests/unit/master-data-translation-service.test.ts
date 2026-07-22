@@ -14,12 +14,14 @@ const prismaMock = vi.hoisted(() => ({
     findMany: vi.fn(),
     upsert: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   $transaction: vi.fn(async (operations: Array<Promise<unknown>>) => Promise.all(operations)),
 }));
 
 const providerMock = vi.hoisted(() => ({
   translateBatch: vi.fn(),
+  detectLocales: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
@@ -48,6 +50,8 @@ describe("master data translation service", () => {
     vi.clearAllMocks();
     prismaMock.masterDataTranslation.upsert.mockResolvedValue({});
     prismaMock.masterDataTranslation.update.mockResolvedValue({});
+    prismaMock.masterDataTranslation.updateMany.mockResolvedValue({ count: 0 });
+    providerMock.detectLocales.mockResolvedValue([]);
   });
 
   it("shows a Portuguese department in English and preserves its original name and code", () => {
@@ -191,6 +195,90 @@ describe("master data translation service", () => {
         }),
       }),
     );
+  });
+
+  it("detects the text language asynchronously instead of assuming the plant or UI language", async () => {
+    prismaMock.area.findUnique
+      .mockResolvedValueOnce({
+        id: "area-1",
+        plantId: "plant-1",
+        name: "Produção",
+        sourceLanguage: null,
+        plant: { defaultLanguage: "en" },
+      })
+      .mockResolvedValueOnce({
+        id: "area-1",
+        plantId: "plant-1",
+        name: "Produção",
+        sourceLanguage: "pt",
+        plant: { defaultLanguage: "en" },
+      });
+    prismaMock.masterDataTranslation.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    providerMock.detectLocales.mockResolvedValue(["pt"]);
+
+    await processMasterDataTranslations({
+      entityType: MasterDataEntityType.AREA,
+      entityId: "area-1",
+    });
+
+    expect(providerMock.detectLocales).toHaveBeenCalledWith(["Produção"]);
+    expect(prismaMock.area.update).toHaveBeenCalledWith({
+      where: { id: "area-1" },
+      data: { sourceLanguage: "pt" },
+    });
+    expect(prismaMock.masterDataTranslation.updateMany).toHaveBeenCalledWith({
+      where: {
+        entityType: MasterDataEntityType.AREA,
+        entityId: "area-1",
+        field: { in: [MasterDataTranslationField.NAME] },
+        isManual: false,
+      },
+      data: expect.objectContaining({
+        value: null,
+        status: MasterDataTranslationStatus.PENDING,
+      }),
+    });
+  });
+
+  it("detects professional risk names and categories independently", async () => {
+    prismaMock.riskTheme.findUnique
+      .mockResolvedValueOnce({
+        id: "risk-1",
+        plantId: "plant-1",
+        name: "Esmagamento",
+        category: "Mechanical",
+        sourceLanguage: null,
+        categorySourceLanguage: null,
+        plant: { defaultLanguage: "fr" },
+      })
+      .mockResolvedValueOnce({
+        id: "risk-1",
+        plantId: "plant-1",
+        name: "Esmagamento",
+        category: "Mechanical",
+        sourceLanguage: "pt",
+        categorySourceLanguage: "en",
+        plant: { defaultLanguage: "fr" },
+      });
+    prismaMock.masterDataTranslation.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    providerMock.detectLocales.mockResolvedValue(["pt", "en"]);
+
+    await processMasterDataTranslations({
+      entityType: MasterDataEntityType.RISK_THEME,
+      entityId: "risk-1",
+    });
+
+    expect(providerMock.detectLocales).toHaveBeenCalledWith(["Esmagamento", "Mechanical"]);
+    expect(prismaMock.riskTheme.update).toHaveBeenCalledWith({
+      where: { id: "risk-1" },
+      data: { sourceLanguage: "pt", categorySourceLanguage: "en" },
+    });
   });
 
   it("records provider failures without changing the original master data record", async () => {

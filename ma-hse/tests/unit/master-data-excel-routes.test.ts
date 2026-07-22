@@ -66,7 +66,7 @@ describe("master data Excel routes", () => {
     expect(importServiceMock.importFromExcel).toHaveBeenCalledWith(
       "plant-1",
       expect.any(Uint8Array),
-      { sourceLanguage: "pt", includeEquipments: true },
+      { includeEquipments: true },
     );
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
       entityType: "MasterDataImport",
@@ -87,7 +87,7 @@ describe("master data Excel routes", () => {
       routeContext(),
     );
 
-    expect(importServiceMock.buildExport).toHaveBeenLastCalledWith("plant-1", { includeEquipments: true });
+    expect(importServiceMock.buildExport).toHaveBeenLastCalledWith("plant-1", { includeEquipments: true, locale: "pt" });
     expect(n3Response.status).toBe(200);
 
     guardsMock.requirePlantAccess.mockResolvedValueOnce(authenticatedRole(RoleCode.N2_PLANT_MANAGER));
@@ -96,7 +96,7 @@ describe("master data Excel routes", () => {
       routeContext(),
     );
 
-    expect(importServiceMock.buildExport).toHaveBeenLastCalledWith("plant-1", { includeEquipments: false });
+    expect(importServiceMock.buildExport).toHaveBeenLastCalledWith("plant-1", { includeEquipments: false, locale: "pt" });
     expect(n2Response.status).toBe(200);
   });
 });
