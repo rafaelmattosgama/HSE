@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { locales, type AppLocale } from "@/lib/i18n/routing";
 
 export type TranslationPurpose = "viewer" | "master-data";
 
@@ -10,6 +11,7 @@ export type TranslationBatchInput = {
 
 export interface TranslationProvider {
   translateBatch(input: TranslationBatchInput): Promise<string[]>;
+  detectLocales(texts: string[]): Promise<Array<AppLocale | null>>;
 }
 
 export class TranslationProviderError extends Error {
@@ -21,6 +23,10 @@ export class TranslationProviderError extends Error {
 
 type TranslationResponse = {
   translations: string[];
+};
+
+type LanguageDetectionResponse = {
+  locales: Array<AppLocale | "unknown">;
 };
 
 type OpenAiResponsePayload = {
@@ -52,15 +58,22 @@ class DisabledTranslationProvider implements TranslationProvider {
   async translateBatch(): Promise<string[]> {
     throw new TranslationProviderError("Translation provider is disabled");
   }
+
+  async detectLocales(): Promise<Array<AppLocale | null>> {
+    throw new TranslationProviderError("Translation provider is disabled");
+  }
 }
 
 class OpenAiTranslationProvider implements TranslationProvider {
-  async translateBatch(input: TranslationBatchInput) {
+  private async requestStructured<T>(input: {
+    systemPrompt: string;
+    payload: Record<string, unknown>;
+    schemaName: string;
+    schema: Record<string, unknown>;
+  }) {
     if (!env.OPENAI_API_KEY) {
       throw new TranslationProviderError("OPENAI_API_KEY is not configured");
     }
-
-    if (input.texts.length === 0) return [];
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);
@@ -77,17 +90,14 @@ class OpenAiTranslationProvider implements TranslationProvider {
           input: [
             {
               role: "system",
-              content: [{ type: "input_text", text: SYSTEM_PROMPTS[input.purpose] }],
+              content: [{ type: "input_text", text: input.systemPrompt }],
             },
             {
               role: "user",
               content: [
                 {
                   type: "input_text",
-                  text: JSON.stringify({
-                    targetLanguage: input.targetLocale,
-                    texts: input.texts,
-                  }),
+                  text: JSON.stringify(input.payload),
                 },
               ],
             },
@@ -95,20 +105,8 @@ class OpenAiTranslationProvider implements TranslationProvider {
           text: {
             format: {
               type: "json_schema",
-              name: "translation_batch",
-              schema: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  translations: {
-                    type: "array",
-                    items: { type: "string" },
-                    minItems: input.texts.length,
-                    maxItems: input.texts.length,
-                  },
-                },
-                required: ["translations"],
-              },
+              name: input.schemaName,
+              schema: input.schema,
             },
           },
         }),
@@ -125,18 +123,77 @@ class OpenAiTranslationProvider implements TranslationProvider {
         throw new TranslationProviderError("Translation provider returned an empty response");
       }
 
-      const parsed = JSON.parse(outputText) as TranslationResponse;
-      if (!Array.isArray(parsed.translations) || parsed.translations.length !== input.texts.length) {
-        throw new TranslationProviderError("Translation provider returned an invalid batch");
-      }
-
-      return parsed.translations.map((value, index) => value?.trim() || input.texts[index]);
+      return JSON.parse(outputText) as T;
     } catch (error) {
       if (error instanceof TranslationProviderError) throw error;
       throw new TranslationProviderError("Translation provider request failed", { cause: error });
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async translateBatch(input: TranslationBatchInput) {
+    if (input.texts.length === 0) return [];
+
+    const parsed = await this.requestStructured<TranslationResponse>({
+      systemPrompt: SYSTEM_PROMPTS[input.purpose],
+      payload: {
+        targetLanguage: input.targetLocale,
+        texts: input.texts,
+      },
+      schemaName: "translation_batch",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          translations: {
+            type: "array",
+            items: { type: "string" },
+            minItems: input.texts.length,
+            maxItems: input.texts.length,
+          },
+        },
+        required: ["translations"],
+      },
+    });
+
+    if (!Array.isArray(parsed.translations) || parsed.translations.length !== input.texts.length) {
+      throw new TranslationProviderError("Translation provider returned an invalid batch");
+    }
+
+    return parsed.translations.map((value, index) => value?.trim() || input.texts[index]);
+  }
+
+  async detectLocales(texts: string[]) {
+    if (texts.length === 0) return [];
+
+    const parsed = await this.requestStructured<LanguageDetectionResponse>({
+      systemPrompt:
+        "Detect the source language of each Plant Master Data value. Return the matching locale code only when it is one of pt, it, en, pl, de, ro or fr. Return unknown for codes, acronyms, proper names, product names, technical references or ambiguous text. Do not translate or rewrite the input.",
+      payload: { texts },
+      schemaName: "master_data_language_detection",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          locales: {
+            type: "array",
+            items: { type: "string", enum: [...locales, "unknown"] },
+            minItems: texts.length,
+            maxItems: texts.length,
+          },
+        },
+        required: ["locales"],
+      },
+    });
+
+    if (!Array.isArray(parsed.locales) || parsed.locales.length !== texts.length) {
+      throw new TranslationProviderError("Translation provider returned an invalid language detection batch");
+    }
+
+    return parsed.locales.map((locale) =>
+      locales.includes(locale as AppLocale) ? (locale as AppLocale) : null,
+    );
   }
 }
 

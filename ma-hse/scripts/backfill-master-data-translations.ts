@@ -8,6 +8,7 @@ type BackfillOptions = {
   plantCode?: string;
   entityType?: MasterDataEntityType;
   dryRun: boolean;
+  redetectSourceLanguage: boolean;
 };
 
 function readOptions(): BackfillOptions {
@@ -33,6 +34,7 @@ function readOptions(): BackfillOptions {
     plantCode: values.get("plant"),
     entityType,
     dryRun: values.get("dry-run") === "true",
+    redetectSourceLanguage: values.get("redetect-source-language") === "true",
   };
 }
 
@@ -71,6 +73,24 @@ async function preserveKnownDefaultRiskLanguages(entityType: MasterDataEntityTyp
   });
 }
 
+async function clearSourceLanguageForRedetection(
+  entityType: MasterDataEntityType,
+  entityId: string,
+) {
+  if (entityType === MasterDataEntityType.AREA) {
+    await prisma.area.update({ where: { id: entityId }, data: { sourceLanguage: null } });
+  } else if (entityType === MasterDataEntityType.WORKSTATION) {
+    await prisma.workstation.update({ where: { id: entityId }, data: { sourceLanguage: null } });
+  } else if (entityType === MasterDataEntityType.EQUIPMENT) {
+    await prisma.equipment.update({ where: { id: entityId }, data: { sourceLanguage: null } });
+  } else {
+    await prisma.riskTheme.update({
+      where: { id: entityId },
+      data: { sourceLanguage: null, categorySourceLanguage: null },
+    });
+  }
+}
+
 async function run() {
   const options = readOptions();
   const entityTypes = options.entityType
@@ -92,6 +112,9 @@ async function run() {
           const chunk = batch.slice(index, index + 3);
           const results = await Promise.allSettled(
             chunk.map(async (row) => {
+              if (options.redetectSourceLanguage) {
+                await clearSourceLanguageForRedetection(entityType, row.id);
+              }
               await preserveKnownDefaultRiskLanguages(entityType, row.id);
               return processMasterDataTranslations({ entityType, entityId: row.id });
             }),
@@ -118,12 +141,20 @@ async function run() {
           errors,
           cursor,
           dryRun: options.dryRun,
+          redetectSourceLanguage: options.redetectSourceLanguage,
         }),
       );
     }
   }
 
-  console.info(JSON.stringify({ done: true, processed, translated, errors, dryRun: options.dryRun }));
+  console.info(JSON.stringify({
+    done: true,
+    processed,
+    translated,
+    errors,
+    dryRun: options.dryRun,
+    redetectSourceLanguage: options.redetectSourceLanguage,
+  }));
   if (errors > 0) process.exitCode = 1;
 }
 

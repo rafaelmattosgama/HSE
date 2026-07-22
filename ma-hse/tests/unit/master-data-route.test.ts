@@ -236,7 +236,7 @@ describe("master data route", () => {
         plantId: "plant-1",
         code: "WS1",
         name: "Packing 1",
-        sourceLanguage: "en",
+        sourceLanguage: null,
         isActive: true,
       },
     });
@@ -280,7 +280,7 @@ describe("master data route", () => {
       data: {
         code: "EQ1",
         name: "Forklift 1B",
-        sourceLanguage: "en",
+        sourceLanguage: null,
         isActive: true,
       },
     });
@@ -358,7 +358,7 @@ describe("master data route", () => {
         plantId: "plant-1",
         code: "EQ2",
         name: "Empilhador 2",
-        sourceLanguage: "pt",
+        sourceLanguage: null,
         isActive: true,
       },
     });
@@ -385,6 +385,7 @@ describe("master data route", () => {
       plantId: "plant-1",
       code: "EQ3",
       name: "Forklift 3",
+      sourceLanguage: "en",
       isActive: false,
     });
     prismaMock.equipment.update.mockResolvedValue({
@@ -423,7 +424,7 @@ describe("master data route", () => {
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     prismaMock.equipment.findFirst
-      .mockResolvedValueOnce({ id: equipmentId, plantId: "plant-1", code: "EQ6", name: "Forklift 6", isActive: true })
+      .mockResolvedValueOnce({ id: equipmentId, plantId: "plant-1", code: "EQ6", name: "Forklift 6", sourceLanguage: "en", isActive: true })
       .mockResolvedValueOnce(null);
     prismaMock.equipment.update.mockResolvedValue({
       id: equipmentId,
@@ -444,7 +445,7 @@ describe("master data route", () => {
 
     expect(prismaMock.equipment.update).toHaveBeenCalledWith({
       where: { id: equipmentId },
-      data: { code: "EQ6", name: "Forklift 6B", sourceLanguage: "en", isActive: true },
+      data: { code: "EQ6", name: "Forklift 6B", sourceLanguage: null, isActive: true },
     });
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "UPDATE" }));
     expect(response.status).toBe(200);

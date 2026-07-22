@@ -13,6 +13,7 @@ export async function GET(_: Request, context: { params: Promise<{ plantCode: st
   const plant = await getPlantByCode(plantCode);
   const template = await MasterDataImportService.buildExport(plant.id, {
     includeEquipments: canManagePlantEquipment(auth.role),
+    locale: auth.session.user.language,
   });
 
   return new Response(new Uint8Array(template), {

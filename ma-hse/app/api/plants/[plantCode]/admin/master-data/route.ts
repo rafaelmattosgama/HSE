@@ -146,7 +146,7 @@ async function findByCode(type: MasterDataType, plantId: string, code: string, e
   }
 }
 
-async function createItem(type: MasterDataType, plantId: string, data: ReturnType<typeof buildData>, sourceLanguage: string) {
+async function createItem(type: MasterDataType, plantId: string, data: ReturnType<typeof buildData>, sourceLanguage: string | null) {
   switch (type) {
     case "area":
       return prisma.area.create({ data: { plantId, ...data, sourceLanguage } });
@@ -165,7 +165,7 @@ async function createItem(type: MasterDataType, plantId: string, data: ReturnTyp
   }
 }
 
-async function updateItem(type: MasterDataType, id: string, data: ReturnType<typeof buildData>, sourceLanguage: string) {
+async function updateItem(type: MasterDataType, id: string, data: ReturnType<typeof buildData>, sourceLanguage: string | null) {
   switch (type) {
     case "area":
       return prisma.area.update({ where: { id }, data: { ...data, sourceLanguage } });
@@ -182,6 +182,15 @@ async function updateItem(type: MasterDataType, id: string, data: ReturnType<typ
     case "injuryType":
       return prisma.injuryType.update({ where: { id }, data });
   }
+}
+
+function preserveSourceLanguageWhenNameIsUnchanged(
+  type: MasterDataType,
+  existing: { name: string; sourceLanguage?: string | null },
+  nextName: string,
+) {
+  if (!getTranslatableEntityType(type) || existing.name !== nextName) return null;
+  return existing.sourceLanguage ?? null;
 }
 
 async function deactivateItem(type: MasterDataType, plantId: string, id: string) {
@@ -303,8 +312,6 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     name,
     category: parsed.data.category,
   });
-  const sourceLanguage = auth.session.user.language ?? plant.defaultLanguage ?? "en";
-
   if (parsed.data.id) {
     const existing = await findById(type, plant.id, parsed.data.id);
     if (!existing) {
@@ -316,6 +323,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       return fail("DUPLICATE_CODE", duplicateMessage(type), 409);
     }
 
+    const sourceLanguage = preserveSourceLanguageWhenNameIsUnchanged(type, existing, name);
     const item = await updateItem(type, parsed.data.id, data, sourceLanguage);
     const entityType = getTranslatableEntityType(type);
     if (entityType) await scheduleMasterDataTranslations({ entityType, entityId: item.id });
@@ -336,6 +344,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   }
 
   if (duplicate && !duplicate.isActive) {
+    const sourceLanguage = preserveSourceLanguageWhenNameIsUnchanged(type, duplicate, name);
     const item = await updateItem(type, duplicate.id, data, sourceLanguage);
     const entityType = getTranslatableEntityType(type);
     if (entityType) await scheduleMasterDataTranslations({ entityType, entityId: item.id });
@@ -350,7 +359,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     return ok({ item }, { status: 201 });
   }
 
-  const item = await createItem(type, plant.id, data, sourceLanguage);
+  const item = await createItem(type, plant.id, data, null);
   const entityType = getTranslatableEntityType(type);
   if (entityType) await scheduleMasterDataTranslations({ entityType, entityId: item.id });
   await writeAuditLog({

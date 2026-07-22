@@ -2,6 +2,8 @@
 
 O MA HSE preserva o nome original e o idioma de origem de departamentos, postos de trabalho, equipamentos e riscos profissionais. As traduções são guardadas em `MasterDataTranslation`; códigos e identificadores nunca são traduzidos.
 
+O idioma do texto não é inferido a partir do idioma da interface. Nas criações, edições e importações sem idioma explícito, o registo principal é guardado primeiro e o worker deteta posteriormente a língua efetiva do nome. Assim, um utilizador com a interface em inglês pode introduzir `Produção` sem esse valor ser tratado incorretamente como inglês.
+
 ## Configuração
 
 Configure o fornecedor apenas por variáveis de ambiente:
@@ -51,6 +53,12 @@ Filtros opcionais:
 
 ```powershell
 npm run db:backfill-master-data-translations -- --plant=PT11 --entity=AREA --batch-size=100
+```
+
+Se dados antigos tiverem herdado incorretamente a língua do utilizador ou da planta, force uma nova deteção sem alterar os nomes originais nem as traduções manuais:
+
+```powershell
+npm run db:backfill-master-data-translations -- --redetect-source-language --batch-size=100
 ```
 
 Entidades válidas: `AREA`, `WORKSTATION`, `EQUIPMENT` e `RISK_THEME`. O processo usa paginação por cursor, é idempotente, não duplica traduções, preserva versões marcadas como manuais e pode ser repetido após falhas. O progresso e os erros são emitidos como JSON no terminal. Estados `FAILED` ficam disponíveis para nova tentativa.
