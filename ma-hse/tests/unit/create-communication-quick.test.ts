@@ -26,6 +26,12 @@ const baseProps = {
   canManageClassification: false,
 };
 
+function selectContainingOption(value: string) {
+  return screen
+    .getAllByRole("combobox")
+    .find((element) => element.querySelector(`option[value="${value}"]`)) as HTMLSelectElement | undefined;
+}
+
 describe("CreateCommunicationQuick", () => {
   beforeEach(() => {
     navigationMock.usePathname.mockReturnValue("/app/pl1/communications");
@@ -69,5 +75,30 @@ describe("CreateCommunicationQuick", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show" }));
 
     expect((screen.getByPlaceholderText("Description") as HTMLTextAreaElement).value).toBe("Observed guard missing on conveyor.");
+  });
+
+  it("hides and clears unsafe act type when the communication changes to First Aid", () => {
+    render(createElement(CreateCommunicationQuick, {
+      ...baseProps,
+      canManageClassification: true,
+      unsafeActTypes: [{ id: "unsafe-act-1", name: "Procedure bypass", code: "UA-01", category: "Behavior" }],
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+
+    const typeSelect = selectContainingOption("FIRST_AID");
+    expect(typeSelect).toBeTruthy();
+    fireEvent.change(typeSelect!, { target: { value: "UNSAFE_ACT" } });
+
+    const unsafeActSelect = selectContainingOption("unsafe-act-1");
+    expect(unsafeActSelect).toBeTruthy();
+    fireEvent.change(unsafeActSelect!, { target: { value: "unsafe-act-1" } });
+    expect(unsafeActSelect?.value).toBe("unsafe-act-1");
+
+    fireEvent.change(typeSelect!, { target: { value: "FIRST_AID" } });
+    expect(selectContainingOption("unsafe-act-1")).toBeUndefined();
+
+    fireEvent.change(typeSelect!, { target: { value: "UNSAFE_ACT" } });
+    expect(selectContainingOption("unsafe-act-1")?.value).toBe("");
   });
 });

@@ -231,6 +231,7 @@ export default async function PlantLayout({
         <RepeatabilityAlertModal
           plantCode={plant}
           title="Alerts"
+          acknowledgeWithProfileAlerts={plantRole === RoleCode.N3_SAFETY || plantRole === RoleCode.N4_SUPERVISOR}
           alerts={unreadAlerts.map((alert) => ({
             id: alert.id,
             title: alert.title,

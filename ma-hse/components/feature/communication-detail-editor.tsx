@@ -8,6 +8,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { supportsUnsafeActType } from "@/lib/communication-classification";
 import { sanitizeCommunicationPdfFileName, supportsCommunicationPdfReport } from "@/lib/communication-report";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
@@ -137,7 +138,9 @@ export function CommunicationDetailEditor({
   const [workstationId, setWorkstationId] = useState(communication.workstationId ?? "");
   const [equipmentId, setEquipmentId] = useState(communication.equipmentId ?? "");
   const [riskThemeId, setRiskThemeId] = useState(communication.riskThemeId ?? "");
-  const [unsafeActTypeId, setUnsafeActTypeId] = useState(communication.unsafeActTypeId ?? "");
+  const [unsafeActTypeId, setUnsafeActTypeId] = useState(
+    communication.type === CommunicationType.FIRST_AID ? "" : communication.unsafeActTypeId ?? "",
+  );
   const [unsafeConditionTypeId, setUnsafeConditionTypeId] = useState(communication.unsafeConditionTypeId ?? "");
   const [nearMissTypeId, setNearMissTypeId] = useState(communication.nearMissTypeId ?? "");
   const [improvementSubtype, setImprovementSubtype] = useState<CommunicationImprovementSubtype | "">(communication.improvementSubtype ?? "");
@@ -161,7 +164,7 @@ export function CommunicationDetailEditor({
   const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
   const needsRestrictedProfessionalRisk = type === "NEAR_MISS" || type === "FIRST_AID";
   const needsProfessionalRisk = type === "ACCIDENT" || (needsRestrictedProfessionalRisk && canManageClassification);
-  const needsUnsafeActType = type === "UNSAFE_ACT" || (type === "FIRST_AID" && canManageClassification);
+  const needsUnsafeActType = supportsUnsafeActType(type);
   const needsUnsafeConditionType = type === "UNSAFE_CONDITION" && canManageClassification;
   const needsNearMissType = type === "NEAR_MISS" && canManageClassification;
   const improvementSubtypeOptions =
@@ -387,6 +390,9 @@ export function CommunicationDetailEditor({
             const nextType = event.target.value as CommunicationType;
             setType(nextType);
             setImprovementSubtype("");
+            if (nextType === CommunicationType.FIRST_AID) {
+              setUnsafeActTypeId("");
+            }
             if (nextType === "FIVE_S_IMPROVEMENT" || nextType === "IMPROVEMENT_SUGGESTION") {
               setTargetEmployeeId("");
             }

@@ -9,6 +9,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { supportsUnsafeActType } from "@/lib/communication-classification";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
 
 type Option = {
@@ -108,7 +109,7 @@ export function CreateCommunicationQuick({
   const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
   const needsRestrictedProfessionalRisk = type === "NEAR_MISS" || type === "FIRST_AID";
   const needsProfessionalRisk = type === "ACCIDENT" || (needsRestrictedProfessionalRisk && canManageClassification);
-  const needsUnsafeActType = type === "UNSAFE_ACT" || (type === "FIRST_AID" && canManageClassification);
+  const needsUnsafeActType = supportsUnsafeActType(type);
   const needsUnsafeConditionType = type === "UNSAFE_CONDITION" && canManageClassification;
   const needsNearMissType = type === "NEAR_MISS" && canManageClassification;
   const improvementSubtypeOptions =
@@ -272,6 +273,9 @@ export function CreateCommunicationQuick({
           const nextType = event.target.value as CommunicationType;
           setType(nextType);
           setImprovementSubtype("");
+          if (nextType === CommunicationType.FIRST_AID) {
+            setUnsafeActTypeId("");
+          }
           if (nextType === "FIVE_S_IMPROVEMENT" || nextType === "IMPROVEMENT_SUGGESTION") {
             setTargetEmployeeId("");
           }

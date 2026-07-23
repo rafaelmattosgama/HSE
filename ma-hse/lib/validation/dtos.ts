@@ -68,6 +68,18 @@ const communicationInputShape = z.object({
 
 type CommunicationValidationValue = z.infer<typeof communicationInputShape>;
 
+function sanitizeFirstAidUnsafeActType<
+  T extends { type: CommunicationType; unsafeActTypeId?: string | null },
+>(value: T): T {
+  if (value.type !== CommunicationType.FIRST_AID || value.unsafeActTypeId === undefined) {
+    return value;
+  }
+
+  const sanitized = { ...value };
+  delete sanitized.unsafeActTypeId;
+  return sanitized;
+}
+
 function validateCommunicationPayload(
   value: CommunicationValidationValue,
   ctx: z.RefinementCtx,
@@ -171,7 +183,8 @@ function validateCommunicationPayload(
 export const createCommunicationInput = communicationInputShape
   .superRefine((value, ctx) => {
     validateCommunicationPayload(value, ctx, { requireUnsafeActType: true });
-  });
+  })
+  .transform(sanitizeFirstAidUnsafeActType);
 
 export const createPublicReportCommunicationInput = communicationInputShape
   .superRefine((value, ctx) => {
@@ -183,7 +196,7 @@ export const updateCommunicationInput = communicationInputShape.omit({
   quickAction: true,
 }).superRefine((value, ctx) => {
   validateCommunicationPayload(value, ctx, { requireUnsafeActType: true });
-});
+}).transform(sanitizeFirstAidUnsafeActType);
 
 export const validateCommunicationInput = z.object({
   isValid: z.boolean(),
