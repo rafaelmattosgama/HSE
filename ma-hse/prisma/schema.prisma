@@ -34,6 +34,7 @@ model Plant {
   mapLayers                          MapLayer[]
   nearMissTypes                      NearMissType[]
   notifications                      Notification[]
+  occupationalHealthWorkers          OccupationalHealthWorker[]
   accessTokens                       PlantAccessToken[]
   monthlyInputs                      PlantMonthlyInput[]
   recipientLists                     ReportRecipientList[]
@@ -170,17 +171,44 @@ model Line {
 }
 
 model Workstation {
-  id             String          @id @default(uuid())
-  plantId        String
-  code           String
-  name           String
-  isActive       Boolean         @default(true)
-  sourceLanguage String?
-  communications Communication[]
-  mapFeatures    MapFeature[]
-  plant          Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  id                        String                     @id @default(uuid())
+  plantId                   String
+  code                      String
+  name                      String
+  isActive                  Boolean                    @default(true)
+  sourceLanguage            String?
+  communications            Communication[]
+  mapFeatures               MapFeature[]
+  occupationalHealthWorkers OccupationalHealthWorker[]
+  plant                     Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@unique([plantId, code])
+}
+
+model OccupationalHealthWorker {
+  id            String       @id @default(uuid())
+  plantId       String
+  employeeNo    String
+  name          String
+  birthDate     DateTime
+  workstationId String?
+  gender        String
+  hireDate      DateTime
+  roleStartDate DateTime
+  roleName      String?
+  nationality   String?
+  examDate      DateTime
+  validUntil    DateTime?
+  status        String       @default("VALID")
+  observation   String?
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  plant         Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  workstation   Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+
+  @@unique([plantId, employeeNo])
+  @@index([plantId, isActive, examDate])
 }
 
 model Equipment {

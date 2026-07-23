@@ -6,6 +6,7 @@
   "scripts": {
     "predev": "prisma generate",
     "dev": "next dev",
+    "dev:server": "next dev",
     "dev:all": "node scripts/dev-all.mjs",
     "prebuild": "prisma generate",
     "build": "next build",

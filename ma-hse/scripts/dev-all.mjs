@@ -125,7 +125,7 @@ async function main() {
 
   await runNpmOnce(["run", "scheduler:dev"], env);
 
-  const app = spawnNpmLongRunning(["run", "dev", "--", "--port", String(port)], env);
+  const app = spawnNpmLongRunning(["run", "dev:server", "--", "--port", String(port)], env);
   const worker = spawnNpmLongRunning(["run", "worker:dev"], env);
 
   const children = [app, worker];

@@ -2,9 +2,9 @@ import { DEFAULT_UNSAFE_ACT_TYPES, LEGACY_DEFAULT_UNSAFE_ACT_TYPES } from "@/lib
 import { prisma } from "@/lib/prisma";
 
 export async function ensureDefaultUnsafeActTypes(plantId: string) {
-  await prisma.$transaction(async (tx) => {
-    for (const row of DEFAULT_UNSAFE_ACT_TYPES) {
-      await tx.unsafeActType.upsert({
+  await prisma.$transaction([
+    ...DEFAULT_UNSAFE_ACT_TYPES.map((row) =>
+      prisma.unsafeActType.upsert({
         where: {
           plantId_code: {
             plantId,
@@ -22,10 +22,9 @@ export async function ensureDefaultUnsafeActTypes(plantId: string) {
           category: row.category,
           name: row.name,
         },
-      });
-    }
-
-    await tx.unsafeActType.updateMany({
+      }),
+    ),
+    prisma.unsafeActType.updateMany({
       where: {
         plantId,
         OR: LEGACY_DEFAULT_UNSAFE_ACT_TYPES.map((row) => ({
@@ -36,6 +35,6 @@ export async function ensureDefaultUnsafeActTypes(plantId: string) {
       data: {
         isActive: false,
       },
-    });
-  });
+    }),
+  ]);
 }
