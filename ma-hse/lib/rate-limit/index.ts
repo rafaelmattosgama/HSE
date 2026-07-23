@@ -3,10 +3,11 @@ import { env } from "@/lib/env";
 
 const memoryStore = new Map<string, { count: number; resetAt: number }>();
 
-let redis: Redis | null | undefined;
+let redis: Redis | undefined;
+let redisConnection: Promise<Redis | null> | undefined;
 
 function createRedisClient() {
-  if (redis !== undefined) {
+  if (redis) {
     return redis;
   }
 
@@ -20,10 +21,10 @@ function createRedisClient() {
       // Readiness checks and rate limits fall back gracefully when Redis is unavailable.
     });
   } catch {
-    redis = null;
+    redis = undefined;
   }
 
-  return redis;
+  return redis ?? null;
 }
 
 async function getConnectedRedisClient() {
@@ -36,13 +37,24 @@ async function getConnectedRedisClient() {
     return client;
   }
 
-  try {
-    await client.connect();
-    return client;
-  } catch {
-    redis = null;
-    return null;
+  if (!redisConnection) {
+    redisConnection = (async () => {
+      try {
+        await client.connect();
+        return client;
+      } catch {
+        if (redis === client) {
+          redis = undefined;
+        }
+        client.disconnect();
+        return null;
+      }
+    })().finally(() => {
+      redisConnection = undefined;
+    });
   }
+
+  return redisConnection;
 }
 
 export async function consumeRateLimit(key: string, points = env.RATE_LIMIT_POINTS, windowSec = env.RATE_LIMIT_WINDOW_SEC) {
