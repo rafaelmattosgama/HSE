@@ -26,6 +26,9 @@ const prismaMock = vi.hoisted(() => ({
   riskTheme: {
     findFirst: vi.fn(),
   },
+  unsafeActType: {
+    findFirst: vi.fn(),
+  },
   unsafeConditionType: {
     findFirst: vi.fn(),
   },
@@ -476,5 +479,103 @@ describe("CommunicationService approved communication alerts", () => {
         }),
       }),
     );
+  });
+
+  it("persists a null unsafe act type when creating First Aid even if a residual value is supplied", async () => {
+    prismaMock.employeeDirectory.findUnique.mockResolvedValue({
+      id: "worker-1",
+      name: "Worker One",
+      employeeNo: "001",
+    });
+    prismaMock.riskTheme.findFirst.mockResolvedValue({ id: "risk-theme-1" });
+    prismaMock.communication.create.mockResolvedValue({
+      id: "comm-first-aid",
+      plantId: "plant-1",
+      type: CommunicationType.FIRST_AID,
+      status: CommunicationStatus.VALID_OPEN,
+      eventDatetime: new Date("2026-01-15T10:00:00Z"),
+      targetEmployeeId: "worker-1",
+      targetEmployeeNo: "001",
+      workstationId: null,
+      reporterName: "Reporter",
+      reporterEmployeeNo: null,
+    });
+
+    await CommunicationService.create({
+      plantId: "plant-1",
+      payload: {
+        type: CommunicationType.FIRST_AID,
+        eventDatetime: new Date("2026-01-15T10:00:00Z"),
+        reporterName: "Reporter",
+        targetEmployeeId: "worker-1",
+        riskThemeId: "risk-theme-1",
+        unsafeActTypeId: "unsafe-act-1",
+        description: "Minor injury treated on site.",
+        bodyPartId: "body-part-1",
+        injuryTypeId: "injury-type-1",
+        isFatal: false,
+      },
+      reporterUserId: "user-1",
+      actorRole: RoleCode.N3_SAFETY,
+    });
+
+    expect(prismaMock.unsafeActType.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.communication.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: CommunicationType.FIRST_AID,
+          unsafeActTypeId: null,
+        }),
+      }),
+    );
+  });
+
+  it("clears a legacy unsafe act type when updating an existing First Aid communication", async () => {
+    prismaMock.communication.findUniqueOrThrow.mockResolvedValue({
+      id: "comm-first-aid",
+      plantId: "plant-1",
+      type: CommunicationType.FIRST_AID,
+      reporterName: "Reporter",
+      unsafeActTypeId: "unsafe-act-legacy",
+    });
+    prismaMock.employeeDirectory.findUnique.mockResolvedValue({
+      id: "worker-1",
+      name: "Worker One",
+      employeeNo: "001",
+    });
+    prismaMock.riskTheme.findFirst.mockResolvedValue({ id: "risk-theme-1" });
+    prismaMock.communication.update.mockResolvedValue({
+      id: "comm-first-aid",
+      plantId: "plant-1",
+      type: CommunicationType.FIRST_AID,
+      unsafeActTypeId: null,
+    });
+
+    await CommunicationService.update({
+      communicationId: "comm-first-aid",
+      actorUserId: "user-1",
+      actorRole: RoleCode.N3_SAFETY,
+      payload: {
+        type: CommunicationType.FIRST_AID,
+        eventDatetime: new Date("2026-01-15T10:00:00Z"),
+        reporterName: "Reporter",
+        targetEmployeeId: "worker-1",
+        riskThemeId: "risk-theme-1",
+        unsafeActTypeId: "unsafe-act-legacy",
+        description: "Minor injury treated on site.",
+        bodyPartId: "body-part-1",
+        injuryTypeId: "injury-type-1",
+        isFatal: false,
+      },
+    });
+
+    expect(prismaMock.unsafeActType.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.communication.update).toHaveBeenCalledWith({
+      where: { id: "comm-first-aid" },
+      data: expect.objectContaining({
+        type: CommunicationType.FIRST_AID,
+        unsafeActTypeId: null,
+      }),
+    });
   });
 });

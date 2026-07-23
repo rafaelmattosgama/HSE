@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { requireApiResponse } from "@/lib/client-api";
 
 type RepeatabilityAlertModalProps = {
   plantCode: string;
   title?: string;
+  acknowledgeWithProfileAlerts?: boolean;
   alerts: Array<{
     id: string;
     title: string;
@@ -16,7 +18,12 @@ type RepeatabilityAlertModalProps = {
   }>;
 };
 
-export function RepeatabilityAlertModal({ plantCode, title = "Alerts", alerts }: RepeatabilityAlertModalProps) {
+export function RepeatabilityAlertModal({
+  plantCode,
+  title = "Alerts",
+  acknowledgeWithProfileAlerts = false,
+  alerts,
+}: RepeatabilityAlertModalProps) {
   const [open, setOpen] = useState(alerts.length > 0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -30,17 +37,39 @@ export function RepeatabilityAlertModal({ plantCode, title = "Alerts", alerts }:
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plantCode}/notifications/acknowledge`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          notificationIds: alerts.map((alert) => alert.id),
-        }),
-      });
+      const notificationIds = alerts.map((alert) => alert.id);
 
-      const json = await response.json();
-      if (!response.ok || !json.ok) {
-        throw new Error(json.message ?? "Failed to close alerts");
+      if (acknowledgeWithProfileAlerts) {
+        const response = await fetch("/api/notifications/profile-alerts", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            notificationIds,
+            status: "READ",
+          }),
+        });
+        const json = await requireApiResponse<{ updated: number; unreadCount: number }>(
+          response,
+          "Failed to close alerts",
+        );
+
+        window.dispatchEvent(
+          new CustomEvent("profile-alerts-updated", {
+            detail: {
+              unreadCount: json.data?.unreadCount ?? 0,
+            },
+          }),
+        );
+      } else {
+        const response = await fetch(`/api/plants/${encodeURIComponent(plantCode)}/notifications/acknowledge`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            notificationIds,
+          }),
+        });
+
+        await requireApiResponse<{ updated: number }>(response, "Failed to close alerts");
       }
 
       setOpen(false);

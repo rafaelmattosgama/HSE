@@ -106,6 +106,46 @@ describe("communications route", () => {
     });
   });
 
+  it("removes a residual unsafe act type from a First Aid API payload", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+      role: RoleCode.N3_SAFETY,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
+    serviceMock.CommunicationService.create.mockResolvedValue({
+      id: "comm-first-aid",
+      plantId: "plant-1",
+      type: CommunicationType.FIRST_AID,
+      status: CommunicationStatus.VALID_OPEN,
+    });
+
+    const request = new Request("http://localhost/api/plants/maap/communications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: CommunicationType.FIRST_AID,
+        eventDatetime: "2026-01-15T10:00:00.000Z",
+        reporterName: "Operator Test",
+        targetEmployeeId: "11111111-1111-4111-8111-111111111111",
+        bodyPartId: "22222222-2222-4222-8222-222222222222",
+        riskThemeId: "33333333-3333-4333-8333-333333333333",
+        unsafeActTypeId: "44444444-4444-4444-8444-444444444444",
+        description: "Minor injury treated on site.",
+      }),
+    }) as never;
+
+    const response = await POST(request, routeContext());
+
+    expect(response?.status).toBe(201);
+    const servicePayload = serviceMock.CommunicationService.create.mock.calls[0]?.[0]?.payload;
+    expect(servicePayload.type).toBe(CommunicationType.FIRST_AID);
+    expect(Object.hasOwn(servicePayload, "unsafeActTypeId")).toBe(false);
+  });
+
   it("lists communications in validation together with active communications by default", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue({
       session: {

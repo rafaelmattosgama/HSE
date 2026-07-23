@@ -26,7 +26,7 @@ describe("communication classification rules", () => {
       getMissingCommunicationClassificationFields({
         type: CommunicationType.FIRST_AID,
       }),
-    ).toEqual(["riskThemeId", "unsafeActTypeId"]);
+    ).toEqual(["riskThemeId"]);
 
     expect(
       getMissingCommunicationClassificationFields({

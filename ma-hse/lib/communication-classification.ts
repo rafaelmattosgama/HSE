@@ -23,7 +23,7 @@ export function requiresNearMissType(type: CommunicationType) {
 }
 
 export function supportsUnsafeActType(type: CommunicationType) {
-  return type === CommunicationType.UNSAFE_ACT || type === CommunicationType.FIRST_AID;
+  return type === CommunicationType.UNSAFE_ACT;
 }
 
 export function requiresUnsafeConditionType(type: CommunicationType) {

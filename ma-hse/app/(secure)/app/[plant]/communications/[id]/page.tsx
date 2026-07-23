@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CommunicationStatus, MasterDataEntityType, RoleCode } from "@prisma/client";
+import { CommunicationStatus, CommunicationType, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { CommunicationDetailEditor } from "@/components/feature/communication-detail-editor";
@@ -239,7 +239,10 @@ export default async function CommunicationDetailPage({
           workstationId: communication.workstationId,
           equipmentId: communication.equipmentId,
           riskThemeId: canManageClassification || (communication.type !== "NEAR_MISS" && communication.type !== "FIRST_AID") ? communication.riskThemeId : null,
-          unsafeActTypeId: canManageClassification || communication.type !== "FIRST_AID" ? communication.unsafeActTypeId : null,
+          unsafeActTypeId:
+            communication.type === CommunicationType.FIRST_AID
+              ? null
+              : communication.unsafeActTypeId,
           unsafeConditionTypeId: canManageClassification ? communication.unsafeConditionTypeId : null,
           nearMissTypeId: canManageClassification ? communication.nearMissTypeId : null,
           improvementSubtype: communication.improvementSubtype,
