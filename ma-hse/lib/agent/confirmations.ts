@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import {
   closeActionConfirmationPayloadInput,
   executeCloseActionConfirmation,
+  executeUpdateActionPriorityConfirmation,
+  updateActionPriorityConfirmationPayloadInput,
 } from "@/lib/agent/tools/action-confirmation-executors";
 
 const CONFIRMATION_TTL_MS = 10 * 60 * 1000;
@@ -190,6 +192,8 @@ class InMemoryPendingConfirmationStore implements PendingConfirmationStore {
 let confirmationStore: PendingConfirmationStore = new PrismaPendingConfirmationStore();
 const defaultConfirmationExecutors: Record<string, ConfirmationExecutor> = {
   close_action: async (ctx, payload) => executeCloseActionConfirmation(ctx, closeActionConfirmationPayloadInput.parse(payload)),
+  update_action_priority: async (ctx, payload) =>
+    executeUpdateActionPriorityConfirmation(ctx, updateActionPriorityConfirmationPayloadInput.parse(payload)),
 };
 let confirmationExecutors: Record<string, ConfirmationExecutor> = { ...defaultConfirmationExecutors };
 

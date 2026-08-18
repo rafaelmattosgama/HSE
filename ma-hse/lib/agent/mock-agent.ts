@@ -1,7 +1,12 @@
 import { ActionPriority, ActionStatus } from "@prisma/client";
+import { type AgentIntent, resolveAgentIntent } from "@/lib/agent/intents";
 import { formatInternalAgentCopy, getInternalAgentCopy, type InternalAgentCopy } from "@/lib/agent/i18n";
 import type { AgentPendingConfirmationSummary, AgentToolContext, AgentToolResult } from "@/lib/agent/permissions";
-import { createActionTools, prepareCloseActionForAgent } from "@/lib/agent/tools/actions";
+import {
+  createActionTools,
+  prepareCloseActionForAgent,
+  prepareUpdateActionPriorityForAgent,
+} from "@/lib/agent/tools/actions";
 import { createCommunicationTools } from "@/lib/agent/tools/communications";
 import { createKpiTools } from "@/lib/agent/tools/kpis";
 import { createReportTools } from "@/lib/agent/tools/reports";
@@ -15,6 +20,21 @@ type InvokableTool = {
 export type MockAgentResult = {
   message: string;
   confirmation?: AgentPendingConfirmationSummary | null;
+  flow?: AgentActionFlow | null;
+};
+
+export type AgentActionChoice = {
+  id: string;
+  sequenceNumber?: number | null;
+  title: string;
+  status: string;
+  priority: string;
+  dueDate?: Date | string | null;
+};
+
+export type AgentActionFlow = {
+  type: "update_priority" | "close_action";
+  actions: AgentActionChoice[];
 };
 
 function normalizeText(value: string) {
@@ -51,8 +71,52 @@ async function invokeTool<T>(tool: InvokableTool, input: unknown): Promise<Agent
   return result as AgentToolResult<T>;
 }
 
-function formatToolFailure(result: AgentToolResult<unknown>, copy: InternalAgentCopy) {
-  return result.ok ? copy.ui.completed : copy.mock.operationFailed;
+function formatToolFailure(
+  result: AgentToolResult<unknown>,
+  copy: InternalAgentCopy,
+  operation?: "open" | "overdue" | "communications" | "kpis" | "report" | "close" | "priority",
+) {
+  if (result.ok) return copy.ui.completed;
+  if (copy.locale === "pt") {
+    if (result.errorCode === "FORBIDDEN") {
+      return operation === "close"
+        ? "Não tem permissão para fechar esta ação."
+        : "Não tem permissão para efetuar esta operação.";
+    }
+    if (operation === "open") return "Não foi possível consultar as ações abertas. Tente novamente.";
+    if (operation === "overdue") return "Não foi possível consultar as ações em atraso. Tente novamente.";
+    if (operation === "communications") return "Não foi possível consultar as comunicações. Tente novamente.";
+    if (operation === "kpis") return "Não foi possível obter os KPIs da fábrica. Tente novamente.";
+    if (operation === "report") return "Não foi possível gerar o relatório. Tente novamente.";
+    if (operation === "close") return "Não foi possível preparar o fecho desta ação. Tente novamente.";
+    if (operation === "priority") return "Não foi possível atualizar a prioridade desta ação. Tente novamente.";
+  }
+  if (operation === "open") return "The open actions could not be retrieved. Please try again.";
+  if (operation === "overdue") return "The overdue actions could not be retrieved. Please try again.";
+  if (operation === "communications") return "The communications could not be retrieved. Please try again.";
+  if (operation === "kpis") return "The plant KPIs could not be retrieved. Please try again.";
+  if (operation === "report") return "The report could not be generated. Please try again.";
+  return copy.mock.operationFailed;
+}
+
+function flowCopy(copy: InternalAgentCopy, key: "chooseAction" | "choosePriority") {
+  if (copy.locale === "pt") {
+    return key === "chooseAction"
+      ? "Selecione primeiro uma ação."
+      : "Selecione a nova prioridade para a ação.";
+  }
+  return key === "chooseAction" ? "Select an action first." : "Select the new priority for the action.";
+}
+
+async function listActionChoices(ctx: AgentToolContext): Promise<AgentToolResult<AgentActionChoice[]>> {
+  const listActions = getTool(createActionTools(ctx), "list_actions");
+  const [openResult, ongoingResult] = await Promise.all([
+    invokeTool<AgentActionChoice[]>(listActions, { status: ActionStatus.OPEN, limit: 50 }),
+    invokeTool<AgentActionChoice[]>(listActions, { status: ActionStatus.ONGOING, limit: 50 }),
+  ]);
+  if (!openResult.ok) return openResult;
+  if (!ongoingResult.ok) return ongoingResult;
+  return { ok: true, data: [...openResult.data, ...ongoingResult.data] };
 }
 
 function formatActionRows(
@@ -155,11 +219,114 @@ function extractPriority(message: string) {
   return null;
 }
 
-export async function runMockAgent(ctx: AgentToolContext, message: string): Promise<MockAgentResult> {
+export async function runMockAgent(ctx: AgentToolContext, message: string, intent?: AgentIntent | null): Promise<MockAgentResult> {
   const copy = getInternalAgentCopy(ctx.session.user.language);
   const normalized = normalizeText(message);
+  const resolvedIntent = intent ?? resolveAgentIntent(message);
   const mentionsAction = includesAny(normalized, ["aco", "acao", "action", "azione", "dzialan", "massnahm", "actiune"]);
   const requestsList = includesAny(normalized, ["lista", "list", "elenca", "auflist", "afis", "affich"]);
+
+  if (resolvedIntent === "LIST_OVERDUE_ACTIONS") {
+    const findOverdueActions = getTool(createActionTools(ctx), "find_overdue_actions");
+    const result = await invokeTool<{
+      count: number;
+      actions: Array<{ id: string; sequenceNumber?: number | null; title: string; priority: string; status: string; dueDate?: Date | string | null }>;
+    }>(findOverdueActions, { limit: 25 });
+
+    return {
+      message: result.ok ? formatOverdueActionRows(result.data, copy) : formatToolFailure(result, copy, "overdue"),
+      confirmation: null,
+    };
+  }
+
+  if (resolvedIntent === "LIST_OPEN_ACTIONS") {
+    const result = await listActionChoices(ctx);
+    return {
+      message: result.ok ? formatActionRows(result.data, copy) : formatToolFailure(result, copy, "open"),
+      confirmation: null,
+    };
+  }
+
+  if (resolvedIntent === "LIST_COMMUNICATIONS") {
+    const listCommunications = getTool(createCommunicationTools(ctx), "list_communications");
+    const result = await invokeTool<Array<{ code?: string | null; id: string; type: string; status: string; description?: string | null }>>(
+      listCommunications,
+      { limit: 25 },
+    );
+    return {
+      message: result.ok ? formatCommunicationRows(result.data, copy) : formatToolFailure(result, copy, "communications"),
+      confirmation: null,
+    };
+  }
+
+  if (resolvedIntent === "SHOW_PLANT_KPIS") {
+    const now = new Date();
+    const getKpis = getTool(createKpiTools(ctx), "get_monthly_kpis");
+    const result = await invokeTool(getKpis, { year: now.getFullYear(), month: now.getMonth() + 1 });
+    return {
+      message: result.ok ? formatKpiResult(result.data, copy) : formatToolFailure(result, copy, "kpis"),
+      confirmation: null,
+    };
+  }
+
+  if (resolvedIntent === "GENERATE_CURRENT_MONTH_REPORT") {
+    const generatePeriodReport = getTool(createReportTools(ctx), "generate_period_report");
+    const result = await invokeTool<{
+      title?: string;
+      fileName?: string;
+      periodStart?: Date | string;
+      periodEnd?: Date | string;
+    }>(generatePeriodReport, { reportType: "MONTHLY" });
+    return {
+      message: result.ok ? formatReportResult(result.data, copy) : formatToolFailure(result, copy, "report"),
+      confirmation: null,
+    };
+  }
+
+  if (resolvedIntent === "START_UPDATE_ACTION_PRIORITY") {
+    const actionId = await resolveActionIdForClose(ctx, message);
+    const priority = extractPriority(message);
+    if (!actionId) {
+      const result = await listActionChoices(ctx);
+      return {
+        message: result.ok && result.data.length === 0 ? copy.mock.noOpenActions : flowCopy(copy, "chooseAction"),
+        confirmation: null,
+        flow: result.ok && result.data.length > 0 ? { type: "update_priority", actions: result.data } : null,
+      };
+    }
+    if (!priority) return { message: flowCopy(copy, "choosePriority"), confirmation: null };
+
+    const result = await prepareUpdateActionPriorityForAgent(ctx, { actionId, priority });
+    if (!result.ok) return { message: formatToolFailure(result, copy, "priority"), confirmation: null };
+    return {
+      message: ctx.pendingConfirmation?.summary ?? copy.mock.confirmationRequired,
+      confirmation: ctx.pendingConfirmation ?? null,
+    };
+  }
+
+  if (resolvedIntent === "START_CLOSE_ACTION") {
+    const actionId = await resolveActionIdForClose(ctx, message);
+    if (!actionId) {
+      const result = await listActionChoices(ctx);
+      return {
+        message: result.ok && result.data.length === 0 ? copy.mock.noOpenActions : flowCopy(copy, "chooseAction"),
+        confirmation: null,
+        flow: result.ok && result.data.length > 0 ? { type: "close_action", actions: result.data } : null,
+      };
+    }
+
+    const result = await prepareCloseActionForAgent(ctx, {
+      actionId,
+      closureComment: copy.mock.closureComment,
+      closedAt: new Date().toISOString(),
+      evidence: [],
+    });
+    if (!result.ok) return { message: formatToolFailure(result, copy, "close"), confirmation: null };
+    return {
+      message: ctx.pendingConfirmation?.summary ?? copy.mock.confirmationRequired,
+      confirmation: ctx.pendingConfirmation ?? null,
+    };
+  }
 
   if (includesAny(normalized, ["atraso", "overdue", "scadut", "zalegl", "uberfall", "intarzi", "retard"])) {
     const findOverdueActions = getTool(createActionTools(ctx), "find_overdue_actions");
@@ -291,7 +458,7 @@ export async function runMockAgent(ctx: AgentToolContext, message: string): Prom
   }
 
   return {
-    message: copy.mock.help,
+    message: `${copy.mock.help}\n${copy.locale === "pt" ? "Que informação pretende consultar ou alterar?" : "What information would you like to view or change?"}`,
     confirmation: null,
   };
 }

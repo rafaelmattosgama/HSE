@@ -13,6 +13,7 @@ import {
   truncateAgentOutput,
 } from "@/lib/agent/guardrails";
 import { runMockAgent } from "@/lib/agent/mock-agent";
+import { AGENT_INTENTS, resolveAgentIntent } from "@/lib/agent/intents";
 import { canUseAgent, getAgentCookiePlantCode, resolveAgentToolContext } from "@/lib/agent/permissions";
 import { enforceAgentRateLimit } from "@/lib/agent/rate-limit";
 import { env } from "@/lib/env";
@@ -35,6 +36,7 @@ const agentRequestInput = z
       .min(1, { message: INVALID_AGENT_REQUEST_MESSAGE })
       .max(env.AGENT_MAX_MESSAGE_CHARS, { message: AGENT_MESSAGE_TOO_LONG_MESSAGE })
       .optional(),
+    intent: z.enum(AGENT_INTENTS).optional(),
     plantCode: z.string().trim().min(2).max(40).optional(),
     confirmationId: z.string().uuid().optional(),
     confirmationAction: z.enum(["confirm", "cancel"]).optional(),
@@ -213,19 +215,23 @@ export async function POST(request: Request) {
     });
   }
 
-  if (env.AGENT_MOCK_MODE) {
+  const resolvedIntent = parsed.data.intent ?? resolveAgentIntent(parsed.data.message);
+  if (env.AGENT_MOCK_MODE || resolvedIntent) {
     try {
-      const result = await runMockAgent(ctx, parsed.data.message!);
+      const mode = env.AGENT_MOCK_MODE ? "mock" : "real";
+      const result = await runMockAgent(ctx, parsed.data.message!, resolvedIntent);
       await writeAgentAuditEvent({
         ctx,
         eventType: "agent_response",
         result: "success",
-        mode: "mock",
+        mode,
         messageLength: parsed.data.message!.length,
         outputSummary: {
+          intent: resolvedIntent,
           responseLength: result.message.length,
           hasConfirmation: Boolean(result.confirmation ?? ctx.pendingConfirmation),
           confirmationId: (result.confirmation ?? ctx.pendingConfirmation)?.confirmationId ?? null,
+          flow: result.flow?.type ?? null,
         },
       });
       return ok({
@@ -233,6 +239,9 @@ export async function POST(request: Request) {
         plantCode: ctx.plantCode,
         message: result.message,
         confirmation: result.confirmation ?? ctx.pendingConfirmation ?? null,
+        intent: resolvedIntent,
+        flow: result.flow ?? null,
+        mode,
       });
     } catch (error) {
       logger.error(

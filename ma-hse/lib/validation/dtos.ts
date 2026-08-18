@@ -440,6 +440,12 @@ export const updateSEWOInput = createSEWOInput;
 export const approveSEWOInput = z.object({
   approved: z.boolean(),
   approvalComment: z.string().min(3),
+  shareReport: z.boolean().optional(),
+});
+
+export const changeSewoDecisionInput = z.object({
+  approved: z.boolean(),
+  approvalComment: z.string().min(3),
 });
 
 export const updateAlertRuleInput = z.object({
@@ -892,6 +898,7 @@ export type ReopenActionInput = z.infer<typeof reopenEntityInput>;
 export type CreateSEWOInput = z.infer<typeof createSEWOInput>;
 export type UpdateSEWOInput = z.infer<typeof updateSEWOInput>;
 export type ApproveSEWOInput = z.infer<typeof approveSEWOInput>;
+export type ChangeSewoDecisionInput = z.infer<typeof changeSewoDecisionInput>;
 export type UpdateActionInput = z.infer<typeof updateActionInput>;
 export type UpdateAlertRuleInput = z.infer<typeof updateAlertRuleInput>;
 export type UpdateRepeatabilityAlertConfigInput = z.infer<typeof updateRepeatabilityAlertConfigInput>;

@@ -1,5 +1,6 @@
 import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { ValidationQueue } from "@/components/feature/validation-queue";
+import { SewoValidationHistory } from "@/components/feature/sewo-validation-history";
 import { SewoValidationQueue } from "@/components/feature/sewo-validation-queue";
 import { AppHero, AppSectionHeader } from "@/components/ui/app-surface";
 import { authOptions } from "@/lib/auth/options";
@@ -9,7 +10,7 @@ import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getLocalizedCommunicationUi } from "@/lib/services/communication-ui-localization";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
-import { getPendingSewoValidationRows } from "@/lib/services/sewo-validation-service";
+import { getPendingSewoValidationRows, getSewoValidationHistoryRows } from "@/lib/services/sewo-validation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerSession } from "next-auth";
@@ -75,7 +76,7 @@ export default async function ValidationPage({
   });
   const uniqueAreas = Array.from(new Map(pending.flatMap((row) => row.area ? [[row.area.id, row.area] as const] : [])).values());
   const uniqueWorkstations = Array.from(new Map(pending.flatMap((row) => row.workstation ? [[row.workstation.id, row.workstation] as const] : [])).values());
-  const [translatedDescriptions, communicationUi, sewoUiResult, pendingSewoRows, localizedAreas, localizedWorkstations] = await Promise.all([
+  const [translatedDescriptions, communicationUi, sewoUiResult, pendingSewoRows, sewoValidationHistoryRows, localizedAreas, localizedWorkstations] = await Promise.all([
     translateForViewer(uiLocale, pending.map((row) => row.description)),
     getLocalizedCommunicationUi(uiLocale),
     getLocalizedSewoUi(uiLocale),
@@ -84,6 +85,12 @@ export default async function ValidationPage({
           userId: session.user.id,
           plantCode: isAllPlants ? undefined : plant,
           locale: uiLocale,
+        })
+      : [],
+    isN1
+      ? getSewoValidationHistoryRows({
+          userId: session.user.id,
+          plantCode: isAllPlants ? undefined : plant,
         })
       : [],
     localizeMasterDataRows(MasterDataEntityType.AREA, uniqueAreas, uiLocale),
@@ -104,6 +111,13 @@ export default async function ValidationPage({
         <section className="space-y-4">
           <AppSectionHeader title={sewoUiResult.ui.n1ValidationSewoSection} />
           <SewoValidationQueue rows={pendingSewoRows} ui={sewoUiResult.ui} showPlant={isAllPlants} />
+        </section>
+      )}
+
+      {isN1 && (
+        <section className="space-y-4">
+          <AppSectionHeader title={sewoUiResult.ui.n1ValidationHistorySection} />
+          <SewoValidationHistory rows={sewoValidationHistoryRows} ui={sewoUiResult.ui} />
         </section>
       )}
 

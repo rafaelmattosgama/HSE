@@ -16,6 +16,8 @@ import { ActionService } from "@/lib/services/action-service";
 import {
   closeActionConfirmationPayloadInput,
   executeCloseActionConfirmation,
+  executeUpdateActionPriorityConfirmation,
+  updateActionPriorityConfirmationPayloadInput,
 } from "@/lib/agent/tools/action-confirmation-executors";
 import { createActionInput, updateActionInput } from "@/lib/validation/dtos";
 
@@ -72,6 +74,11 @@ const updateActionToolInput = z
     dueDate: z.string().min(1).optional(),
   })
   .passthrough();
+
+const updateActionPriorityToolInput = z.object({
+  actionId: z.string().min(1),
+  priority: z.nativeEnum(ActionPriority),
+});
 
 const findOverdueActionsInput = z
   .object({
@@ -152,6 +159,47 @@ export async function prepareCloseActionForAgent(ctx: AgentToolContext, input: u
         requiresConfirmation: true,
         ...confirmation,
       };
+    },
+  });
+}
+
+async function createPriorityUpdateConfirmation(
+  ctx: AgentToolContext,
+  input: { actionId: string; priority: ActionPriority },
+  action: { id: string; sequenceNumber: number | null; title: string; priority: ActionPriority },
+) {
+  const reference = action.sequenceNumber ? `#${action.sequenceNumber}` : action.id;
+  const confirmation = await createPendingConfirmation({
+    ctx,
+    toolName: "update_action_priority",
+    payload: { actionId: action.id, priority: input.priority },
+    allowedRoles: AGENT_CONTROLLED_OPERATION_ROLES,
+    summary: `${getInternalAgentCopy(ctx.session.user.language).ui.confirmationRequired} ${reference}: ${action.title} (${action.priority} → ${input.priority}).`,
+    execute: executeUpdateActionPriorityConfirmation,
+  });
+
+  return {
+    requiresConfirmation: true,
+    ...confirmation,
+  };
+}
+
+export async function prepareUpdateActionPriorityForAgent(ctx: AgentToolContext, input: unknown) {
+  return runAgentTool({
+    ctx,
+    toolName: "update_action_priority",
+    toolInput: input,
+    allowedRoles: AGENT_CONTROLLED_OPERATION_ROLES,
+    run: async () => {
+      const payload = updateActionPriorityConfirmationPayloadInput.parse(input);
+      const action = await prisma.action.findFirst({
+        where: { plantId: ctx.plantId, ...buildActionReferenceWhere(payload.actionId) },
+        select: { id: true, sequenceNumber: true, title: true, status: true, priority: true },
+      });
+      if (!action) throw new AgentToolUserError("Action not found for this plant.");
+      if (action.status === ActionStatus.CLOSED) throw new AgentToolUserError("Action is already closed.");
+
+      return createPriorityUpdateConfirmation(ctx, payload, action);
     },
   });
 }
@@ -313,6 +361,11 @@ export function createActionTools(ctx: AgentToolContext) {
             });
 
             if (!current) throw new AgentToolUserError("Action not found for this plant.");
+            const requestedPriority = payload.priority;
+            if (requestedPriority !== undefined && requestedPriority !== current.priority) {
+              if (current.status === ActionStatus.CLOSED) throw new AgentToolUserError("Action is already closed.");
+              return createPriorityUpdateConfirmation(ctx, { actionId: current.id, priority: requestedPriority }, current);
+            }
             if (payload.ownerUserId) await assertActionOwnerForPlant(ctx, payload.ownerUserId);
 
             const updatePayload = updateActionInput.safeParse({
@@ -349,6 +402,13 @@ export function createActionTools(ctx: AgentToolContext) {
             };
           },
         }),
+    }),
+    tool({
+      name: "prepare_update_action_priority",
+      description:
+        "Prepare an action priority update. This tool always creates a pending server-side confirmation before changing the action.",
+      parameters: updateActionPriorityToolInput,
+      execute: async (input) => prepareUpdateActionPriorityForAgent(ctx, input),
     }),
     tool({
       name: "find_overdue_actions",

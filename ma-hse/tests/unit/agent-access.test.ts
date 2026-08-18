@@ -8,10 +8,10 @@ describe("agent access controls", () => {
   it("allows only internal agent roles", () => {
     expect(canUseAgent({ role: RoleCode.N0_ADMIN })).toBe(true);
     expect(canUseAgent({ role: RoleCode.N1_CORPORATE })).toBe(true);
+    expect(canUseAgent({ role: RoleCode.N2_PLANT_MANAGER })).toBe(true);
     expect(canUseAgent({ role: RoleCode.N3_SAFETY })).toBe(true);
+    expect(canUseAgent({ role: RoleCode.N4_SUPERVISOR })).toBe(true);
 
-    expect(canUseAgent({ role: RoleCode.N2_PLANT_MANAGER })).toBe(false);
-    expect(canUseAgent({ role: RoleCode.N4_SUPERVISOR })).toBe(false);
     expect(canUseAgent({ role: RoleCode.N5_OPERATOR })).toBe(false);
     expect(canUseAgent({ role: RoleCode.MEDICO })).toBe(false);
     expect(canUseAgent({ role: null })).toBe(false);

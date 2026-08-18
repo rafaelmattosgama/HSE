@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertTriangle, Check, FileSpreadsheet, FileText, X } from "lucide-react";
+import { AlertTriangle, Check, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireApiResponse } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
@@ -72,12 +72,14 @@ export function SewoValidationQueue({
   const router = useRouter();
   const [comments, setComments] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [sharePromptRow, setSharePromptRow] = useState<SewoValidationQueueRow | null>(null);
   const [message, setMessage] = useState("");
 
-  async function submitDecision(row: SewoValidationQueueRow, approved: boolean) {
+  async function submitDecision(row: SewoValidationQueueRow, approved: boolean, shareReport = false) {
     if (!approved && !window.confirm(ui.n1ValidationConfirmReject)) return;
 
     setBusyId(row.id);
+    setSharePromptRow(null);
     setMessage("");
 
     const fallbackComment = approved ? "Validated by N1." : "Rejected by N1.";
@@ -90,6 +92,7 @@ export function SewoValidationQueue({
         body: JSON.stringify({
           approved,
           approvalComment,
+          shareReport,
         }),
       });
       await requireApiResponse(response, ui.n1ValidationFailed);
@@ -106,6 +109,15 @@ export function SewoValidationQueue({
     } finally {
       setBusyId(null);
     }
+  }
+
+  function startDecision(row: SewoValidationQueueRow, approved: boolean) {
+    if (approved) {
+      setSharePromptRow(row);
+      return;
+    }
+
+    void submitDecision(row, false);
   }
 
   if (!rows.length) {
@@ -176,9 +188,6 @@ export function SewoValidationQueue({
                 <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?type=complete&format=pdf`} className="app-toolbar" title={ui.n1ValidationExportPdf}>
                   <FileText className="h-4 w-4" />
                 </Link>
-                <Link href={`/api/plants/${row.plantCode}/sewo/${row.id}/report?type=complete&format=xlsx`} className="app-toolbar" title={ui.n1ValidationExportExcel}>
-                  <FileSpreadsheet className="h-4 w-4" />
-                </Link>
               </div>
             </div>
 
@@ -195,11 +204,11 @@ export function SewoValidationQueue({
               </label>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" onClick={() => void submitDecision(row, true)} disabled={busyId === row.id} title={ui.n1ValidationApprove}>
+                <Button type="button" size="sm" onClick={() => startDecision(row, true)} disabled={busyId === row.id} title={ui.n1ValidationApprove}>
                   <Check className="h-4 w-4" />
                   <span>{busyId === row.id ? ui.n1ValidationSaving : ui.n1ValidationApprove}</span>
                 </Button>
-                <Button type="button" size="sm" variant="destructive" onClick={() => void submitDecision(row, false)} disabled={busyId === row.id} title={ui.n1ValidationReject}>
+                <Button type="button" size="sm" variant="destructive" onClick={() => startDecision(row, false)} disabled={busyId === row.id} title={ui.n1ValidationReject}>
                   <X className="h-4 w-4" />
                   <span>{ui.n1ValidationReject}</span>
                 </Button>
@@ -208,6 +217,45 @@ export function SewoValidationQueue({
           </article>
         );
       })}
+
+      {sharePromptRow ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-[2px]">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sewo-share-prompt-title"
+            aria-describedby="sewo-share-prompt-description"
+            className="app-panel w-full max-w-md rounded-2xl p-6 shadow-2xl"
+          >
+            <h2 id="sewo-share-prompt-title" className="text-lg font-semibold text-slate-900">
+              {ui.n1ValidationSharePromptTitle}
+            </h2>
+            <p id="sewo-share-prompt-description" className="mt-3 text-sm leading-6 text-slate-600">
+              {ui.n1ValidationSharePromptMessage}
+            </p>
+            <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+              {sharePromptRow.code}
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void submitDecision(sharePromptRow, true, false)}
+                disabled={busyId === sharePromptRow.id}
+              >
+                {ui.n1ValidationSharePromptDontShare}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void submitDecision(sharePromptRow, true, true)}
+                disabled={busyId === sharePromptRow.id}
+              >
+                {busyId === sharePromptRow.id ? ui.n1ValidationSaving : ui.n1ValidationSharePromptShare}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

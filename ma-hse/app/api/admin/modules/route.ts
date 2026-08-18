@@ -1,18 +1,14 @@
 import { RoleCode } from "@prisma/client";
-import { z } from "zod";
 import { getServerSession } from "next-auth";
 import { fail, ok } from "@/lib/api";
 import { authOptions } from "@/lib/auth/options";
 import { parseBody } from "@/lib/http";
 import {
-  DEFAULT_MODULE_TOGGLES,
   GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
+  moduleTogglesInputSchema,
+  resolveModuleToggles,
 } from "@/lib/modules";
 import { prisma } from "@/lib/prisma";
-
-const updateModulesInput = z.object({
-  modules: z.record(z.string(), z.boolean()),
-});
 
 async function requireN0Admin() {
   const session = await getServerSession(authOptions);
@@ -41,10 +37,7 @@ export async function GET() {
   });
 
   return ok({
-    modules: {
-      ...DEFAULT_MODULE_TOGGLES,
-      ...((parameter?.valueJson as Record<string, boolean> | null) ?? {}),
-    },
+    modules: resolveModuleToggles(parameter?.valueJson),
   });
 }
 
@@ -52,13 +45,10 @@ export async function POST(request: Request) {
   const auth = await requireN0Admin();
   if (auth instanceof Response) return auth;
 
-  const parsed = await parseBody(request, updateModulesInput);
+  const parsed = await parseBody(request, moduleTogglesInputSchema);
   if ("error" in parsed) return parsed.error;
 
-  const modules = {
-    ...DEFAULT_MODULE_TOGGLES,
-    ...parsed.data.modules,
-  };
+  const modules = resolveModuleToggles(parsed.data.modules);
 
   const existing = await prisma.systemParameter.findFirst({
     where: {

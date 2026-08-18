@@ -103,7 +103,9 @@ export type AgentToolResult<T> =
 export const AGENT_ACCESS_ROLES = [
   RoleCode.N0_ADMIN,
   RoleCode.N1_CORPORATE,
+  RoleCode.N2_PLANT_MANAGER,
   RoleCode.N3_SAFETY,
+  RoleCode.N4_SUPERVISOR,
 ] as const;
 
 export const AGENT_RATE_LIMIT_EXEMPT_ROLES = [

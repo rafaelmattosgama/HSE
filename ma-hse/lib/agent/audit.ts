@@ -66,6 +66,7 @@ export function buildAgentRequestSummary(body: unknown) {
     plantCode: typeof record.plantCode === "string" ? record.plantCode.slice(0, 40) : undefined,
     messageLength: typeof record.message === "string" ? record.message.length : undefined,
     hasMessage: typeof record.message === "string",
+    intent: typeof record.intent === "string" ? record.intent.slice(0, 80) : undefined,
     confirmationId: typeof record.confirmationId === "string" ? record.confirmationId : undefined,
     confirmationAction: typeof record.confirmationAction === "string" ? record.confirmationAction : undefined,
   };
