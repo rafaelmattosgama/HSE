@@ -46,6 +46,14 @@
   --violet: #6d28d9;
   --violet-soft: #f5f3ff;
   --danger-soft: #fef2f2;
+  /* Safety Communication Pyramid palette. Keep category colors centralized. */
+  --safety-pyramid-fatal: #c00000;
+  --safety-pyramid-serious-injury: #f4b183;
+  --safety-pyramid-minor-injury: #ed7d31;
+  --safety-pyramid-first-aid: #ffd966;
+  --safety-pyramid-near-miss: #fce4d6;
+  --safety-pyramid-unsafe-condition: #70ad47;
+  --safety-pyramid-unsafe-act: #92d050;
 }
 
 html[data-theme="black"] {
@@ -92,6 +100,13 @@ html[data-theme="black"] {
   --violet: #c4b5fd;
   --violet-soft: rgba(139, 92, 246, 0.14);
   --danger-soft: rgba(239, 68, 68, 0.14);
+  --safety-pyramid-fatal: #ff6b6b;
+  --safety-pyramid-serious-injury: #f4b183;
+  --safety-pyramid-minor-injury: #ff9c5a;
+  --safety-pyramid-first-aid: #ffe38a;
+  --safety-pyramid-near-miss: #ffd9bf;
+  --safety-pyramid-unsafe-condition: #85cf67;
+  --safety-pyramid-unsafe-act: #b2e66f;
 }
 
 @theme inline {
