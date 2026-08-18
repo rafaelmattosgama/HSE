@@ -212,9 +212,21 @@ describe("mock internal agent", () => {
     );
   });
 
-  it("updates action priority through the real update_action tool", async () => {
+  it("prepares a priority update and only changes the action after confirmation", async () => {
     prismaMock.prisma.action.findFirst
       .mockResolvedValueOnce({ id: "11111111-1111-4111-8111-111111111111" })
+      .mockResolvedValueOnce({
+        id: "11111111-1111-4111-8111-111111111111",
+        sequenceNumber: 1,
+        title: "Install guard",
+        description: "Install guard on the line.",
+        ownerUserId: "22222222-2222-4222-8222-222222222222",
+        priority: "MEDIUM",
+        category: "CORRECTIVE",
+        level: "N3",
+        dueDate: new Date("2026-07-20T00:00:00.000Z"),
+        status: ActionStatus.OPEN,
+      })
       .mockResolvedValueOnce({
         id: "11111111-1111-4111-8111-111111111111",
         sequenceNumber: 1,
@@ -240,9 +252,14 @@ describe("mock internal agent", () => {
       status: ActionStatus.OPEN,
     });
 
-    const result = await runMockAgent(ctx(), "atualiza a acao ACT-1 para prioridade alta");
+    const currentCtx = ctx();
+    const result = await runMockAgent(currentCtx, "atualiza a acao ACT-1 para prioridade alta");
 
     expect(result.message).toContain("HIGH");
+    expect(result.confirmation?.toolName).toBe("update_action_priority");
+    expect(actionServiceMock.ActionService.update).not.toHaveBeenCalled();
+
+    await executePendingConfirmation({ ctx: currentCtx, confirmationId: result.confirmation!.confirmationId });
     expect(actionServiceMock.ActionService.update).toHaveBeenCalledWith(
       expect.objectContaining({
         actionId: "11111111-1111-4111-8111-111111111111",

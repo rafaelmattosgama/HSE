@@ -13,9 +13,9 @@ import { SettingsPlantSelector } from "@/components/feature/settings-plant-selec
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { UserManager } from "@/components/feature/user-manager";
 import {
-  DEFAULT_MODULE_TOGGLES,
   GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
   MODULE_TOGGLES_PARAMETER_KEY,
+  resolveModuleToggles,
 } from "@/lib/modules";
 import { formatMasterDataMessage } from "@/lib/master-data-ui";
 import { prisma } from "@/lib/prisma";
@@ -187,6 +187,7 @@ export default async function SettingsPage({
     CONTRACTORS: ui.modules.contractors,
     COMMUNICATIONS: ui.modules.communications,
     MONTHLY_INPUTS: ui.modules.monthlyInputs,
+    ENVIRONMENT_DASHBOARD: ui.modules.environmentDashboard,
     OCCUPATIONAL_HEALTH: ui.modules.occupationalHealth,
   };
 
@@ -259,13 +260,11 @@ export default async function SettingsPage({
                 errorMessage={masterDataUi.moduleSettingsError}
                 helpButtonLabel={masterDataUi.helpButton}
                 moduleLabels={moduleLabels}
-                initialModules={{
-                  ...DEFAULT_MODULE_TOGGLES,
-                  ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-                }}
+                initialModules={resolveModuleToggles(globalModuleParameter?.valueJson)}
               />
 
               <ModuleToggleManager
+                key={selectedPlant.code}
                 endpoint={`/api/plants/${selectedPlant.code}/admin/modules`}
                 title={formatMasterDataMessage(masterDataUi.plantModulesTitle, { plant: selectedPlant.name })}
                 description={masterDataUi.plantModulesHelp}
@@ -275,11 +274,10 @@ export default async function SettingsPage({
                 errorMessage={masterDataUi.moduleSettingsError}
                 helpButtonLabel={masterDataUi.helpButton}
                 moduleLabels={moduleLabels}
-                initialModules={{
-                  ...DEFAULT_MODULE_TOGGLES,
-                  ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-                  ...((moduleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-                }}
+                initialModules={resolveModuleToggles(
+                  globalModuleParameter?.valueJson,
+                  moduleParameter?.valueJson,
+                )}
               />
             </div>
           </section>

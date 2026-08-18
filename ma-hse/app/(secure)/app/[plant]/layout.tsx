@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import { RoleCode } from "@prisma/client";
 import { authOptions } from "@/lib/auth/options";
 import {
-  DEFAULT_MODULE_TOGGLES,
   GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
   MODULE_TOGGLES_PARAMETER_KEY,
+  PLANT_NAVIGATION_MODULES,
+  resolveModuleToggles,
 } from "@/lib/modules";
 import { AGGREGATE_PLANT_MODULES, ALL_PLANTS_SCOPE, isAllPlantsScope } from "@/lib/plant-scope";
 import { PlantNav } from "@/components/layout/plant-nav";
@@ -40,19 +41,6 @@ const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?:
   { href: "admin", label: "admin", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
 ];
 const CORPORATE_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY];
-const MODULE_BY_ITEM: Partial<Record<(typeof items)[number]["href"], keyof typeof DEFAULT_MODULE_TOGGLES>> = {
-  mapa: "MAPA",
-  validation: "VALIDATIONS",
-  actions: "ACTIONS",
-  sewo: "SEWO",
-  smat: "SMAT",
-  "occupational-health": "OCCUPATIONAL_HEALTH",
-  contractors: "CONTRACTORS",
-  communications: "COMMUNICATIONS",
-  "monthly-inputs": "MONTHLY_INPUTS",
-  "environment-dashboard": "MONTHLY_INPUTS",
-};
-
 export default async function PlantLayout({
   children,
   params,
@@ -153,11 +141,10 @@ export default async function PlantLayout({
           take: 10,
         })
     : [];
-  const moduleToggles: Record<keyof typeof DEFAULT_MODULE_TOGGLES, boolean> = {
-    ...DEFAULT_MODULE_TOGGLES,
-    ...((globalModuleParameter?.valueJson as Record<string, boolean> | null) ?? {}),
-    ...((plantRecord?.systemParameters[0]?.valueJson as Record<string, boolean> | null) ?? {}),
-  };
+  const moduleToggles = resolveModuleToggles(
+    globalModuleParameter?.valueJson,
+    plantRecord?.systemParameters[0]?.valueJson,
+  );
   const ui = await getServerUiDictionary({
     userLanguage: session.user.language,
     plantLanguage: plantRecord?.defaultLanguage,
@@ -167,7 +154,7 @@ export default async function PlantLayout({
     .filter((item) => (plantRole ? item.roles.includes(plantRole) : false))
     .filter((item) => (isAllPlants ? AGGREGATE_PLANT_MODULES.has(item.href) : true))
     .filter((item) => {
-      const moduleKey = MODULE_BY_ITEM[item.href];
+      const moduleKey = PLANT_NAVIGATION_MODULES[item.href];
       return moduleKey ? Boolean(moduleToggles[moduleKey]) : true;
     })
     .map((item) => ({

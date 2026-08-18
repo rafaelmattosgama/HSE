@@ -2,11 +2,12 @@ import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { AppHero, AppSectionHeader } from "@/components/ui/app-surface";
+import { SewoValidationHistory } from "@/components/feature/sewo-validation-history";
 import { SewoValidationQueue } from "@/components/feature/sewo-validation-queue";
 import { authOptions } from "@/lib/auth/options";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
-import { getPendingSewoValidationRows } from "@/lib/services/sewo-validation-service";
+import { getPendingSewoValidationRows, getSewoValidationHistoryRows } from "@/lib/services/sewo-validation-service";
 
 export default async function GlobalValidationPage() {
   const session = await getServerSession(authOptions);
@@ -16,11 +17,14 @@ export default async function GlobalValidationPage() {
   if (!canUseValidation) redirect("/app/corporate");
 
   const uiLocale = await getServerUiLocale({ userLanguage: session.user.language });
-  const [{ ui }, rows] = await Promise.all([
+  const [{ ui }, rows, historyRows] = await Promise.all([
     getLocalizedSewoUi(uiLocale),
     getPendingSewoValidationRows({
       userId: session.user.id,
       locale: uiLocale,
+    }),
+    getSewoValidationHistoryRows({
+      userId: session.user.id,
     }),
   ]);
 
@@ -36,6 +40,11 @@ export default async function GlobalValidationPage() {
       <section className="space-y-4">
         <AppSectionHeader title={ui.n1ValidationSewoSection} />
         <SewoValidationQueue rows={rows} ui={ui} showPlant />
+      </section>
+
+      <section className="space-y-4">
+        <AppSectionHeader title={ui.n1ValidationHistorySection} />
+        <SewoValidationHistory rows={historyRows} ui={ui} />
       </section>
     </div>
   );

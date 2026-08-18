@@ -268,7 +268,7 @@ describe("agent tools security boundaries", () => {
     );
   });
 
-  it("updates only safe action fields for an authorized role using backend plant context", async () => {
+  it("prepares priority changes for confirmation using backend plant context", async () => {
     prismaMock.prisma.action.findFirst.mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
       sequenceNumber: 1,
@@ -305,8 +305,8 @@ describe("agent tools security boundaries", () => {
     expect(result).toMatchObject({
       ok: true,
       data: {
-        id: "11111111-1111-4111-8111-111111111111",
-        priority: "HIGH",
+        requiresConfirmation: true,
+        toolName: "update_action_priority",
       },
     });
     expect(prismaMock.prisma.action.findFirst).toHaveBeenCalledWith(
@@ -317,18 +317,7 @@ describe("agent tools security boundaries", () => {
         },
       }),
     );
-    expect(actionServiceMock.ActionService.update).toHaveBeenCalledWith({
-      actionId: "11111111-1111-4111-8111-111111111111",
-      actorUserId: "user-1",
-      payload: expect.objectContaining({
-        title: "Install guard",
-        description: "Install a guard on the line.",
-        ownerUserId: "22222222-2222-4222-8222-222222222222",
-        priority: "HIGH",
-        category: "CORRECTIVE",
-        level: "N3",
-      }),
-    });
+    expect(actionServiceMock.ActionService.update).not.toHaveBeenCalled();
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "AGENT_TOOL_SUCCEEDED",

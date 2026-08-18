@@ -103,22 +103,6 @@ describe("SewaService approval notifications", () => {
         id: "sewo-1",
         plantId: "plant-1",
         status: SEWOStatus.IN_APPROVAL,
-      })
-      .mockResolvedValueOnce({
-        id: "sewo-1",
-        plantId: "plant-1",
-        status: SEWOStatus.APPROVED,
-        approvedAt,
-        approvedByUserId: "user-1",
-        actions: [],
-        actionLinks: [],
-      })
-      .mockResolvedValueOnce({
-        id: "sewo-1",
-        plantId: "plant-1",
-        status: SEWOStatus.APPROVED,
-        approvedAt,
-        approvedByUserId: "user-1",
       });
     prismaMock.sEWO.update.mockResolvedValue({
       id: "sewo-1",
@@ -153,6 +137,37 @@ describe("SewaService approval notifications", () => {
     expect(emailMock.sendSewoValidatedDistributionEmail).not.toHaveBeenCalled();
     expect(emailMock.sendSewoValidatedSubmitterEmail).not.toHaveBeenCalled();
     expect(result.status).toBe(SEWOStatus.APPROVED);
+  });
+
+  it("does not enqueue report sharing when Corporate validates with Don't share", async () => {
+    const approvedAt = new Date("2026-05-26T10:00:00.000Z");
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValueOnce({
+      id: "sewo-1",
+      plantId: "plant-1",
+      status: SEWOStatus.IN_APPROVAL,
+    });
+    prismaMock.sEWO.update.mockResolvedValue({
+      id: "sewo-1",
+      plantId: "plant-1",
+      status: SEWOStatus.APPROVED,
+      approvedAt,
+      approvedByUserId: "user-1",
+    });
+
+    const result = await SewaService.approve({
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      payload: {
+        approved: true,
+        approvalComment: "Approved",
+        shareReport: false,
+      },
+    });
+
+    await flushAsyncWork();
+
+    expect(result.status).toBe(SEWOStatus.APPROVED);
+    expect(queuesMock.sewoApprovedNotificationQueue.add).not.toHaveBeenCalled();
   });
 
   it("sends external S-EWO reports in each recipient language from the worker handler", async () => {

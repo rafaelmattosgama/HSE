@@ -30,7 +30,14 @@ import {
   isSewoSubmitterRole,
 } from "@/lib/services/sewo-validation-service";
 import { getSewoStatusFromLinkedActions } from "@/lib/sewo-status";
-import type { ApproveSEWOInput, CreateSEWOInput, ManualCloseSewoInput, ReopenActionInput, UpdateSEWOInput } from "@/lib/validation/dtos";
+import type {
+  ApproveSEWOInput,
+  ChangeSewoDecisionInput,
+  CreateSEWOInput,
+  ManualCloseSewoInput,
+  ReopenActionInput,
+  UpdateSEWOInput,
+} from "@/lib/validation/dtos";
 
 type SewoApprovedExternalEmailCopy = {
   subject: string;
@@ -684,6 +691,7 @@ async function sendSewoApprovedExternalReports(input: {
     isPriority: boolean;
   };
   recipients: Awaited<ReturnType<typeof listSewoReportRecipients>>;
+  status?: "Approved" | "Rejected";
 }) {
   const { SewoExportService } = await import("@/lib/services/sewo-export");
   const exportPromises = new Map<string, Promise<{ pdf: Buffer }>>();
@@ -709,6 +717,7 @@ async function sendSewoApprovedExternalReports(input: {
       isPriority: input.summary.isPriority,
     });
 
+    const isRejected = input.status === "Rejected";
     await sendSewoValidatedDistributionEmail({
       to: recipient.email,
       user: {
@@ -716,13 +725,13 @@ async function sendSewoApprovedExternalReports(input: {
         email: recipient.email,
         language: recipient.language,
       },
-      tipoAlerta: email.subject,
+      tipoAlerta: isRejected ? "Rejected S-EWO report" : email.subject,
       descricao: input.summary.occurrenceType,
       prioridade: input.summary.isPriority ? input.summary.sifPsifLabel : "Normal",
       dataHora: new Date(),
       sewoCode,
       plantName: input.summary.plantLabel,
-      sewoStatus: "Approved",
+      sewoStatus: input.status ?? "Approved",
       sewoUrl: "",
       attachments: [
         {
@@ -744,6 +753,86 @@ async function sendSewoApprovedExternalReports(input: {
       "failed_to_send_sewo_external_reports",
     );
   }
+}
+
+async function notifySewoRejectedReportShared(sewoId: string) {
+  const sewo = await prisma.sEWO.findUniqueOrThrow({
+    where: { id: sewoId },
+    include: {
+      plant: true,
+      communication: true,
+      line: true,
+    },
+  });
+  const [recipients, externalRecipients] = await Promise.all([
+    getRoleRecipients(sewo.plantId, [...SEWO_STAKEHOLDER_ROLES]),
+    listSewoReportRecipients(sewo.plantId),
+  ]);
+  const summary = buildSewoNotificationSummary(sewo);
+  const notificationTasks: Promise<unknown>[] = [];
+
+  if (recipients.userIds.length || recipients.emailRecipients.length) {
+    notificationTasks.push((async () => {
+      const { SewoExportService } = await import("@/lib/services/sewo-export");
+      const exported = await SewoExportService.buildExport(sewoId, {
+        locale: sewo.plant.defaultLanguage,
+        includeXlsx: false,
+      }).catch(() => null);
+
+      await NotificationService.notify({
+        plantId: sewo.plantId,
+        userIds: recipients.userIds,
+        emailRecipients: recipients.emailRecipients,
+        title: `S-EWO rejeitado e partilhado: ${summary.occurrenceType}`,
+        body: [
+          `Planta: ${summary.plantLabel}`,
+          `Tipo de ocorrÃªncia: ${summary.occurrenceType}`,
+          "Estado: Rejected",
+          summary.isPriority ? `ClassificaÃ§Ã£o SIF/PSIF: ${summary.sifPsifLabel}` : null,
+        ].filter(Boolean).join(" | "),
+        channel: SEWO_REJECTED_CHANNEL,
+        attachments: exported
+          ? [{
+              filename: `sewo-${sewo.plant.code}-${filenameSafeCode(getReadableSewoCode(sewo))}.pdf`,
+              content: exported.pdf,
+              contentType: "application/pdf",
+            }]
+          : undefined,
+      });
+    })());
+  }
+
+  if (externalRecipients.length) {
+    notificationTasks.push(sendSewoApprovedExternalReports({
+      sewoId,
+      sewo: {
+        id: sewo.id,
+        plantId: sewo.plantId,
+        plant: {
+          code: sewo.plant.code,
+          name: sewo.plant.name,
+        },
+        codigoSewo: sewo.codigoSewo,
+      },
+      summary,
+      recipients: externalRecipients,
+      status: "Rejected",
+    }));
+  }
+
+  const results = await Promise.allSettled(notificationTasks);
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      logger.error(
+        {
+          error: result.reason,
+          sewoId,
+          taskIndex: index,
+        },
+        "failed_to_share_sewo_rejected_report",
+      );
+    }
+  });
 }
 
 function buildSewoEmailHtml(input: {
@@ -1096,6 +1185,9 @@ export const SewaService = {
     payload: ApproveSEWOInput;
   }) {
     const before = await prisma.sEWO.findUniqueOrThrow({ where: { id: input.sewoId } });
+    if (before.status !== SEWOStatus.IN_APPROVAL) {
+      throw new SewoValidationError("INVALID_STATUS", "Only submitted S-EWO records can be approved or rejected.");
+    }
 
     const updated = await prisma.sEWO.update({
       where: { id: input.sewoId },
@@ -1117,8 +1209,10 @@ export const SewaService = {
     });
 
     if (input.payload.approved) {
-      void enqueueSewoApprovedNotification(updated.id);
-      return this.syncStatusWithActions(updated.id);
+      if (input.payload.shareReport !== false) {
+        void enqueueSewoApprovedNotification(updated.id);
+      }
+      return updated;
     }
 
     await safeNotifySewoRejected({
@@ -1128,6 +1222,81 @@ export const SewaService = {
     });
 
     return updated;
+  },
+
+  async changeCorporateDecision(input: {
+    sewoId: string;
+    actorUserId: string;
+    payload: ChangeSewoDecisionInput;
+  }) {
+    const before = await prisma.sEWO.findUniqueOrThrow({ where: { id: input.sewoId } });
+    const nextStatus = input.payload.approved ? SEWOStatus.APPROVED : SEWOStatus.REJECTED;
+
+    if (before.status !== SEWOStatus.APPROVED && before.status !== SEWOStatus.REJECTED) {
+      throw new SewoValidationError("INVALID_STATUS", "Only decided S-EWO records can have their corporate decision changed.");
+    }
+    if (before.status === nextStatus) {
+      throw new SewoValidationError("INVALID_TRANSITION", "The requested corporate decision is already applied.");
+    }
+
+    const updated = await prisma.sEWO.update({
+      where: { id: input.sewoId },
+      data: {
+        status: nextStatus,
+        approvedByUserId: input.actorUserId,
+        approvedAt: new Date(),
+        approvalComment: input.payload.approvalComment,
+      },
+    });
+
+    await writeAuditLog({
+      entityType: "SEWO",
+      entityId: input.sewoId,
+      action: "CHANGE_CORPORATE_DECISION",
+      actorUserId: input.actorUserId,
+      plantId: updated.plantId,
+      diff: buildDiff(before as unknown as Record<string, unknown>, updated as unknown as Record<string, unknown>),
+    });
+
+    if (!input.payload.approved) {
+      await safeNotifySewoRejected({
+        sewoId: updated.id,
+        actorUserId: input.actorUserId,
+        approvalComment: input.payload.approvalComment,
+      });
+    }
+
+    return updated;
+  },
+
+  async shareReport(input: {
+    sewoId: string;
+    actorUserId: string;
+  }) {
+    const sewo = await prisma.sEWO.findUniqueOrThrow({ where: { id: input.sewoId } });
+    if (sewo.status !== SEWOStatus.APPROVED && sewo.status !== SEWOStatus.REJECTED) {
+      throw new SewoValidationError("INVALID_STATUS", "Only decided S-EWO reports can be shared.");
+    }
+
+    if (sewo.status === SEWOStatus.APPROVED) {
+      await notifySewoApproved(sewo.id);
+    } else {
+      await notifySewoRejectedReportShared(sewo.id);
+    }
+    await writeAuditLog({
+      entityType: "SEWO",
+      entityId: sewo.id,
+      action: "SHARE_REPORT",
+      actorUserId: input.actorUserId,
+      plantId: sewo.plantId,
+      diff: buildDiff(
+        sewo as unknown as Record<string, unknown>,
+        {
+          ...sewo,
+          reportSharedAt: new Date().toISOString(),
+        } as unknown as Record<string, unknown>,
+      ),
+    });
   },
 
   async sendApprovedNotifications(sewoId: string) {

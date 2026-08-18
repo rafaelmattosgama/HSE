@@ -1,19 +1,14 @@
 import { RoleCode } from "@prisma/client";
-import { z } from "zod";
 import { ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
-import { DEFAULT_MODULE_TOGGLES, MODULE_TOGGLES_PARAMETER_KEY } from "@/lib/modules";
+import { MODULE_TOGGLES_PARAMETER_KEY, moduleTogglesInputSchema, resolveModuleToggles } from "@/lib/modules";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 
-const updateModulesInput = z.object({
-  modules: z.record(z.string(), z.boolean()),
-});
-
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
@@ -27,26 +22,20 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
   });
 
   return ok({
-    modules: {
-      ...DEFAULT_MODULE_TOGGLES,
-      ...((parameter?.valueJson as Record<string, boolean> | null) ?? {}),
-    },
+    modules: resolveModuleToggles(parameter?.valueJson),
   });
 }
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN]);
   if ("error" in auth) return auth.error;
 
-  const parsed = await parseBody(request, updateModulesInput);
+  const parsed = await parseBody(request, moduleTogglesInputSchema);
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
-  const modules = {
-    ...DEFAULT_MODULE_TOGGLES,
-    ...parsed.data.modules,
-  };
+  const modules = resolveModuleToggles(parsed.data.modules);
 
   await prisma.systemParameter.upsert({
     where: {

@@ -1,6 +1,14 @@
 import Link from "next/link";
+import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
+import {
+  GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
+  MODULE_TOGGLES_PARAMETER_KEY,
+  isModuleEnabled,
+} from "@/lib/modules";
+import { isAllPlantsScope } from "@/lib/plant-scope";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { EnvironmentDashboardBoard } from "@/components/feature/environment-dashboard-board";
@@ -89,9 +97,46 @@ export default async function EnvironmentDashboardPage({
   const { plant } = await params;
   const currentSearchParams = await searchParams;
   const session = await getServerSession(authOptions);
-  const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
+  if (!session?.user) {
+    redirect("/login");
+  }
+  if (isAllPlantsScope(plant)) {
+    redirect("/app/corporate");
+  }
+
+  const [plantRow, globalModuleParameter] = await Promise.all([
+    prisma.plant.findUnique({
+      where: { code: plant },
+      include: {
+        systemParameters: {
+          where: { key: MODULE_TOGGLES_PARAMETER_KEY },
+        },
+      },
+    }),
+    prisma.systemParameter.findFirst({
+      where: { plantId: null, key: GLOBAL_MODULE_TOGGLES_PARAMETER_KEY },
+    }),
+  ]);
+  if (!plantRow) {
+    redirect("/app/corporate");
+  }
+
+  const canAccessDashboard = session.user.plantRoles.some(
+    (entry) =>
+      entry.role === RoleCode.N0_ADMIN ||
+      entry.role === RoleCode.N1_CORPORATE ||
+      (entry.plantCode === plant && (entry.role === RoleCode.N2_PLANT_MANAGER || entry.role === RoleCode.N3_SAFETY)),
+  );
+  if (!canAccessDashboard || !isModuleEnabled(
+    "ENVIRONMENT_DASHBOARD",
+    globalModuleParameter?.valueJson,
+    plantRow.systemParameters[0]?.valueJson,
+  )) {
+    redirect(`/app/${plant}/dashboards`);
+  }
+
   const ui = await getServerUiDictionary({
-    userLanguage: session?.user.language,
+    userLanguage: session.user.language,
     plantLanguage: plantRow.defaultLanguage,
   });
   const filterApplied = hasDateFilter(currentSearchParams);
@@ -161,7 +206,7 @@ export default async function EnvironmentDashboardPage({
   });
   const monthOptions = Array.from({ length: 12 }, (_, index) => ({
     value: String(index + 1),
-    label: getMonthLabel(session?.user.language ?? plantRow.defaultLanguage ?? "en", index),
+    label: getMonthLabel(session.user.language ?? plantRow.defaultLanguage ?? "en", index),
   }));
   const environmentHelp = formatUiLabel(ui.dashboard.environmentDashboardHelp, { plant: plantRow.name });
 

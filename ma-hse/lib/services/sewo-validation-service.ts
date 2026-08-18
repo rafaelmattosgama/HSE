@@ -58,6 +58,16 @@ export type SewoValidationRow = {
   sifPsifResult: SifPsifResult;
 };
 
+export type SewoValidationHistoryRow = {
+  id: string;
+  code: string;
+  plantCode: string;
+  plantName: string;
+  createdAt: string;
+  decisionAt: string | null;
+  status: "APPROVED" | "REJECTED";
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -336,4 +346,59 @@ export async function getPendingSewoValidationRows(input: {
   return records
     .map((record) => toValidationRow(record, localizedAreaById, localizedWorkstationById))
     .filter((row) => isSewoSubmitterRole(row.submittedByRole));
+}
+
+export async function getSewoValidationHistoryRows(input: {
+  userId: string;
+  plantCode?: string;
+  limit?: number;
+}) {
+  const userRoles = await prisma.userPlantRole.findMany({
+    where: {
+      userId: input.userId,
+      user: {
+        isActive: true,
+      },
+    },
+    include: {
+      role: true,
+    },
+  });
+  if (!userRoles.some((entry) => entry.role.code === RoleCode.N1_CORPORATE)) {
+    return [] as SewoValidationHistoryRow[];
+  }
+
+  const plants = await prisma.plant.findMany({
+    where: input.plantCode ? { code: input.plantCode } : { isActive: true },
+    select: { id: true },
+  });
+  const plantIds = plants.map((plant) => plant.id);
+  if (!plantIds.length) {
+    return [] as SewoValidationHistoryRow[];
+  }
+
+  const records = await prisma.sEWO.findMany({
+    where: {
+      plantId: { in: plantIds },
+      status: { in: [SEWOStatus.APPROVED, SEWOStatus.REJECTED] },
+    },
+    include: {
+      plant: true,
+    },
+    orderBy: [
+      { approvedAt: "desc" },
+      { updatedAt: "desc" },
+    ],
+    take: input.limit ?? 200,
+  });
+
+  return records.map((record): SewoValidationHistoryRow => ({
+    id: record.id,
+    code: getReadableSewoCode(record),
+    plantCode: record.plant.code,
+    plantName: record.plant.name,
+    createdAt: record.createdAt.toISOString(),
+    decisionAt: record.approvedAt?.toISOString() ?? null,
+    status: record.status as SewoValidationHistoryRow["status"],
+  }));
 }
