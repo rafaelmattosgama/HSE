@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDashboardOpenAction, isDashboardOverdueAction } from "@/lib/dashboard-actions";
+import { getLinkedCommunicationClosureRate, isDashboardOpenAction, isDashboardOverdueAction } from "@/lib/dashboard-actions";
 
 const referenceDate = new Date(2026, 5, 5, 13, 30);
 
@@ -35,5 +35,18 @@ describe("dashboard action metrics", () => {
 
     expect(actions.filter(isDashboardOpenAction)).toHaveLength(4);
     expect(actions.filter((action) => isDashboardOverdueAction(action, referenceDate))).toHaveLength(1);
+  });
+
+  it("calculates a linked-communication closure rate from applicable records only", () => {
+    expect(getLinkedCommunicationClosureRate([
+      { actions: [{ status: "CLOSED" }] },
+      { actions: [{ status: "CLOSED" }, { status: "CLOSED" }] },
+      { actions: [{ status: "ONGOING" }] },
+      { actions: [] },
+    ])).toBeCloseTo((2 / 3) * 100);
+  });
+
+  it("returns not-applicable when no communication has a linked action", () => {
+    expect(getLinkedCommunicationClosureRate([{ actions: [] }, { actions: [] }])).toBeNull();
   });
 });

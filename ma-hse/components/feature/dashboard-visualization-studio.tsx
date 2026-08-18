@@ -233,12 +233,21 @@ function TrendBarChart({
   series,
   variant,
   maxLabel,
+  title,
+  monthLabel,
+  noDataLabel,
 }: {
   labels: string[];
   series: TrendSeries[];
   variant: "count" | "percent" | "index";
   maxLabel: string;
+  title: string;
+  monthLabel: string;
+  noDataLabel: string;
 }) {
+  const hasValues = series.some((entry) => entry.values.some((value) => value !== 0));
+  if (labels.length === 0 || !hasValues) return <div className="app-empty" role="status">{noDataLabel}</div>;
+
   const width = 720;
   const height = 260;
   const chartHeight = 180;
@@ -248,8 +257,9 @@ function TrendBarChart({
   const barWidth = Math.max(10, (groupWidth - 14) / Math.max(series.length, 1));
 
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
+    <figure className="overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]" role="img" aria-label={`${title}. ${monthLabel} on the horizontal axis.`}>
+        <title>{title}</title>
         <line x1="40" y1="210" x2="700" y2="210" stroke="var(--chart-axis)" />
         {labels.map((label, labelIndex) => (
           <g key={label} transform={`translate(${40 + labelIndex * groupWidth}, 0)`}>
@@ -276,8 +286,10 @@ function TrendBarChart({
         <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {maxLabel}: {formatValue(maxValue, variant)}
         </text>
+        <text x="370" y="254" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">{monthLabel}</text>
       </svg>
-    </div>
+      <figcaption className="sr-only">{title}</figcaption>
+    </figure>
   );
 }
 
@@ -286,12 +298,21 @@ function TrendPointsChart({
   series,
   variant,
   maxLabel,
+  title,
+  monthLabel,
+  noDataLabel,
 }: {
   labels: string[];
   series: TrendSeries[];
   variant: "count" | "percent" | "index";
   maxLabel: string;
+  title: string;
+  monthLabel: string;
+  noDataLabel: string;
 }) {
+  const hasValues = series.some((entry) => entry.values.some((value) => value !== 0));
+  if (labels.length === 0 || !hasValues) return <div className="app-empty" role="status">{noDataLabel}</div>;
+
   const width = 720;
   const height = 260;
   const maxValue = Math.max(1, ...series.flatMap((entry) => entry.values));
@@ -299,8 +320,9 @@ function TrendPointsChart({
   const stepX = labels.length > 1 ? chartWidth / (labels.length - 1) : chartWidth;
 
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
+    <figure className="overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]" role="img" aria-label={`${title}. ${monthLabel} on the horizontal axis.`}>
+        <title>{title}</title>
         <line x1="40" y1="210" x2="700" y2="210" stroke="var(--chart-axis)" />
         {series.map((entry, seriesIndex) => {
           const points = entry.values
@@ -330,8 +352,10 @@ function TrendPointsChart({
         <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {maxLabel}: {formatValue(maxValue, variant)}
         </text>
+        <text x="370" y="254" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">{monthLabel}</text>
       </svg>
-    </div>
+      <figcaption className="sr-only">{title}</figcaption>
+    </figure>
   );
 }
 
@@ -344,7 +368,8 @@ function CircularChart({
   variant: "count" | "percent" | "index";
   labels: Pick<DashboardUiDictionary, "noDataForPeriod" | "total">;
 }) {
-  if (data.length === 0) {
+  const rawTotal = data.reduce((sum, item) => sum + item.value, 0);
+  if (data.length === 0 || rawTotal === 0) {
     return <div className="app-empty">{labels.noDataForPeriod}</div>;
   }
 
@@ -418,7 +443,8 @@ function ParetoChart({
   variant: "count" | "percent" | "index";
   labels: Pick<DashboardUiDictionary, "noDataForPeriod" | "total">;
 }) {
-  if (data.length === 0) {
+  const rawTotal = data.reduce((sum, item) => sum + item.value, 0);
+  if (data.length === 0 || rawTotal === 0) {
     return <div className="app-empty">{labels.noDataForPeriod}</div>;
   }
 
@@ -643,10 +669,26 @@ export function DashboardVisualizationStudio({
             </div>
             <div className="mt-4">
               {chartType === "bar" ? (
-                <TrendBarChart labels={indicatorTrend.labels} series={indicatorTrend.series} variant={selectedMetric.variant} maxLabel={text.max} />
+                <TrendBarChart
+                  labels={indicatorTrend.labels}
+                  series={indicatorTrend.series}
+                  variant={selectedMetric.variant}
+                  maxLabel={text.max}
+                  title={`${text.monthlyTrend}: ${selectedMetric.label}`}
+                  monthLabel={text.month}
+                  noDataLabel={text.noDataForPeriod}
+                />
               ) : null}
               {chartType === "points" ? (
-                <TrendPointsChart labels={indicatorTrend.labels} series={indicatorTrend.series} variant={selectedMetric.variant} maxLabel={text.max} />
+                <TrendPointsChart
+                  labels={indicatorTrend.labels}
+                  series={indicatorTrend.series}
+                  variant={selectedMetric.variant}
+                  maxLabel={text.max}
+                  title={`${text.monthlyTrend}: ${selectedMetric.label}`}
+                  monthLabel={text.month}
+                  noDataLabel={text.noDataForPeriod}
+                />
               ) : null}
               {chartType === "circular" ? <CircularChart data={indicatorDistribution} variant={selectedMetric.variant} labels={text} /> : null}
               {chartType === "pareto" ? <ParetoChart data={indicatorDistribution} variant={selectedMetric.variant} labels={text} /> : null}
@@ -674,10 +716,26 @@ export function DashboardVisualizationStudio({
               </div>
               <div className="mt-4">
                 {chartType === "bar" ? (
-                  <TrendBarChart labels={rankingTrend.labels} series={rankingTrend.series} variant={selectedRankingPanel.variant} maxLabel={text.max} />
+                  <TrendBarChart
+                    labels={rankingTrend.labels}
+                    series={rankingTrend.series}
+                    variant={selectedRankingPanel.variant}
+                    maxLabel={text.max}
+                    title={`${text.monthlyTrend}: ${selectedRankingPanel.title}`}
+                    monthLabel={text.month}
+                    noDataLabel={text.noDataForPeriod}
+                  />
                 ) : null}
                 {chartType === "points" ? (
-                  <TrendPointsChart labels={rankingTrend.labels} series={rankingTrend.series} variant={selectedRankingPanel.variant} maxLabel={text.max} />
+                  <TrendPointsChart
+                    labels={rankingTrend.labels}
+                    series={rankingTrend.series}
+                    variant={selectedRankingPanel.variant}
+                    maxLabel={text.max}
+                    title={`${text.monthlyTrend}: ${selectedRankingPanel.title}`}
+                    monthLabel={text.month}
+                    noDataLabel={text.noDataForPeriod}
+                  />
                 ) : null}
                 {chartType === "circular" ? <CircularChart data={rankingDistribution} variant={selectedRankingPanel.variant} labels={text} /> : null}
                 {chartType === "pareto" ? <ParetoChart data={rankingDistribution} variant={selectedRankingPanel.variant} labels={text} /> : null}

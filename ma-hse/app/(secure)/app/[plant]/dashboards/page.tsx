@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { CommunicationType, MasterDataEntityType, RoleCode } from "@prisma/client";
-import { AlertTriangle, CheckCircle2, Clock3, ClipboardCheck, Inbox, Stethoscope, UserCheck } from "lucide-react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { resolveDashboardPeriod, type DashboardSearchParams } from "@/lib/dashboard-period";
 import {
   buildMonthBuckets,
   createEmptyMonthlyMetricSnapshot,
+  limitDashboardMonthBucketsToObserved,
   type RankingEntry,
   type RankingGroup,
   type RankingSeriesSnapshot,
@@ -18,17 +18,22 @@ import {
   getCommunicationTypeTotal,
   type CommunicationTypeTopEntry,
 } from "@/lib/communication-type-top";
-import { CommunicationPyramid } from "@/components/feature/communication-pyramid";
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
+import { SafetyCommunicationPyramid } from "@/components/feature/safety-communication-pyramid";
+import { SafetyDashboardKpiGroups } from "@/components/feature/safety-dashboard-kpi-groups";
 import { SafetyDaysSpotlight } from "@/components/feature/safety-days-dashboard";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { buildSafetyDaysSummary } from "@/lib/safety-days";
 import { getPlantSafetyDaysConfig } from "@/lib/services/parameter-service";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
-import { AppCard, AppHero, AppKpiCard } from "@/components/ui/app-surface";
-import { isDashboardOpenAction, isDashboardOverdueAction } from "@/lib/dashboard-actions";
+import { AppHero } from "@/components/ui/app-surface";
+import {
+  getLinkedCommunicationClosureRate,
+  isDashboardOpenAction,
+  isDashboardOverdueAction,
+} from "@/lib/dashboard-actions";
 import {
   COMMUNICATION_IN_VALIDATION_STATUSES,
   isDashboardPyramidCommunicationStatus,
@@ -51,7 +56,61 @@ function buildPyramidCounts(
   };
 }
 
-function buildMonthlyInputFilter(period: ReturnType<typeof resolveDashboardPeriod>) {
+function buildPyramidCommunicationWhere(plantId: string, period: { from: Date; to: Date }) {
+  return {
+    plantId,
+    OR: [
+      {
+        eventDatetime: {
+          gte: period.from,
+          lte: period.to,
+        },
+      },
+      {
+        status: {
+          in: [...COMMUNICATION_IN_VALIDATION_STATUSES],
+        },
+        reportedAt: {
+          gte: period.from,
+          lte: period.to,
+        },
+      },
+    ],
+  };
+}
+
+function getHomologousPeriod(period: { from: Date; to: Date }) {
+  const from = new Date(period.from);
+  const to = new Date(period.to);
+  from.setUTCFullYear(from.getUTCFullYear() - 1);
+  to.setUTCFullYear(to.getUTCFullYear() - 1);
+  return { from, to };
+}
+
+function getHomologousTrend(current: number, previous: number, label: string, locale: string, digits = 0) {
+  const difference = current - previous;
+  const formatter = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: digits,
+    signDisplay: "always",
+  });
+  const direction = difference > 0 ? "↑" : difference < 0 ? "↓" : "→";
+  return `${direction} ${formatter.format(difference)} ${label.toLocaleLowerCase(locale)}`;
+}
+
+function actionWasOpenAt(
+  action: { createdAt: Date; closedAt: Date | null; reopenedAt: Date | null },
+  referenceDate: Date,
+) {
+  if (action.createdAt > referenceDate) return false;
+  if (!action.closedAt || action.closedAt > referenceDate) return true;
+  return Boolean(action.reopenedAt && action.reopenedAt > action.closedAt && action.reopenedAt <= referenceDate);
+}
+
+function getMonthEnd(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+}
+
+function buildMonthlyInputFilter(period: { from: Date; to: Date }) {
   const pairs: Array<{ year: number; month: number }> = [];
   const cursor = new Date(Date.UTC(period.from.getUTCFullYear(), period.from.getUTCMonth(), 1));
   const last = new Date(Date.UTC(period.to.getUTCFullYear(), period.to.getUTCMonth(), 1));
@@ -160,15 +219,27 @@ export default async function DashboardsPage({
       ? RoleCode.N1_CORPORATE
       : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
   const period = resolveDashboardPeriod(currentSearchParams);
-  const monthBuckets = buildMonthBuckets(period.from, period.to);
+  const now = new Date();
+  const backlogReferenceDate = period.to < now ? period.to : now;
+  const monthBuckets = limitDashboardMonthBucketsToObserved(buildMonthBuckets(period.from, period.to), {
+    now,
+    partialLabel: ui.dashboard.kpiPartialMonth,
+    markCurrentMonth: period.to >= now,
+  });
   const monthlyInputFilter = buildMonthlyInputFilter(period);
+  const homologousPeriod = getHomologousPeriod(period);
+  const homologousMonthlyInputFilter = buildMonthlyInputFilter(homologousPeriod);
 
   const [
     communicationRows,
     pyramidCommunicationRows,
+    homologousPyramidCommunicationRows,
     actionRows,
     sewoRows,
+    backlogActionRows,
+    homologousSewoRows,
     hoursWorkedRows,
+    homologousHoursWorkedRows,
     employeeRows,
     communicationDateRange,
     monthlyYearRange,
@@ -219,33 +290,39 @@ export default async function DashboardsPage({
             name: true,
           },
         },
+        actions: {
+          select: {
+            status: true,
+          },
+        },
       },
     }),
     prisma.communication.findMany({
-      where: {
-        plantId: plantRow.id,
-        OR: [
-          {
-            eventDatetime: {
-              gte: period.from,
-              lte: period.to,
-            },
-          },
-          {
-            status: {
-              in: [...COMMUNICATION_IN_VALIDATION_STATUSES],
-            },
-            reportedAt: {
-              gte: period.from,
-              lte: period.to,
-            },
-          },
-        ],
-      },
+      where: buildPyramidCommunicationWhere(plantRow.id, period),
       select: {
         type: true,
         status: true,
         classification: true,
+        lostDays: true,
+        actions: {
+          select: {
+            status: true,
+          },
+        },
+      },
+    }),
+    prisma.communication.findMany({
+      where: buildPyramidCommunicationWhere(plantRow.id, homologousPeriod),
+      select: {
+        type: true,
+        status: true,
+        classification: true,
+        lostDays: true,
+        actions: {
+          select: {
+            status: true,
+          },
+        },
       },
     }),
     prisma.action.findMany({
@@ -260,6 +337,7 @@ export default async function DashboardsPage({
         status: true,
         dueDate: true,
         createdAt: true,
+        closedAt: true,
         ownerUserId: true,
       },
     }),
@@ -287,6 +365,44 @@ export default async function DashboardsPage({
         },
       },
     }),
+    prisma.action.findMany({
+      where: {
+        plantId: plantRow.id,
+        createdAt: {
+          lte: backlogReferenceDate,
+        },
+      },
+      select: {
+        status: true,
+        dueDate: true,
+        createdAt: true,
+        closedAt: true,
+        reopenedAt: true,
+      },
+    }),
+    prisma.sEWO.findMany({
+      where: {
+        plantId: plantRow.id,
+        analysisDate: {
+          gte: homologousPeriod.from,
+          lte: homologousPeriod.to,
+        },
+      },
+      select: {
+        templateData: true,
+        causeSelections: {
+          select: {
+            selected: true,
+            isRootCause: true,
+            causeItem: {
+              select: {
+                label: true,
+              },
+            },
+          },
+        },
+      },
+    }),
     prisma.plantMonthlyInput.findMany({
       where: {
         plantId: plantRow.id,
@@ -295,6 +411,15 @@ export default async function DashboardsPage({
       select: {
         year: true,
         month: true,
+        hoursWorked: true,
+      },
+    }),
+    prisma.plantMonthlyInput.findMany({
+      where: {
+        plantId: plantRow.id,
+        ...homologousMonthlyInputFilter,
+      },
+      select: {
         hoursWorked: true,
       },
     }),
@@ -356,23 +481,35 @@ export default async function DashboardsPage({
   const employeeByNo = new Map(employeeRows.map((entry) => [entry.employeeNo, entry]));
   const validCommunications = communicationRows.filter((entry) => ["VALID_OPEN", "ONGOING", "CLOSED"].includes(entry.status));
   const pyramidCommunications = pyramidCommunicationRows.filter((entry) => isDashboardPyramidCommunicationStatus(entry.status));
+  const homologousPyramidCommunications = homologousPyramidCommunicationRows.filter((entry) => isDashboardPyramidCommunicationStatus(entry.status));
   const pyramidCounts = buildPyramidCounts(pyramidCommunications);
+  const homologousPyramidCounts = homologousPyramidCommunications.length > 0
+    ? buildPyramidCounts(homologousPyramidCommunications)
+    : undefined;
+  const homologousValidCommunications = homologousPyramidCommunications.filter((entry) => ["VALID_OPEN", "ONGOING", "CLOSED"].includes(entry.status));
   const pendingValidation = communicationRows.filter((entry) => ["SUBMITTED", "PENDING_VALIDATION"].includes(entry.status)).length;
   const openCommunications = communicationRows.filter((entry) => ["VALID_OPEN", "ONGOING"].includes(entry.status)).length;
-  const dashboardReferenceDate = new Date();
   const myOpenActions = actionRows.filter(
     (entry) => entry.ownerUserId === session?.user.id && isDashboardOpenAction(entry),
   ).length;
-  const clinicalCases = communicationRows.filter((entry) => entry.type === "FIRST_AID" || entry.type === "ACCIDENT").length;
-  const overdue = actionRows.filter((entry) => isDashboardOverdueAction(entry, dashboardReferenceDate)).length;
+  const backlogActions = backlogActionRows.filter((entry) => actionWasOpenAt(entry, backlogReferenceDate));
+  const overdue = backlogActions.filter((entry) => isDashboardOverdueAction(entry, backlogReferenceDate)).length;
   const openActionsCount = actionRows.filter((entry) => entry.status === "OPEN").length;
   const closedActions = actionRows.filter((entry) => entry.status === "CLOSED").length;
   const actionsToClose = actionRows.filter(isDashboardOpenAction).length;
   const totalActions = actionRows.length;
+  const closedActionsWithDates = actionRows.filter((entry) => entry.status === "CLOSED" && entry.closedAt && entry.dueDate);
+  const closedOnTimePercent = closedActionsWithDates.length > 0
+    ? (closedActionsWithDates.filter((entry) => entry.closedAt! <= entry.dueDate).length / closedActionsWithDates.length) * 100
+    : null;
   const validCommunicationsCount = validCommunications.length;
   const nearMissCount = validCommunications.filter((entry) => entry.type === "NEAR_MISS").length;
+  const unsafeActCount = validCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length;
+  const unsafeConditionCount = validCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length;
   const injuryCount = validCommunications.filter((entry) => entry.type === "ACCIDENT").length;
+  const firstAidCount = validCommunications.filter((entry) => entry.type === "FIRST_AID").length;
   const rootCauseCount = sewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
+  const homologousRootCauseCount = homologousSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const rootCauseTopEntries = buildSewoRootCauseTopEntries(sewoRows);
   const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries);
   const unsafeActTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_ACT);
@@ -385,8 +522,95 @@ export default async function DashboardsPage({
   const closedActionsPercent = totalActions > 0 ? (closedActions / totalActions) * 100 : 0;
   const actionsToClosePercent = totalActions > 0 ? (actionsToClose / totalActions) * 100 : 0;
   const totalHoursWorked = hoursWorkedRows.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
+  const homologousHoursWorked = homologousHoursWorkedRows.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
   const frequencyIndex = totalHoursWorked > 0 ? (injuryCount / totalHoursWorked) * 1_000_000 : 0;
   const severityIndex = totalHoursWorked > 0 ? (lostDays / totalHoursWorked) * 1_000_000 : 0;
+  const firstAidRate = totalHoursWorked > 0 ? (firstAidCount / totalHoursWorked) * 1_000_000 : null;
+  const homologousInjuryCount = homologousValidCommunications.filter((entry) => entry.type === "ACCIDENT").length;
+  const homologousFirstAidCount = homologousValidCommunications.filter((entry) => entry.type === "FIRST_AID").length;
+  const homologousLostDays = homologousValidCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
+  const homologousFrequencyIndex = homologousHoursWorked > 0 ? (homologousInjuryCount / homologousHoursWorked) * 1_000_000 : null;
+  const homologousSeverityIndex = homologousHoursWorked > 0 ? (homologousLostDays / homologousHoursWorked) * 1_000_000 : null;
+  const homologousFirstAidRate = homologousHoursWorked > 0 ? (homologousFirstAidCount / homologousHoursWorked) * 1_000_000 : null;
+  const unsafeActsClosedPercent = getLinkedCommunicationClosureRate(
+    validCommunications.filter((entry) => entry.type === "UNSAFE_ACT"),
+  );
+  const unsafeConditionsClosedPercent = getLinkedCommunicationClosureRate(
+    validCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION"),
+  );
+  const homologousUnsafeActsClosedPercent = getLinkedCommunicationClosureRate(
+    homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_ACT"),
+  );
+  const homologousUnsafeConditionsClosedPercent = getLinkedCommunicationClosureRate(
+    homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION"),
+  );
+  const hasHomologousCommunicationData = homologousPyramidCommunications.length > 0;
+  const actionBacklogTrend = monthBuckets.map((bucket) => {
+    const monthEnd = getMonthEnd(bucket.year, bucket.month);
+    const referenceDate = monthEnd > backlogReferenceDate ? backlogReferenceDate : monthEnd;
+    return {
+      label: bucket.label,
+      value: backlogActionRows.filter((entry) => actionWasOpenAt(entry, referenceDate)).length,
+    };
+  });
+  const actionAgeing = backlogActions.reduce(
+    (result, action) => {
+      const ageDays = Math.max(0, Math.floor((backlogReferenceDate.getTime() - action.createdAt.getTime()) / (24 * 60 * 60 * 1000)));
+      if (ageDays <= 30) result.recent += 1;
+      else if (ageDays <= 60) result.aging += 1;
+      else result.longRunning += 1;
+      return result;
+    },
+    { recent: 0, aging: 0, longRunning: 0 },
+  );
+  const detailedKpiRoles: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY];
+  const showDetailedKpis = Boolean(actorRole && detailedKpiRoles.includes(actorRole));
+  const canViewValidation = showDetailedKpis;
+  const canViewOpenCommunications = Boolean(actorRole);
+  const homologousComparisons = {
+    validatedEvents: hasHomologousCommunicationData
+      ? getHomologousTrend(validCommunicationsCount, homologousValidCommunications.length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    injuries: hasHomologousCommunicationData
+      ? getHomologousTrend(injuryCount, homologousInjuryCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    frequencyRate: homologousFrequencyIndex === null
+      ? undefined
+      : getHomologousTrend(frequencyIndex, homologousFrequencyIndex, ui.dashboard.samePeriodLastYearShort, uiLocale, 2),
+    gravityRate: homologousSeverityIndex === null
+      ? undefined
+      : getHomologousTrend(severityIndex, homologousSeverityIndex, ui.dashboard.samePeriodLastYearShort, uiLocale, 2),
+    daysLost: hasHomologousCommunicationData
+      ? getHomologousTrend(lostDays, homologousLostDays, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    firstAids: hasHomologousCommunicationData
+      ? getHomologousTrend(firstAidCount, homologousFirstAidCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    firstAidRate: homologousFirstAidRate === null || firstAidRate === null
+      ? undefined
+      : getHomologousTrend(firstAidRate, homologousFirstAidRate, ui.dashboard.samePeriodLastYearShort, uiLocale, 2),
+    nearMisses: hasHomologousCommunicationData
+      ? getHomologousTrend(nearMissCount, homologousValidCommunications.filter((entry) => entry.type === "NEAR_MISS").length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    unsafeActs: hasHomologousCommunicationData
+      ? getHomologousTrend(unsafeActCount, homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    unsafeConditions: hasHomologousCommunicationData
+      ? getHomologousTrend(unsafeConditionCount, homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    rootCauses: homologousSewoRows.length > 0
+      ? getHomologousTrend(rootCauseCount, homologousRootCauseCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      : undefined,
+    hoursWorked: homologousHoursWorked > 0
+      ? getHomologousTrend(totalHoursWorked, homologousHoursWorked, ui.dashboard.samePeriodLastYearShort, uiLocale, 2)
+      : undefined,
+    unsafeActsClosedPercent: homologousUnsafeActsClosedPercent === null || unsafeActsClosedPercent === null
+      ? undefined
+      : getHomologousTrend(unsafeActsClosedPercent, homologousUnsafeActsClosedPercent, ui.dashboard.samePeriodLastYearShort, uiLocale, 1),
+    unsafeConditionsClosedPercent: homologousUnsafeConditionsClosedPercent === null || unsafeConditionsClosedPercent === null
+      ? undefined
+      : getHomologousTrend(unsafeConditionsClosedPercent, homologousUnsafeConditionsClosedPercent, ui.dashboard.samePeriodLastYearShort, uiLocale, 1),
+  };
 
   const involvedWorkers = new Map<string, number>();
   const reportingWorkers = new Map<string, number>();
@@ -720,92 +944,17 @@ export default async function DashboardsPage({
 
       <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} />
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <AppCard>
-          <p className="app-section-eyebrow">{ui.dashboard.period}</p>
-          <p className="mt-2 text-sm font-bold text-slate-900">{period.label}</p>
-        </AppCard>
-        <AppKpiCard
-          label={ui.dashboard.validatedEvents}
-          value={validCommunicationsCount.toLocaleString()}
-          tone="success"
-          icon={<CheckCircle2 className="h-5 w-5" />}
-        />
-        <AppKpiCard
-          label={ui.dashboard.hoursWorked}
-          value={totalHoursWorked.toFixed(2)}
-          tone="violet"
-          icon={<Clock3 className="h-5 w-5" />}
-        />
-        <AppKpiCard
-          label={ui.dashboard.overdueActions}
-          value={overdue.toLocaleString()}
-          tone="danger"
-          icon={<AlertTriangle className="h-5 w-5" />}
-        />
-        <AppKpiCard
-          label={ui.dashboard.myOpenActions}
-          value={myOpenActions.toLocaleString()}
-          tone="warning"
-          icon={<UserCheck className="h-5 w-5" />}
-        />
-        <div className="grid gap-4 md:col-span-5 xl:grid-cols-4">
-          <RootCauseTopFiveCard
-            title={ui.dashboard.rootCauseTopFive}
-            entries={rootCauseTopEntries}
-            total={rootCauseCount}
-            noDataLabel={ui.dashboard.noRootCauses}
-            totalLabel={ui.dashboard.rootCauseTotal}
-          />
-          <RootCauseTopFiveCard
-            title={ui.dashboard.unsafeActTypeTopFive}
-            entries={unsafeActTypeTopEntries}
-            total={unsafeActTypeTotal}
-            noDataLabel={ui.dashboard.noUnsafeActTypes}
-            totalLabel={ui.dashboard.rootCauseTotal}
-          />
-          <RootCauseTopFiveCard
-            title={ui.dashboard.unsafeConditionTypeTopFive}
-            entries={unsafeConditionTypeTopEntries}
-            total={unsafeConditionTypeTotal}
-            noDataLabel={ui.dashboard.noUnsafeConditionTypes}
-            totalLabel={ui.dashboard.rootCauseTotal}
-          />
-          <RootCauseTopFiveCard
-            title={ui.dashboard.nearMissTypeTopFive}
-            entries={nearMissTypeTopEntries}
-            total={nearMissTypeTotal}
-            noDataLabel={ui.dashboard.noNearMissTypes}
-            totalLabel={ui.dashboard.rootCauseTotal}
-          />
-        </div>
-      </section>
-
-      {actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N2_PLANT_MANAGER ? (
-        <section className="grid gap-4 md:grid-cols-2">
-          <AppKpiCard label={ui.dashboard.openCommunications} value={openCommunications.toLocaleString()} tone="brand" icon={<Inbox className="h-5 w-5" />} />
-          <AppKpiCard label={ui.dashboard.pendingValidation} value={pendingValidation.toLocaleString()} tone="warning" icon={<ClipboardCheck className="h-5 w-5" />} />
-        </section>
-      ) : null}
-
-      {actorRole === RoleCode.N3_SAFETY ? (
-        <section className="grid gap-4 md:grid-cols-3">
-          <AppKpiCard label={ui.dashboard.pendingValidation} value={pendingValidation.toLocaleString()} tone="warning" icon={<ClipboardCheck className="h-5 w-5" />} />
-          <AppKpiCard label={ui.dashboard.openCommunications} value={openCommunications.toLocaleString()} tone="brand" icon={<Inbox className="h-5 w-5" />} />
-          <AppKpiCard label={ui.dashboard.clinicalCases} value={clinicalCases.toLocaleString()} tone="danger" icon={<Stethoscope className="h-5 w-5" />} />
-        </section>
-      ) : null}
-
-      {actorRole === RoleCode.N4_SUPERVISOR || actorRole === RoleCode.N5_OPERATOR ? (
-        <section className="grid gap-4 md:grid-cols-1">
-          <AppKpiCard label={ui.dashboard.openCommunications} value={openCommunications.toLocaleString()} tone="brand" icon={<Inbox className="h-5 w-5" />} />
-        </section>
-      ) : null}
-
-      <CommunicationPyramid
+      <SafetyCommunicationPyramid
         title={ui.dashboard.safetyCommunicationPyramid}
-        description={ui.dashboard.selectedPeriodPyramidDescription}
         counts={pyramidCounts}
+        previousCounts={homologousPyramidCounts}
+        locale={uiLocale}
+        scopeLabel={plantRow.name}
+        periodLabel={period.label}
+        classificationRule={ui.dashboard.pyramidClassificationRule}
+        hierarchyLabel={ui.dashboard.pyramidHierarchyNote}
+        emptyLabel={ui.dashboard.pyramidEmptyState}
+        previousPeriodLabel={ui.dashboard.samePeriodLastYearShort}
         helpLabel={ui.dashboard.help}
         labels={{
           fatal: ui.dashboard.pyramidFatal,
@@ -817,6 +966,74 @@ export default async function DashboardsPage({
           unsafeAct: ui.dashboard.pyramidUnsafeAct,
         }}
       />
+
+      <SafetyDashboardKpiGroups
+        locale={uiLocale}
+        periodLabel={period.label}
+        labels={ui.dashboard}
+        detailed={showDetailedKpis}
+        canViewValidation={canViewValidation}
+        canViewOpenCommunications={canViewOpenCommunications}
+        metrics={{
+          validatedEvents: validCommunicationsCount,
+          injuries: injuryCount,
+          daysLost: lostDays,
+          firstAids: firstAidCount,
+          frequencyRate: totalHoursWorked > 0 ? frequencyIndex : null,
+          gravityRate: totalHoursWorked > 0 ? severityIndex : null,
+          firstAidRate,
+          nearMisses: nearMissCount,
+          unsafeActs: unsafeActCount,
+          unsafeConditions: unsafeConditionCount,
+          rootCauses: rootCauseCount,
+          openActions: backlogActions.length,
+          overdueActions: overdue,
+          closedOnTimePercent,
+          unsafeActsClosedPercent,
+          unsafeConditionsClosedPercent,
+          pendingValidation,
+          openCommunications,
+          myOpenActions,
+          hoursWorked: hoursWorkedRows.length > 0 ? totalHoursWorked : null,
+          comparisons: homologousComparisons,
+          backlog: {
+            total: backlogActions.length,
+            trend: actionBacklogTrend,
+            ageing: actionAgeing,
+          },
+        }}
+      />
+
+      {showDetailedKpis ? <section className="grid gap-4 xl:grid-cols-4">
+        <RootCauseTopFiveCard
+          title={ui.dashboard.rootCauseTopFive}
+          entries={rootCauseTopEntries}
+          total={rootCauseCount}
+          noDataLabel={ui.dashboard.noRootCauses}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+        <RootCauseTopFiveCard
+          title={ui.dashboard.unsafeActTypeTopFive}
+          entries={unsafeActTypeTopEntries}
+          total={unsafeActTypeTotal}
+          noDataLabel={ui.dashboard.noUnsafeActTypes}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+        <RootCauseTopFiveCard
+          title={ui.dashboard.unsafeConditionTypeTopFive}
+          entries={unsafeConditionTypeTopEntries}
+          total={unsafeConditionTypeTotal}
+          noDataLabel={ui.dashboard.noUnsafeConditionTypes}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+        <RootCauseTopFiveCard
+          title={ui.dashboard.nearMissTypeTopFive}
+          entries={nearMissTypeTopEntries}
+          total={nearMissTypeTotal}
+          noDataLabel={ui.dashboard.noNearMissTypes}
+          totalLabel={ui.dashboard.rootCauseTotal}
+        />
+      </section> : null}
 
       {(actorRole === RoleCode.N0_ADMIN ||
         actorRole === RoleCode.N1_CORPORATE ||

@@ -104,6 +104,28 @@ export function buildMonthBuckets(from: Date, to: Date) {
   return buckets;
 }
 
+export function limitDashboardMonthBucketsToObserved(
+  buckets: ReturnType<typeof buildMonthBuckets>,
+  {
+    now = new Date(),
+    partialLabel = "partial",
+    markCurrentMonth = true,
+  }: {
+    now?: Date;
+    partialLabel?: string;
+    markCurrentMonth?: boolean;
+  } = {},
+) {
+  const currentMonthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+
+  return buckets
+    .filter((bucket) => bucket.key <= currentMonthKey)
+    .map((bucket) => ({
+      ...bucket,
+      label: markCurrentMonth && bucket.key === currentMonthKey ? `${bucket.label} (${partialLabel})` : bucket.label,
+    }));
+}
+
 export function createEmptyMonthlyMetricSnapshot(monthKey: string, monthLabel: string): MonthlyMetricSnapshot {
   return {
     monthKey,
