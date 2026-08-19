@@ -428,6 +428,10 @@ async function notifySewoRejected(input: {
 
 const OPEN_LINKED_ACTIONS_MESSAGE = "Não é possível fechar este S-EWO porque existem ações associadas ainda em aberto.";
 const PENDING_COMMUNICATION_LINK_MESSAGE = "This communication must be validated before actions or S-EWO can be linked.";
+const COMMUNICATION_ALREADY_HAS_SEWO_MESSAGE = "This communication already has a linked S-EWO.";
+const SEWO_DELETE_DRAFT_ONLY_MESSAGE = "Only draft S-EWO records can be deleted.";
+const SEWO_DELETE_LINKED_ACTIONS_MESSAGE = "S-EWO records with linked actions cannot be deleted.";
+const SEWO_DELETE_CONFLICT_MESSAGE = "This S-EWO was changed by another user. Refresh the page and try again.";
 
 export class SewoValidationError extends Error {
   constructor(
@@ -755,6 +759,24 @@ async function sendSewoApprovedExternalReports(input: {
   }
 }
 
+async function assertCommunicationHasNoOtherLinkedSewo(input: {
+  communicationId: string;
+  excludeSewoId?: string;
+}) {
+  const linkedSewo = await prisma.sEWO.findFirst({
+    where: {
+      communicationId: input.communicationId,
+      deletedAt: null,
+      ...(input.excludeSewoId ? { id: { not: input.excludeSewoId } } : {}),
+    },
+    select: { id: true },
+  });
+
+  if (linkedSewo) {
+    throw new SewoValidationError("COMMUNICATION_ALREADY_HAS_SEWO", COMMUNICATION_ALREADY_HAS_SEWO_MESSAGE, 409);
+  }
+}
+
 async function notifySewoRejectedReportShared(sewoId: string) {
   const sewo = await prisma.sEWO.findUniqueOrThrow({
     where: { id: sewoId },
@@ -937,6 +959,7 @@ export const SewaService = {
     ]);
     if (input.payload.communicationId) {
       assertCommunicationCanBeLinkedToManualSewo({ communication: linkedCommunication });
+      await assertCommunicationHasNoOtherLinkedSewo({ communicationId: input.payload.communicationId });
     }
 
     const requestedStatus = input.payload.status ?? SEWOStatus.DRAFT;
@@ -958,7 +981,7 @@ export const SewaService = {
         analysisDate: input.payload.analysisDate,
       });
 
-      return tx.sEWO.create({
+      const created = await tx.sEWO.create({
         data: {
           plantId: input.plantId,
           communicationId: input.payload.communicationId ?? null,
@@ -1008,6 +1031,14 @@ export const SewaService = {
           attachments: true,
         },
       });
+
+      if (input.payload.communicationId) {
+        await tx.sewoAutoCreationSuppression.deleteMany({
+          where: { communicationId: input.payload.communicationId },
+        });
+      }
+
+      return created;
     });
 
     await writeAuditLog({
@@ -1045,6 +1076,9 @@ export const SewaService = {
         attachments: true,
       },
     });
+    if (before.deletedAt) {
+      throw new SewoValidationError("NOT_FOUND", "SEWO not found", 404);
+    }
     if (input.payload.communicationId) {
       const linkedCommunication = await prisma.communication.findFirst({
         where: {
@@ -1058,6 +1092,10 @@ export const SewaService = {
       });
 
       assertCommunicationCanBeLinkedToManualSewo({ communication: linkedCommunication });
+      await assertCommunicationHasNoOtherLinkedSewo({
+        communicationId: input.payload.communicationId,
+        excludeSewoId: input.sewoId,
+      });
     }
 
     const requestedStatus = input.payload.status ?? before.status;
@@ -1409,34 +1447,69 @@ export const SewaService = {
   async deleteSewo(input: {
     sewoId: string;
     actorUserId: string;
+    expectedUpdatedAt: Date;
   }) {
-    const before = await prisma.sEWO.findUniqueOrThrow({
-      where: { id: input.sewoId },
+    const before = await prisma.sEWO.findFirst({
+      where: {
+        id: input.sewoId,
+        deletedAt: null,
+      },
       include: {
         actions: { select: { id: true } },
+        actionLinks: { select: { id: true } },
       },
     });
 
-    const actionIds = before.actions.map((entry) => entry.id);
+    if (!before) {
+      throw new SewoValidationError("NOT_FOUND", "SEWO not found", 404);
+    }
+
+    if (before.status !== SEWOStatus.DRAFT) {
+      throw new SewoValidationError("SEWO_DELETE_DRAFT_ONLY", SEWO_DELETE_DRAFT_ONLY_MESSAGE, 409);
+    }
+
+    if (before.actions.length > 0 || before.actionLinks.length > 0) {
+      throw new SewoValidationError("SEWO_HAS_LINKED_ACTIONS", SEWO_DELETE_LINKED_ACTIONS_MESSAGE, 409);
+    }
+
+    if (before.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+      throw new SewoValidationError("SEWO_DELETE_CONFLICT", SEWO_DELETE_CONFLICT_MESSAGE, 409);
+    }
+
+    const deletedAt = new Date();
 
     await prisma.$transaction(async (tx) => {
-      if (actionIds.length > 0) {
-        await tx.actionEvidenceAttachment.deleteMany({
-          where: { actionId: { in: actionIds } },
-        });
-        await tx.actionCoOwner.deleteMany({
-          where: { actionId: { in: actionIds } },
-        });
-        await tx.sEWOActionLink.deleteMany({ where: { sewoId: input.sewoId } });
-        await tx.action.deleteMany({
-          where: { id: { in: actionIds } },
-        });
+      const result = await tx.sEWO.updateMany({
+        where: {
+          id: input.sewoId,
+          status: SEWOStatus.DRAFT,
+          deletedAt: null,
+          updatedAt: before.updatedAt,
+        },
+        data: {
+          deletedAt,
+          deletedByUserId: input.actorUserId,
+          communicationId: null,
+        },
+      });
+
+      if (result.count !== 1) {
+        throw new SewoValidationError("SEWO_DELETE_CONFLICT", SEWO_DELETE_CONFLICT_MESSAGE, 409);
       }
 
-      await tx.sEWOActionLink.deleteMany({ where: { sewoId: input.sewoId } });
-      await tx.sEWOAttachment.deleteMany({ where: { sewoId: input.sewoId } });
-      await tx.sEWOCauseSelection.deleteMany({ where: { sewoId: input.sewoId } });
-      await tx.sEWO.delete({ where: { id: input.sewoId } });
+      if (before.isAutoCreated && before.communicationId) {
+        await tx.sewoAutoCreationSuppression.upsert({
+          where: { communicationId: before.communicationId },
+          create: {
+            communicationId: before.communicationId,
+            suppressedByUserId: input.actorUserId,
+          },
+          update: {
+            suppressedAt: deletedAt,
+            suppressedByUserId: input.actorUserId,
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -1447,8 +1520,13 @@ export const SewaService = {
           plantId: before.plantId,
           diffJson: {
             before,
-            after: null,
-            fieldsChanged: Object.keys(before),
+            after: {
+              ...before,
+              communicationId: null,
+              deletedAt,
+              deletedByUserId: input.actorUserId,
+            },
+            fieldsChanged: ["communicationId", "deletedAt", "deletedByUserId"],
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -1456,7 +1534,7 @@ export const SewaService = {
 
     return {
       id: input.sewoId,
-      deletedLinkedActions: actionIds.length,
+      deletedAt: deletedAt.toISOString(),
     };
   },
 
@@ -1483,7 +1561,7 @@ export const SewaService = {
       },
     });
 
-    if (sewo.status === SEWOStatus.IN_APPROVAL || sewo.status === SEWOStatus.REJECTED) {
+    if (sewo.deletedAt || sewo.status === SEWOStatus.IN_APPROVAL || sewo.status === SEWOStatus.REJECTED) {
       return prisma.sEWO.findUniqueOrThrow({ where: { id: sewoId } });
     }
 
@@ -1521,11 +1599,18 @@ export const SewaService = {
     communicationId: string;
     actorUserId: string;
   }) {
-    const existing = await prisma.sEWO.findFirst({
-      where: {
-        communicationId: input.communicationId,
-      },
-    });
+    const [existing, suppression] = await Promise.all([
+      prisma.sEWO.findFirst({
+        where: {
+          communicationId: input.communicationId,
+          deletedAt: null,
+        },
+      }),
+      prisma.sewoAutoCreationSuppression.findUnique({
+        where: { communicationId: input.communicationId },
+        select: { id: true },
+      }),
+    ]);
 
     if (existing) {
       await prisma.$transaction((tx) =>
@@ -1537,6 +1622,10 @@ export const SewaService = {
         }),
       );
       return existing;
+    }
+
+    if (suppression) {
+      return null;
     }
 
     const [actor, communication, catalog] = await prisma.$transaction([

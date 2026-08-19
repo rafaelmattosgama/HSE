@@ -42,6 +42,7 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
     where: {
       id,
       plantId: plant.id,
+      deletedAt: null,
     },
     select: { id: true },
   });

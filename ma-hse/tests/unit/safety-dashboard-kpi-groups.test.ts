@@ -44,11 +44,25 @@ describe("SafetyDashboardKpiGroups", () => {
           trend: [{ label: "Jan 2026", value: 1 }, { label: "Feb 2026", value: 3 }],
           ageing: { recent: 1, aging: 1, longRunning: 1 },
         },
+        sifPsif: {
+          plantName: "Plant A",
+          current: {
+            overall: { total: 2, sif: 1, psif: 0, sifOrPsif: 1, sifPercent: 50, psifPercent: 0, sifOrPsifPercent: 50 },
+            byCategory: {
+              FIRST_AID: { total: 1, sif: 1, psif: 0, sifOrPsif: 1, sifPercent: 100, psifPercent: 0, sifOrPsifPercent: 100 },
+              NEAR_MISS: { total: 1, sif: 0, psif: 0, sifOrPsif: 0, sifPercent: 0, psifPercent: 0, sifOrPsifPercent: 0 },
+              ACCIDENT: { total: 0, sif: 0, psif: 0, sifOrPsif: 0, sifPercent: null, psifPercent: null, sifOrPsifPercent: null },
+            },
+          },
+          comparisons: {},
+        },
       },
     }));
 
     expect(screen.getByRole("heading", { name: labels.kpiSafetyOutcomes })).toBeTruthy();
     expect(screen.getByRole("heading", { name: labels.kpiLeadingIndicators })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: labels.kpiSifPsifIndicators })).toBeTruthy();
+    expect(screen.getByRole("button", { name: `Definition: ${labels.kpiSifPsifIncidents}` })).toBeTruthy();
     const exposureHeading = screen.getByRole("heading", { name: labels.kpiExposureScope });
     const actionsHeading = screen.getByRole("heading", { name: labels.kpiActionsCompliance });
     expect(exposureHeading.compareDocumentPosition(actionsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

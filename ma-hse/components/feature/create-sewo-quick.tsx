@@ -432,7 +432,6 @@ export function CreateSewoQuick({
   const [associatedCommunicationExpanded, setAssociatedCommunicationExpanded] = useState(!initialSewo);
   const [statusReason, setStatusReason] = useState("");
   const [changingStatus, setChangingStatus] = useState(false);
-  const [deletingSewo, setDeletingSewo] = useState(false);
   const [linkedActionDraft, setLinkedActionDraft] = useState<ActionPlanRow>(() => createActionPlanRow());
   const [editableCommunicationActions, setEditableCommunicationActions] = useState<EditableCommunicationAction[]>(
     () => initialSewo?.linkedActions.map((action) => ({ ...action, dirty: false })) ?? [],
@@ -1001,34 +1000,6 @@ export function CreateSewoQuick({
     }
   }
 
-  async function deleteSewoRecord() {
-    if (!initialSewo) return;
-
-    if (!window.confirm("Delete this S-EWO record? This action cannot be undone.")) {
-      return;
-    }
-
-    setDeletingSewo(true);
-    setMessage("");
-
-    try {
-      const response = await fetch(`/api/plants/${plant}/sewo/${initialSewo.id}`, {
-        method: "DELETE",
-      });
-
-      const json = await parseApiResponse(response);
-      if (!response.ok || !json?.ok) {
-        throw new Error(json?.message ?? "Failed to delete S-EWO");
-      }
-
-      window.location.href = `/app/${plant}/sewo`;
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to delete S-EWO");
-    } finally {
-      setDeletingSewo(false);
-    }
-  }
-
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     await saveSewo(!initialSewo || initialSewo.status === SEWOStatus.DRAFT || isRejectedSewo ? "submit" : "save");
@@ -1111,15 +1082,6 @@ export function CreateSewoQuick({
               onClick={() => void reopenSewo()}
             >
               {changingStatus ? ui.savingAction : "Reopen S-EWO"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              disabled={deletingSewo}
-              onClick={() => void deleteSewoRecord()}
-            >
-              {deletingSewo ? "Deleting..." : "Delete S-EWO"}
             </Button>
           </div>
         </section>

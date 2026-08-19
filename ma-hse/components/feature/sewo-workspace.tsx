@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CreateSewoQuick } from "@/components/feature/create-sewo-quick";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { parseApiResponse } from "@/lib/client-api";
 import type { RootCauseGroup, SewoUi } from "@/lib/sewo-ui";
 
 type Option = {
@@ -98,6 +102,8 @@ type SewoRow = {
   typeLabel: string;
   status: string;
   statusLabel: string;
+  updatedAt: string;
+  linkedActionCount: number;
   communicationId: string | null;
   performedByName: string;
   description: string;
@@ -120,6 +126,7 @@ export function SewoWorkspace({
   actionOwners,
   ui,
   rootCauseGroups,
+  canDeleteSewo,
 }: {
   plant: string;
   initialSelectedSewoId?: string | null;
@@ -136,12 +143,58 @@ export function SewoWorkspace({
   actionOwners: Option[];
   ui: SewoUi;
   rootCauseGroups: RootCauseGroup[];
+  canDeleteSewo: boolean;
 }) {
+  const router = useRouter();
+  const [rows, setRows] = useState(sewoRows);
+  const [deleteTarget, setDeleteTarget] = useState<SewoRow | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [listMessage, setListMessage] = useState("");
   const selectedSewo = initialSelectedSewoId
     ? sewoRows.find((row) => row.id === initialSelectedSewoId) ?? null
     : null;
   const view = selectedSewo ? "edit" : mode;
   const listHref = `/app/${plant}/sewo`;
+
+  useEffect(() => {
+    setRows(sewoRows);
+  }, [sewoRows]);
+
+  function deleteDisabledReason(row: SewoRow) {
+    if (!canDeleteSewo) return ui.deleteSewoNotAllowed;
+    if (row.status !== "DRAFT") return ui.deleteSewoDraftOnly;
+    if (row.linkedActionCount > 0) return ui.deleteSewoLinkedActions;
+    return null;
+  }
+
+  async function deleteSewo(row: SewoRow) {
+    setIsDeleting(true);
+    setDeleteError("");
+    setListMessage("");
+
+    try {
+      const response = await fetch(`/api/plants/${plant}/sewo/${row.id}`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ updatedAt: row.updatedAt }),
+      });
+      const json = await parseApiResponse(response);
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message ?? ui.deleteSewoError);
+      }
+
+      setRows((currentRows) => currentRows.filter((entry) => entry.id !== row.id));
+      setDeleteTarget(null);
+      setListMessage(ui.deleteSewoSuccess);
+      router.refresh();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : ui.deleteSewoError);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -164,6 +217,7 @@ export function SewoWorkspace({
 
       {view === "list" ? (
         <section className="app-panel overflow-x-auto rounded-xl">
+          {listMessage ? <p className="px-4 pt-4 text-sm font-medium text-slate-700" role="status">{listMessage}</p> : null}
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -173,11 +227,15 @@ export function SewoWorkspace({
                 <th className="px-4 py-3">{ui.tableType}</th>
                 <th className="px-4 py-3">{ui.tableStatus}</th>
                 <th className="px-4 py-3">{ui.tableEdit}</th>
+                <th className="px-4 py-3">{ui.tableDelete}</th>
               </tr>
             </thead>
             <tbody>
-              {sewoRows.map((row) => (
-                <tr key={row.id} className="border-t border-slate-200">
+              {rows.map((row) => {
+                const disabledReason = deleteDisabledReason(row);
+
+                return (
+                  <tr key={row.id} className="border-t border-slate-200">
                   <td className="px-4 py-3">{row.date}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{row.codigoSewo ?? "Requires code update"}</td>
                   <td className="px-4 py-3">{row.local}</td>
@@ -190,11 +248,30 @@ export function SewoWorkspace({
                       {ui.editButton}
                     </Link>
                   </td>
-                </tr>
-              ))}
-              {sewoRows.length === 0 ? (
+                  <td className="px-4 py-3">
+                    <span className="inline-flex" title={disabledReason ?? ui.deleteSewo}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        className="h-8 w-8 p-0"
+                        disabled={Boolean(disabledReason) || isDeleting}
+                        onClick={() => {
+                          setDeleteError("");
+                          setDeleteTarget(row);
+                        }}
+                        aria-label={`${ui.deleteSewo} ${row.codigoSewo ?? row.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </span>
+                  </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 ? (
                 <tr className="border-t border-slate-200">
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">{ui.noRecords}</td>
                 </tr>
               ) : null}
             </tbody>
@@ -275,6 +352,38 @@ export function SewoWorkspace({
             {ui.close}
           </Link>
         </section>
+      ) : null}
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-[2px]">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-sewo-title"
+            className="app-panel w-full max-w-md rounded-2xl p-6 shadow-2xl"
+          >
+            <h2 id="delete-sewo-title" className="text-lg font-semibold text-slate-900">{ui.deleteSewoConfirmTitle}</h2>
+            <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-800">
+              {deleteTarget.codigoSewo ?? "S-EWO"}
+            </p>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-slate-600">{ui.tableDate}</dt><dd className="font-medium text-slate-900">{deleteTarget.date}</dd></div>
+              <div><dt className="text-slate-600">{ui.tableLocation}</dt><dd className="font-medium text-slate-900">{deleteTarget.local}</dd></div>
+              <div><dt className="text-slate-600">{ui.tableType}</dt><dd className="font-medium text-slate-900">{deleteTarget.typeLabel}</dd></div>
+              <div><dt className="text-slate-600">{ui.tableStatus}</dt><dd className="font-medium text-slate-900">{deleteTarget.statusLabel}</dd></div>
+            </dl>
+            <p className="mt-4 text-sm leading-6 text-amber-800">{ui.deleteSewoImpact}</p>
+            {deleteError ? <p className="mt-3 text-sm font-medium text-red-700" role="alert">{deleteError}</p> : null}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+                {ui.deleteSewoCancel}
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => void deleteSewo(deleteTarget)} disabled={isDeleting} aria-busy={isDeleting}>
+                {isDeleting ? ui.savingAction : ui.deleteSewo}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

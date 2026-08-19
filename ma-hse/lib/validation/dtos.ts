@@ -437,6 +437,10 @@ export const createSEWOInput = z.object({
 
 export const updateSEWOInput = createSEWOInput;
 
+export const deleteSEWOInput = z.object({
+  updatedAt: z.coerce.date(),
+});
+
 export const approveSEWOInput = z.object({
   approved: z.boolean(),
   approvalComment: z.string().min(3),
@@ -897,6 +901,7 @@ export type BulkCloseActionInput = z.infer<typeof bulkCloseActionInput>;
 export type ReopenActionInput = z.infer<typeof reopenEntityInput>;
 export type CreateSEWOInput = z.infer<typeof createSEWOInput>;
 export type UpdateSEWOInput = z.infer<typeof updateSEWOInput>;
+export type DeleteSEWOInput = z.infer<typeof deleteSEWOInput>;
 export type ApproveSEWOInput = z.infer<typeof approveSEWOInput>;
 export type ChangeSewoDecisionInput = z.infer<typeof changeSewoDecisionInput>;
 export type UpdateActionInput = z.infer<typeof updateActionInput>;

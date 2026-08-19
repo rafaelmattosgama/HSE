@@ -29,6 +29,7 @@ export function createSewoTools(ctx: AgentToolContext) {
             const rows = await prisma.sEWO.findMany({
               where: {
                 plantId: ctx.plantId,
+                deletedAt: null,
                 ...(input.status ? { status: input.status } : {}),
               },
               include: {

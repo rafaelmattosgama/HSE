@@ -57,6 +57,9 @@ export type RankingEntry = {
   plantCode: string;
   plantName: string;
   value: number;
+  count?: number;
+  total?: number;
+  percentage?: number;
 };
 
 export type RankingGroup = {

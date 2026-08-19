@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CommunicationType, MasterDataEntityType, RoleCode } from "@prisma/client";
+import { CommunicationType, MasterDataEntityType, RoleCode, SEWOStatus } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/options";
 import { resolveDashboardPeriod, type DashboardSearchParams } from "@/lib/dashboard-period";
@@ -38,6 +38,10 @@ import {
   COMMUNICATION_IN_VALIDATION_STATUSES,
   isDashboardPyramidCommunicationStatus,
 } from "@/lib/communication-status";
+import {
+  buildSifPsifIndicatorBreakdown,
+  SIF_PSIF_ELIGIBLE_COMMUNICATION_TYPES,
+} from "@/lib/sif-psif-indicators";
 
 function buildPyramidCounts(
   rows: Array<{
@@ -76,6 +80,24 @@ function buildPyramidCommunicationWhere(plantId: string, period: { from: Date; t
         },
       },
     ],
+  };
+}
+
+function buildClosedSifPsifIncidentWhere(plantId: string, period: { from: Date; to: Date }) {
+  return {
+    plantId,
+    type: {
+      in: [...SIF_PSIF_ELIGIBLE_COMMUNICATION_TYPES],
+    },
+    eventDatetime: {
+      gte: period.from,
+      lte: period.to,
+    },
+    sewoRecords: {
+      some: {
+        status: SEWOStatus.CLOSED,
+      },
+    },
   };
 }
 
@@ -129,29 +151,47 @@ function buildMonthlyInputFilter(period: { from: Date; to: Date }) {
 }
 
 function buildTopEntries(map: Map<string, number>) {
+  const total = [...map.values()].reduce((sum, value) => sum + value, 0);
+
   return [...map.entries()]
     .map(([label, value], index) => ({
       plantCode: `rank-${index}-${label}`,
       plantName: label,
       value,
+      count: value,
+      total,
+      percentage: total > 0 ? (value / total) * 100 : 0,
     }))
     .sort((a, b) => b.value - a.value || a.plantName.localeCompare(b.plantName))
     .slice(0, 5);
 }
 
-function toRootCauseRankingEntries(entries: ReturnType<typeof buildSewoRootCauseTopEntries>): RankingEntry[] {
+function toRootCauseRankingEntries(
+  entries: ReturnType<typeof buildSewoRootCauseTopEntries>,
+  total: number,
+): RankingEntry[] {
   return entries.map((entry, index) => ({
     plantCode: `root-cause-${index}-${entry.label}`,
     plantName: entry.label,
     value: entry.percentage,
+    count: entry.count,
+    total,
+    percentage: entry.percentage,
   }));
 }
 
-function toCommunicationTypeRankingEntries(entries: CommunicationTypeTopEntry[], prefix: string): RankingEntry[] {
+function toCommunicationTypeRankingEntries(
+  entries: CommunicationTypeTopEntry[],
+  prefix: string,
+  total: number,
+): RankingEntry[] {
   return entries.map((entry, index) => ({
     plantCode: `${prefix}-${index}-${entry.label}`,
     plantName: entry.label,
     value: entry.percentage,
+    count: entry.count,
+    total,
+    percentage: entry.percentage,
   }));
 }
 
@@ -244,6 +284,8 @@ export default async function DashboardsPage({
     communicationDateRange,
     monthlyYearRange,
     injuryHistoryRows,
+    sifPsifIncidentRows,
+    homologousSifPsifIncidentRows,
   ] = await prisma.$transaction([
     prisma.communication.findMany({
       where: {
@@ -344,6 +386,7 @@ export default async function DashboardsPage({
     prisma.sEWO.findMany({
       where: {
         plantId: plantRow.id,
+        deletedAt: null,
         analysisDate: {
           gte: period.from,
           lte: period.to,
@@ -383,6 +426,7 @@ export default async function DashboardsPage({
     prisma.sEWO.findMany({
       where: {
         plantId: plantRow.id,
+        deletedAt: null,
         analysisDate: {
           gte: homologousPeriod.from,
           lte: homologousPeriod.to,
@@ -458,6 +502,36 @@ export default async function DashboardsPage({
         eventDatetime: "asc",
       },
     }),
+    prisma.communication.findMany({
+      where: buildClosedSifPsifIncidentWhere(plantRow.id, period),
+      select: {
+        id: true,
+        type: true,
+        sewoRecords: {
+          where: {
+            status: SEWOStatus.CLOSED,
+          },
+          select: {
+            templateData: true,
+          },
+        },
+      },
+    }),
+    prisma.communication.findMany({
+      where: buildClosedSifPsifIncidentWhere(plantRow.id, homologousPeriod),
+      select: {
+        id: true,
+        type: true,
+        sewoRecords: {
+          where: {
+            status: SEWOStatus.CLOSED,
+          },
+          select: {
+            templateData: true,
+          },
+        },
+      },
+    }),
   ]);
   const localizedWorkstations = await localizeMasterDataRows(
     MasterDataEntityType.WORKSTATION,
@@ -511,13 +585,15 @@ export default async function DashboardsPage({
   const rootCauseCount = sewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const homologousRootCauseCount = homologousSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const rootCauseTopEntries = buildSewoRootCauseTopEntries(sewoRows);
-  const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries);
+  const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries, rootCauseCount);
   const unsafeActTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_ACT);
   const unsafeConditionTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_CONDITION);
   const nearMissTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.NEAR_MISS);
   const unsafeActTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.UNSAFE_ACT);
   const unsafeConditionTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.UNSAFE_CONDITION);
   const nearMissTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.NEAR_MISS);
+  const sifPsifIndicators = buildSifPsifIndicatorBreakdown(sifPsifIncidentRows);
+  const homologousSifPsifIndicators = buildSifPsifIndicatorBreakdown(homologousSifPsifIncidentRows);
   const lostDays = validCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
   const closedActionsPercent = totalActions > 0 ? (closedActions / totalActions) * 100 : 0;
   const actionsToClosePercent = totalActions > 0 ? (actionsToClose / totalActions) * 100 : 0;
@@ -612,6 +688,47 @@ export default async function DashboardsPage({
       : getHomologousTrend(unsafeConditionsClosedPercent, homologousUnsafeConditionsClosedPercent, ui.dashboard.samePeriodLastYearShort, uiLocale, 1),
   };
 
+  const sifPsifComparisons = {
+    overall: homologousSifPsifIndicators.overall.total > 0
+      ? getHomologousTrend(
+          sifPsifIndicators.overall.sifOrPsifPercent ?? 0,
+          homologousSifPsifIndicators.overall.sifOrPsifPercent ?? 0,
+          ui.dashboard.samePeriodLastYearShort,
+          uiLocale,
+          1,
+        )
+      : undefined,
+    byCategory: {
+      FIRST_AID: homologousSifPsifIndicators.byCategory.FIRST_AID.total > 0
+        ? getHomologousTrend(
+            sifPsifIndicators.byCategory.FIRST_AID.sifOrPsifPercent ?? 0,
+            homologousSifPsifIndicators.byCategory.FIRST_AID.sifOrPsifPercent ?? 0,
+            ui.dashboard.samePeriodLastYearShort,
+            uiLocale,
+            1,
+          )
+        : undefined,
+      NEAR_MISS: homologousSifPsifIndicators.byCategory.NEAR_MISS.total > 0
+        ? getHomologousTrend(
+            sifPsifIndicators.byCategory.NEAR_MISS.sifOrPsifPercent ?? 0,
+            homologousSifPsifIndicators.byCategory.NEAR_MISS.sifOrPsifPercent ?? 0,
+            ui.dashboard.samePeriodLastYearShort,
+            uiLocale,
+            1,
+          )
+        : undefined,
+      ACCIDENT: homologousSifPsifIndicators.byCategory.ACCIDENT.total > 0
+        ? getHomologousTrend(
+            sifPsifIndicators.byCategory.ACCIDENT.sifOrPsifPercent ?? 0,
+            homologousSifPsifIndicators.byCategory.ACCIDENT.sifOrPsifPercent ?? 0,
+            ui.dashboard.samePeriodLastYearShort,
+            uiLocale,
+            1,
+          )
+        : undefined,
+    },
+  };
+
   const involvedWorkers = new Map<string, number>();
   const reportingWorkers = new Map<string, number>();
   const involvedDepartments = new Map<string, number>();
@@ -643,21 +760,21 @@ export default async function DashboardsPage({
       id: "unsafe-act-types-top",
       title: ui.dashboard.unsafeActTypeTopFive,
       variant: "percent",
-      higher: toCommunicationTypeRankingEntries(unsafeActTypeTopEntries, "unsafe-act-type"),
+      higher: toCommunicationTypeRankingEntries(unsafeActTypeTopEntries, "unsafe-act-type", unsafeActTypeTotal),
       lower: [],
     },
     {
       id: "unsafe-condition-types-top",
       title: ui.dashboard.unsafeConditionTypeTopFive,
       variant: "percent",
-      higher: toCommunicationTypeRankingEntries(unsafeConditionTypeTopEntries, "unsafe-condition-type"),
+      higher: toCommunicationTypeRankingEntries(unsafeConditionTypeTopEntries, "unsafe-condition-type", unsafeConditionTypeTotal),
       lower: [],
     },
     {
       id: "near-miss-types-top",
       title: ui.dashboard.nearMissTypeTopFive,
       variant: "percent",
-      higher: toCommunicationTypeRankingEntries(nearMissTypeTopEntries, "near-miss-type"),
+      higher: toCommunicationTypeRankingEntries(nearMissTypeTopEntries, "near-miss-type", nearMissTypeTotal),
       lower: [],
     },
     {
@@ -757,7 +874,10 @@ export default async function DashboardsPage({
           return {
             monthKey: bucket.key,
             monthLabel: bucket.label,
-            entries: toRootCauseRankingEntries(buildSewoRootCauseTopEntries(monthSewoRows)),
+            entries: toRootCauseRankingEntries(
+              buildSewoRootCauseTopEntries(monthSewoRows),
+              monthSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0),
+            ),
           };
         }
 
@@ -772,6 +892,7 @@ export default async function DashboardsPage({
             entries: toCommunicationTypeRankingEntries(
               buildCommunicationTypeTopEntries(monthRows, CommunicationType.UNSAFE_ACT),
               "unsafe-act-type",
+              getCommunicationTypeTotal(monthRows, CommunicationType.UNSAFE_ACT),
             ),
           };
         }
@@ -783,6 +904,7 @@ export default async function DashboardsPage({
             entries: toCommunicationTypeRankingEntries(
               buildCommunicationTypeTopEntries(monthRows, CommunicationType.UNSAFE_CONDITION),
               "unsafe-condition-type",
+              getCommunicationTypeTotal(monthRows, CommunicationType.UNSAFE_CONDITION),
             ),
           };
         }
@@ -794,6 +916,7 @@ export default async function DashboardsPage({
             entries: toCommunicationTypeRankingEntries(
               buildCommunicationTypeTopEntries(monthRows, CommunicationType.NEAR_MISS),
               "near-miss-type",
+              getCommunicationTypeTotal(monthRows, CommunicationType.NEAR_MISS),
             ),
           };
         }
@@ -1001,6 +1124,11 @@ export default async function DashboardsPage({
             trend: actionBacklogTrend,
             ageing: actionAgeing,
           },
+          sifPsif: {
+            plantName: plantRow.name,
+            current: sifPsifIndicators,
+            comparisons: sifPsifComparisons,
+          },
         }}
       />
 
@@ -1062,6 +1190,7 @@ export default async function DashboardsPage({
           initialActivePlantCode={plantRow.code}
           hidePlantList
           hidePyramid
+          hideFavoriteMetrics
           showCreatePlantLink={false}
           rootCauseMetricLabel={ui.dashboard.sewoRootCauses}
           labels={ui.dashboard}

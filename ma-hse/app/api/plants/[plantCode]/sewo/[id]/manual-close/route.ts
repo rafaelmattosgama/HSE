@@ -22,6 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       where: {
         id,
         plantId: plant.id,
+        deletedAt: null,
       },
     });
 

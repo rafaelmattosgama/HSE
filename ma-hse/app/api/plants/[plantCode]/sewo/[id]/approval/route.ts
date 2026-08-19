@@ -31,7 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
 
   try {
     const plant = await getPlantByCode(plantCode);
-    const sewo = await prisma.sEWO.findFirst({ where: { id, plantId: plant.id } });
+    const sewo = await prisma.sEWO.findFirst({ where: { id, plantId: plant.id, deletedAt: null } });
     if (!sewo) return fail("NOT_FOUND", "SEWO not found", 404);
     if (sewo.status !== SEWOStatus.IN_APPROVAL) {
       return fail("INVALID_STATUS", "Only submitted S-EWO records can be approved or rejected", 400);
@@ -71,7 +71,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ plant
 
   try {
     const plant = await getPlantByCode(plantCode);
-    const sewo = await prisma.sEWO.findFirst({ where: { id, plantId: plant.id } });
+    const sewo = await prisma.sEWO.findFirst({ where: { id, plantId: plant.id, deletedAt: null } });
     if (!sewo) return fail("NOT_FOUND", "SEWO not found", 404);
     if (sewo.status !== SEWOStatus.APPROVED && sewo.status !== SEWOStatus.REJECTED) {
       return fail("INVALID_STATUS", "Only decided S-EWO records can have their corporate decision changed", 400);

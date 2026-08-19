@@ -3,6 +3,7 @@ import { AlertTriangle, Bandage, CalendarDays, CheckCircle2, ClipboardCheck, Clo
 import { AppPanel, AppSectionHeader } from "@/components/ui/app-surface";
 import { HelpPopover } from "@/components/ui/help-popover";
 import type { DashboardUiDictionary } from "@/lib/ui-language";
+import type { SifPsifIndicatorBreakdown, SifPsifIndicatorCategory } from "@/lib/sif-psif-indicators";
 
 type Tone = "default" | "brand" | "success" | "info" | "warning" | "danger" | "violet";
 
@@ -21,6 +22,7 @@ type Metric = {
   icon: ReactNode;
   digits?: number;
   comparison?: string;
+  detail?: string;
   emptyValueLabel?: string;
 };
 
@@ -48,6 +50,7 @@ function KpiCard({ metric, locale, noDataLabel }: { metric: Metric; locale: stri
         </div>
         <div className="app-kpi-card__icon" aria-hidden="true">{metric.icon}</div>
       </div>
+      {metric.detail ? <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">{metric.detail}</p> : null}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-slate-600">
         <span>{metric.period}</span>
         <span aria-hidden="true">•</span>
@@ -56,6 +59,14 @@ function KpiCard({ metric, locale, noDataLabel }: { metric: Metric; locale: stri
       </div>
     </article>
   );
+}
+
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce((label, [key, value]) => label.replace(`{${key}}`, String(value)), template);
+}
+
+function formatPercent(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
 }
 
 function KpiGroup({
@@ -186,6 +197,14 @@ export function SafetyDashboardKpiGroups({
       trend: Array<{ label: string; value: number }>;
       ageing: { recent: number; aging: number; longRunning: number };
     };
+    sifPsif?: {
+      plantName: string;
+      current: SifPsifIndicatorBreakdown;
+      comparisons: {
+        overall?: string;
+        byCategory?: Partial<Record<SifPsifIndicatorCategory, string>>;
+      };
+    };
   };
 }) {
   const noData = labels.kpiNoData;
@@ -198,6 +217,14 @@ export function SafetyDashboardKpiGroups({
   const informationState: KpiState = { label: labels.kpiInformational, tone: "info" };
   const noDataState: KpiState = { label: noData, tone: "default" };
   const notApplicableState: KpiState = { label: labels.kpiNotApplicable, tone: "default" };
+  const sifPsifPeriod = metrics.sifPsif
+    ? `${selectedPeriod} Â· ${labels.plant}: ${metrics.sifPsif.plantName}`
+    : selectedPeriod;
+  const sifPsifCategories: Array<{ key: SifPsifIndicatorCategory; title: string }> = [
+    { key: "FIRST_AID", title: labels.pyramidFirstAid },
+    { key: "NEAR_MISS", title: labels.pyramidNearMiss },
+    { key: "ACCIDENT", title: labels.injuries },
+  ];
 
   return (
     <div className="space-y-5" data-testid="safety-kpi-groups">
@@ -288,6 +315,53 @@ export function SafetyDashboardKpiGroups({
           }} locale={locale} noDataLabel={noData} /> : null}
         </div>
       </section>
+
+      {metrics.sifPsif ? <KpiGroup
+        id="sif-psif-indicators-heading"
+        title={labels.kpiSifPsifIndicators}
+        description={labels.kpiSifPsifIndicatorsDescription}
+        helpLabel={labels.help}
+      >
+        <KpiCard metric={{
+          title: labels.kpiSifPsifIncidents,
+          value: metrics.sifPsif.current.overall.sifOrPsifPercent,
+          unit: "%",
+          period: sifPsifPeriod,
+          definition: labels.kpiSifPsifIncidentsDefinition,
+          detail: formatTemplate(labels.kpiSifPsifEligibleIncidentDetail, {
+            numerator: metrics.sifPsif.current.overall.sifOrPsif,
+            denominator: metrics.sifPsif.current.overall.total,
+          }),
+          state: metrics.sifPsif.current.overall.total === 0
+            ? noDataState
+            : metrics.sifPsif.current.overall.sifOrPsif === 0 ? safeState : attentionState,
+          icon: <ShieldCheck className="h-5 w-5" />,
+          digits: 1,
+          comparison: metrics.sifPsif.comparisons.overall,
+        }} locale={locale} noDataLabel={noData} />
+        {sifPsifCategories.map((category) => {
+          const summary = metrics.sifPsif!.current.byCategory[category.key];
+          const detail = `${labels.kpiSif}: ${summary.sif} (${summary.sifPercent === null ? "â€”" : `${formatPercent(summary.sifPercent, locale)}%`}) Â· ${labels.kpiPsif}: ${summary.psif} (${summary.psifPercent === null ? "â€”" : `${formatPercent(summary.psifPercent, locale)}%`}) Â· ${formatTemplate(labels.kpiSifPsifEligibleIncidentDetail, { numerator: summary.sifOrPsif, denominator: summary.total })}`;
+
+          return <KpiCard
+            key={category.key}
+            metric={{
+              title: `${category.title}: SIF / PSIF`,
+              value: summary.sifOrPsifPercent,
+              unit: "%",
+              period: sifPsifPeriod,
+              definition: formatTemplate(labels.kpiSifPsifCategoryDefinition, { category: category.title }),
+              detail,
+              state: summary.total === 0 ? noDataState : summary.sifOrPsif === 0 ? safeState : attentionState,
+              icon: <Target className="h-5 w-5" />,
+              digits: 1,
+              comparison: metrics.sifPsif!.comparisons.byCategory?.[category.key],
+            }}
+            locale={locale}
+            noDataLabel={noData}
+          />;
+        })}
+      </KpiGroup> : null}
 
       {detailed ? <KpiGroup id="leading-indicators-heading" title={labels.kpiLeadingIndicators} description={labels.kpiLeadingIndicatorsDescription} helpLabel={labels.help}>
         <KpiCard metric={{ title: labels.nearMisses, value: metrics.nearMisses, unit: labels.kpiUnitEvents, period: selectedPeriod, definition: labels.kpiNearMissesDefinition, state: informationState, icon: <Eye className="h-5 w-5" />, comparison: metrics.comparisons?.nearMisses }} locale={locale} noDataLabel={noData} />

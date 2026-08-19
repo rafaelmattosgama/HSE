@@ -88,6 +88,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
       where: {
         id: parsed.data.sewoId,
         plantId: plant.id,
+        deletedAt: null,
       },
       select: { id: true },
     });
