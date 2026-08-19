@@ -124,6 +124,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
     prisma.sEWO.findMany({
       where: {
         plantId: { in: plantRows.map((row) => row.id) },
+        deletedAt: null,
       },
       orderBy: [{ analysisDate: "desc" }, { createdAt: "desc" }],
       take: 100,

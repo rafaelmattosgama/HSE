@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { ActionService } from "@/lib/services/action-service";
 import { SewaService, SewoValidationError } from "@/lib/services/sewo-service";
-import { updateSEWOInput } from "@/lib/validation/dtos";
+import { deleteSEWOInput, updateSEWOInput } from "@/lib/validation/dtos";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
@@ -20,6 +20,7 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
     where: {
       id,
       plantId: plant.id,
+      deletedAt: null,
     },
     include: {
       communication: true,
@@ -60,6 +61,7 @@ export async function PUT(request: Request, context: { params: Promise<{ plantCo
       where: {
         id,
         plantId: plant.id,
+        deletedAt: null,
       },
       select: { id: true, status: true },
     });
@@ -111,7 +113,7 @@ export async function PUT(request: Request, context: { params: Promise<{ plantCo
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ plantCode: string; id: string }> },
 ) {
   const { plantCode, id } = await context.params;
@@ -123,20 +125,41 @@ export async function DELETE(
   ]);
   if ("error" in auth) return auth.error;
 
-  const plant = await getPlantByCode(plantCode);
-  const sewo = await prisma.sEWO.findFirst({
-    where: { id, plantId: plant.id },
-    select: { id: true },
-  });
+  const parsed = await parseBody(request, deleteSEWOInput);
+  if ("error" in parsed) return parsed.error;
 
-  if (!sewo) {
-    return fail("NOT_FOUND", "SEWO not found", 404);
+  try {
+    const plant = await getPlantByCode(plantCode);
+    const sewo = await prisma.sEWO.findFirst({
+      where: { id, plantId: plant.id, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!sewo) {
+      return fail("NOT_FOUND", "SEWO not found", 404);
+    }
+
+    const deleted = await SewaService.deleteSewo({
+      sewoId: id,
+      actorUserId: auth.session.user.id,
+      expectedUpdatedAt: parsed.data.updatedAt,
+    });
+
+    return ok(deleted);
+  } catch (error) {
+    if (error instanceof SewoValidationError) {
+      return fail(error.code, error.message, error.status);
+    }
+
+    logger.error(
+      {
+        error,
+        plantCode,
+        sewoId: id,
+        actorUserId: auth.session.user.id,
+      },
+      "failed_to_delete_sewo",
+    );
+    return fail("INTERNAL_ERROR", "Failed to delete S-EWO", 500);
   }
-
-  const deleted = await SewaService.deleteSewo({
-    sewoId: id,
-    actorUserId: auth.session.user.id,
-  });
-
-  return ok(deleted);
 }

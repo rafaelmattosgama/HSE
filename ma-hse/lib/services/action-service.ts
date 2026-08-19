@@ -81,7 +81,7 @@ export const ActionService = {
 
   async reopenSewoStatusForNewAction(sewoId: string) {
     const sewo = await prisma.sEWO.findUniqueOrThrow({ where: { id: sewoId } });
-    if (sewo.status === SEWOStatus.IN_APPROVAL || sewo.status === SEWOStatus.REJECTED) {
+    if (sewo.deletedAt || sewo.status === SEWOStatus.IN_APPROVAL || sewo.status === SEWOStatus.REJECTED) {
       return;
     }
 
@@ -117,6 +117,21 @@ export const ActionService = {
 
       if (!communication || !isCommunicationLinkableStatus(communication.status)) {
         throw new ActionValidationError("INVALID_COMMUNICATION", PENDING_COMMUNICATION_LINK_MESSAGE);
+      }
+    }
+
+    if (input.payload.sourceType === ActionSourceType.SEWO && input.payload.sewoId) {
+      const sewo = await prisma.sEWO.findFirst({
+        where: {
+          id: input.payload.sewoId,
+          plantId: input.plantId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (!sewo) {
+        throw new ActionValidationError("INVALID_SEWO", "Select an existing S-EWO record for this plant.");
       }
     }
 

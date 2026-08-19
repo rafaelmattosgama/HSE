@@ -1,8 +1,16 @@
-import { CommunicationStatus, CommunicationType } from "@prisma/client";
+import { CommunicationStatus, CommunicationType, SEWOStatus } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const txMock = vi.hoisted(() => ({
   sEWO: {
+    create: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  sewoAutoCreationSuppression: {
+    deleteMany: vi.fn(),
+    upsert: vi.fn(),
+  },
+  auditLog: {
     create: vi.fn(),
   },
   communicationAttachment: {
@@ -32,6 +40,10 @@ const prismaMock = vi.hoisted(() => ({
     }),
     sEWO: {
       findFirst: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+    },
+    sewoAutoCreationSuppression: {
+      findUnique: vi.fn(),
     },
     plant: {
       findUniqueOrThrow: vi.fn(),
@@ -323,6 +335,7 @@ describe("SewaService.createProvisionalFromCommunication", () => {
 
   it("does not create duplicate S-EWO records for the same communication", async () => {
     prismaMock.prisma.sEWO.findFirst.mockResolvedValue({ id: "existing-sewo", communicationId: "comm-1" });
+    prismaMock.prisma.sewoAutoCreationSuppression.findUnique.mockResolvedValue(null);
     txMock.communicationAttachment.findMany.mockResolvedValue([]);
 
     const result = await SewaService.createProvisionalFromCommunication({
@@ -341,6 +354,93 @@ describe("SewaService.createProvisionalFromCommunication", () => {
         createdAt: "asc",
       },
     });
+  });
+
+  it("does not recreate an automatic S-EWO after its source communication is suppressed", async () => {
+    prismaMock.prisma.sEWO.findFirst.mockResolvedValue(null);
+    prismaMock.prisma.sewoAutoCreationSuppression.findUnique.mockResolvedValue({ id: "suppression-1" });
+
+    const result = await SewaService.createProvisionalFromCommunication({
+      communicationId: "comm-1",
+      actorUserId: "user-1",
+    });
+
+    expect(result).toBeNull();
+    expect(prismaMock.prisma.communication.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(txMock.sEWO.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("SewaService.deleteSewo", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const updatedAt = new Date("2026-08-19T10:00:00.000Z");
+
+  function draftSewo(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "sewo-1",
+      plantId: "plant-1",
+      communicationId: "comm-1",
+      isAutoCreated: true,
+      status: "DRAFT",
+      updatedAt,
+      actions: [],
+      actionLinks: [],
+      ...overrides,
+    };
+  }
+
+  it("soft-deletes an eligible draft without removing the source communication or linked records", async () => {
+    prismaMock.prisma.sEWO.findFirst.mockResolvedValue(draftSewo());
+    txMock.sEWO.updateMany.mockResolvedValue({ count: 1 });
+    txMock.sewoAutoCreationSuppression.upsert.mockResolvedValue({ id: "suppression-1" });
+    txMock.auditLog.create.mockResolvedValue({ id: "audit-1" });
+
+    const result = await SewaService.deleteSewo({
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      expectedUpdatedAt: updatedAt,
+    });
+
+    expect(result.id).toBe("sewo-1");
+    expect(txMock.sEWO.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        communicationId: null,
+        deletedByUserId: "user-1",
+      }),
+    }));
+    expect(txMock.sewoAutoCreationSuppression.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { communicationId: "comm-1" },
+    }));
+    expect(txMock.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "DELETE" }),
+    }));
+  });
+
+  it.each([SEWOStatus.IN_APPROVAL, SEWOStatus.APPROVED, SEWOStatus.REJECTED, SEWOStatus.CLOSED])("blocks deletion of %s records", async (status) => {
+    prismaMock.prisma.sEWO.findFirst.mockResolvedValue(draftSewo({ status }));
+
+    await expect(SewaService.deleteSewo({
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      expectedUpdatedAt: updatedAt,
+    })).rejects.toMatchObject({ code: "SEWO_DELETE_DRAFT_ONLY", status: 409 });
+
+    expect(txMock.sEWO.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("blocks deletion when the draft has linked actions", async () => {
+    prismaMock.prisma.sEWO.findFirst.mockResolvedValue(draftSewo({ actions: [{ id: "action-1" }] }));
+
+    await expect(SewaService.deleteSewo({
+      sewoId: "sewo-1",
+      actorUserId: "user-1",
+      expectedUpdatedAt: updatedAt,
+    })).rejects.toMatchObject({ code: "SEWO_HAS_LINKED_ACTIONS", status: 409 });
+
+    expect(txMock.sEWO.updateMany).not.toHaveBeenCalled();
   });
 });
 

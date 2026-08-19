@@ -222,6 +222,17 @@ const UI_DICTIONARY = {
       kpiSafetyOutcomesDescription: "Current safety outcomes, including the accident-free-day counter and selected-period results.",
       kpiLeadingIndicators: "Leading indicators",
       kpiLeadingIndicatorsDescription: "Preventive reporting and learning signals for the selected period.",
+      kpiSifPsifIndicators: "SIF / PSIF indicators",
+      kpiSifPsifIndicatorsDescription:
+        "Closed S-EWO classifications for unique First Aid, Near Miss and Injury communications in the selected plant and period.",
+      kpiSifPsifIncidents: "% SIF / PSIF incidents",
+      kpiSifPsifIncidentsDefinition:
+        "Formula: unique eligible incidents classified SIF or PSIF / unique eligible incidents × 100. Eligible incidents are First Aid, Near Miss and Injury communications whose event date is in the selected period and that have one linked S-EWO with status CLOSED. The SIF/PSIF result is derived from the S-EWO decision tree. Incidents without a decision remain in the denominator but not the numerator. 0 means eligible incidents exist but none is SIF/PSIF; No data means no eligible incident exists.",
+      kpiSifPsifCategoryDefinition:
+        "Formula for {category}: unique eligible {category} incidents classified SIF or PSIF / unique eligible {category} incidents × 100. Only linked S-EWO records with status CLOSED are used. SIF and PSIF are mutually exclusive for the displayed incident count; 0 means eligible incidents exist but none is SIF/PSIF, while No data means no eligible incident exists.",
+      kpiSifPsifEligibleIncidentDetail: "{numerator} of {denominator} eligible incidents",
+      kpiSif: "SIF",
+      kpiPsif: "PSIF",
       kpiActionsCompliance: "Actions and compliance",
       kpiActionsComplianceDescription: "Current action follow-up and validation workload. Current-stock metrics are explicitly identified.",
       kpiExposureScope: "Exposure and scope",

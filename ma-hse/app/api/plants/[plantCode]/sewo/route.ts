@@ -21,7 +21,7 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
 
   const plant = await getPlantByCode(plantCode);
   const rows = await prisma.sEWO.findMany({
-    where: { plantId: plant.id },
+    where: { plantId: plant.id, deletedAt: null },
     include: {
       communication: true,
       causeSelections: true,

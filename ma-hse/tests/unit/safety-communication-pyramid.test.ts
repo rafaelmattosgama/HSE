@@ -34,9 +34,10 @@ describe("SafetyCommunicationPyramid", () => {
     expect(screen.getByText("Near miss")).toBeTruthy();
     expect(screen.getByText("Unsafe condition")).toBeTruthy();
     expect(screen.getByText("Unsafe act")).toBeTruthy();
+    expect(screen.queryByText("01 Fatal")).toBeNull();
     expect(screen.getByLabelText(/Fatal: 0/i).getAttribute("style")).toContain("--safety-pyramid-fatal");
     expect(screen.getByLabelText(/Unsafe act: 0/i).getAttribute("style")).toContain("--safety-pyramid-unsafe-act");
-    expect(screen.getAllByText("—")).toHaveLength(7);
+    expect(screen.getAllByText("Not applicable")).toHaveLength(7);
   });
 
   it("explains hierarchy, exposes the count denominator and remains keyboard-accessible", () => {
@@ -50,6 +51,8 @@ describe("SafetyCommunicationPyramid", () => {
     }));
 
     expect(screen.getAllByText("of 10")).toHaveLength(7);
+    expect(screen.getAllByText("% of total")).toHaveLength(7);
+    expect(screen.getAllByText("Events")).toHaveLength(7);
     expect(screen.getByText(/width communicates severity hierarchy/i)).toBeTruthy();
     expect(screen.getByLabelText(/Near miss: 6, 60.0 percent/i)).toBeTruthy();
 
@@ -62,5 +65,44 @@ describe("SafetyCommunicationPyramid", () => {
     const firstLayer = screen.getByLabelText(/Fatal: 0/i);
     expect(firstLayer.className).toContain("w-full");
     expect(firstLayer.className).toContain("sm:w-[var(--pyramid-layer-width)]");
+  });
+
+  it("keeps the current first-aid scenario and 100.0 percent visible in the band", () => {
+    render(createElement(SafetyCommunicationPyramid, {
+      title: "Safety Communication Pyramid",
+      counts: { ...zeroCounts, firstAid: 1 },
+      scopeLabel: "Valença - MAAP",
+      periodLabel: "2026-01-01 - 2026-12-31",
+    }));
+
+    expect(screen.getByText("Valença - MAAP")).toBeTruthy();
+    expect(screen.getByText("2026-01-01 - 2026-12-31")).toBeTruthy();
+    expect(screen.getByLabelText(/First aid: 1, 100.0 percent/i)).toBeTruthy();
+    expect(screen.getByText("100.0%")).toBeTruthy();
+    expect(screen.getAllByText("of 1")).toHaveLength(7);
+  });
+
+  it("keeps double-digit values and full titles legible within the responsive bands", () => {
+    render(createElement(SafetyCommunicationPyramid, {
+      title: "Safety Communication Pyramid",
+      counts: { ...zeroCounts, nearMiss: 12, unsafeAct: 100 },
+      scopeLabel: "Valença - MAAP",
+      periodLabel: "2026-01-01 - 2026-12-31",
+    }));
+
+    expect(screen.getByText("12")).toBeTruthy();
+    expect(screen.getByText("100")).toBeTruthy();
+    expect(screen.getAllByText("of 112")).toHaveLength(7);
+
+    for (const name of ["Fatal", "Serious injury", "Minor injury", "First aid", "Near miss", "Unsafe condition", "Unsafe act"]) {
+      expect(screen.getByText(name).className).toContain("break-words");
+      expect(screen.getByText(name).className).not.toContain("truncate");
+    }
+
+    for (const band of Array.from(document.querySelectorAll("ol > li > article"))) {
+      expect(band.className).toContain("grid-cols-[minmax(0,1fr)_auto]");
+      expect(band.className).not.toContain("absolute");
+      expect(band.className).not.toContain("overflow-x");
+    }
   });
 });

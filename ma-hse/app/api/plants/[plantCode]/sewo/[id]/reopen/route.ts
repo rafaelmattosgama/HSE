@@ -19,7 +19,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   try {
     const plant = await getPlantByCode(plantCode);
     const sewo = await prisma.sEWO.findFirst({
-      where: { id, plantId: plant.id },
+      where: { id, plantId: plant.id, deletedAt: null },
       select: { id: true, status: true },
     });
 

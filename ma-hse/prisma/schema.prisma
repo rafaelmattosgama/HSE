@@ -90,6 +90,7 @@ model User {
   reviewedExternalWorkerDocuments           ExternalWorkerDocument[]            @relation("ExternalWorkerDocumentReviewer")
   notifications                             Notification[]
   sewoApproved                              SEWO[]                              @relation("SewoApprovedBy")
+  sewoDeleted                               SEWO[]                              @relation("SewoDeletedBy")
   sewoPerformed                             SEWO[]                              @relation("SewoPerformedBy")
   sewoAttachment                            SEWOAttachment[]
   createdSafetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientCreatedBy")
@@ -433,6 +434,7 @@ model Communication {
   involvedEmployees                CommunicationInvolvedEmployee[]
   mapFeatures                      MapFeature[]
   sewoRecords                      SEWO[]
+  sewoAutoCreationSuppression      SewoAutoCreationSuppression?
   safetyCommunicationNotifications SafetyCommunicationNotification[]
   smatAudits                       SmatAudit[]
 
@@ -918,7 +920,7 @@ model AlertEvent {
 model SEWO {
   id                            String                  @id @default(uuid())
   plantId                       String
-  communicationId               String?
+  communicationId               String?                 @unique
   eventClassification           String
   areaId                        String?
   lineId                        String?
@@ -939,6 +941,8 @@ model SEWO {
   causeCatalogVersionId         String
   createdAt                     DateTime                @default(now())
   updatedAt                     DateTime                @updatedAt
+  deletedAt                     DateTime?
+  deletedByUserId               String?
   templateData                  Json?
   isAutoCreated                 Boolean                 @default(false)
   codigoSewo                    String?                 @unique
@@ -948,6 +952,7 @@ model SEWO {
   numeroSequencial              Int?
   actions                       Action[]
   approvedBy                    User?                   @relation("SewoApprovedBy", fields: [approvedByUserId], references: [id])
+  deletedBy                     User?                   @relation("SewoDeletedBy", fields: [deletedByUserId], references: [id])
   area                          Area?                   @relation(fields: [areaId], references: [id])
   causeCatalogVersion           SEWOCauseCatalogVersion @relation(fields: [causeCatalogVersionId], references: [id])
   communication                 Communication?          @relation(fields: [communicationId], references: [id])
@@ -960,6 +965,15 @@ model SEWO {
   causeSelections               SEWOCauseSelection[]
 
   @@index([tipo, codigoFabrica, ano, numeroSequencial])
+  @@index([plantId, deletedAt])
+}
+
+model SewoAutoCreationSuppression {
+  id                 String        @id @default(uuid())
+  communicationId    String        @unique
+  suppressedAt       DateTime      @default(now())
+  suppressedByUserId String
+  communication      Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
 }
 
 model SEWOAttachment {

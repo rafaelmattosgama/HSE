@@ -286,6 +286,7 @@ export async function getPendingSewoValidationRows(input: {
       plantId: {
         in: plantIds,
       },
+      deletedAt: null,
       status: SEWOStatus.IN_APPROVAL,
     },
     include: {
@@ -380,6 +381,7 @@ export async function getSewoValidationHistoryRows(input: {
   const records = await prisma.sEWO.findMany({
     where: {
       plantId: { in: plantIds },
+      deletedAt: null,
       status: { in: [SEWOStatus.APPROVED, SEWOStatus.REJECTED] },
     },
     include: {

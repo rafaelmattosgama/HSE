@@ -1,4 +1,4 @@
-import { ActionStatus, MasterDataEntityType } from "@prisma/client";
+import { ActionStatus, MasterDataEntityType, RoleCode } from "@prisma/client";
 import { SewoWorkspace } from "@/components/feature/sewo-workspace";
 import { prisma } from "@/lib/prisma";
 import { localizeBodyPartRows, localizeInjuryTypeRows } from "@/lib/public-report";
@@ -39,12 +39,18 @@ export default async function SewoPage({
     userLanguage: session?.user.language,
     plantLanguage: plantRow.defaultLanguage,
   });
+  const canDeleteSewo = Boolean(session?.user.plantRoles.some(
+    (entry) => entry.role === RoleCode.N0_ADMIN
+      || entry.role === RoleCode.N1_CORPORATE
+      || (entry.plantCode === plant && entry.role === RoleCode.N3_SAFETY),
+  ));
   await ensureDefaultShifts(plantRow.id);
 
   const [sewoRecords, catalogVersions, communications, areas, workstations, shifts, workers, bodyParts, injuryTypes, actionOwners] = await prisma.$transaction([
     prisma.sEWO.findMany({
       where: {
         plantId: plantRow.id,
+        deletedAt: null,
       },
       include: {
         communication: {
@@ -240,6 +246,8 @@ export default async function SewoPage({
             : translatedStandaloneTypes[index] ?? record.eventClassification,
           status: record.status,
           statusLabel: formatLocalizedSewoStatus(record.status, ui),
+          updatedAt: record.updatedAt.toISOString(),
+          linkedActionCount: record.actions.length + record.actionLinks.length,
           communicationId: record.communicationId ?? null,
           performedByName: record.performedBy.name,
           description: translatedSewoDescriptions[index] ?? record.howText,
@@ -351,6 +359,7 @@ export default async function SewoPage({
       actionOwners={actionOwners.map((entry) => ({ id: entry.user.id, name: entry.user.name }))}
       ui={ui}
       rootCauseGroups={rootCauseGroups}
+      canDeleteSewo={canDeleteSewo}
     />
   );
 }

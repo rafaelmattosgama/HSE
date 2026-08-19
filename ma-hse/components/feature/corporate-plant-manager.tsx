@@ -53,6 +53,7 @@ type CorporatePlantManagerProps = {
   storageKeyBase?: string;
   initialActivePlantCode?: string | null;
   hidePlantList?: boolean;
+  hideFavoriteMetrics?: boolean;
   hideRankings?: boolean;
   hidePyramid?: boolean;
   showCreatePlantLink?: boolean;
@@ -130,37 +131,64 @@ function RankingCard({
   entries,
   activePlantCode,
   variant,
+  totalLabel,
+  noDataLabel,
 }: {
   title: string;
   entries: RankingEntry[];
   activePlantCode: string | null;
   variant: "count" | "percent" | "index";
+  totalLabel: string;
+  noDataLabel: string;
 }) {
+  const total = entries[0]?.total;
+  const maxValue = Math.max(1, ...entries.map((entry) => entry.value));
+
   return (
-    <AppCard>
-      <h3 className="app-section-eyebrow">{title}</h3>
-      <ol className="mt-3 space-y-1.5 text-sm">
+    <AppCard className="overflow-hidden">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="app-section-eyebrow">{title}</h3>
+        {total !== undefined ? <span className="app-chip h-7 shrink-0 text-[11px]">{totalLabel}: {total.toLocaleString()}</span> : null}
+      </div>
+      {entries.length === 0 ? <p className="app-empty mt-3" role="status">{noDataLabel}</p> : (
+      <ol className="mt-3 space-y-2 text-sm">
         {entries.map((entry, index) => {
           const isActive = activePlantCode === entry.plantCode;
+          const percentage = entry.percentage ?? (maxValue > 0 ? (entry.value / maxValue) * 100 : 0);
+          const detail = entry.count !== undefined && entry.total !== undefined
+            ? `${entry.count.toLocaleString()} / ${entry.total.toLocaleString()} Â· ${percentage.toFixed(1)}%`
+            : `${percentage.toFixed(1)}%`;
 
           return (
             <li
               key={`${title}-${entry.plantCode}`}
-              className={`flex items-center justify-between gap-3 rounded-md px-2 py-1.5 ${
+              className={`rounded-lg border px-3 py-2.5 ${
                 isActive ? "bg-teal-50 text-teal-900" : "bg-slate-50 text-slate-700"
               }`}
             >
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-500">
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-black text-slate-600 shadow-sm">
                   {index + 1}
                 </span>
-                <span className="truncate">{entry.plantName}</span>
-              </span>
-              <span className="ml-2 shrink-0 text-right font-semibold">{formatValue(entry.value, variant)}</span>
+                <span className="min-w-0 break-words font-semibold">{entry.plantName}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block font-black tabular-nums text-slate-950">{formatValue(entry.value, variant)}</span>
+                  <span className="mt-0.5 block text-[11px] font-semibold tabular-nums text-slate-500">{detail}</span>
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+                <div
+                  className={`h-full rounded-full ${isActive ? "bg-teal-600" : "bg-[var(--brand-700)]"}`}
+                  style={{ width: `${Math.max(3, (entry.value / maxValue) * 100)}%` }}
+                />
+              </div>
             </li>
           );
         })}
       </ol>
+      )}
     </AppCard>
   );
 }
@@ -188,6 +216,7 @@ export function CorporatePlantManager({
   storageKeyBase = "ma-hse-corporate",
   initialActivePlantCode = null,
   hidePlantList = false,
+  hideFavoriteMetrics = false,
   hideRankings = false,
   hidePyramid = false,
   showCreatePlantLink = true,
@@ -539,50 +568,54 @@ export function CorporatePlantManager({
           )}
 
           <div className="space-y-4">
-            <div className="app-card-muted p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">{text.favoriteIndicators}</p>
+            {hideFavoriteMetrics ? null : (
+              <div className="space-y-4">
+                <div className="app-card-muted p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">{text.favoriteIndicators}</p>
+                    </div>
+                    {extraMetrics.length > 0 ? (
+                      <button
+                        type="button"
+                        className="app-toolbar min-h-10"
+                        onClick={() => setShowAllMetrics((current) => !current)}
+                      >
+                        {showAllMetrics ? text.showLess : text.showMore}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {availableMetrics.map((metric) => {
+                      const isFavorite = favoriteMetricIds.includes(metric.id);
+
+                      return (
+                        <button
+                          key={metric.id}
+                          type="button"
+                          className={`app-chip ${isFavorite ? "app-chip--active" : ""}`}
+                          onClick={() => toggleFavoriteMetric(metric.id)}
+                        >
+                          {metric.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                {extraMetrics.length > 0 ? (
-                  <button
-                    type="button"
-                    className="app-toolbar min-h-10"
-                    onClick={() => setShowAllMetrics((current) => !current)}
-                  >
-                    {showAllMetrics ? text.showLess : text.showMore}
-                  </button>
-                ) : null}
-              </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {availableMetrics.map((metric) => {
-                  const isFavorite = favoriteMetricIds.includes(metric.id);
-
-                  return (
-                    <button
+                <div className="grid gap-3 md:grid-cols-3 2xl:grid-cols-3">
+                  {visibleMetrics.map((metric) => (
+                    <MetricCard
                       key={metric.id}
-                      type="button"
-                      className={`app-chip ${isFavorite ? "app-chip--active" : ""}`}
-                      onClick={() => toggleFavoriteMetric(metric.id)}
-                    >
-                      {metric.label}
-                    </button>
-                  );
-                })}
+                      label={metric.label}
+                      value={formatValue(activePlant ? metric.plantValue : metric.globalValue, metric.variant)}
+                      tone={metric.tone}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3 2xl:grid-cols-3">
-              {visibleMetrics.map((metric) => (
-                <MetricCard
-                  key={metric.id}
-                  label={metric.label}
-                  value={formatValue(activePlant ? metric.plantValue : metric.globalValue, metric.variant)}
-                  tone={metric.tone}
-                />
-              ))}
-            </div>
+            )}
 
             {hideRankings ? null : (
               <div className="app-card-muted p-4">
@@ -626,6 +659,8 @@ export function CorporatePlantManager({
                     entries={panel.entries}
                     activePlantCode={activePlantCode}
                     variant={panel.variant}
+                    totalLabel={text.total}
+                    noDataLabel={text.noDataForPeriod}
                   />
                 ))}
               </div>

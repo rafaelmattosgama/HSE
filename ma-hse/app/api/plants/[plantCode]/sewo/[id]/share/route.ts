@@ -17,7 +17,7 @@ export async function POST(_request: Request, context: { params: Promise<{ plant
   try {
     const plant = await getPlantByCode(plantCode);
     const sewo = await prisma.sEWO.findFirst({
-      where: { id, plantId: plant.id },
+    where: { id, plantId: plant.id, deletedAt: null },
       select: { id: true, status: true },
     });
     if (!sewo) return fail("NOT_FOUND", "SEWO not found", 404);

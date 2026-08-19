@@ -219,7 +219,7 @@ async function assertCreateActionReferences(ctx: AgentToolContext, payload: z.in
 
   if (payload.sourceType === "SEWO" && payload.sewoId) {
     const sewo = await prisma.sEWO.findFirst({
-      where: { id: payload.sewoId, plantId: ctx.plantId },
+      where: { id: payload.sewoId, plantId: ctx.plantId, deletedAt: null },
       select: { id: true },
     });
     if (!sewo) throw new AgentToolUserError("Select an existing S-EWO record for this plant.");
