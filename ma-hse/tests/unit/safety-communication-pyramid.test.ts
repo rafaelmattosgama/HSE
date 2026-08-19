@@ -35,8 +35,8 @@ describe("SafetyCommunicationPyramid", () => {
     expect(screen.getByText("Unsafe condition")).toBeTruthy();
     expect(screen.getByText("Unsafe act")).toBeTruthy();
     expect(screen.queryByText("01 Fatal")).toBeNull();
-    expect(screen.getByLabelText(/Fatal: 0/i).getAttribute("style")).toContain("--safety-pyramid-fatal");
-    expect(screen.getByLabelText(/Unsafe act: 0/i).getAttribute("style")).toContain("--safety-pyramid-unsafe-act");
+    expect(screen.getByTestId("pyramid-band-fatal").getAttribute("style")).toContain("--safety-pyramid-fatal");
+    expect(screen.getByTestId("pyramid-band-unsafeAct").getAttribute("style")).toContain("--safety-pyramid-unsafe-act");
     expect(screen.getAllByText("Not applicable")).toHaveLength(7);
   });
 
@@ -52,7 +52,7 @@ describe("SafetyCommunicationPyramid", () => {
 
     expect(screen.getAllByText("of 10")).toHaveLength(7);
     expect(screen.getAllByText("% of total")).toHaveLength(7);
-    expect(screen.getAllByText("Events")).toHaveLength(7);
+    expect(screen.queryByText("Events")).toBeNull();
     expect(screen.getByText(/width communicates severity hierarchy/i)).toBeTruthy();
     expect(screen.getByLabelText(/Near miss: 6, 60.0 percent/i)).toBeTruthy();
 
@@ -63,8 +63,10 @@ describe("SafetyCommunicationPyramid", () => {
     expect(screen.getByRole("dialog", { name: "Safety Communication Pyramid" })).toBeTruthy();
 
     const firstLayer = screen.getByLabelText(/Fatal: 0/i);
-    expect(firstLayer.className).toContain("w-full");
-    expect(firstLayer.className).toContain("sm:w-[var(--pyramid-layer-width)]");
+    expect(firstLayer.className).toContain("md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
+    expect(screen.getByTestId("pyramid-band-fatal").className).toContain("md:w-[var(--pyramid-layer-width)]");
+    expect(screen.getByTestId("pyramid-band-fatal").querySelector('[data-testid^="pyramid-metrics-"]')).toBeNull();
+    expect(screen.getByTestId("pyramid-events-fatal").textContent).toBe("0");
   });
 
   it("keeps the current first-aid scenario and 100.0 percent visible in the band", () => {
@@ -80,6 +82,7 @@ describe("SafetyCommunicationPyramid", () => {
     expect(screen.getByLabelText(/First aid: 1, 100.0 percent/i)).toBeTruthy();
     expect(screen.getByText("100.0%")).toBeTruthy();
     expect(screen.getAllByText("of 1")).toHaveLength(7);
+    expect(screen.getByTestId("pyramid-events-firstAid").textContent).toBe("1");
   });
 
   it("keeps double-digit values and full titles legible within the responsive bands", () => {
@@ -99,10 +102,14 @@ describe("SafetyCommunicationPyramid", () => {
       expect(screen.getByText(name).className).not.toContain("truncate");
     }
 
-    for (const band of Array.from(document.querySelectorAll("ol > li > article"))) {
-      expect(band.className).toContain("grid-cols-[minmax(0,1fr)_auto]");
-      expect(band.className).not.toContain("absolute");
-      expect(band.className).not.toContain("overflow-x");
+    for (const row of Array.from(document.querySelectorAll("ol > li > article"))) {
+      expect(row.className).toContain("grid-cols-1");
+      expect(row.className).toContain("md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
+      expect(row.className).not.toContain("absolute");
+      expect(row.className).not.toContain("overflow-x");
     }
+
+    expect(screen.getByTestId("pyramid-metrics-unsafeAct")).toBeTruthy();
+    expect(screen.getByTestId("pyramid-events-unsafeAct").textContent).toBe("100");
   });
 });

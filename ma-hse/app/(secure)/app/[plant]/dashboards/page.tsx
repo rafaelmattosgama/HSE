@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { CommunicationType, MasterDataEntityType, RoleCode, SEWOStatus } from "@prisma/client";
+import { CommunicationType, MasterDataEntityType, SEWOStatus } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import { notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
 import { resolveDashboardPeriod, type DashboardSearchParams } from "@/lib/dashboard-period";
 import {
@@ -42,6 +43,11 @@ import {
   buildSifPsifIndicatorBreakdown,
   SIF_PSIF_ELIGIBLE_COMMUNICATION_TYPES,
 } from "@/lib/sif-psif-indicators";
+import {
+  getSafetyDashboardRole,
+  hasSafetyDashboardAccess,
+  hasSafetyDashboardDetailedReadAccess,
+} from "@/lib/rbac/dashboard";
 
 function buildPyramidCounts(
   rows: Array<{
@@ -247,17 +253,16 @@ export default async function DashboardsPage({
   const { plant } = await params;
   const currentSearchParams = await searchParams;
   const session = await getServerSession(authOptions);
+  if (!session?.user || !hasSafetyDashboardAccess(plant, session.user.plantRoles)) {
+    notFound();
+  }
   const plantRow = await prisma.plant.findUniqueOrThrow({ where: { code: plant } });
   const uiLocale = await getServerUiLocale({
     userLanguage: session?.user.language,
     plantLanguage: plantRow.defaultLanguage,
   });
   const ui = getUiDictionary(uiLocale);
-  const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN)
-    ? RoleCode.N0_ADMIN
-    : session?.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
-      ? RoleCode.N1_CORPORATE
-      : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
+  const actorRole = getSafetyDashboardRole(plant, session.user.plantRoles);
   const period = resolveDashboardPeriod(currentSearchParams);
   const now = new Date();
   const backlogReferenceDate = period.to < now ? period.to : now;
@@ -639,9 +644,8 @@ export default async function DashboardsPage({
     },
     { recent: 0, aging: 0, longRunning: 0 },
   );
-  const detailedKpiRoles: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY];
-  const showDetailedKpis = Boolean(actorRole && detailedKpiRoles.includes(actorRole));
-  const canViewValidation = showDetailedKpis;
+  const showDetailedKpis = hasSafetyDashboardDetailedReadAccess(actorRole);
+  const showPendingValidationKpi = showDetailedKpis;
   const canViewOpenCommunications = Boolean(actorRole);
   const homologousComparisons = {
     validatedEvents: hasHomologousCommunicationData
@@ -1095,7 +1099,7 @@ export default async function DashboardsPage({
         periodLabel={period.label}
         labels={ui.dashboard}
         detailed={showDetailedKpis}
-        canViewValidation={canViewValidation}
+        showPendingValidationKpi={showPendingValidationKpi}
         canViewOpenCommunications={canViewOpenCommunications}
         metrics={{
           validatedEvents: validCommunicationsCount,
@@ -1163,10 +1167,7 @@ export default async function DashboardsPage({
         />
       </section> : null}
 
-      {(actorRole === RoleCode.N0_ADMIN ||
-        actorRole === RoleCode.N1_CORPORATE ||
-        actorRole === RoleCode.N2_PLANT_MANAGER ||
-        actorRole === RoleCode.N3_SAFETY) ? (
+      {showDetailedKpis ? (
         <CorporatePlantManager
           initialPlants={[plantBenchmarkSummary]}
           totalPlants={1}

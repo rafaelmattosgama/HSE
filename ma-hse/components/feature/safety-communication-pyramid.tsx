@@ -74,18 +74,18 @@ export function SafetyCommunicationPyramid({
 
   return (
     <AppCard className="overflow-hidden">
-      <header className="flex flex-col gap-2 border-b border-slate-200/80 pb-3 lg:flex-row lg:items-center lg:justify-between">
+      <header className="flex flex-col gap-2 border-b border-slate-200/80 pb-2.5 md:flex-row md:items-center md:justify-between">
         <p className="app-section-eyebrow text-slate-700">{title}</p>
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600" aria-label={`${scopeLabel}, ${periodLabel}`}>
-          <span className="app-chip h-8 px-3">{scopeLabel}</span>
-          <span className="app-chip h-8 px-3">{periodLabel}</span>
+          <span className="app-chip h-7 px-2.5">{scopeLabel}</span>
+          <span className="app-chip h-7 px-2.5">{periodLabel}</span>
           <HelpPopover title={title} body={helpBody} buttonLabel={helpLabel} />
         </div>
       </header>
 
       {total === 0 ? <p className="app-empty mt-3" role="status">{emptyLabel}</p> : null}
 
-      <ol className="mt-3 space-y-1" aria-label={title}>
+      <ol className="mt-3 space-y-1.5" aria-label={title}>
         {PYRAMID_LAYERS.map((layer) => {
           const value = counts[layer.key];
           const previousValue = previousCounts?.[layer.key];
@@ -100,56 +100,60 @@ export function SafetyCommunicationPyramid({
           return (
             <li
               key={layer.key}
-              className="flex justify-center px-[var(--pyramid-mobile-inset)] sm:px-0"
+              className="min-w-0"
               style={{
                 ...style,
                 "--pyramid-mobile-inset": `${Math.round((100 - layer.width) * 0.12)}%`,
               } as CSSProperties}
             >
               <article
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 rounded-lg border border-l-4 p-2.5 shadow-sm [clip-path:polygon(3%_0%,97%_0%,100%_100%,0%_100%)] sm:w-[var(--pyramid-layer-width)] sm:gap-3 sm:px-5"
-                style={{
-                  ...style,
-                  borderColor: `color-mix(in srgb, ${layer.accent} 62%, var(--border))`,
-                  borderLeftColor: layer.accent,
-                  background: `linear-gradient(100deg, color-mix(in srgb, ${layer.accent} 52%, var(--surface)) 0%, color-mix(in srgb, ${layer.accent} 24%, var(--surface)) 62%, var(--surface) 100%)`,
-                  boxShadow: `0 12px 26px color-mix(in srgb, ${layer.accent} 18%, transparent)`,
-                }}
+                className="grid min-w-0 grid-cols-1 gap-1.5 md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)] md:items-stretch md:gap-3"
                 aria-label={`${label}: ${formatCount(value, locale)}${percentage === null ? ", percentage unavailable" : `, ${percentage.toFixed(1)} percent`}`}
               >
-                <div className="flex min-w-0 items-center gap-2 self-center">
-                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-white/75 shadow-sm" style={{ borderColor: `color-mix(in srgb, ${layer.accent} 72%, var(--border))`, color: `color-mix(in srgb, ${layer.accent} 72%, var(--text-strong))` }} aria-hidden="true">
-                    <Icon className="h-4 w-4" strokeWidth={2.4} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="break-words text-xs font-black uppercase leading-4 tracking-[0.08em] text-slate-950">{label}</p>
+                <div className="flex min-w-0 justify-center px-[var(--pyramid-mobile-inset)] md:px-0">
+                  <div
+                    data-testid={`pyramid-band-${layer.key}`}
+                    className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-l-4 px-3 py-1.5 shadow-[0_6px_16px_rgba(15,23,42,0.08)] [clip-path:polygon(3%_0%,97%_0%,100%_100%,0%_100%)] md:w-[var(--pyramid-layer-width)] md:px-4"
+                    style={{
+                      ...style,
+                      borderColor: `color-mix(in srgb, ${layer.accent} 68%, var(--border))`,
+                      borderLeftColor: layer.accent,
+                      background: `linear-gradient(100deg, color-mix(in srgb, ${layer.accent} 62%, var(--surface)) 0%, color-mix(in srgb, ${layer.accent} 35%, var(--surface)) 100%)`,
+                    }}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-white/75 shadow-sm" style={{ borderColor: `color-mix(in srgb, ${layer.accent} 72%, var(--border))`, color: `color-mix(in srgb, ${layer.accent} 72%, var(--text-strong))` }} aria-hidden="true">
+                        <Icon className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      </span>
+                      <p className="min-w-0 break-words text-xs font-black uppercase leading-4 tracking-[0.08em] text-slate-950">{label}</p>
+                    </div>
+                    <p data-testid={`pyramid-events-${layer.key}`} className="shrink-0 text-base font-black leading-none tabular-nums text-slate-950 sm:text-lg">{formatCount(value, locale)}</p>
                   </div>
                 </div>
 
-                <div className="grid min-w-0 grid-cols-2 self-stretch overflow-hidden rounded-md border border-white/35 bg-white/20 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]">
-                  <div className="min-w-0 px-2.5 py-2 sm:px-3">
-                    <p className="text-lg font-black leading-none tabular-nums text-slate-950 sm:text-xl">{formatCount(value, locale)}</p>
-                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-700">Events</p>
-                  </div>
-                  <div className="min-w-0 border-l border-slate-900/15 px-2.5 py-2 sm:px-3">
-                    <p className="text-[10px] font-black leading-none text-slate-950 sm:text-sm">{percentage === null ? "Not applicable" : `${percentage.toFixed(1)}%`}</p>
-                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-slate-700">% of total</p>
-                    <p className="text-[9px] font-semibold tabular-nums text-slate-700">of {formatCount(total, locale)}</p>
+                <section
+                  data-testid={`pyramid-metrics-${layer.key}`}
+                  className="grid min-w-0 grid-cols-1 overflow-hidden rounded-md border border-slate-200/80 bg-slate-50/80 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
+                >
+                  <div className="min-w-0 px-2.5 py-1.5">
+                    <p className="text-xs font-black leading-none text-slate-950 sm:text-sm">{percentage === null ? "Not applicable" : `${percentage.toFixed(1)}%`}</p>
+                    <p className="mt-1 text-[8px] font-bold uppercase tracking-wide text-slate-600">% of total</p>
+                    <p className="text-[8px] font-semibold tabular-nums text-slate-600">of {formatCount(total, locale)}</p>
                   </div>
                   {hasPreviousComparison && previousValue !== undefined ? (
-                    <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 border-t border-slate-900/15 px-2.5 py-1.5 text-right sm:px-3">
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-700">Trend</p>
-                      <p className="whitespace-nowrap text-[10px] font-bold tabular-nums text-slate-900">{getTrendLabel(value, previousValue, previousPeriodLabel, locale)}</p>
+                    <div className="flex min-w-0 items-center justify-between gap-2 border-t border-slate-900/10 px-2.5 py-1 text-right">
+                      <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">Trend</p>
+                      <p className="min-w-0 break-words text-[9px] font-bold leading-3 tabular-nums text-slate-800">{getTrendLabel(value, previousValue, previousPeriodLabel, locale)}</p>
                     </div>
                   ) : null}
-                </div>
+                </section>
               </article>
             </li>
           );
         })}
       </ol>
 
-      <div className="mt-2 grid gap-1 text-[11px] leading-4 text-slate-600 sm:grid-cols-2 sm:gap-4">
+      <div className="mt-2 grid gap-1 text-[10px] leading-4 text-slate-600 sm:grid-cols-2 sm:gap-4">
         <p>{classificationRule}</p>
         <p>{hierarchyLabel}</p>
       </div>

@@ -20,12 +20,13 @@ import { normalizeInternalAgentLocale } from "@/lib/agent/i18n";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
+import { SAFETY_DASHBOARD_VIEW_ROLES } from "@/lib/rbac/dashboard";
 
 const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?: boolean }> = [
   {
     href: "dashboards",
     label: "safetyDashboard",
-    roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR],
+    roles: [...SAFETY_DASHBOARD_VIEW_ROLES],
     spotlight: true,
   },
   { href: "environment-dashboard", label: "environmentDashboard", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
