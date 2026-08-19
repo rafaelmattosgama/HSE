@@ -201,4 +201,26 @@ describe("communication validate route", () => {
       }),
     );
   });
+
+  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR])(
+    "keeps validation forbidden for %s even when dashboard access is available",
+    async () => {
+      guardsMock.requirePlantAccess.mockResolvedValue({
+        error: new Response(JSON.stringify({ ok: false, errorCode: "FORBIDDEN" }), { status: 403 }),
+      });
+
+      const response = await POST(
+        new Request("http://localhost/api/plants/maap/communications/comm-1/validate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ isValid: true, notes: "Attempted from a dashboard user" }),
+        }),
+        routeContext(),
+      );
+
+      expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+      expect(response.status).toBe(403);
+      expect(serviceMock.CommunicationService.validate).not.toHaveBeenCalled();
+    },
+  );
 });

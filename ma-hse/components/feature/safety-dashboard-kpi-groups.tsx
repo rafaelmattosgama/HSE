@@ -160,7 +160,7 @@ export function SafetyDashboardKpiGroups({
   periodLabel,
   labels,
   detailed,
-  canViewValidation,
+  showPendingValidationKpi,
   canViewOpenCommunications,
   metrics,
 }: {
@@ -168,7 +168,7 @@ export function SafetyDashboardKpiGroups({
   periodLabel: string;
   labels: DashboardUiDictionary;
   detailed: boolean;
-  canViewValidation: boolean;
+  showPendingValidationKpi: boolean;
   canViewOpenCommunications: boolean;
   metrics: {
     validatedEvents: number;
@@ -383,7 +383,7 @@ export function SafetyDashboardKpiGroups({
         {detailed ? <KpiCard metric={{ title: labels.kpiActionsClosedOnTime, value: metrics.closedOnTimePercent, unit: "%", period: selectedPeriod, definition: labels.kpiActionsClosedOnTimeDefinition, state: metrics.closedOnTimePercent === null ? notApplicableState : metrics.closedOnTimePercent >= 90 ? safeState : attentionState, icon: <Clock3 className="h-5 w-5" />, digits: 1, emptyValueLabel: labels.kpiNotApplicable }} locale={locale} noDataLabel={noData} /> : null}
         {detailed ? <KpiCard metric={{ title: labels.kpiUnsafeActsClosed, value: metrics.unsafeActsClosedPercent, unit: "%", period: selectedPeriodCurrentStock, definition: labels.kpiUnsafeActsClosedDefinition, state: metrics.unsafeActsClosedPercent === null ? notApplicableState : metrics.unsafeActsClosedPercent >= 90 ? safeState : attentionState, icon: <ShieldCheck className="h-5 w-5" />, digits: 1, comparison: metrics.comparisons?.unsafeActsClosedPercent, emptyValueLabel: labels.kpiNotApplicable }} locale={locale} noDataLabel={noData} /> : null}
         {detailed ? <KpiCard metric={{ title: labels.kpiUnsafeConditionsClosed, value: metrics.unsafeConditionsClosedPercent, unit: "%", period: selectedPeriodCurrentStock, definition: labels.kpiUnsafeConditionsClosedDefinition, state: metrics.unsafeConditionsClosedPercent === null ? notApplicableState : metrics.unsafeConditionsClosedPercent >= 90 ? safeState : attentionState, icon: <ShieldCheck className="h-5 w-5" />, digits: 1, comparison: metrics.comparisons?.unsafeConditionsClosedPercent, emptyValueLabel: labels.kpiNotApplicable }} locale={locale} noDataLabel={noData} /> : null}
-        {canViewValidation ? <KpiCard metric={{ title: labels.pendingValidation, value: metrics.pendingValidation, unit: labels.kpiUnitEvents, period: currentStock, definition: labels.kpiPendingValidationDefinition, state: metrics.pendingValidation === 0 ? safeState : attentionState, icon: <ClipboardCheck className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
+        {showPendingValidationKpi ? <KpiCard metric={{ title: labels.pendingValidation, value: metrics.pendingValidation, unit: labels.kpiUnitEvents, period: currentStock, definition: labels.kpiPendingValidationDefinition, state: metrics.pendingValidation === 0 ? safeState : attentionState, icon: <ClipboardCheck className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
         {canViewOpenCommunications ? <KpiCard metric={{ title: labels.openCommunications, value: metrics.openCommunications, unit: labels.kpiUnitEvents, period: currentStock, definition: labels.kpiOpenCommunicationsDefinition, state: metrics.openCommunications === 0 ? safeState : informationState, icon: <Inbox className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
         {detailed && metrics.backlog ? <BacklogInsight {...metrics.backlog} labels={labels} /> : null}
       </KpiGroup>

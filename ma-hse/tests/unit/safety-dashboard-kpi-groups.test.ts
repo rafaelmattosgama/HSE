@@ -16,7 +16,7 @@ describe("SafetyDashboardKpiGroups", () => {
       periodLabel: "2026-01-01 - 2026-08-18",
       labels,
       detailed: true,
-      canViewValidation: true,
+      showPendingValidationKpi: true,
       canViewOpenCommunications: true,
       metrics: {
         validatedEvents: 12,
