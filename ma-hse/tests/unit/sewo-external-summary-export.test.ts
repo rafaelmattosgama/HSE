@@ -441,6 +441,8 @@ describe("SewoExportService.buildExport", () => {
       },
       communication: {
         id: "comm-1",
+        description: "Readable occurrence description from the linked communication.",
+        type: "ACCIDENT",
         area: {
           name: "Press Shop",
         },
@@ -448,6 +450,13 @@ describe("SewoExportService.buildExport", () => {
           name: "Line 2",
         },
         targetEmployee: null,
+        bodyPart: {
+          code: "BP08",
+          name: "Hand",
+        },
+        injuryType: {
+          name: "Hand contusion",
+        },
       },
       eventClassification: "Near Miss",
       area: {
@@ -468,7 +477,7 @@ describe("SewoExportService.buildExport", () => {
       },
       approvedAt: new Date("2026-05-21T08:00:00.000Z"),
       status: "APPROVED",
-      whatText: "Hand contusion",
+      whatText: "11111111-1111-4111-8111-111111111111",
       whereText: "Line 2",
       whoText: "123 - Maria Lopes",
       usualWorkYesNo: true,
@@ -547,6 +556,8 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("sewo-1");
     expect(rendered.texts).toContain("Exported by: Ana Silva");
     expect(rendered.texts).toContain("Valenca (PL1)");
+    expect(rendered.texts).toContain("Readable occurrence description from the linked communication.");
+    expect(rendered.texts).not.toContain("11111111-1111-4111-8111-111111111111");
     expect(rendered.texts).toContain("Operator slipped near the conveyor.");
     expect(rendered.texts).toContain("Floor contamination identified.");
     expect(rendered.texts).toContain("Why did the operator slip?");
