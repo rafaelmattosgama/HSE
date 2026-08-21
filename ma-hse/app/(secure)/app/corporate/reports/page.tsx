@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { StorageService } from "@/lib/services/storage-service";
 import { generateCorporateReportAction } from "@/app/(secure)/app/corporate/reports/actions";
 import { CorporateReportGeneratorForm } from "@/components/feature/corporate-report-generator-form";
 
@@ -64,33 +63,31 @@ export default async function CorporateReportsPage({
     }),
   ]);
 
-  const reports = await Promise.all(
-    reportRuns.map(async (run) => {
-      const fileKeys = getFileKeys(run.fileKeys);
-      const plantCode = run.plant?.code ?? fileKeys.plantCode ?? null;
-      const plantName = run.plant?.name ?? fileKeys.plantName ?? null;
-      const isFactoryReport = Boolean(run.plantId);
-      const factoryLabel = isFactoryReport
-        ? `${plantCode ? `${plantCode.toUpperCase()} - ` : ""}${plantName ?? "Selected factory"}`
-        : "All factories";
+  const reports = reportRuns.map((run) => {
+    const fileKeys = getFileKeys(run.fileKeys);
+    const plantCode = run.plant?.code ?? fileKeys.plantCode ?? null;
+    const plantName = run.plant?.name ?? fileKeys.plantName ?? null;
+    const isFactoryReport = Boolean(run.plantId);
+    const factoryLabel = isFactoryReport
+      ? `${plantCode ? `${plantCode.toUpperCase()} - ` : ""}${plantName ?? "Selected factory"}`
+      : "All factories";
 
-      return {
-        id: run.id,
-        code: run.codigoCompleto ?? run.codigoAbreviado ?? "Requires code update",
-        type: run.type,
-        scopeLabel: isFactoryReport ? "Factory" : "Global",
-        factoryLabel,
-        status: run.status,
-        periodStart: run.periodStart.toISOString().slice(0, 10),
-        periodEnd: run.periodEnd.toISOString().slice(0, 10),
-        createdAt: run.createdAt.toISOString(),
-        completedAt: run.completedAt?.toISOString() ?? "-",
-        recipientsCount: Array.isArray(run.recipients) ? run.recipients.length : 0,
-        pdfFileName: fileKeys.pdfFileName ?? "report.pdf",
-        pdfUrl: fileKeys.pdfKey ? await StorageService.getPresignedDownloadUrl({ key: fileKeys.pdfKey }) : null,
-      };
-    }),
-  );
+    return {
+      id: run.id,
+      code: run.codigoCompleto ?? run.codigoAbreviado ?? "Requires code update",
+      type: run.type,
+      scopeLabel: isFactoryReport ? "Factory" : "Global",
+      factoryLabel,
+      status: run.status,
+      periodStart: run.periodStart.toISOString().slice(0, 10),
+      periodEnd: run.periodEnd.toISOString().slice(0, 10),
+      createdAt: run.createdAt.toISOString(),
+      completedAt: run.completedAt?.toISOString() ?? "-",
+      recipientsCount: Array.isArray(run.recipients) ? run.recipients.length : 0,
+      pdfFileName: fileKeys.pdfFileName ?? "report.pdf",
+      pdfUrl: fileKeys.pdfKey ? `/api/corporate/reports/${run.id}/pdf` : null,
+    };
+  });
 
   return (
     <main className="mx-auto w-full max-w-7xl px-6 py-6">

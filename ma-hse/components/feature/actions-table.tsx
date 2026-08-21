@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
+import { parseApiResponse, requireApiResponse, uploadAttachment } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
 import {
   BASE_ACTIONS_UI,
@@ -149,37 +149,21 @@ export function ActionsTable({
   async function uploadFiles(files: File[], plantCode = plant) {
     const uploaded: Array<{ fileKey: string; fileName: string; contentType: string }> = [];
     for (const file of files) {
-      const presignResponse = await fetch("/api/storage/presign", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      let uploadResult: { key: string };
+      try {
+        uploadResult = await uploadAttachment({
           plantCode,
-          fileName: file.name,
-          contentType: file.type || "application/octet-stream",
           folder: "actions",
-        }),
-      });
-      const presignJson = await requireApiResponse<{
-        uploadUrl: string;
-        key: string;
-      }>(presignResponse, "Failed to prepare evidence upload");
-      const presignData = presignJson.data;
-
-      if (!presignData) {
-        throw new Error("Failed to prepare evidence upload");
-      }
-
-      const putResponse = await fetch(presignData.uploadUrl, {
-        method: "PUT",
-        headers: { "content-type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      if (!putResponse.ok) {
+          file,
+          contentType: file.type || "application/octet-stream",
+          fallbackErrorMessage: "Failed to prepare evidence upload",
+        });
+      } catch {
         throw new Error(`Failed to upload ${file.name}`);
       }
 
       uploaded.push({
-        fileKey: presignData.key,
+        fileKey: uploadResult.key,
         fileName: file.name,
         contentType: file.type || "application/octet-stream",
       });

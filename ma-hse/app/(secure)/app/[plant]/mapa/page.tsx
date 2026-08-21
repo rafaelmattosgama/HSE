@@ -6,7 +6,6 @@ import { formatCommunicationType } from "@/lib/helpers";
 import { prisma } from "@/lib/prisma";
 import { getServerUiLocale } from "@/lib/server-ui-language";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
-import { StorageService } from "@/lib/services/storage-service";
 import { MapaManager } from "@/components/feature/mapa-manager";
 
 export default async function MapaPage({
@@ -66,16 +65,14 @@ export default async function MapaPage({
   const workstationNameById = new Map(localizedWorkstations.map((row) => [row.id, row.name]));
   const communicationTypeLabels = getFixedCommunicationLabels(uiLocale).communicationTypeLabels;
 
-  const sourceDocuments = await Promise.all(
-    documents.map(async (document) => ({
-      id: document.id,
-      title: document.title,
-      fileName: document.fileName,
-      fileType: document.fileType,
-      selectedLayerNames: Array.isArray(document.selectedLayerNames) ? document.selectedLayerNames.map(String) : [],
-      downloadUrl: await StorageService.getPresignedDownloadUrl({ key: document.fileKey }),
-    })),
-  );
+  const sourceDocuments = documents.map((document) => ({
+    id: document.id,
+    title: document.title,
+    fileName: document.fileName,
+    fileType: document.fileType,
+    selectedLayerNames: Array.isArray(document.selectedLayerNames) ? document.selectedLayerNames.map(String) : [],
+    downloadUrl: `/api/plants/${plant}/mapa/documents/${document.id}`,
+  }));
 
   const anchorByAreaId = new Map(
     features

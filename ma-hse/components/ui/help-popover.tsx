@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
+
+const POPOVER_WIDTH = 288;
+const POPOVER_MARGIN = 16;
+
+type PopoverPosition = { top: number; left: number; width: number };
 
 export function HelpPopover({
   title,
@@ -14,11 +20,13 @@ export function HelpPopover({
 }) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
   const popoverId = useId();
   const titleId = `${popoverId}-title`;
   const bodyId = `${popoverId}-body`;
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   function close() {
     setPinned(false);
@@ -26,28 +34,54 @@ export function HelpPopover({
     buttonRef.current?.focus();
   }
 
+  function updatePosition() {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(POPOVER_WIDTH, window.innerWidth - POPOVER_MARGIN * 2);
+    const maxLeft = Math.max(POPOVER_MARGIN, window.innerWidth - width - POPOVER_MARGIN);
+    const left = Math.min(Math.max(POPOVER_MARGIN, rect.right - width), maxLeft);
+    const top = Math.min(rect.bottom + 8, Math.max(POPOVER_MARGIN, window.innerHeight - POPOVER_MARGIN));
+    setPosition({ top, left, width });
+  }
+
+  // Positioned via a portal (instead of CSS position:absolute inside the card)
+  // so the popover cannot be clipped by an ancestor card's `overflow: hidden`.
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      setPinned(false);
-      setOpen(false);
-      buttonRef.current?.focus();
+      close();
     }
 
     function handlePointerDown(event: PointerEvent) {
-      if (!pinned || containerRef.current?.contains(event.target as Node)) return;
+      if (!pinned) return;
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
       setPinned(false);
       setOpen(false);
+    }
+
+    function handleReposition() {
+      updatePosition();
     }
 
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
     };
   }, [open, pinned]);
 
@@ -85,18 +119,23 @@ export function HelpPopover({
       >
         <Info className="h-4 w-4" aria-hidden="true" />
       </button>
-      {open ? (
-        <div
-          id={popoverId}
-          role="dialog"
-          aria-labelledby={titleId}
-          aria-describedby={bodyId}
-          className="fixed inset-x-4 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-auto -translate-y-1/2 overflow-y-auto rounded-md border border-slate-200 bg-white p-3 text-left shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-10 sm:max-h-[min(24rem,calc(100dvh-4rem))] sm:w-72 sm:translate-y-0"
-        >
-          <p id={titleId} className="text-sm font-semibold text-slate-900">{title}</p>
-          <p id={bodyId} className="mt-2 whitespace-pre-line text-sm text-slate-700">{body}</p>
-        </div>
-      ) : null}
+      {open && position && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={popoverRef}
+              id={popoverId}
+              role="dialog"
+              aria-labelledby={titleId}
+              aria-describedby={bodyId}
+              style={{ top: position.top, left: position.left, width: position.width }}
+              className="fixed z-50 max-h-[min(24rem,calc(100dvh-4rem))] overflow-y-auto rounded-md border border-slate-200 bg-white p-3 text-left shadow-lg"
+            >
+              <p id={titleId} className="text-sm font-semibold text-slate-900">{title}</p>
+              <p id={bodyId} className="mt-2 whitespace-pre-line text-sm text-slate-700">{body}</p>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { Button } from "@/components/ui/button";
 import { HelpPopover } from "@/components/ui/help-popover";
-import { parseApiResponse, requireApiResponse } from "@/lib/client-api";
+import { parseApiResponse, requireApiResponse, uploadAttachment } from "@/lib/client-api";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
 import { getNextSewoSubmissionStatus } from "@/lib/sewo-status";
 import {
@@ -732,42 +732,23 @@ export function CreateSewoQuick({
     for (const attachment of evidenceAttachments) {
       if (!attachment.file) continue;
       const photo = attachment.file;
-      const presignResponse = await fetch("/api/storage/presign", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+
+      let uploadResult: { key: string };
+      try {
+        uploadResult = await uploadAttachment({
           plantCode: plant,
-          fileName: photo.name,
-          contentType: photo.type || "image/jpeg",
           folder: "sewo",
-        }),
-      });
-
-      const presignJson = await requireApiResponse<{
-        uploadUrl: string;
-        key: string;
-      }>(presignResponse, ui.preparePhotoUploadError);
-      const presignData = presignJson.data;
-
-      if (!presignData) {
-        throw new Error(ui.preparePhotoUploadError);
-      }
-
-      const putResponse = await fetch(presignData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "content-type": photo.type || "image/jpeg",
-        },
-        body: photo,
-      });
-
-      if (!putResponse.ok) {
+          file: photo,
+          contentType: photo.type || "image/jpeg",
+          fallbackErrorMessage: ui.preparePhotoUploadError,
+        });
+      } catch {
         throw new Error(formatUiMessage(ui.uploadPhotoError, { name: photo.name }));
       }
 
       uploaded.push({
         id: attachment.id,
-        fileKey: presignData.key,
+        fileKey: uploadResult.key,
         fileName: photo.name,
         contentType: photo.type || "image/jpeg",
         caption: attachment.caption?.trim() || undefined,

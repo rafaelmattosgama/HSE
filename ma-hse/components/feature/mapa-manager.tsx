@@ -3,6 +3,7 @@
 import { MapFeatureType, MapSourceFileType } from "@prisma/client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { uploadAttachment } from "@/lib/client-api";
 
 type SourceDocument = {
   id: string;
@@ -160,29 +161,17 @@ export function MapaManager({
             ? MapSourceFileType.IMAGE
             : MapSourceFileType.OTHER;
 
-    const presignResponse = await fetch("/api/storage/presign", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    let uploadResult: { key: string };
+    try {
+      uploadResult = await uploadAttachment({
         plantCode: plant,
-        fileName: documentFile.name,
-        contentType: documentFile.type || "application/octet-stream",
         folder: "maps",
-      }),
-    });
-    const presignJson = await presignResponse.json();
-    if (!presignResponse.ok || !presignJson.ok) {
-      setMessage(presignJson.message ?? "Failed to prepare upload.");
-      return;
-    }
-
-    const putResponse = await fetch(presignJson.data.uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": documentFile.type || "application/octet-stream" },
-      body: documentFile,
-    });
-    if (!putResponse.ok) {
-      setMessage("Failed to upload source file.");
+        file: documentFile,
+        contentType: documentFile.type || "application/octet-stream",
+        fallbackErrorMessage: "Failed to prepare upload.",
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to upload source file.");
       return;
     }
 
@@ -191,7 +180,7 @@ export function MapaManager({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         title: documentTitle || documentFile.name,
-        fileKey: presignJson.data.key,
+        fileKey: uploadResult.key,
         fileName: documentFile.name,
         contentType: documentFile.type || "application/octet-stream",
         fileType,

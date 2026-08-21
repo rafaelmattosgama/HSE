@@ -9,6 +9,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { uploadAttachment } from "@/lib/client-api";
 import { supportsUnsafeActType } from "@/lib/communication-classification";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
 
@@ -128,36 +129,21 @@ export function CreateCommunicationQuick({
     const uploaded = [];
 
     for (const photo of photos) {
-      const presignResponse = await fetch("/api/storage/presign", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      let uploadResult: { key: string };
+      try {
+        uploadResult = await uploadAttachment({
           plantCode: plant,
-          fileName: photo.name,
-          contentType: photo.type || "image/jpeg",
           folder: "communications",
-        }),
-      });
-
-      const presignJson = await presignResponse.json();
-      if (!presignResponse.ok || !presignJson.ok) {
-        throw new Error(presignJson.message ?? "Failed to prepare photo upload");
-      }
-
-      const putResponse = await fetch(presignJson.data.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "content-type": photo.type || "image/jpeg",
-        },
-        body: photo,
-      });
-
-      if (!putResponse.ok) {
+          file: photo,
+          contentType: photo.type || "image/jpeg",
+          fallbackErrorMessage: "Failed to prepare photo upload",
+        });
+      } catch {
         throw new Error(`Failed to upload ${photo.name}`);
       }
 
       uploaded.push({
-        fileKey: presignJson.data.key,
+        fileKey: uploadResult.key,
         fileName: photo.name,
         contentType: photo.type || "image/jpeg",
       });

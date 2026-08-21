@@ -3,6 +3,7 @@
 import { ExternalCompanyDocumentType, ExternalWorkerDocumentType } from "@prisma/client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { uploadAttachment } from "@/lib/client-api";
 
 type PortalData = {
   id: string;
@@ -41,20 +42,15 @@ export function ContractorPortal({ company }: { company: PortalData }) {
   const [workerBirthDate, setWorkerBirthDate] = useState("");
 
   async function uploadFile(folder: "communications" | "actions" | "sewo", file: File) {
-    const presignResponse = await fetch("/api/contractors/storage/presign", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        plantCode: company.plant.code,
-        fileName: file.name,
-        contentType: file.type || "application/pdf",
-        folder,
-      }),
+    const uploadResult = await uploadAttachment({
+      plantCode: company.plant.code,
+      folder,
+      file,
+      contentType: file.type || "application/pdf",
+      fallbackErrorMessage: "Failed to prepare upload",
+      endpoint: "/api/contractors/storage/upload",
     });
-    const presignJson = await presignResponse.json();
-    if (!presignResponse.ok || !presignJson.ok) throw new Error("Failed to prepare upload");
-    await fetch(presignJson.data.uploadUrl, { method: "PUT", headers: { "content-type": file.type || "application/pdf" }, body: file });
-    return { fileKey: presignJson.data.key, fileName: file.name, contentType: file.type || "application/pdf" };
+    return { fileKey: uploadResult.key, fileName: file.name, contentType: file.type || "application/pdf" };
   }
 
   async function submitCompanyDocument(type: ExternalCompanyDocumentType, file: File, validUntil: string) {

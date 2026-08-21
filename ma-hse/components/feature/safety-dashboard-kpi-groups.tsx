@@ -218,7 +218,7 @@ export function SafetyDashboardKpiGroups({
   const noDataState: KpiState = { label: noData, tone: "default" };
   const notApplicableState: KpiState = { label: labels.kpiNotApplicable, tone: "default" };
   const sifPsifPeriod = metrics.sifPsif
-    ? `${selectedPeriod} Â· ${labels.plant}: ${metrics.sifPsif.plantName}`
+    ? `${selectedPeriod} · ${labels.plant}: ${metrics.sifPsif.plantName}`
     : selectedPeriod;
   const sifPsifCategories: Array<{ key: SifPsifIndicatorCategory; title: string }> = [
     { key: "FIRST_AID", title: labels.pyramidFirstAid },
@@ -341,7 +341,7 @@ export function SafetyDashboardKpiGroups({
         }} locale={locale} noDataLabel={noData} />
         {sifPsifCategories.map((category) => {
           const summary = metrics.sifPsif!.current.byCategory[category.key];
-          const detail = `${labels.kpiSif}: ${summary.sif} (${summary.sifPercent === null ? "â€”" : `${formatPercent(summary.sifPercent, locale)}%`}) Â· ${labels.kpiPsif}: ${summary.psif} (${summary.psifPercent === null ? "â€”" : `${formatPercent(summary.psifPercent, locale)}%`}) Â· ${formatTemplate(labels.kpiSifPsifEligibleIncidentDetail, { numerator: summary.sifOrPsif, denominator: summary.total })}`;
+          const detail = `${labels.kpiSif}: ${summary.sif} (${summary.sifPercent === null ? "—" : `${formatPercent(summary.sifPercent, locale)}%`}) · ${labels.kpiPsif}: ${summary.psif} (${summary.psifPercent === null ? "—" : `${formatPercent(summary.psifPercent, locale)}%`}) · ${formatTemplate(labels.kpiSifPsifEligibleIncidentDetail, { numerator: summary.sifOrPsif, denominator: summary.total })}`;
 
           return <KpiCard
             key={category.key}

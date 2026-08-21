@@ -474,9 +474,8 @@ export const updateRepeatabilityAlertConfigInput = z.object({
   workstationNearMissWeeklyThreshold: z.number().int().positive(),
 });
 
-export const issuePresignedUploadInput = z.object({
+export const uploadAttachmentInput = z.object({
   plantCode: z.string().min(2),
-  fileName: z.string().min(1),
   contentType: z.string().min(3),
   folder: z.enum(["communications", "actions", "sewo", "maps", "smat"]),
 });
@@ -907,7 +906,7 @@ export type ChangeSewoDecisionInput = z.infer<typeof changeSewoDecisionInput>;
 export type UpdateActionInput = z.infer<typeof updateActionInput>;
 export type UpdateAlertRuleInput = z.infer<typeof updateAlertRuleInput>;
 export type UpdateRepeatabilityAlertConfigInput = z.infer<typeof updateRepeatabilityAlertConfigInput>;
-export type IssuePresignedUploadInput = z.infer<typeof issuePresignedUploadInput>;
+export type UploadAttachmentInput = z.infer<typeof uploadAttachmentInput>;
 export type ContractorRegisterInput = z.infer<typeof contractorRegisterInput>;
 export type ContractorLoginInput = z.infer<typeof contractorLoginInput>;
 export type ContractorInvitationInput = z.infer<typeof contractorInvitationInput>;

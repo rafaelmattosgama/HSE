@@ -808,9 +808,9 @@ async function notifySewoRejectedReportShared(sewoId: string) {
         title: `S-EWO rejeitado e partilhado: ${summary.occurrenceType}`,
         body: [
           `Planta: ${summary.plantLabel}`,
-          `Tipo de ocorrÃªncia: ${summary.occurrenceType}`,
+          `Tipo de ocorrência: ${summary.occurrenceType}`,
           "Estado: Rejected",
-          summary.isPriority ? `ClassificaÃ§Ã£o SIF/PSIF: ${summary.sifPsifLabel}` : null,
+          summary.isPriority ? `Classificação SIF/PSIF: ${summary.sifPsifLabel}` : null,
         ].filter(Boolean).join(" | "),
         channel: SEWO_REJECTED_CHANNEL,
         attachments: exported

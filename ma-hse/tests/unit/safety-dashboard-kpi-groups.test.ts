@@ -63,6 +63,10 @@ describe("SafetyDashboardKpiGroups", () => {
     expect(screen.getByRole("heading", { name: labels.kpiLeadingIndicators })).toBeTruthy();
     expect(screen.getByRole("heading", { name: labels.kpiSifPsifIndicators })).toBeTruthy();
     expect(screen.getByRole("button", { name: `Definition: ${labels.kpiSifPsifIncidents}` })).toBeTruthy();
+    // Regression: the SIF/PSIF category detail must render a plain middle dot and
+    // em dash, not mojibake ("Â·" / "â€”") from a UTF-8 string double-encoded as CP1252.
+    expect(screen.getByText("SIF: 1 (100.0%) · PSIF: 0 (0.0%) · 1 of 1 eligible incidents")).toBeTruthy();
+    expect(screen.getByText("SIF: 0 (—) · PSIF: 0 (—) · 0 of 0 eligible incidents")).toBeTruthy();
     const exposureHeading = screen.getByRole("heading", { name: labels.kpiExposureScope });
     const actionsHeading = screen.getByRole("heading", { name: labels.kpiActionsCompliance });
     expect(exposureHeading.compareDocumentPosition(actionsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
