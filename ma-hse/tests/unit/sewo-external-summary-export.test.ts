@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({
@@ -35,6 +36,7 @@ const validationMock = vi.hoisted(() => ({
 
 const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   y = 40;
+  pageCount = 1;
   page = {
     width: 595,
     height: 842,
@@ -136,6 +138,15 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
 
   addPage() {
     this.y = this.page.margins.top;
+    this.pageCount += 1;
+    return this;
+  }
+
+  bufferedPageRange() {
+    return { start: 0, count: this.pageCount };
+  }
+
+  switchToPage() {
     return this;
   }
 
@@ -164,7 +175,7 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   }
 
   end() {
-    const chunk = Buffer.from(JSON.stringify(this.payload));
+    const chunk = Buffer.from(JSON.stringify({ ...this.payload, pageCount: this.pageCount }));
     for (const handler of this.handlers.get("data") ?? []) {
       handler(chunk);
     }
@@ -327,6 +338,7 @@ describe("SewoExportService.buildExternalSummaryExport", () => {
         ],
       },
       causeSelections: [],
+      actions: [],
       actionLinks: [
         {
           action: {
@@ -397,6 +409,7 @@ describe("SewoExportService.buildExternalSummaryExport", () => {
       howText: "",
       templateData: null,
       causeSelections: [],
+      actions: [],
       actionLinks: [],
       attachments: [
         {
@@ -513,6 +526,7 @@ describe("SewoExportService.buildExport", () => {
         ],
       },
       causeSelections: [],
+      actions: [],
       actionLinks: [
         {
           action: {
@@ -598,6 +612,7 @@ describe("SewoExportService.buildExport", () => {
       immediateCorrectiveActionText: "Briefed the team.",
       templateData: null,
       causeSelections: [],
+      actions: [],
       actionLinks: [],
       attachments: [],
     });
@@ -652,6 +667,7 @@ describe("SewoExportService.buildExport", () => {
         ],
       },
       causeSelections: [],
+      actions: [],
       actionLinks: [
         {
           action: {
@@ -675,5 +691,179 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("sewo-legacy-action");
     expect(rendered.texts.some((entry) => entry.includes("Review platform stop"))).toBe(true);
     expect(rendered.texts).toContain("Not applicable");
+  });
+
+  function baseSewoFixture(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "sewo-1",
+      plant: { code: "pl1", name: "Valenca" },
+      communication: null,
+      eventClassification: "Near Miss",
+      area: null,
+      line: null,
+      shift: null,
+      analysisDate: new Date("2026-05-20T08:00:00.000Z"),
+      performedBy: { name: "Joao Costa" },
+      approvedBy: null,
+      approvedAt: null,
+      status: "APPROVED",
+      whatText: "Near Miss",
+      whereText: "Line 2",
+      whoText: "Operator",
+      usualWorkYesNo: true,
+      whichText: "Normal operation",
+      howText: "Operator slipped near the conveyor.",
+      immediateCorrectiveActionText: "Area isolated and cleaned.",
+      templateData: null,
+      causeSelections: [],
+      actions: [],
+      actionLinks: [],
+      attachments: [],
+      ...overrides,
+    };
+  }
+
+  it("keeps every paragraph of a long, accented analysis text without truncating it", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    const analysisText = [
+      "Enquanto manipulava peça para retirada de final de linha e colocação em contentor, a peça escorregou tendo caído e atingido o pé.",
+      "A peça escorregou porque continha óleo de corte e a posição do contentor não é favorável à colocação da mesma de forma fácil.",
+    ].join("\n\n");
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
+      id: "sewo-analysis-paragraphs",
+      templateData: { analysisText },
+    }));
+
+    const exported = await SewoExportService.buildExport("sewo-analysis-paragraphs", { locale: "pt", exportedBy: "Ana Silva" });
+    const rendered = JSON.parse(exported.pdf.toString()) as { texts: string[] };
+
+    expect(rendered.texts).toContain(analysisText);
+    expect(rendered.texts.some((entry) => entry.endsWith("..."))).toBe(false);
+  });
+
+  it("keeps long, multi-line and bilingual root cause comments intact instead of cutting them mid-sentence", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    const weaknessComment = [
+      "Comentário longo em português que continua bastante depois dos 140 caracteres que antes serviam de limite fixo para a coluna de comentários da tabela de causas.",
+      "Additional English follow-up sentence that must remain fully visible as well.",
+    ].join("\n");
+    const manufacturingComment =
+      "Outro comentário longo que termina corretamente sem cortar a meio da frase, ultrapassando de forma clara os antigos 140 caracteres de limite por célula da tabela.";
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
+      id: "sewo-root-cause-comments",
+      templateData: {
+        rootCauseDetails: [
+          { label: "6.3 Weakness in design", comment: weaknessComment, isRootCause: true },
+          { label: "6.8 Erroneous manufacturing / installation", comment: manufacturingComment, isRootCause: false },
+        ],
+      },
+    }));
+
+    const exported = await SewoExportService.buildExport("sewo-root-cause-comments", { locale: "en", exportedBy: "Ana Silva" });
+    const rendered = JSON.parse(exported.pdf.toString()) as { texts: string[] };
+
+    expect(rendered.texts).toContain(weaknessComment);
+    expect(rendered.texts).toContain(manufacturingComment);
+    expect(rendered.texts.some((entry) => entry.endsWith("..."))).toBe(false);
+  });
+
+  it("lists every action linked to the SEWO via either relation, deduplicated, with translated status and full description", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    const longDescription =
+      "Descrição longa da ação corretiva que detalha extensivamente os passos necessários para eliminar a causa raiz identificada, incluindo peças a substituir, testes a realizar e formação a dar aos operadores envolvidos.";
+    const sharedAction = {
+      id: "action-open",
+      title: "Repair conveyor guard",
+      description: "Install and bolt the missing guard back onto the conveyor.",
+      dueDate: new Date("2026-07-01T00:00:00.000Z"),
+      status: "OPEN",
+      ownerUser: { name: "Carlos Mendes" },
+    };
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
+      id: "sewo-multiple-actions",
+      actions: [
+        sharedAction,
+        {
+          id: "action-overdue",
+          title: "Replace worn belt",
+          description: longDescription,
+          dueDate: new Date("2026-01-01T00:00:00.000Z"),
+          status: "ONGOING",
+          ownerUser: null,
+        },
+      ],
+      actionLinks: [
+        { action: sharedAction },
+        {
+          action: {
+            id: "action-closed",
+            title: "Retrain shift on lockout procedure",
+            description: "Completed refresher training for the affected shift.",
+            dueDate: new Date("2026-03-01T00:00:00.000Z"),
+            status: "CLOSED",
+            ownerUser: { name: "Ana Silva" },
+          },
+        },
+      ],
+    }));
+
+    const exported = await SewoExportService.buildExport("sewo-multiple-actions", { locale: "en", exportedBy: "Ana Silva" });
+    const rendered = JSON.parse(exported.pdf.toString()) as { texts: string[] };
+
+    expect(rendered.texts.filter((entry) => entry.includes("Repair conveyor guard")).length).toBe(1);
+    expect(rendered.texts.some((entry) => entry.includes(longDescription))).toBe(true);
+    expect(rendered.texts).toContain("Open");
+    expect(rendered.texts).toContain("Ongoing");
+    expect(rendered.texts).toContain("Closed");
+    expect(rendered.texts).not.toContain("OPEN");
+    expect(rendered.texts.some((entry) => entry.includes("Carlos Mendes"))).toBe(true);
+    expect(rendered.texts).toContain("Not applicable");
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(exported.xlsx as unknown as ArrayBuffer);
+    const actionsSheet = workbook.getWorksheet(ui.actionPlan)!;
+    expect(actionsSheet.rowCount).toBe(4);
+    const titles = [2, 3, 4].map((row) => actionsSheet.getRow(row).getCell(1).value);
+    expect(titles).toEqual(expect.arrayContaining(["Repair conveyor guard", "Replace worn belt", "Retrain shift on lockout procedure"]));
+  });
+
+  it("shows the placeholder row only when the SEWO truly has no linked actions", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({ id: "sewo-no-actions" }));
+
+    const exported = await SewoExportService.buildExport("sewo-no-actions", { locale: "en", exportedBy: "Ana Silva" });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(exported.xlsx as unknown as ArrayBuffer);
+    const actionsSheet = workbook.getWorksheet(ui.actionPlan)!;
+    expect(actionsSheet.rowCount).toBe(2);
+    expect(actionsSheet.getRow(2).getCell(1).value).toBe(ui.noLinkedActions);
+  });
+
+  it("does not drop rows off the page: many long root causes flow onto a continuation page instead of being cut", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    const lastComment = "Marker comment for the final root cause row, which must survive onto whichever page it lands on.";
+    const rootCauseDetails = Array.from({ length: 14 }, (_, index) => ({
+      label: `${index + 1}.1 Root cause number ${index + 1}`,
+      comment: index === 13
+        ? lastComment
+        : `Linha um do comentário ${index + 1}.\nLinha dois do comentário ${index + 1}.\nLine three in English for cause ${index + 1}.`,
+      isRootCause: index % 2 === 0,
+    }));
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
+      id: "sewo-many-root-causes",
+      templateData: { rootCauseDetails },
+    }));
+
+    const exported = await SewoExportService.buildExport("sewo-many-root-causes", { locale: "en", exportedBy: "Ana Silva" });
+    const rendered = JSON.parse(exported.pdf.toString()) as { texts: string[]; pageCount: number };
+
+    expect(rendered.pageCount).toBeGreaterThan(3);
+    expect(rendered.texts).toContain(lastComment);
   });
 });
