@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionPriority } from "@prisma/client";
 import { Camera, FileUp, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { uploadAttachment } from "@/lib/client-api";
 import {
   SMAT_ATTACHMENT_ACCEPT,
   SMAT_ATTACHMENT_LIMITS,
@@ -243,34 +244,21 @@ export function CreateSmatAudit({
 
     for (const attachment of attachments) {
       const { file, contentType } = attachment;
-      const presignResponse = await fetch("/api/storage/presign", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      let uploadResult: { key: string };
+      try {
+        uploadResult = await uploadAttachment({
           plantCode,
-          fileName: file.name,
-          contentType,
           folder: "smat",
-        }),
-      });
-
-      const presignJson = await presignResponse.json();
-      if (!presignResponse.ok || !presignJson.ok) {
-        throw new Error(presignJson.message ?? "Não foi possível preparar o carregamento da imagem SMAT.");
-      }
-
-      const putResponse = await fetch(presignJson.data.uploadUrl, {
-        method: "PUT",
-        headers: { "content-type": contentType },
-        body: file,
-      });
-
-      if (!putResponse.ok) {
+          file,
+          contentType,
+          fallbackErrorMessage: "Não foi possível preparar o carregamento da imagem SMAT.",
+        });
+      } catch {
         throw new Error(`Nao foi possivel carregar ${file.name}`);
       }
 
       uploaded.push({
-        fileKey: presignJson.data.key,
+        fileKey: uploadResult.key,
         fileName: file.name,
         contentType,
         caption: attachment.caption.trim() || undefined,

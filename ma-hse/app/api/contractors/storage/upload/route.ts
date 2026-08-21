@@ -1,9 +1,8 @@
 import { fail, ok } from "@/lib/api";
 import { buildStorageKey } from "@/lib/helpers";
 import { getContractorSessionCompany } from "@/lib/contractor-auth";
-import { parseBody } from "@/lib/http";
 import { StorageService } from "@/lib/services/storage-service";
-import { issuePresignedUploadInput } from "@/lib/validation/dtos";
+import { parseAttachmentUploadForm } from "@/lib/storage-upload";
 
 export async function POST(request: Request) {
   const company = await getContractorSessionCompany();
@@ -11,7 +10,7 @@ export async function POST(request: Request) {
     return fail("UNAUTHORIZED", "Contractor authentication required", 401);
   }
 
-  const parsed = await parseBody(request, issuePresignedUploadInput);
+  const parsed = await parseAttachmentUploadForm(request);
   if ("error" in parsed) return parsed.error;
 
   const key = buildStorageKey({
@@ -20,10 +19,12 @@ export async function POST(request: Request) {
     fileName: parsed.data.fileName,
   });
 
-  const presigned = await StorageService.getPresignedUploadUrl({
+  const body = Buffer.from(await parsed.data.file.arrayBuffer());
+  const uploaded = await StorageService.uploadObject({
     key,
     contentType: parsed.data.contentType,
+    body,
   });
 
-  return ok(presigned);
+  return ok(uploaded);
 }

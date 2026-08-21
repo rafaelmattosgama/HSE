@@ -47,18 +47,14 @@ describe("CreateSmatAudit attachments", () => {
     fetchMock.mockImplementation(async (input) => {
       const url = String(input);
 
-      if (url === "/api/storage/presign") {
+      if (url === "/api/storage/upload") {
         return new Response(JSON.stringify({
           ok: true,
           data: {
-            uploadUrl: "http://storage.local/upload",
+            bucket: "ehs-attachments",
             key: "pl1/smat/smat-photo.jpg",
           },
         }), { status: 200 });
-      }
-
-      if (url === "http://storage.local/upload") {
-        return new Response(null, { status: 200 });
       }
 
       if (url === "/api/plants/pl1/smat") {
@@ -84,6 +80,14 @@ describe("CreateSmatAudit attachments", () => {
     await waitFor(() => {
       expect(screen.getByText("stop after payload")).toBeTruthy();
     });
+
+    const uploadCall = fetchMock.mock.calls.find((call) => String(call[0]) === "/api/storage/upload");
+    expect(uploadCall).toBeTruthy();
+    const uploadForm = (uploadCall?.[1] as RequestInit).body as FormData;
+    expect(uploadForm.get("plantCode")).toBe("pl1");
+    expect(uploadForm.get("folder")).toBe("smat");
+    expect(uploadForm.get("contentType")).toBe("image/jpeg");
+    expect((uploadForm.get("file") as File).name).toBe("smat-photo.jpg");
 
     const smatCall = fetchMock.mock.calls.find((call) => String(call[0]) === "/api/plants/pl1/smat");
     expect(smatCall).toBeTruthy();

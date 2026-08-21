@@ -156,7 +156,7 @@ function RankingCard({
           const isActive = activePlantCode === entry.plantCode;
           const percentage = entry.percentage ?? (maxValue > 0 ? (entry.value / maxValue) * 100 : 0);
           const detail = entry.count !== undefined && entry.total !== undefined
-            ? `${entry.count.toLocaleString()} / ${entry.total.toLocaleString()} Â· ${percentage.toFixed(1)}%`
+            ? `${entry.count.toLocaleString()} / ${entry.total.toLocaleString()} · ${percentage.toFixed(1)}%`
             : `${percentage.toFixed(1)}%`;
 
           return (

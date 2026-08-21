@@ -21,9 +21,9 @@ describe("ModuleToggleManager", () => {
 
     render(createElement(ModuleToggleManager, {
       endpoint: "/api/admin/modules",
-      title: "MÃ³dulos das plantas",
-      description: "Configure os mÃ³dulos.",
-      saveLabel: "Guardar mÃ³dulos globais",
+      title: "Módulos das plantas",
+      description: "Configure os módulos.",
+      saveLabel: "Guardar módulos globais",
       initialModules: resolveModuleToggles(),
       moduleLabels: { ENVIRONMENT_DASHBOARD: "Dashboard de Ambiente" },
     }));
@@ -31,7 +31,7 @@ describe("ModuleToggleManager", () => {
     const dashboardToggle = screen.getByRole("checkbox", { name: "Dashboard de Ambiente" }) as HTMLInputElement;
     expect(dashboardToggle.checked).toBe(true);
     fireEvent.click(dashboardToggle);
-    fireEvent.click(screen.getByRole("button", { name: "Guardar mÃ³dulos globais" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar módulos globais" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({

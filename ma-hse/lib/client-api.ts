@@ -29,3 +29,37 @@ export async function requireApiResponse<T>(response: Response, fallbackMessage:
 
   return json;
 }
+
+/**
+ * Uploads a file through the app server (`/api/storage/upload` by default),
+ * which relays it to storage server-side. Uploads never go straight from the
+ * browser to the storage endpoint: in production that endpoint is only
+ * reachable from the app's own network, not from the user's browser.
+ */
+export async function uploadAttachment(input: {
+  plantCode: string;
+  folder: string;
+  file: File;
+  contentType?: string;
+  fallbackErrorMessage?: string;
+  endpoint?: string;
+}) {
+  const fallbackErrorMessage = input.fallbackErrorMessage ?? "Failed to upload file";
+  const formData = new FormData();
+  formData.append("file", input.file);
+  formData.append("plantCode", input.plantCode);
+  formData.append("folder", input.folder);
+  formData.append("contentType", input.contentType ?? input.file.type ?? "application/octet-stream");
+
+  const response = await fetch(input.endpoint ?? "/api/storage/upload", {
+    method: "POST",
+    body: formData,
+  });
+
+  const json = await requireApiResponse<{ bucket: string; key: string }>(response, fallbackErrorMessage);
+  if (!json.data) {
+    throw new Error(fallbackErrorMessage);
+  }
+
+  return json.data;
+}
