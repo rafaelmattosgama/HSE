@@ -1,6 +1,9 @@
 import { ActionPriority, Prisma } from "@prisma/client";
 import {
   DEFAULT_ALERT_CONFIG,
+  DEFAULT_AUTHORIZATION_SEGREGATION_OF_DUTIES,
+  DEFAULT_COMPETENCE_EXPIRING_THRESHOLD_DAYS,
+  DEFAULT_MEDICAL_FITNESS_BLOCKS_AUTHORIZATION,
   DEFAULT_REPEATABILITY_ALERT_CONFIG,
   DEFAULT_SLA_DAYS,
   SYSTEM_PARAMETER_KEYS,
@@ -255,4 +258,43 @@ export async function setPlantSafetyDaysConfig(plantId: string, config: SafetyDa
       valueJson: config,
     },
   });
+}
+
+export async function getCompetenceExpiringThresholdDays(plantId: string): Promise<number> {
+  const parameter = await prisma.systemParameter.findUnique({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.COMPETENCE_EXPIRING_THRESHOLD_DAYS,
+      },
+    },
+  });
+
+  return typeof parameter?.valueJson === "number" ? parameter.valueJson : DEFAULT_COMPETENCE_EXPIRING_THRESHOLD_DAYS;
+}
+
+export async function getAuthorizationSegregationOfDuties(plantId: string): Promise<boolean> {
+  const parameter = await prisma.systemParameter.findUnique({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.AUTHORIZATION_SEGREGATION_OF_DUTIES,
+      },
+    },
+  });
+
+  return typeof parameter?.valueJson === "boolean" ? parameter.valueJson : DEFAULT_AUTHORIZATION_SEGREGATION_OF_DUTIES;
+}
+
+export async function getMedicalFitnessBlocksAuthorization(plantId: string): Promise<boolean> {
+  const parameter = await prisma.systemParameter.findUnique({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.MEDICAL_FITNESS_BLOCKS_AUTHORIZATION,
+      },
+    },
+  });
+
+  return typeof parameter?.valueJson === "boolean" ? parameter.valueJson : DEFAULT_MEDICAL_FITNESS_BLOCKS_AUTHORIZATION;
 }

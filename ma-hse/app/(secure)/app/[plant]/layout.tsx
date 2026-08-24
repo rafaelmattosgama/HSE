@@ -15,6 +15,7 @@ import { PlantSwitcher } from "@/components/layout/plant-switcher";
 import { InternalAgentChat } from "@/components/feature/internal-agent-chat";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
+import { CompetenceUrgentAlert } from "@/components/feature/competence-urgent-alert";
 import { shouldShowInternalAgentChat } from "@/lib/agent/ui-access";
 import { normalizeInternalAgentLocale } from "@/lib/agent/i18n";
 import { env } from "@/lib/env";
@@ -36,6 +37,7 @@ const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?:
   { href: "sewo", label: "S-EWO", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
   { href: "smat", label: "SMAT", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
   { href: "occupational-health", label: "occupationalHealth", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY] },
+  { href: "competences", label: "competences", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
   { href: "monthly-inputs", label: "monthlyInputs", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
   { href: "contractors", label: "contractors", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
   { href: "mapa", label: "mapa", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
@@ -89,6 +91,10 @@ export default async function PlantLayout({
         ? session.user.plantRoles.find((entry) => entry.plantCode)?.role
         : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
   const hasSafetyCommunicationAlerts = plantRole === RoleCode.N3_SAFETY || plantRole === RoleCode.N4_SUPERVISOR;
+  const hasCompetenceUrgentAlerts = plantRole === RoleCode.N2_PLANT_MANAGER
+    || plantRole === RoleCode.N3_SAFETY
+    || plantRole === RoleCode.N4_SUPERVISOR
+    || plantRole === RoleCode.N5_OPERATOR;
   const [plantRecord, globalModuleParameter] = await Promise.all([
     isAllPlants
       ? Promise.resolve(null)
@@ -115,7 +121,7 @@ export default async function PlantLayout({
           userId: session.user.id,
           plantId: plantRecord.id,
           channel: {
-            in: ["REPEATABILITY_ALERT", "SEWO_REJECTED"],
+            in: ["REPEATABILITY_ALERT", "SEWO_REJECTED", "COMPETENCE_ALERT"],
           },
           status: "UNREAD",
         },
@@ -229,6 +235,7 @@ export default async function PlantLayout({
         />
       ) : null}
       <SafetyCommunicationFloatingAlert plantCode={plant} enabled={!isAllPlants && hasSafetyCommunicationAlerts} />
+      <CompetenceUrgentAlert plantCode={plant} labels={ui.competences} enabled={!isAllPlants && hasCompetenceUrgentAlerts} />
       {showInternalAgentChat ? <InternalAgentChat key={agentLocale} plantCode={plant} locale={agentLocale} /> : null}
     </>
   );

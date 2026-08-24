@@ -655,6 +655,45 @@ async function resolveDepartmentByWorkerDept(input: {
   }) ?? null;
 }
 
+/**
+ * §7.2 of docs/modulo-competencias-autorizacoes.md: the department's
+ * responsible users (N4_SUPERVISOR mapped to an Area via
+ * SafetyCommunicationAlertRecipient), extracted so competence-alert-service.ts
+ * can reuse the same resolution without a new recipients table or admin
+ * screen. dispatchApprovedCommunicationAlerts below now calls this instead
+ * of inlining the query — same where/include/orderBy, behavior unchanged.
+ */
+export async function resolveDepartmentAlertRecipients(input: { plantId: string; departmentId: string }) {
+  const recipientModel = getSafetyCommunicationAlertRecipientDelegate({
+    allowMissing: true,
+    context: "resolveDepartmentAlertRecipients",
+  });
+  if (!recipientModel) return [];
+
+  return recipientModel.findMany({
+    where: {
+      plantId: input.plantId,
+      departmentId: input.departmentId,
+      isActive: true,
+      user: {
+        isActive: true,
+        plantRoles: {
+          some: {
+            plantId: input.plantId,
+            role: { code: RoleCode.N4_SUPERVISOR },
+          },
+        },
+      },
+    },
+    include: {
+      user: {
+        select: { id: true, name: true, email: true, language: true },
+      },
+    },
+    orderBy: { user: { name: "asc" } },
+  });
+}
+
 async function loadApprovedCommunicationContext(communicationId: string) {
   const communication = await prisma.communication.findUnique({
     where: { id: communicationId },
@@ -1641,38 +1680,9 @@ export const SafetyCommunicationAlertService = {
       return;
     }
 
-    const recipients = await recipientModel.findMany({
-      where: {
-        plantId: communication.plantId,
-        departmentId: department.id,
-        isActive: true,
-        user: {
-          isActive: true,
-          plantRoles: {
-            some: {
-              plantId: communication.plantId,
-              role: {
-                code: RoleCode.N4_SUPERVISOR,
-              },
-            },
-          },
-        },
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            language: true,
-          },
-        },
-      },
-      orderBy: {
-        user: {
-          name: "asc",
-        },
-      },
+    const recipients = await resolveDepartmentAlertRecipients({
+      plantId: communication.plantId,
+      departmentId: department.id,
     });
 
     if (!recipients.length) {

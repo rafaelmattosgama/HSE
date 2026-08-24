@@ -535,6 +535,52 @@ async function upsertMasterData(plantId: string) {
   ]);
 }
 
+/**
+ * Competence & Authorizations catalog seed — phase 1 (§3.1). All four types
+ * ship with a 12-month validity and a mandatory practical assessment; per-type
+ * periodicities are deferred to the catalog management screen in a later phase.
+ */
+async function upsertCompetenceTypes(plantId: string) {
+  const competenceTypes: Array<{
+    code: string;
+    name: string;
+    category: "EQUIPMENT_OPERATION" | "HIGH_RISK_ACTIVITY";
+    displayOrder: number;
+  }> = [
+    { code: "FORKLIFT", name: "Empilhador", category: "EQUIPMENT_OPERATION", displayOrder: 0 },
+    { code: "MEWP", name: "Plataforma elevatória", category: "EQUIPMENT_OPERATION", displayOrder: 1 },
+    { code: "OVERHEAD_CRANE", name: "Ponte rolante", category: "EQUIPMENT_OPERATION", displayOrder: 2 },
+    { code: "WORK_AT_HEIGHT", name: "Trabalhos em altura", category: "HIGH_RISK_ACTIVITY", displayOrder: 3 },
+  ];
+
+  for (const type of competenceTypes) {
+    await prisma.competenceType.upsert({
+      where: { plantId_code: { plantId, code: type.code } },
+      update: {
+        name: type.name,
+        category: type.category,
+        displayOrder: type.displayOrder,
+        requiresAssessment: true,
+        validityMonths: 12,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        code: type.code,
+        name: type.name,
+        category: type.category,
+        displayOrder: type.displayOrder,
+        requiresTraining: true,
+        requiresAssessment: true,
+        requiresAuthorization: true,
+        validityMonths: 12,
+        refresherMonths: null,
+        sourceLanguage: "pt",
+      },
+    });
+  }
+}
+
 async function upsertPl1MasterData(plantId: string) {
   for (const [index, name] of PL1_WORKSTATIONS.entries()) {
     await prisma.workstation.upsert({
@@ -1341,6 +1387,7 @@ async function main() {
 
   for (const plant of plants) {
     await upsertMasterData(plant.id);
+    await upsertCompetenceTypes(plant.id);
     if (plant.code === "pl1") {
       await upsertPl1MasterData(plant.id);
     }

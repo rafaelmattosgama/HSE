@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import {
   actionsOverdueQueue,
   alertsRepetitiveQueue,
+  competenceExpiryQueue,
   digestWeeklyQueue,
   reportAnnualQueue,
   reportMonthlyQueue,
@@ -51,6 +52,14 @@ async function upsertPlantJobs() {
       tz: plant.timezone,
     }, {
       name: "alerts-repetitive",
+      data: { plantId: plant.id },
+    });
+
+    await competenceExpiryQueue.upsertJobScheduler(`competence-expiry-${plant.id}`, {
+      pattern: "0 8 * * *",
+      tz: ACTION_ALERT_TIMEZONE,
+    }, {
+      name: "competence-expiry",
       data: { plantId: plant.id },
     });
   }
