@@ -79,7 +79,11 @@ describe("communication report route", () => {
     expect(Array.from(data)).toEqual([1, 2, 3]);
   });
 
-  it("rejects unsupported communication types before generating the PDF", async () => {
+  it.each([
+    [CommunicationType.NEAR_MISS, "NM_MAAP_2026_10"],
+    [CommunicationType.FIRST_AID, "FA_MAAP_2026_11"],
+    [CommunicationType.ACCIDENT, "IN_MAAP_2026_12"],
+  ])("returns a PDF attachment for %s communications", async (type, codigoCompleto) => {
     guardsMock.requirePlantAccess.mockResolvedValue({
       session: { user: { id: "user-1", language: "pt" } },
       role: RoleCode.N3_SAFETY,
@@ -87,8 +91,33 @@ describe("communication report route", () => {
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
     prismaMock.communication.findFirst.mockResolvedValue({
       id: "comm-1",
-      type: CommunicationType.NEAR_MISS,
-      codigoCompleto: "NM_MAAP_2026_10",
+      type,
+      codigoCompleto,
+      codigoAbreviado: null,
+    });
+    uiLanguageMock.getServerUiLocale.mockResolvedValue("pt");
+    exportMock.CommunicationReportExportService.buildPdf.mockResolvedValue(Buffer.from([1, 2, 3]));
+
+    const response = (await GET(
+      new Request("http://localhost/api/plants/maap/communications/comm-1/report"),
+      routeContext(),
+    ))!;
+
+    expect(response.status).toBe(200);
+    expect(exportMock.CommunicationReportExportService.buildPdf).toHaveBeenCalledWith("comm-1", { locale: "pt" });
+    expect(response.headers.get("content-disposition")).toContain(`comunicacao-seguranca-${codigoCompleto}.pdf`);
+  });
+
+  it("rejects unknown communication types before generating the PDF", async () => {
+    guardsMock.requirePlantAccess.mockResolvedValue({
+      session: { user: { id: "user-1", language: "pt" } },
+      role: RoleCode.N3_SAFETY,
+    });
+    plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
+    prismaMock.communication.findFirst.mockResolvedValue({
+      id: "comm-1",
+      type: "UNSUPPORTED_TYPE",
+      codigoCompleto: "OTHER_MAAP_2026_10",
       codigoAbreviado: null,
     });
 
