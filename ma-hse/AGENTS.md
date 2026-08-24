@@ -70,7 +70,7 @@ Public QR/link submissions are not user roles; they are represented by `PlantAcc
 - Critical operations logged via `writeAuditLog()`
 - Prisma enum imports from `@prisma/client`
 - Mutations use `prisma.$transaction()` for data consistency
-- S3 file operations via presigned URLs (never direct upload)
+- S3 file operations always go through the app server (`StorageService.uploadObject`/`getObjectBuffer`), never a presigned URL handed to the browser — in production the storage endpoint isn't reachable from the browser, only from the app's own network (see `lib/storage-upload.ts`)
 
 ## Development Commands
 ```bash
@@ -87,7 +87,7 @@ npx prisma studio   # DB browser
 - `hasPlantAccess` already handles N0/N1 bypass; no extra guards needed for them
 - S-EWO `whereText` stores workstation name at creation time (no direct FK)
 - Communication types: UNSAFE_ACT, UNSAFE_CONDITION, NEAR_MISS, FIRST_AID, ACCIDENT
-- Action sourceTypes: COMMUNICATION, SEWO, MANUAL
+- Action sourceTypes: COMMUNICATION, SEWO, MANUAL, SMAT
 - SEWO statuses: DRAFT, IN_APPROVAL, APPROVED, REJECTED, CLOSED
 - Locale via cookie `ehs_locale`, resolved: cookie > Accept-Language > "pt"
 - `lib/i18n/request.ts` is the next-intl request config (NOT `lib/i18n/routing.ts`)

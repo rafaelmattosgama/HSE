@@ -11,6 +11,7 @@ export const DEFAULT_MODULE_TOGGLES = {
   MONTHLY_INPUTS: true,
   ENVIRONMENT_DASHBOARD: true,
   OCCUPATIONAL_HEALTH: true,
+  COMPETENCE_AUTHORIZATIONS: true,
 } as const;
 
 export const MODULE_OPTIONS = [
@@ -24,6 +25,7 @@ export const MODULE_OPTIONS = [
   { key: "MONTHLY_INPUTS", label: "Monthly Inputs" },
   { key: "ENVIRONMENT_DASHBOARD", label: "Dashboard de Ambiente" },
   { key: "OCCUPATIONAL_HEALTH", label: "Occupational Health" },
+  { key: "COMPETENCE_AUTHORIZATIONS", label: "Competencies & Authorizations" },
 ] as const;
 
 export const MODULE_TOGGLES_PARAMETER_KEY = "MODULE_TOGGLES";
@@ -93,6 +95,7 @@ export const PLANT_NAVIGATION_MODULES: Partial<Record<string, ModuleToggleKey>> 
   sewo: "SEWO",
   smat: "SMAT",
   "occupational-health": "OCCUPATIONAL_HEALTH",
+  competences: "COMPETENCE_AUTHORIZATIONS",
   contractors: "CONTRACTORS",
   communications: "COMMUNICATIONS",
   "monthly-inputs": "MONTHLY_INPUTS",

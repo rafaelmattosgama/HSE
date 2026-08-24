@@ -15,6 +15,7 @@ import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
+import { CompetenceRequirementManager } from "@/components/feature/competence-requirement-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
@@ -28,6 +29,7 @@ import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-servic
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
+import { CompetenceService } from "@/lib/services/competence-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
@@ -89,6 +91,9 @@ export default async function AdminPage({
     sewoRecipients,
     repeatabilityConfig,
     safetyDaysConfig,
+    competenceTypes,
+    competenceRequirements,
+    competenceRequirementCoverage,
   ] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
@@ -158,6 +163,15 @@ export default async function AdminPage({
     listSewoReportRecipients(plantRow.id),
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
+    actorRole === RoleCode.N0_ADMIN
+      ? prisma.competenceType.findMany({ where: { plantId: plantRow.id, isActive: true }, orderBy: { displayOrder: "asc" } })
+      : Promise.resolve([]),
+    actorRole === RoleCode.N0_ADMIN
+      ? CompetenceService.listRequirements(plantRow.id, uiLocale)
+      : Promise.resolve([]),
+    actorRole === RoleCode.N0_ADMIN
+      ? CompetenceService.getRequirementCoverage(plantRow.id)
+      : Promise.resolve({ totalRoles: 0, rolesWithRequirement: 0, roleNamesWithoutRequirement: [], workersWithoutRoleName: 0, totalWorkers: 0 }),
   ]);
   const [localizedAreas, localizedWorkstations, localizedEquipments] = await Promise.all([
     localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
@@ -284,6 +298,18 @@ export default async function AdminPage({
           labels={masterDataUi}
         />
       )}
+
+      {actorRole === RoleCode.N0_ADMIN ? (
+        <CompetenceRequirementManager
+          plant={plant}
+          labels={ui.competences}
+          competenceTypes={competenceTypes.map((type) => ({ id: type.id, name: type.name }))}
+          areas={localizedAreas.map((item) => ({ id: item.id, name: item.name }))}
+          workstations={localizedWorkstations.map((item) => ({ id: item.id, name: item.name }))}
+          initialRequirements={competenceRequirements}
+          initialCoverage={competenceRequirementCoverage}
+        />
+      ) : null}
 
       {actorRole === RoleCode.N0_ADMIN ? (
         <SewoRecipientListManager

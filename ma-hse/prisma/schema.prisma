@@ -23,6 +23,9 @@ model Plant {
   auditLogs                          AuditLog[]
   bodyParts                          BodyPart[]
   communications                     Communication[]
+  competenceRequirements             CompetenceRequirement[]
+  competenceTypes                    CompetenceType[]
+  competenceWorkers                  CompetenceWorker[]
   employees                          EmployeeDirectory[]
   equipments                         Equipment[]
   externalCompanies                  ExternalCompany[]
@@ -56,6 +59,7 @@ model Plant {
 model User {
   id                                        String                              @id @default(uuid())
   email                                     String?                             @unique
+  employeeDirectoryId                       String?                             @unique
   passwordHash                              String?
   name                                      String
   language                                  String                              @default("pt")
@@ -100,6 +104,17 @@ model User {
   sessions                                  Session[]
   smatAuditsCreated                         SmatAudit[]                         @relation("SMATAuditorUser")
   smatAttachment                            SmatAuditAttachment[]
+  addedCompetenceWorkers                    CompetenceWorker[]                  @relation("CompetenceWorkerAddedBy")
+  createdCompetenceRequirements             CompetenceRequirement[]             @relation("CompetenceRequirementCreatedBy")
+  employeeDirectory                         EmployeeDirectory?                  @relation(fields: [employeeDirectoryId], references: [id])
+  competenceAssessmentsPerformed            CompetenceAssessment[]
+  authorizationsGranted                     WorkerAuthorization[]               @relation("AuthorizationGrantedBy")
+  authorizationsSuspended                   WorkerAuthorization[]               @relation("AuthorizationSuspendedBy")
+  authorizationsRevoked                     WorkerAuthorization[]               @relation("AuthorizationRevokedBy")
+  authorizationsReactivated                 WorkerAuthorization[]               @relation("AuthorizationReactivatedBy")
+  trainingRecordAttachmentsUploaded         TrainingRecordAttachment[]
+  competenceAssessmentAttachmentsUploaded   CompetenceAssessmentAttachment[]
+  competenceAlertDeliveries                 CompetenceAlertDelivery[]
   plantRoles                                UserPlantRole[]
 }
 
@@ -150,6 +165,8 @@ model Area {
   sourceLanguage                     String?
   plant                              Plant                               @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications                     Communication[]
+  competenceRequirements             CompetenceRequirement[]
+  competenceWorkers                  CompetenceWorker[]
   mapFeatures                        MapFeature[]
   sewoRecords                        SEWO[]
   safetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientDepartment")
@@ -179,6 +196,7 @@ model Workstation {
   isActive                  Boolean                    @default(true)
   sourceLanguage            String?
   communications            Communication[]
+  competenceRequirements    CompetenceRequirement[]
   mapFeatures               MapFeature[]
   occupationalHealthWorkers OccupationalHealthWorker[]
   plant                     Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
@@ -355,9 +373,334 @@ model EmployeeDirectory {
   plant                        Plant                           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   shift                        Shift?                          @relation(fields: [shiftId], references: [id])
   contractorCompanyAssignments ExternalCompany[]               @relation("ExternalContractorSponsor")
+  competenceWorkers            CompetenceWorker[]
+  linkedUser                   User?
 
   @@unique([plantId, employeeNo])
   @@index([plantId, name])
+}
+
+/// Competence & Authorizations module — phase 1 (catalog + requirement matrix
+/// scaffolding + worker enrollment). Training/assessment/authorization records
+/// and the state-computation algorithm are introduced in later phases; for now
+/// every WorkerCompetenceState is either MISSING (required) or NOT_APPLICABLE.
+model CompetenceType {
+  id                    String                    @id @default(uuid())
+  plantId               String
+  code                  String
+  name                  String
+  category              CompetenceCategory        @default(EQUIPMENT_OPERATION)
+  requiresTraining      Boolean                   @default(true)
+  requiresAssessment    Boolean                   @default(true)
+  requiresAuthorization Boolean                   @default(true)
+  validityMonths        Int                       @default(12)
+  refresherMonths       Int?
+  legalReference        String?
+  displayOrder          Int                       @default(0)
+  isActive              Boolean                   @default(true)
+  sourceLanguage        String?
+  plant                 Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  requirements          CompetenceRequirement[]
+  states                WorkerCompetenceState[]
+  trainingRecords       TrainingRecord[]
+  assessments           CompetenceAssessment[]
+  authorizations        WorkerAuthorization[]
+  alertDeliveries       CompetenceAlertDelivery[]
+
+  @@unique([plantId, code])
+  @@index([plantId, isActive, displayOrder])
+}
+
+enum CompetenceCategory {
+  EQUIPMENT_OPERATION
+  HIGH_RISK_ACTIVITY
+  SAFETY_ROLE
+  LEGAL_MANDATORY
+  OTHER
+}
+
+model CompetenceRequirement {
+  id                 String                     @id @default(uuid())
+  plantId            String
+  competenceTypeId   String
+  scopeType          CompetenceRequirementScope
+  scopeRoleName      String?
+  scopeAreaId        String?
+  scopeWorkstationId String?
+  isMandatory        Boolean                    @default(true)
+  notes              String?
+  isActive           Boolean                    @default(true)
+  createdAt          DateTime                   @default(now())
+  createdById        String?
+
+  plant          Plant          @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  competenceType CompetenceType @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  area           Area?          @relation(fields: [scopeAreaId], references: [id], onDelete: Cascade)
+  workstation    Workstation?   @relation(fields: [scopeWorkstationId], references: [id], onDelete: Cascade)
+  createdBy      User?          @relation("CompetenceRequirementCreatedBy", fields: [createdById], references: [id])
+
+  @@index([plantId, competenceTypeId, isActive])
+}
+
+enum CompetenceRequirementScope {
+  ROLE
+  AREA
+  WORKSTATION
+  ALL_WORKERS
+}
+
+model CompetenceWorker {
+  id                  String   @id @default(uuid())
+  plantId             String
+  employeeDirectoryId String
+  areaId              String?
+  roleName            String?
+  isActive            Boolean  @default(true)
+  addedById           String?
+  addedAt             DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  plant           Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  employee        EmployeeDirectory         @relation(fields: [employeeDirectoryId], references: [id], onDelete: Cascade)
+  area            Area?                     @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  addedBy         User?                     @relation("CompetenceWorkerAddedBy", fields: [addedById], references: [id])
+  states          WorkerCompetenceState[]
+  trainingRecords TrainingRecord[]
+  assessments     CompetenceAssessment[]
+  authorizations  WorkerAuthorization[]
+  alertDeliveries CompetenceAlertDelivery[]
+
+  @@unique([plantId, employeeDirectoryId])
+  @@index([plantId, isActive])
+}
+
+model WorkerCompetenceState {
+  id                     String              @id @default(uuid())
+  plantId                String
+  competenceWorkerId     String
+  competenceTypeId       String
+  isRequired             Boolean             @default(false)
+  requirementSource      String?
+  state                  CompetenceCellState
+  validUntil             DateTime?
+  daysToExpiry           Int?
+  currentAuthorizationId String?
+  blockedReason          String?
+  computedAt             DateTime            @default(now())
+
+  competenceWorker CompetenceWorker @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([competenceWorkerId, competenceTypeId])
+  @@index([plantId, state])
+  @@index([plantId, validUntil])
+}
+
+enum CompetenceCellState {
+  VALID
+  EXPIRING
+  EXPIRED
+  MISSING
+  AWAITING_ASSESSMENT
+  AWAITING_AUTHORIZATION
+  SUSPENDED
+  REVOKED
+  NOT_APPLICABLE
+}
+
+/// Competence & Authorizations module — phase 2 (the three record levels,
+/// the state-computation algorithm and the individual worker profile).
+model TrainingRecord {
+  id                   String         @id @default(uuid())
+  plantId              String
+  competenceWorkerId   String
+  competenceTypeId     String
+  provider             String?
+  trainerName          String?
+  completedAt          DateTime
+  durationHours        Decimal?       @db.Decimal(5, 2)
+  certificateNumber    String?
+  certificateExpiresAt DateTime?
+  result               TrainingResult @default(PASSED)
+  notes                String?
+  createdAt            DateTime       @default(now())
+  createdById          String?
+
+  competenceWorker CompetenceWorker           @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType             @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  attachments      TrainingRecordAttachment[]
+  assessments      CompetenceAssessment[]
+  authorizations   WorkerAuthorization[]
+
+  @@index([competenceWorkerId, competenceTypeId, completedAt])
+}
+
+enum TrainingResult {
+  PASSED
+  FAILED
+}
+
+model TrainingRecordAttachment {
+  id               String   @id @default(uuid())
+  trainingRecordId String
+  fileKey          String
+  fileName         String
+  contentType      String
+  caption          String?
+  createdAt        DateTime @default(now())
+  uploadedById     String?
+
+  trainingRecord TrainingRecord @relation(fields: [trainingRecordId], references: [id], onDelete: Cascade)
+  uploadedBy     User?          @relation(fields: [uploadedById], references: [id])
+}
+
+model CompetenceAssessment {
+  id                 String                     @id @default(uuid())
+  plantId            String
+  competenceWorkerId String
+  competenceTypeId   String
+  trainingRecordId   String?
+  assessedAt         DateTime
+  assessorUserId     String?
+  assessorName       String?
+  method             CompetenceAssessmentMethod @default(PRACTICAL_TEST)
+  result             CompetenceAssessmentResult
+  score              Int?
+  observations       String?
+  createdAt          DateTime                   @default(now())
+  createdById        String?
+
+  competenceWorker CompetenceWorker                 @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType                   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  trainingRecord   TrainingRecord?                  @relation(fields: [trainingRecordId], references: [id], onDelete: SetNull)
+  assessor         User?                            @relation(fields: [assessorUserId], references: [id])
+  attachments      CompetenceAssessmentAttachment[]
+  authorizations   WorkerAuthorization[]
+
+  @@index([competenceWorkerId, competenceTypeId, assessedAt])
+}
+
+enum CompetenceAssessmentMethod {
+  PRACTICAL_TEST
+  OBSERVATION
+  THEORY_TEST
+  SIMULATOR
+}
+
+enum CompetenceAssessmentResult {
+  COMPETENT
+  NOT_YET_COMPETENT
+}
+
+model CompetenceAssessmentAttachment {
+  id                     String   @id @default(uuid())
+  competenceAssessmentId String
+  fileKey                String
+  fileName               String
+  contentType            String
+  caption                String?
+  createdAt              DateTime @default(now())
+  uploadedById           String?
+
+  competenceAssessment CompetenceAssessment @relation(fields: [competenceAssessmentId], references: [id], onDelete: Cascade)
+  uploadedBy           User?                @relation(fields: [uploadedById], references: [id])
+}
+
+/// sequenceNumber is a plain max+1 inside the same $transaction, mirroring
+/// Action.sequenceNumber — RecordCodeService only covers COMMUNICATION/SEWO/REPORT.
+model WorkerAuthorization {
+  id                  String              @id @default(uuid())
+  plantId             String
+  competenceWorkerId  String
+  competenceTypeId    String
+  trainingRecordId    String?
+  assessmentId        String?
+  sequenceNumber      Int?
+  grantedAt           DateTime            @default(now())
+  grantedByUserId     String
+  validFrom           DateTime
+  validUntil          DateTime
+  restrictions        String?
+  status              AuthorizationStatus @default(ACTIVE)
+  documentFileKey     String?
+  acknowledgedAt      DateTime?
+  suspendedAt         DateTime?
+  suspendedByUserId   String?
+  suspensionReason    String?
+  reactivatedAt       DateTime?
+  reactivatedByUserId String?
+  revokedAt           DateTime?
+  revokedByUserId     String?
+  revocationReason    String?
+  supersededById      String?             @unique
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  competenceWorker  CompetenceWorker          @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType    CompetenceType            @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  trainingRecord    TrainingRecord?           @relation(fields: [trainingRecordId], references: [id], onDelete: SetNull)
+  assessment        CompetenceAssessment?     @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  grantedBy         User                      @relation("AuthorizationGrantedBy", fields: [grantedByUserId], references: [id])
+  suspendedByUser   User?                     @relation("AuthorizationSuspendedBy", fields: [suspendedByUserId], references: [id])
+  revokedByUser     User?                     @relation("AuthorizationRevokedBy", fields: [revokedByUserId], references: [id])
+  reactivatedByUser User?                     @relation("AuthorizationReactivatedBy", fields: [reactivatedByUserId], references: [id])
+  supersededBy      WorkerAuthorization?      @relation("AuthorizationSupersedes", fields: [supersededById], references: [id])
+  supersedes        WorkerAuthorization?      @relation("AuthorizationSupersedes")
+  alertDeliveries   CompetenceAlertDelivery[]
+
+  @@unique([plantId, sequenceNumber])
+  @@index([plantId, status, validUntil])
+  @@index([competenceWorkerId, competenceTypeId, status])
+}
+
+enum AuthorizationStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+  EXPIRED
+  SUPERSEDED
+}
+
+/// §3.8 / phase 4: delivery log for competence alerts. cycleKey is what makes
+/// this idempotent (§7.3) — authorizationId for alerts tied to one, "YYYY-MM"
+/// otherwise. competenceWorker/competenceType relations added beyond the
+/// doc's literal snippet, mirroring ActionAlertDelivery's own relation to
+/// Action — the more consistent precedent for a delivery-log table in this
+/// codebase.
+model CompetenceAlertDelivery {
+  id                 String              @id @default(uuid())
+  plantId            String
+  competenceWorkerId String
+  competenceTypeId   String
+  authorizationId    String?
+  userId             String
+  alertType          CompetenceAlertType
+  channel            ActionAlertChannel
+  cycleKey           String
+  notificationId     String?
+  sentAt             DateTime            @default(now())
+
+  competenceWorker CompetenceWorker     @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType       @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  authorization    WorkerAuthorization? @relation(fields: [authorizationId], references: [id], onDelete: Cascade)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification     Notification?        @relation(fields: [notificationId], references: [id])
+
+  @@unique([competenceWorkerId, competenceTypeId, userId, alertType, channel, cycleKey])
+  @@index([userId, alertType, sentAt])
+}
+
+enum CompetenceAlertType {
+  EXPIRING_90
+  EXPIRING_60
+  EXPIRING_30
+  EXPIRING_7
+  EXPIRY_DAY
+  MISSING_DOCUMENT
+  AUTHORIZATION_SUSPENDED
+  AUTHORIZATION_REVOKED
+  ROLE_WITHOUT_COMPETENCE
+  AWAITING_ASSESSMENT
 }
 
 model Communication {
@@ -1059,6 +1402,7 @@ model Notification {
   createdAt                       DateTime                         @default(now())
   readAt                          DateTime?
   actionAlertDeliveries           ActionAlertDelivery[]
+  competenceAlertDeliveries       CompetenceAlertDelivery[]
   plant                           Plant?                           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   user                            User?                            @relation(fields: [userId], references: [id], onDelete: Cascade)
   safetyCommunicationNotification SafetyCommunicationNotification?

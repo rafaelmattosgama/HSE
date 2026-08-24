@@ -14,6 +14,7 @@ export const QUEUE_NAMES = {
   ALERTS_REPETITIVE: "alerts-repetitive",
   SEWO_APPROVED_NOTIFICATION: "sewo-approved-notification",
   MASTER_DATA_TRANSLATION: "master-data-translation",
+  COMPETENCE_EXPIRY: "competence-expiry",
 } as const;
 
 export const digestWeeklyQueue = new Queue(QUEUE_NAMES.DIGEST_WEEKLY, { connection });
@@ -23,6 +24,7 @@ export const actionsOverdueQueue = new Queue(QUEUE_NAMES.ACTIONS_OVERDUE, { conn
 export const alertsRepetitiveQueue = new Queue(QUEUE_NAMES.ALERTS_REPETITIVE, { connection });
 export const sewoApprovedNotificationQueue = new Queue(QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, { connection });
 export const masterDataTranslationQueue = new Queue(QUEUE_NAMES.MASTER_DATA_TRANSLATION, { connection });
+export const competenceExpiryQueue = new Queue(QUEUE_NAMES.COMPETENCE_EXPIRY, { connection });
 
 export function getQueueConnection() {
   return connection;

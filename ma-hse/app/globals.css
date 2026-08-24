@@ -350,11 +350,13 @@ html[data-theme="black"] .bg-sky-100 {
 }
 
 html[data-theme="black"] .bg-red-50,
+html[data-theme="black"] .bg-red-100,
 html[data-theme="black"] .bg-rose-100 {
   background-color: var(--danger-soft) !important;
 }
 
-html[data-theme="black"] .bg-orange-100 {
+html[data-theme="black"] .bg-orange-100,
+html[data-theme="black"] .bg-amber-100 {
   background-color: var(--warning-soft) !important;
 }
 
