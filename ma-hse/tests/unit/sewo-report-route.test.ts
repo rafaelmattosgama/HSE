@@ -58,7 +58,7 @@ describe("S-EWO report route", () => {
       role: RoleCode.N3_SAFETY,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "en" });
-    prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1" });
+    prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1", codigoSewo: "sewo_MAAPNM202607" });
     uiLanguageMock.getServerUiLocale.mockResolvedValue("en");
     exportMock.SewoExportService.buildExternalSummaryExport.mockResolvedValue({ pdf: Buffer.from([1, 2, 3]) });
 
@@ -71,7 +71,7 @@ describe("S-EWO report route", () => {
     expect(exportMock.SewoExportService.buildExport).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
-    expect(response.headers.get("content-disposition")).toContain("s-ewo-sewo-1.pdf");
+    expect(response.headers.get("content-disposition")).toContain("SEWO_MAAPNM202607.pdf");
     const data = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(data)).toEqual([1, 2, 3]);
   });
@@ -82,7 +82,7 @@ describe("S-EWO report route", () => {
       role: RoleCode.N2_PLANT_MANAGER,
     });
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1", defaultLanguage: "pt" });
-    prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1" });
+    prismaMock.sEWO.findFirst.mockResolvedValue({ id: "sewo-1", codigoSewo: "sewo_MAAPNM202607" });
     uiLanguageMock.getServerUiLocale.mockResolvedValue("pt");
     exportMock.SewoExportService.buildExport.mockResolvedValue({ pdf: Buffer.from([4, 5, 6]), xlsx: Buffer.from([7, 8, 9]) });
 
@@ -95,7 +95,7 @@ describe("S-EWO report route", () => {
     expect(exportMock.SewoExportService.buildExternalSummaryExport).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
-    expect(response.headers.get("content-disposition")).toContain("s-ewo-sewo-1.pdf");
+    expect(response.headers.get("content-disposition")).toContain("SEWO_MAAPNM202607.pdf");
     const data = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(data)).toEqual([4, 5, 6]);
   });

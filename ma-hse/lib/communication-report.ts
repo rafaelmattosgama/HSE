@@ -3,6 +3,9 @@ import { CommunicationType } from "@prisma/client";
 export const COMMUNICATION_PDF_REPORT_TYPES: CommunicationType[] = [
   CommunicationType.UNSAFE_ACT,
   CommunicationType.UNSAFE_CONDITION,
+  CommunicationType.NEAR_MISS,
+  CommunicationType.FIRST_AID,
+  CommunicationType.ACCIDENT,
   CommunicationType.FIVE_S_IMPROVEMENT,
   CommunicationType.IMPROVEMENT_SUGGESTION,
 ];

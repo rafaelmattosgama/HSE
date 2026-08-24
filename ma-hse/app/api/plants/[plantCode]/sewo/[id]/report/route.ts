@@ -32,6 +32,14 @@ function getExportErrorLogDetails(error: unknown) {
   };
 }
 
+function getSewoPdfFilename(sewo: { id: string; codigoSewo: string | null }) {
+  const filenameBase = sewo.codigoSewo
+    ? `SEWO_${sewo.codigoSewo.replace(/^sewo[_-]?/i, "")}`.toUpperCase()
+    : `s-ewo-${sewo.id}`;
+
+  return `${filenameBase.replace(/[^A-Za-z0-9_-]+/g, "_")}.pdf`;
+}
+
 export async function GET(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
   const auth = await requirePlantAccess(plantCode, ALLOWED_ROLES);
@@ -44,7 +52,10 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
       plantId: plant.id,
       deletedAt: null,
     },
-    select: { id: true },
+    select: {
+      id: true,
+      codigoSewo: true,
+    },
   });
 
   if (!sewo) {
@@ -81,7 +92,7 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
       status: 200,
       headers: {
         "content-type": "application/pdf",
-        "content-disposition": `attachment; filename=\"s-ewo-${id}.pdf\"`,
+        "content-disposition": `attachment; filename=\"${getSewoPdfFilename(sewo)}\"`,
         "cache-control": "no-store",
       },
     });
