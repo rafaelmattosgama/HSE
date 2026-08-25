@@ -539,6 +539,12 @@ async function upsertMasterData(plantId: string) {
  * Competence & Authorizations catalog seed — phase 1 (§3.1). All four types
  * ship with a 12-month validity and a mandatory practical assessment; per-type
  * periodicities are deferred to the catalog management screen in a later phase.
+ *
+ * §2.7: this is a development fixture, only ever called for the demo plants
+ * (pl01, pl02, pl1) — see the call site below — alongside the fictional
+ * communications and S-EWO seed data. A real plant's catalog is created from
+ * scratch by its N3_SAFETY; this must never be wired into
+ * app/api/corporate/plants/route.ts's plant-creation flow.
  */
 async function upsertCompetenceTypes(plantId: string) {
   const competenceTypes: Array<{

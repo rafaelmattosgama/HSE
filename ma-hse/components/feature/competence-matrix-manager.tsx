@@ -446,7 +446,17 @@ export function CompetenceMatrixManager({
       </AppPanel>
 
       <AppPanel>
-        {filteredWorkers.length === 0 ? (
+        {matrix.competenceTypes.length === 0 ? (
+          <div className="app-empty py-10 text-center" role="status">
+            <p className="font-semibold text-slate-700">{labels.catalogEmptyTitle}</p>
+            <p className="mt-1">{labels.catalogEmptyDescription}</p>
+            {viewerRole === "N1_CORPORATE" || viewerRole === "N3_SAFETY" ? (
+              <Link href={`/app/${plant}/admin`} className="mt-3 inline-block font-semibold text-emerald-700 hover:underline">
+                {labels.catalogEmptyLink}
+              </Link>
+            ) : null}
+          </div>
+        ) : filteredWorkers.length === 0 ? (
           <p className="app-empty py-10 text-center" role="status">
             {matrix.workers.length === 0 ? labels.noWorkersEnrolled : labels.noResultsForFilters}
           </p>

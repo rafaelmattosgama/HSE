@@ -16,6 +16,7 @@ import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
 import { CompetenceRequirementManager } from "@/components/feature/competence-requirement-manager";
+import { CompetenceTypeManager } from "@/components/feature/competence-type-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
@@ -73,6 +74,12 @@ export default async function AdminPage({
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const canManageSafetyCommunicationRecipients = canManageSafetyCommunicationAlertRecipients(actorRole);
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
+  // §2.7: the competence catalog and requirement matrix belong to the plant's
+  // N3_SAFETY, with N1_CORPORATE able to intervene. N0_ADMIN keeps read
+  // access for support but is rendered read-only — see the route guards.
+  const canManageCompetenceCatalog =
+    actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
+  const canViewCompetenceCatalog = actorRole === RoleCode.N0_ADMIN || canManageCompetenceCatalog;
 
   const [
     sla,
@@ -163,13 +170,13 @@ export default async function AdminPage({
     listSewoReportRecipients(plantRow.id),
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
-    actorRole === RoleCode.N0_ADMIN
-      ? prisma.competenceType.findMany({ where: { plantId: plantRow.id, isActive: true }, orderBy: { displayOrder: "asc" } })
+    canViewCompetenceCatalog
+      ? prisma.competenceType.findMany({ where: { plantId: plantRow.id }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] })
       : Promise.resolve([]),
-    actorRole === RoleCode.N0_ADMIN
+    canViewCompetenceCatalog
       ? CompetenceService.listRequirements(plantRow.id, uiLocale)
       : Promise.resolve([]),
-    actorRole === RoleCode.N0_ADMIN
+    canViewCompetenceCatalog
       ? CompetenceService.getRequirementCoverage(plantRow.id)
       : Promise.resolve({ totalRoles: 0, rolesWithRequirement: 0, roleNamesWithoutRequirement: [], workersWithoutRoleName: 0, totalWorkers: 0 }),
   ]);
@@ -299,16 +306,38 @@ export default async function AdminPage({
         />
       )}
 
-      {actorRole === RoleCode.N0_ADMIN ? (
-        <CompetenceRequirementManager
-          plant={plant}
-          labels={ui.competences}
-          competenceTypes={competenceTypes.map((type) => ({ id: type.id, name: type.name }))}
-          areas={localizedAreas.map((item) => ({ id: item.id, name: item.name }))}
-          workstations={localizedWorkstations.map((item) => ({ id: item.id, name: item.name }))}
-          initialRequirements={competenceRequirements}
-          initialCoverage={competenceRequirementCoverage}
-        />
+      {canViewCompetenceCatalog ? (
+        <>
+          <CompetenceTypeManager
+            plant={plant}
+            labels={ui.competences}
+            initialTypes={competenceTypes.map((type) => ({
+              id: type.id,
+              code: type.code,
+              name: type.name,
+              category: type.category,
+              requiresTraining: type.requiresTraining,
+              requiresAssessment: type.requiresAssessment,
+              requiresAuthorization: type.requiresAuthorization,
+              validityMonths: type.validityMonths,
+              refresherMonths: type.refresherMonths,
+              legalReference: type.legalReference,
+              displayOrder: type.displayOrder,
+              isActive: type.isActive,
+            }))}
+            readOnly={!canManageCompetenceCatalog}
+          />
+          <CompetenceRequirementManager
+            plant={plant}
+            labels={ui.competences}
+            competenceTypes={competenceTypes.filter((type) => type.isActive).map((type) => ({ id: type.id, name: type.name }))}
+            areas={localizedAreas.map((item) => ({ id: item.id, name: item.name }))}
+            workstations={localizedWorkstations.map((item) => ({ id: item.id, name: item.name }))}
+            initialRequirements={competenceRequirements}
+            initialCoverage={competenceRequirementCoverage}
+            readOnly={!canManageCompetenceCatalog}
+          />
+        </>
       ) : null}
 
       {actorRole === RoleCode.N0_ADMIN ? (

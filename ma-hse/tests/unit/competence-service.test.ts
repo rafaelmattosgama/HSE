@@ -15,6 +15,8 @@ const transactionMock = vi.hoisted(() => ({
   },
   competenceType: {
     findUniqueOrThrow: vi.fn(),
+    update: vi.fn(),
+    upsert: vi.fn(),
   },
   competenceRequirement: {
     create: vi.fn(),
@@ -71,9 +73,14 @@ const prismaMock = vi.hoisted(() => ({
     },
     competenceAssessment: {
       findUnique: vi.fn(),
+      count: vi.fn(),
     },
     workerAuthorization: {
       findFirst: vi.fn(),
+      count: vi.fn(),
+    },
+    trainingRecord: {
+      count: vi.fn(),
     },
     occupationalHealthWorker: {
       findUnique: vi.fn(),
@@ -1019,6 +1026,129 @@ describe("CompetenceService.updateWorkerRole — §3.2 note: changing roleName r
       CompetenceService.updateWorkerRole("plant-1", "worker-x", { roleName: "Operador" }, "user-1"),
     ).rejects.toThrow(/not found/);
     expect(prismaMock.prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("CompetenceService — competence type catalog CRUD (§2.7 admin screen)", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("upsertCompetenceType() creates a new type and audits it inside the same transaction", async () => {
+    transactionMock.competenceType.upsert.mockResolvedValue({ id: "type-1", code: "FORKLIFT" });
+
+    const type = await CompetenceService.upsertCompetenceType(
+      "plant-1",
+      {
+        code: "FORKLIFT",
+        name: "Empilhador",
+        category: CompetenceCategory.EQUIPMENT_OPERATION,
+        requiresTraining: true,
+        requiresAssessment: true,
+        requiresAuthorization: true,
+        validityMonths: 12,
+        refresherMonths: null,
+        legalReference: null,
+        displayOrder: 0,
+      },
+      "user-1",
+    );
+
+    expect(type).toEqual({ id: "type-1", code: "FORKLIFT" });
+    expect(transactionMock.competenceType.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { plantId_code: { plantId: "plant-1", code: "FORKLIFT" } },
+        create: expect.objectContaining({ plantId: "plant-1", code: "FORKLIFT", validityMonths: 12 }),
+      }),
+    );
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "CREATED", entityType: "CompetenceType" }), transactionMock);
+  });
+
+  it("upsertCompetenceType() updates an existing type by id", async () => {
+    prismaMock.prisma.competenceType.findFirst.mockResolvedValue({ id: "type-1", code: "FORKLIFT" });
+    transactionMock.competenceType.update.mockResolvedValue({ id: "type-1", code: "FORKLIFT", name: "Empilhador retráctil" });
+
+    const type = await CompetenceService.upsertCompetenceType(
+      "plant-1",
+      {
+        id: "type-1",
+        code: "FORKLIFT",
+        name: "Empilhador retráctil",
+        category: CompetenceCategory.EQUIPMENT_OPERATION,
+        requiresTraining: true,
+        requiresAssessment: true,
+        requiresAuthorization: true,
+        validityMonths: 12,
+        refresherMonths: null,
+        legalReference: null,
+        displayOrder: 0,
+      },
+      "user-1",
+    );
+
+    expect(type).toEqual({ id: "type-1", code: "FORKLIFT", name: "Empilhador retráctil" });
+    expect(transactionMock.competenceType.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "type-1" } }),
+    );
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "UPDATED" }), transactionMock);
+  });
+
+  it("upsertCompetenceType() rejects an id outside the plant scope before writing anything", async () => {
+    prismaMock.prisma.competenceType.findFirst.mockResolvedValue(null);
+
+    await expect(
+      CompetenceService.upsertCompetenceType(
+        "plant-1",
+        {
+          id: "type-x",
+          code: "FORKLIFT",
+          name: "Empilhador",
+          category: CompetenceCategory.EQUIPMENT_OPERATION,
+          requiresTraining: true,
+          requiresAssessment: true,
+          requiresAuthorization: true,
+          validityMonths: 12,
+          refresherMonths: null,
+          legalReference: null,
+          displayOrder: 0,
+        },
+        "user-1",
+      ),
+    ).rejects.toThrow(/not found/);
+    expect(transactionMock.competenceType.update).not.toHaveBeenCalled();
+    expect(transactionMock.competenceType.upsert).not.toHaveBeenCalled();
+  });
+
+  it("deactivateCompetenceType() sets isActive to false when no records reference it", async () => {
+    prismaMock.prisma.competenceType.findFirst.mockResolvedValue({ id: "type-1" });
+    prismaMock.prisma.workerAuthorization.count.mockResolvedValue(0);
+    prismaMock.prisma.trainingRecord.count.mockResolvedValue(0);
+    prismaMock.prisma.competenceAssessment.count.mockResolvedValue(0);
+    transactionMock.competenceType.update.mockResolvedValue({ id: "type-1", isActive: false });
+
+    await CompetenceService.deactivateCompetenceType("plant-1", "type-1", "user-1");
+
+    expect(transactionMock.competenceType.update).toHaveBeenCalledWith({
+      where: { id: "type-1" },
+      data: { isActive: false },
+    });
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "DEACTIVATED" }), transactionMock);
+  });
+
+  it("deactivateCompetenceType() is blocked when WorkerAuthorization, TrainingRecord or CompetenceAssessment rows reference it", async () => {
+    prismaMock.prisma.competenceType.findFirst.mockResolvedValue({ id: "type-1" });
+    prismaMock.prisma.workerAuthorization.count.mockResolvedValue(2);
+    prismaMock.prisma.trainingRecord.count.mockResolvedValue(1);
+    prismaMock.prisma.competenceAssessment.count.mockResolvedValue(0);
+
+    await expect(CompetenceService.deactivateCompetenceType("plant-1", "type-1", "user-1")).rejects.toThrow(/3 linked record/);
+    expect(transactionMock.competenceType.update).not.toHaveBeenCalled();
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("deactivateCompetenceType() rejects an id outside the plant scope", async () => {
+    prismaMock.prisma.competenceType.findFirst.mockResolvedValue(null);
+
+    await expect(CompetenceService.deactivateCompetenceType("plant-1", "type-x", "user-1")).rejects.toThrow(/not found/);
+    expect(prismaMock.prisma.workerAuthorization.count).not.toHaveBeenCalled();
   });
 });
 
