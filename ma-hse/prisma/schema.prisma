@@ -23,6 +23,8 @@ model Plant {
   auditLogs                          AuditLog[]
   bodyParts                          BodyPart[]
   communications                     Communication[]
+  competenceAlertDeliveries          CompetenceAlertDelivery[]
+  competenceAssessments              CompetenceAssessment[]
   competenceRequirements             CompetenceRequirement[]
   competenceTypes                    CompetenceType[]
   competenceWorkers                  CompetenceWorker[]
@@ -50,9 +52,12 @@ model Plant {
   shifts                             Shift[]
   smatAudits                         SmatAudit[]
   systemParameters                   SystemParameter[]
+  trainingRecords                    TrainingRecord[]
   unsafeActTypes                     UnsafeActType[]
   unsafeCondTypes                    UnsafeConditionType[]
   users                              UserPlantRole[]
+  workerAuthorizations               WorkerAuthorization[]
+  workerCompetenceStates             WorkerCompetenceState[]
   workstations                       Workstation[]
 }
 
@@ -406,6 +411,7 @@ model CompetenceType {
   assessments           CompetenceAssessment[]
   authorizations        WorkerAuthorization[]
   alertDeliveries       CompetenceAlertDelivery[]
+  actionLinks           CompetenceActionLink[]
 
   @@unique([plantId, code])
   @@index([plantId, isActive, displayOrder])
@@ -469,6 +475,7 @@ model CompetenceWorker {
   assessments     CompetenceAssessment[]
   authorizations  WorkerAuthorization[]
   alertDeliveries CompetenceAlertDelivery[]
+  actionLinks     CompetenceActionLink[]
 
   @@unique([plantId, employeeDirectoryId])
   @@index([plantId, isActive])
@@ -488,6 +495,7 @@ model WorkerCompetenceState {
   blockedReason          String?
   computedAt             DateTime            @default(now())
 
+  plant            Plant            @relation(fields: [plantId], references: [id], onDelete: Cascade)
   competenceWorker CompetenceWorker @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
   competenceType   CompetenceType   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
 
@@ -526,6 +534,7 @@ model TrainingRecord {
   createdAt            DateTime       @default(now())
   createdById          String?
 
+  plant            Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
   competenceWorker CompetenceWorker           @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
   competenceType   CompetenceType             @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
   attachments      TrainingRecordAttachment[]
@@ -570,6 +579,7 @@ model CompetenceAssessment {
   createdAt          DateTime                   @default(now())
   createdById        String?
 
+  plant            Plant                            @relation(fields: [plantId], references: [id], onDelete: Cascade)
   competenceWorker CompetenceWorker                 @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
   competenceType   CompetenceType                   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
   trainingRecord   TrainingRecord?                  @relation(fields: [trainingRecordId], references: [id], onDelete: SetNull)
@@ -636,6 +646,7 @@ model WorkerAuthorization {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
+  plant             Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
   competenceWorker  CompetenceWorker          @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
   competenceType    CompetenceType            @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
   trainingRecord    TrainingRecord?           @relation(fields: [trainingRecordId], references: [id], onDelete: SetNull)
@@ -680,6 +691,7 @@ model CompetenceAlertDelivery {
   notificationId     String?
   sentAt             DateTime            @default(now())
 
+  plant            Plant                @relation(fields: [plantId], references: [id], onDelete: Cascade)
   competenceWorker CompetenceWorker     @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
   competenceType   CompetenceType       @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
   authorization    WorkerAuthorization? @relation(fields: [authorizationId], references: [id], onDelete: Cascade)
@@ -688,6 +700,7 @@ model CompetenceAlertDelivery {
 
   @@unique([competenceWorkerId, competenceTypeId, userId, alertType, channel, cycleKey])
   @@index([userId, alertType, sentAt])
+  @@index([plantId, alertType, sentAt])
 }
 
 enum CompetenceAlertType {
@@ -701,6 +714,24 @@ enum CompetenceAlertType {
   AUTHORIZATION_REVOKED
   ROLE_WITHOUT_COMPETENCE
   AWAITING_ASSESSMENT
+}
+
+/// §3.8 / phase 5 (§8): join table, not a direct FK on Action — mirrors
+/// SmatAuditActionLink. Closing the Action never changes WorkerCompetenceState;
+/// only a real training/assessment/authorization write does that.
+model CompetenceActionLink {
+  id                 String   @id @default(uuid())
+  actionId           String
+  competenceWorkerId String
+  competenceTypeId   String
+  createdAt          DateTime @default(now())
+
+  action           Action           @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  competenceWorker CompetenceWorker @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([actionId, competenceWorkerId, competenceTypeId])
+  @@index([competenceWorkerId, competenceTypeId])
 }
 
 model Communication {
@@ -853,6 +884,7 @@ model Action {
   evidenceAttachments ActionEvidenceAttachment[]
   sewoLinks           SEWOActionLink[]
   smatLinks           SmatAuditActionLink[]
+  competenceLinks     CompetenceActionLink[]
 
   @@unique([plantId, sequenceNumber])
   @@index([plantId, status, dueDate])
@@ -1397,6 +1429,11 @@ model Notification {
   plantId                         String?
   title                           String
   body                            String
+  /// Menores review: in-app alerts had nowhere to carry a link — only the email
+  /// side got `actionUrl` (competence-alert-service.ts). Nullable and additive:
+  /// every existing creator of a Notification keeps working unchanged and simply
+  /// leaves this null, which the UI already treats as "no link to show".
+  actionUrl                       String?
   status                          NotificationStatus               @default(UNREAD)
   channel                         String                           @default("DASHBOARD")
   createdAt                       DateTime                         @default(now())
@@ -1704,6 +1741,7 @@ enum ActionSourceType {
   SEWO
   MANUAL
   SMAT
+  COMPETENCE
 }
 
 enum ActionManualOrigin {

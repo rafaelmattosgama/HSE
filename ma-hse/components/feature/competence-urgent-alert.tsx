@@ -8,6 +8,17 @@ import { requireApiResponse } from "@/lib/client-api";
 import type { CompetenceUrgentFloatingAlert as CompetenceUrgentFloatingAlertItem } from "@/lib/services/competence-alert-service";
 import type { CompetencesUiDictionary } from "@/lib/ui-language";
 
+// minor fix: the body text of this same alert is already built server-side
+// with formatLisbonDate (Europe/Lisbon) — createdAt.replace("T", " ") below
+// showed the raw UTC instant instead, off by the Lisbon offset.
+function formatLisbonDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-PT", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Europe/Lisbon",
+  }).format(new Date(value));
+}
+
 /**
  * §7.1 exception: AUTHORIZATION_SUSPENDED / AUTHORIZATION_REVOKED can't wait
  * for the next navigation (someone may be operating equipment without
@@ -85,8 +96,10 @@ export function CompetenceUrgentAlert({
     }
   }
 
+  // Above RepeatabilityAlertModal / SafetyCommunicationFloatingAlert (both z-[100]): someone may be operating
+  // equipment without cover (§7.1) — this one must win when more than one overlay is queued to show.
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-[2px]">
       <div className="w-full max-w-2xl rounded-2xl border border-rose-200 bg-white shadow-2xl">
         <div className="border-b border-slate-200 px-6 py-5">
           <div className="flex items-start gap-3">
@@ -139,7 +152,7 @@ export function CompetenceUrgentAlert({
                   </button>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  {labels.urgentAlertGeneratedAtPrefix} {alert.createdAt.replace("T", " ").slice(0, 16)}
+                  {labels.urgentAlertGeneratedAtPrefix} {formatLisbonDateTime(alert.createdAt)}
                 </p>
               </article>
             );

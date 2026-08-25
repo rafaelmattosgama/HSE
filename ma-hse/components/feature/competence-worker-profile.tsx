@@ -6,6 +6,7 @@ import type { RoleCode } from "@prisma/client";
 import { ArrowLeft } from "lucide-react";
 import { CompetenceCellDetailPanel } from "@/components/feature/competence-cell-detail-panel";
 import { STATE_META } from "@/components/feature/competence-matrix-manager";
+import type { CompetenceActionOwnerOption } from "@/components/feature/create-competence-action";
 import { AppHero, AppPanel } from "@/components/ui/app-surface";
 import { formatCompetenceCellText } from "@/lib/competence-cell-text";
 import type { CompetenceWorkerProfileView } from "@/lib/services/competence-service";
@@ -24,11 +25,13 @@ export function CompetenceWorkerProfile({
   labels,
   viewerRole,
   profile,
+  owners,
 }: {
   plant: string;
   labels: CompetencesUiDictionary;
   viewerRole: RoleCode;
   profile: CompetenceWorkerProfileView;
+  owners: CompetenceActionOwnerOption[];
 }) {
   const [activeCompetenceTypeId, setActiveCompetenceTypeId] = useState<string | null>(null);
   const activeCompetence = profile.competences.find((row) => row.competenceTypeId === activeCompetenceTypeId) ?? null;
@@ -139,6 +142,7 @@ export function CompetenceWorkerProfile({
           competenceTypeId={activeCompetence.competenceTypeId}
           competenceTypeName={activeCompetence.name}
           workerName={profile.worker.name}
+          owners={owners}
           onClose={() => setActiveCompetenceTypeId(null)}
           onChanged={() => window.location.reload()}
         />

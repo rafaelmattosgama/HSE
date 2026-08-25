@@ -7,15 +7,18 @@ export type AuditDiff = {
   fieldsChanged: string[];
 };
 
-export async function writeAuditLog(input: {
-  entityType: string;
-  entityId: string;
-  action: string;
-  actorUserId?: string | null;
-  plantId?: string | null;
-  diff: AuditDiff;
-}) {
-  await prisma.auditLog.create({
+export async function writeAuditLog(
+  input: {
+    entityType: string;
+    entityId: string;
+    action: string;
+    actorUserId?: string | null;
+    plantId?: string | null;
+    diff: AuditDiff;
+  },
+  client: Prisma.TransactionClient = prisma,
+) {
+  await client.auditLog.create({
     data: {
       entityType: input.entityType,
       entityId: input.entityId,

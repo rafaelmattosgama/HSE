@@ -14,6 +14,12 @@ import {
   type RankingSeriesSnapshot,
 } from "@/lib/dashboard-visualization";
 import { prisma } from "@/lib/prisma";
+import {
+  GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
+  MODULE_TOGGLES_PARAMETER_KEY,
+  isModuleEnabled,
+} from "@/lib/modules";
+import { CompetenceService } from "@/lib/services/competence-service";
 import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
 import {
   buildCommunicationTypeTopEntries,
@@ -22,6 +28,7 @@ import {
 } from "@/lib/communication-type-top";
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { CorporateActionPlans } from "@/components/feature/corporate-action-plans";
+import { CompetenceCorporateBoard } from "@/components/feature/competence-corporate-board";
 import { EnvironmentDashboardBoard } from "@/components/feature/environment-dashboard-board";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
@@ -160,9 +167,13 @@ export default async function CorporatePage({
     previousEnvironmentRows,
     previousYearInjuryRows,
     previousYearKpiRows,
+    globalModuleParameter,
   ] = await Promise.all([
     prisma.plant.findMany({
       include: {
+        systemParameters: {
+          where: { key: MODULE_TOGGLES_PARAMETER_KEY },
+        },
         communications: {
           where: {
             OR: [
@@ -318,6 +329,9 @@ export default async function CorporatePage({
         plantId: true,
         hoursWorked: true,
       },
+    }),
+    prisma.systemParameter.findFirst({
+      where: { plantId: null, key: GLOBAL_MODULE_TOGGLES_PARAMETER_KEY },
     }),
   ]);
   const canManageGlobalRepeatability = session?.user.plantRoles.some(
@@ -524,6 +538,33 @@ export default async function CorporatePage({
       rows: previousEnvironmentRows.filter((row) => row.plantId === plant.id),
     }),
   );
+
+  const competenceEnabledPlantIds = plants
+    .filter((plant) =>
+      isModuleEnabled(
+        "COMPETENCE_AUTHORIZATIONS",
+        globalModuleParameter?.valueJson,
+        plant.systemParameters[0]?.valueJson,
+      ),
+    )
+    .map((plant) => plant.id);
+  const competenceCoverageByPlant = await CompetenceService.getAuthorizationCoverageByPlant(competenceEnabledPlantIds);
+  const competencePlants = plants
+    .filter((plant) => competenceEnabledPlantIds.includes(plant.id))
+    .map((plant) => {
+      const coverage = competenceCoverageByPlant.get(plant.id) ?? {
+        requiredTotal: 0,
+        validCount: 0,
+        coveragePercent: null,
+        expiredCount: 0,
+      };
+      return {
+        id: plant.id,
+        code: plant.code,
+        name: plant.name,
+        ...coverage,
+      };
+    });
 
   const rankings: RankingGroup[] = [
     {
@@ -906,6 +947,10 @@ export default async function CorporatePage({
         className="mb-6"
         labels={ui.dashboard}
       />
+
+      {competencePlants.length > 0 ? (
+        <CompetenceCorporateBoard plants={competencePlants} labels={ui.dashboard} />
+      ) : null}
 
       <div data-onboarding="corporate-comparison">
         <CorporatePlantManager

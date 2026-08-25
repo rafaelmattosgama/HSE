@@ -38,11 +38,28 @@ export default async function CompetenceWorkerProfilePage({
     plantLanguage: plantRow.defaultLanguage,
   });
 
-  const profile = await CompetenceService.getWorkerProfile(plantRow.id, workerId, uiLocale, {
-    role,
-    userId: session.user.id,
-  });
+  const [profile, owners] = await Promise.all([
+    CompetenceService.getWorkerProfile(plantRow.id, workerId, uiLocale, {
+      role,
+      userId: session.user.id,
+    }),
+    prisma.userPlantRole.findMany({
+      where: { plantId: plantRow.id, user: { isActive: true } },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: "asc" } },
+    }),
+  ]);
   if (!profile) notFound();
 
-  return <CompetenceWorkerProfile plant={plant} labels={ui.competences} viewerRole={role} profile={profile} />;
+  const ownerOptions = Array.from(new Map(owners.map((entry) => [entry.user.id, entry.user])).values());
+
+  return (
+    <CompetenceWorkerProfile
+      plant={plant}
+      labels={ui.competences}
+      viewerRole={role}
+      profile={profile}
+      owners={ownerOptions}
+    />
+  );
 }

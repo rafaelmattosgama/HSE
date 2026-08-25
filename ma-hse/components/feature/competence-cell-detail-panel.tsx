@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { RoleCode } from "@prisma/client";
 import { X } from "lucide-react";
 import { STATE_META } from "@/components/feature/competence-matrix-manager";
+import { CreateCompetenceAction, type CompetenceActionOwnerOption } from "@/components/feature/create-competence-action";
 import { Button } from "@/components/ui/button";
 import { requireApiResponse } from "@/lib/client-api";
 import { formatCompetenceBlockedReason, formatCompetenceCellText } from "@/lib/competence-cell-text";
@@ -35,13 +37,27 @@ type HistoryEventWire =
   | { type: "AUTHORIZATION_REACTIVATED"; id: string; occurredAt: string; competenceTypeId: string; actorName: string | null }
   | { type: "AUTHORIZATION_REVOKED"; id: string; occurredAt: string; competenceTypeId: string; reason: string | null; actorName: string | null };
 
-type ProfileWire = {
-  worker: { id: string; name: string };
-  competences: CompetenceRowWire[];
-  history: HistoryEventWire[];
+/** §8: an Action created from a gap, via CompetenceActionLink — never a direct FK on Action. */
+type LinkedActionWire = {
+  id: string;
+  competenceTypeId: string;
+  actionId: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  closedAt: string | null;
+  createdAt: string;
 };
 
-type ActiveForm = "training" | "assessment" | "authorization" | "suspend" | "reactivate" | "revoke" | null;
+type ProfileWire = {
+  worker: { id: string; name: string; roleName: string | null; areaName: string | null };
+  competences: CompetenceRowWire[];
+  history: HistoryEventWire[];
+  actionLinks: LinkedActionWire[];
+};
+
+type ActiveForm = "training" | "assessment" | "authorization" | "suspend" | "reactivate" | "revoke" | "action" | null;
 
 function roleCanAny(viewerRole: RoleCode, allowed: RoleCode[]) {
   return viewerRole === RoleCode.N0_ADMIN || viewerRole === RoleCode.N1_CORPORATE || allowed.includes(viewerRole);
@@ -63,6 +79,7 @@ export function CompetenceCellDetailPanel({
   competenceTypeId,
   competenceTypeName,
   workerName,
+  owners,
   onClose,
   onChanged,
 }: {
@@ -73,6 +90,7 @@ export function CompetenceCellDetailPanel({
   competenceTypeId: string;
   competenceTypeName: string;
   workerName: string;
+  owners: CompetenceActionOwnerOption[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -115,9 +133,15 @@ export function CompetenceCellDetailPanel({
   const canGrant = roleCanAny(viewerRole, [RoleCode.N3_SAFETY]);
   const canSuspendOrReactivate = roleCanAny(viewerRole, [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
   const canRevoke = roleCanAny(viewerRole, [RoleCode.N3_SAFETY]);
+  const canCreateAction = roleCanAny(viewerRole, [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
 
   const hasActiveAuthorization = currentRow ? ["VALID", "EXPIRING", "EXPIRED"].includes(currentRow.state) && currentRow.currentAuthorizationId : false;
   const hasSuspendedAuthorization = currentRow?.state === "SUSPENDED" && currentRow.currentAuthorizationId;
+
+  const relevantActionLinks = useMemo(
+    () => (profile?.actionLinks ?? []).filter((link) => link.competenceTypeId === competenceTypeId),
+    [profile, competenceTypeId],
+  );
 
   async function submit(url: string, method: string, body: unknown) {
     setSaving(true);
@@ -226,6 +250,36 @@ export function CompetenceCellDetailPanel({
             )}
           </section>
 
+          <section>
+            <h3 className="app-section-eyebrow">{labels.actionLinkedTitle}</h3>
+            {relevantActionLinks.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">{labels.actionLinkedEmpty}</p>
+            ) : (
+              <ol className="mt-2 space-y-2">
+                {relevantActionLinks.map((link) => {
+                  const isResolved = link.status === "CLOSED";
+                  return (
+                    <li key={link.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-slate-900">{link.title}</p>
+                        <p className="text-slate-500">{new Date(link.dueDate).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${isResolved ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}`}>
+                          {isResolved ? labels.actionStatusResolved : labels.actionStatusOpen}
+                        </span>
+                        <Link href={`/app/${plant}/actions/${link.actionId}`} className="shrink-0 text-sm font-medium text-[var(--brand-700)] hover:underline">
+                          {labels.actionOpenLink}
+                        </Link>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <p className="mt-2 text-xs text-slate-500">{labels.actionResolvedNote}</p>
+          </section>
+
           {formError ? <p className="text-sm font-medium text-rose-600">{formError}</p> : null}
 
           {activeForm === "training" ? (
@@ -292,6 +346,30 @@ export function CompetenceCellDetailPanel({
                 submit(`/api/plants/${plant}/competences/authorizations/${currentRow?.currentAuthorizationId}/reactivate`, "POST", { note })
               }
             />
+          ) : activeForm === "action" && currentRow ? (
+            <CreateCompetenceAction
+              plant={plant}
+              labels={labels}
+              competenceWorkerId={competenceWorkerId}
+              competenceTypeId={competenceTypeId}
+              owners={owners}
+              gap={{
+                competenceTypeName,
+                workerName,
+                state: currentRow.state,
+                isRequired: currentRow.isRequired,
+                validUntil: currentRow.validUntil,
+                daysToExpiry: currentRow.daysToExpiry,
+                roleName: profile?.worker.roleName ?? null,
+                departmentName: profile?.worker.areaName ?? null,
+                blockedReason: currentRow.blockedReason,
+              }}
+              onCreated={() => {
+                setActiveForm(null);
+                onChanged();
+              }}
+              onCancel={() => setActiveForm(null)}
+            />
           ) : (
             <div className="flex flex-wrap gap-2">
               {canRegister ? (
@@ -322,6 +400,11 @@ export function CompetenceCellDetailPanel({
               {canRevoke && (hasActiveAuthorization || hasSuspendedAuthorization) ? (
                 <Button type="button" size="sm" variant="destructive" onClick={() => setActiveForm("revoke")}>
                   {labels.actionRevoke}
+                </Button>
+              ) : null}
+              {canCreateAction && currentRow && currentRow.state !== "VALID" && currentRow.state !== "NOT_APPLICABLE" ? (
+                <Button type="button" size="sm" variant="secondary" onClick={() => setActiveForm("action")}>
+                  {labels.actionCreateButton}
                 </Button>
               ) : null}
             </div>

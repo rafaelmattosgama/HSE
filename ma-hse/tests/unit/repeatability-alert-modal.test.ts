@@ -68,4 +68,36 @@ describe("RepeatabilityAlertModal", () => {
     expect(await screen.findByText("Failed to close alerts")).toBeTruthy();
     expect(screen.queryByText(/Unexpected token/)).toBeNull();
   });
+
+  it("(minor fix) renders a link from alert.actionUrl when the body has no embedded S-EWO marker", () => {
+    const competenceAlert = {
+      id: "22222222-2222-4222-8222-222222222222",
+      title: "Autorização a expirar em 30 dias: Ana Silva",
+      body: "Competência: Forklift\nTrabalhador: Ana Silva",
+      createdAt: "2026-08-25T09:00:00.000Z",
+      actionUrl: "/app/maap/competences/worker-1",
+    };
+
+    render(createElement(RepeatabilityAlertModal, {
+      plantCode: "maap",
+      alerts: [competenceAlert],
+    }));
+
+    const link = screen.getByRole("link", { name: "Abrir" });
+    expect(link.getAttribute("href")).toBe("/app/maap/competences/worker-1");
+    // The body has no "Abrir S-EWO:" marker to strip, so it renders verbatim.
+    expect(screen.getByText(/Competência: Forklift/)).toBeTruthy();
+    expect(screen.getByText(/Trabalhador: Ana Silva/)).toBeTruthy();
+  });
+
+  it("(minor fix) prefers the embedded S-EWO marker over actionUrl when an alert somehow carries both", () => {
+    render(createElement(RepeatabilityAlertModal, {
+      plantCode: "maap",
+      alerts: [{ ...alert, actionUrl: "/app/maap/competences/worker-1" }],
+    }));
+
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    const link = screen.getByRole("link", { name: "Abrir S-EWO" });
+    expect(link.getAttribute("href")).toBe("http://localhost:3000/app/maap/sewo?sewoId=sewo-1");
+  });
 });

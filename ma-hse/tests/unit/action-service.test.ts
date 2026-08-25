@@ -10,6 +10,9 @@ const transactionMock = vi.hoisted(() => ({
   smatAuditActionLink: {
     create: vi.fn(),
   },
+  competenceActionLink: {
+    create: vi.fn(),
+  },
 }));
 
 const prismaMock = vi.hoisted(() => ({
@@ -247,5 +250,63 @@ describe("ActionService", () => {
         actionId: "action-smat",
       },
     });
+  });
+
+  it("creates the CompetenceActionLink when source type is COMPETENCE, via the join table not a direct FK (§3.8/§8)", async () => {
+    parameterMock.getSlaConfig.mockResolvedValue({
+      LOW: 3,
+      MEDIUM: 7,
+      HIGH: 14,
+    });
+    transactionMock.action.findFirst.mockResolvedValueOnce(null);
+    transactionMock.action.create.mockResolvedValue({
+      id: "action-competence",
+      plantId: "plant-1",
+      sourceType: ActionSourceType.COMPETENCE,
+      manualOrigin: null,
+      communicationId: null,
+      sewoId: null,
+      category: ActionCategory.CORRECTIVE,
+      priority: ActionPriority.HIGH,
+      title: "Forklift — Missing — Ana Silva",
+      description: "Competence gap: missing authorization.",
+      ownerUserId: "owner-1",
+      dueDate: new Date("2026-06-25T00:00:00.000Z"),
+      status: ActionStatus.OPEN,
+      coOwners: [],
+    });
+    prismaMock.prisma.sEWOActionLink.findMany.mockResolvedValue([]);
+
+    await ActionService.create({
+      plantId: "plant-1",
+      actorUserId: "user-1",
+      payload: {
+        sourceType: ActionSourceType.COMPETENCE,
+        competenceWorkerId: "worker-1",
+        competenceTypeId: "type-forklift",
+        category: ActionCategory.CORRECTIVE,
+        priority: ActionPriority.HIGH,
+        title: "Forklift — Missing — Ana Silva",
+        description: "Competence gap: missing authorization.",
+        ownerUserId: "owner-1",
+        level: "N3",
+      },
+    });
+
+    expect(transactionMock.competenceActionLink.create).toHaveBeenCalledWith({
+      data: {
+        competenceWorkerId: "worker-1",
+        competenceTypeId: "type-forklift",
+        actionId: "action-competence",
+      },
+    });
+    expect(transactionMock.action.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        sourceType: ActionSourceType.COMPETENCE,
+        communicationId: null,
+        sewoId: null,
+        level: "N3",
+      }),
+    }));
   });
 });

@@ -205,6 +205,10 @@ export function SafetyDashboardKpiGroups({
         byCategory?: Partial<Record<SifPsifIndicatorCategory, string>>;
       };
     };
+    competences?: {
+      coveragePercent: number | null;
+      expiredCount: number;
+    };
   };
 }) {
   const noData = labels.kpiNoData;
@@ -387,6 +391,36 @@ export function SafetyDashboardKpiGroups({
         {canViewOpenCommunications ? <KpiCard metric={{ title: labels.openCommunications, value: metrics.openCommunications, unit: labels.kpiUnitEvents, period: currentStock, definition: labels.kpiOpenCommunicationsDefinition, state: metrics.openCommunications === 0 ? safeState : informationState, icon: <Inbox className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
         {detailed && metrics.backlog ? <BacklogInsight {...metrics.backlog} labels={labels} /> : null}
       </KpiGroup>
+
+      {metrics.competences ? <KpiGroup
+        id="competence-authorizations-heading"
+        title={labels.kpiCompetenceAuthorizations}
+        description={labels.kpiCompetenceAuthorizationsDescription}
+        helpLabel={labels.help}
+      >
+        <KpiCard metric={{
+          title: labels.kpiCompetenceCoverage,
+          value: metrics.competences.coveragePercent,
+          unit: "%",
+          period: currentStock,
+          definition: labels.kpiCompetenceCoverageDefinition,
+          state: metrics.competences.coveragePercent === null
+            ? notApplicableState
+            : metrics.competences.coveragePercent >= 90 ? safeState : attentionState,
+          icon: <ShieldCheck className="h-5 w-5" />,
+          digits: 1,
+          emptyValueLabel: labels.kpiNotApplicable,
+        }} locale={locale} noDataLabel={noData} />
+        <KpiCard metric={{
+          title: labels.kpiCompetenceExpired,
+          value: metrics.competences.expiredCount,
+          unit: labels.kpiUnitAuthorizations,
+          period: currentStock,
+          definition: labels.kpiCompetenceExpiredDefinition,
+          state: metrics.competences.expiredCount === 0 ? safeState : criticalState,
+          icon: <AlertTriangle className="h-5 w-5" />,
+        }} locale={locale} noDataLabel={noData} />
+      </KpiGroup> : null}
     </div>
   );
 }

@@ -545,8 +545,10 @@ função calcularEstado(trabalhador, competência, hoje):
         → REVOKED
 
   7. avaliação = avaliaçãoMaisRecente(resultado = COMPETENT)
-     se avaliação existe e formaçãoDeSuporte válida:
-        → AWAITING_AUTHORIZATION
+     se avaliação existe:
+        formação = formaçãoDeSuporte(avaliação)     // pode não existir
+        se formação não existe OU formação válida:
+           → AWAITING_AUTHORIZATION
 
   8. formação = formaçãoMaisRecente(resultado = PASSED)
      se formação existe:
@@ -562,6 +564,7 @@ função calcularEstado(trabalhador, competência, hoje):
 Notas de implementação:
 
 - O passo 1 tem uma exceção deliberada: se a competência deixou de ser exigida mas o trabalhador ainda tem autorização ativa, o estado real é mostrado, não cinzento. Esconder uma autorização ativa porque a função mudou é como se perdem autorizações que continuam legalmente válidas.
+- **O passo 7 tolera uma avaliação sem formação ligada.** `CompetenceAssessment.trainingRecordId` é anulável, e uma avaliação órfã tem de contar como avaliação — senão o passo 8 devolve `AWAITING_ASSESSMENT` para quem já foi avaliado, e registar outra avaliação não resolve nada. A célula fica presa em "Aguarda avaliação" para sempre. Do lado da escrita, a ligação deve ser **obrigatória** quando `requiresTraining` é `true`; a tolerância na leitura existe para os registos que escapem a essa validação, não para os legitimar.
 - O limiar de `EXPIRING` (90 dias) vem de `SystemParameter`, chave `COMPETENCE_EXPIRING_THRESHOLD_DAYS`, para não ficar literal no código.
 - Datas em `Europe/Lisbon` via `toZonedTime`, e `differenceInCalendarDays` para a diferença — exatamente o padrão de `action-alert-service.ts`. Usar diferença em milissegundos produz erros de um dia nas mudanças de hora.
 
@@ -669,10 +672,19 @@ Uma implicação a testar no arranque: se a lista atual estiver preenchida a pen
 
 Solução: o campo `cycleKey`.
 
-- Alertas ligados a uma autorização → `cycleKey = authorizationId`. Cada renovação cria uma autorização nova (§2.5), logo uma chave nova, logo o alerta volta a poder ser enviado. Sem lógica extra.
-- Alertas sem autorização (`MISSING_DOCUMENT`, `ROLE_WITHOUT_COMPETENCE`, `AWAITING_ASSESSMENT`) → `cycleKey = "YYYY-MM"`. Lembrete mensal, não diário.
+| Tipo de alerta | `cycleKey` | Porquê |
+|---|---|---|
+| Expiração (`EXPIRING_*`, `EXPIRY_DAY`) | `authorizationId` | Cada renovação cria uma autorização nova (§2.5), logo chave nova, logo o alerta volta a poder ser enviado. Sem lógica extra. |
+| `AUTHORIZATION_SUSPENDED` | `${authorizationId}:${suspendedAt}` | **Ver aviso abaixo.** |
+| `AUTHORIZATION_REVOKED` | `authorizationId` | Terminal — só acontece uma vez por autorização. |
+| `MISSING_DOCUMENT` | `${authorizationId}:${YYYY-MM}` | Lembrete mensal, e distingue autorizações renovadas dentro do mesmo mês. |
+| `ROLE_WITHOUT_COMPETENCE`, `AWAITING_ASSESSMENT` | `YYYY-MM` (ou `YYYY-Www` se semanal) | Não há autorização a que ancorar. Lembrete periódico, não diário. |
 
 Sem isto acontece uma de duas coisas: ou o alerta de renovação nunca chega em 2031 porque a chave já existe de 2026, ou removem-se as restrições e passam a chegar todos os dias.
+
+> **Aviso: a suspensão não é terminal e reutiliza a linha.** `reactivateAuthorization` faz `SUSPENDED → ACTIVE` na **mesma** `WorkerAuthorization`, sem criar registo novo. Logo a sequência suspender → reativar → suspender colide na chave, o `P2002` é interpretado como "já enviado", e a segunda suspensão **não alerta ninguém, sem log de erro**. É por isso que o `cycleKey` deste tipo precisa da ocorrência — o `suspendedAt`, que é reescrito a cada suspensão — e não apenas do id da autorização. O raciocínio "cada renovação cria uma autorização nova" cobre renovações e não cobre este ciclo.
+
+Nota de robustez relacionada: as bandas de expiração devem usar `<=` e não igualdade exata, para que um dia de job em baixo não perca o alerta — o `cycleKey` já garante o envio único. Isto inclui `EXPIRY_DAY`, que deve ser `daysToExpiry <= 0` (limitado a `>= -30`, para não alertar indefinidamente sobre autorizações caducadas há meses) e não `=== 0`.
 
 ---
 

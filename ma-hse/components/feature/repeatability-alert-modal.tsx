@@ -15,6 +15,8 @@ type RepeatabilityAlertModalProps = {
     title: string;
     body: string;
     createdAt: string;
+    /** Competence alerts (menores review): set on the Notification row itself, unlike S-EWO's embedded "Abrir S-EWO:" body marker below. */
+    actionUrl?: string;
   }>;
 };
 
@@ -107,8 +109,13 @@ export function RepeatabilityAlertModal({
           {alerts.map((alert) => (
             <article key={alert.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               {(() => {
-                const actionUrl = extractAlertAction(alert.body);
-                const body = stripAlertAction(alert.body);
+                // The S-EWO marker embedded in the body text wins if present; competence
+                // alerts (and anything else that sets Notification.actionUrl directly)
+                // fall back to that field so exactly one link ever renders per alert.
+                const embeddedActionUrl = extractAlertAction(alert.body);
+                const actionUrl = embeddedActionUrl ?? alert.actionUrl ?? null;
+                const actionLabel = embeddedActionUrl ? "Abrir S-EWO" : "Abrir";
+                const body = embeddedActionUrl ? stripAlertAction(alert.body) : alert.body;
 
                 return (
                   <>
@@ -116,7 +123,7 @@ export function RepeatabilityAlertModal({
                     <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{body}</p>
                     {actionUrl ? (
                       <Link href={actionUrl} className="mt-3 inline-flex text-sm font-semibold text-teal-700 hover:underline">
-                        Abrir S-EWO
+                        {actionLabel}
                       </Link>
                     ) : null}
                   </>

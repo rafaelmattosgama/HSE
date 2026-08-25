@@ -210,10 +210,19 @@ describe("computeCompetenceCellState — step 7 (competent assessment awaiting a
     expect(result.state).toBe(CompetenceCellState.EXPIRED);
   });
 
-  it("falls through when the assessment has no linked supporting training at all", () => {
+  it("counts a competent assessment with no linked training as valid support — nothing to check an expiry date against (§5 fix, item 5)", () => {
     const assessed = assessment({ trainingRecordId: null });
     const result = computeCompetenceCellState(baseInput({ assessments: [assessed] }));
-    expect(result.state).toBe(CompetenceCellState.MISSING);
+    expect(result.state).toBe(CompetenceCellState.AWAITING_AUTHORIZATION);
+  });
+
+  it("takes precedence over a separate passed training record: an unlinked COMPETENT assessment never falls back to AWAITING_ASSESSMENT (item 5)", () => {
+    const passedTraining = training();
+    const assessed = assessment({ trainingRecordId: null });
+    const result = computeCompetenceCellState(
+      baseInput({ trainingRecords: [passedTraining], assessments: [assessed], requiresAssessment: true }),
+    );
+    expect(result.state).toBe(CompetenceCellState.AWAITING_AUTHORIZATION);
   });
 });
 

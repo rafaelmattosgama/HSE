@@ -91,7 +91,12 @@ export default async function PlantLayout({
         ? session.user.plantRoles.find((entry) => entry.plantCode)?.role
         : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
   const hasSafetyCommunicationAlerts = plantRole === RoleCode.N3_SAFETY || plantRole === RoleCode.N4_SUPERVISOR;
-  const hasCompetenceUrgentAlerts = plantRole === RoleCode.N2_PLANT_MANAGER
+  // Must mirror notifications/competences/route.ts's VIEW_ROLES exactly — an
+  // N0/N1 who is a delivery recipient (§7.2) otherwise never sees the modal
+  // that polls the very endpoint that authorizes them.
+  const hasCompetenceUrgentAlerts = plantRole === RoleCode.N0_ADMIN
+    || plantRole === RoleCode.N1_CORPORATE
+    || plantRole === RoleCode.N2_PLANT_MANAGER
     || plantRole === RoleCode.N3_SAFETY
     || plantRole === RoleCode.N4_SUPERVISOR
     || plantRole === RoleCode.N5_OPERATOR;
@@ -116,20 +121,41 @@ export default async function PlantLayout({
     }),
   ]);
   const unreadAlerts = plantRecord
-    ? await prisma.notification.findMany({
-        where: {
-          userId: session.user.id,
-          plantId: plantRecord.id,
-          channel: {
-            in: ["REPEATABILITY_ALERT", "SEWO_REJECTED", "COMPETENCE_ALERT"],
+    ? await Promise.all([
+        // The two channels the modal has always shown. A per-channel take
+        // keeps a flood of COMPETENCE_ALERT rows (item 15) from pushing these
+        // out of the combined top-10 — this query is unchanged from before.
+        prisma.notification.findMany({
+          where: {
+            userId: session.user.id,
+            plantId: plantRecord.id,
+            channel: {
+              in: ["REPEATABILITY_ALERT", "SEWO_REJECTED"],
+            },
+            status: "UNREAD",
           },
-          status: "UNREAD",
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 10,
-      })
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 10,
+        }),
+        prisma.notification.findMany({
+          where: {
+            userId: session.user.id,
+            plantId: plantRecord.id,
+            channel: "COMPETENCE_ALERT",
+            status: "UNREAD",
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 10,
+        }),
+      ]).then(([legacyChannelAlerts, competenceAlerts]) =>
+        [...legacyChannelAlerts, ...competenceAlerts].sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        ),
+      )
     : isAllPlants
       ? await prisma.notification.findMany({
           where: {
@@ -231,11 +257,16 @@ export default async function PlantLayout({
             title: alert.title,
             body: alert.body,
             createdAt: alert.createdAt.toISOString(),
+            actionUrl: alert.actionUrl ?? undefined,
           }))}
         />
       ) : null}
       <SafetyCommunicationFloatingAlert plantCode={plant} enabled={!isAllPlants && hasSafetyCommunicationAlerts} />
-      <CompetenceUrgentAlert plantCode={plant} labels={ui.competences} enabled={!isAllPlants && hasCompetenceUrgentAlerts} />
+      <CompetenceUrgentAlert
+        plantCode={plant}
+        labels={ui.competences}
+        enabled={!isAllPlants && hasCompetenceUrgentAlerts && Boolean(moduleToggles.COMPETENCE_AUTHORIZATIONS)}
+      />
       {showInternalAgentChat ? <InternalAgentChat key={agentLocale} plantCode={plant} locale={agentLocale} /> : null}
     </>
   );

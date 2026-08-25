@@ -217,12 +217,14 @@ export const reopenEntityInput = z.object({
 });
 
 export const createActionInput = z.object({
-  sourceType: z.enum(["COMMUNICATION", "SEWO", "SMAT", "MANUAL"]),
+  sourceType: z.enum(["COMMUNICATION", "SEWO", "SMAT", "MANUAL", "COMPETENCE"]),
   manualOrigin: z.nativeEnum(ActionManualOrigin).optional(),
   level: recordLevelInput.optional().nullable(),
   communicationId: z.string().uuid().optional(),
   sewoId: z.string().uuid().optional(),
   smatAuditId: z.string().uuid().optional(),
+  competenceWorkerId: z.string().uuid().optional(),
+  competenceTypeId: z.string().uuid().optional(),
   category: z.nativeEnum(ActionCategory),
   priority: z.nativeEnum(ActionPriority),
   title: z.string().min(3),
@@ -260,6 +262,14 @@ export const createActionInput = z.object({
       code: z.ZodIssueCode.custom,
       message: "SMAT is required",
       path: ["smatAuditId"],
+    });
+  }
+
+  if (value.sourceType === "COMPETENCE" && (!value.competenceWorkerId || !value.competenceTypeId)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Competence worker and competence type are required",
+      path: ["competenceWorkerId"],
     });
   }
 });
@@ -675,6 +685,14 @@ export const actionListExportInput = z.object({
   })).max(200),
 });
 
+export const competenceMatrixExportInput = z.object({
+  columns: z.array(z.object({
+    key: z.string().trim().min(1).max(80),
+    header: z.string().trim().min(1).max(160),
+  })).min(1).max(60),
+  rows: z.array(z.record(z.string(), z.string())).max(3000),
+});
+
 export const upsertProfessionalRiskInput = z.object({
   id: z.string().uuid().optional(),
   code: z.string().trim().min(1).max(40),
@@ -747,6 +765,8 @@ export const registerAssessmentInput = z.object({
   observations: z.string().trim().max(2000).nullable().optional(),
 });
 
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
 export const grantAuthorizationInput = z.object({
   competenceWorkerId: z.string().uuid(),
   competenceTypeId: z.string().uuid(),
@@ -754,6 +774,18 @@ export const grantAuthorizationInput = z.object({
   assessmentId: z.string().uuid().nullable().optional(),
   validFrom: z.coerce.date(),
   restrictions: z.string().trim().max(500).nullable().optional(),
+}).superRefine((value, ctx) => {
+  // minor fix: unbounded validFrom accepted 1990 or 2090 alike. Bounds are
+  // computed at validation time (not baked into the schema at module load),
+  // so "around today" does not drift over a long-running process's uptime.
+  const now = Date.now();
+  if (value.validFrom.getTime() < now - ONE_YEAR_MS || value.validFrom.getTime() > now + ONE_YEAR_MS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["validFrom"],
+      message: "validFrom must be within one year of today",
+    });
+  }
 });
 
 export const suspendAuthorizationInput = z.object({

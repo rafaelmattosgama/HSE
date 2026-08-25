@@ -276,7 +276,12 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
     };
   }
 
-  // Step 7
+  // Step 7. trainingRecordId is optional on CompetenceAssessment (§3.5) — an
+  // assessment without a linked training record is not "unsupported", it
+  // simply has nothing to check an expiry date against, so it counts as
+  // valid. Requiring the link here would strand an already-competent worker
+  // in AWAITING_ASSESSMENT (step 8) forever, since registering another
+  // assessment doesn't retroactively add the missing link.
   const competentAssessment = latestBy(
     input.assessments.filter((a) => a.result === CompetenceAssessmentResult.COMPETENT),
     (a) => a.assessedAt,
@@ -285,8 +290,9 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
     const supportingTraining = competentAssessment.trainingRecordId
       ? input.trainingRecords.find((t) => t.id === competentAssessment.trainingRecordId) ?? null
       : null;
-    const supportingTrainingValid =
-      !!supportingTraining && !(supportingTraining.certificateExpiresAt && isBeforeToday(supportingTraining.certificateExpiresAt, zonedToday));
+    const supportingTrainingValid = supportingTraining
+      ? !(supportingTraining.certificateExpiresAt && isBeforeToday(supportingTraining.certificateExpiresAt, zonedToday))
+      : true;
 
     if (supportingTrainingValid) {
       return {
