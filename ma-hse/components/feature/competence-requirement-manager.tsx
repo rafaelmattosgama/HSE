@@ -70,6 +70,7 @@ export function CompetenceRequirementManager({
   workstations,
   initialRequirements,
   initialCoverage,
+  readOnly = false,
 }: {
   plant: string;
   labels: CompetencesUiDictionary;
@@ -78,6 +79,7 @@ export function CompetenceRequirementManager({
   workstations: WorkstationOption[];
   initialRequirements: RequirementWire[];
   initialCoverage: CoverageWire;
+  readOnly?: boolean;
 }) {
   const [requirements, setRequirements] = useState(initialRequirements);
   const [coverage, setCoverage] = useState(initialCoverage);
@@ -176,6 +178,8 @@ export function CompetenceRequirementManager({
         <p className="mt-1 text-sm text-slate-600">{labels.requirementManagerDescription}</p>
       </div>
 
+      {readOnly ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{labels.readOnlyCatalogNotice}</p> : null}
+
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
         <h3 className="app-section-eyebrow">{labels.requirementCoverageTitle}</h3>
         {coverage.totalRoles === 0 ? (
@@ -217,13 +221,13 @@ export function CompetenceRequirementManager({
               <th className="py-2">{labels.requirementColumnValue}</th>
               <th className="py-2">{labels.requirementColumnMandatory}</th>
               <th className="py-2">{labels.requirementColumnStatus}</th>
-              <th className="py-2">{labels.requirementColumnActions}</th>
+              {readOnly ? null : <th className="py-2">{labels.requirementColumnActions}</th>}
             </tr>
           </thead>
           <tbody>
             {requirements.length === 0 ? (
               <tr>
-                <td colSpan={6} className="app-empty py-6 text-center">{labels.requirementEmptyState}</td>
+                <td colSpan={readOnly ? 5 : 6} className="app-empty py-6 text-center">{labels.requirementEmptyState}</td>
               </tr>
             ) : (
               requirements.map((requirement) => (
@@ -235,13 +239,15 @@ export function CompetenceRequirementManager({
                   <td className="py-2 text-slate-700">
                     {requirement.isActive ? labels.requirementStatusActive : labels.requirementStatusInactive}
                   </td>
-                  <td className="py-2">
-                    {requirement.isActive ? (
-                      <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => deactivate(requirement.id)}>
-                        {labels.requirementDeactivateButton}
-                      </Button>
-                    ) : null}
-                  </td>
+                  {readOnly ? null : (
+                    <td className="py-2">
+                      {requirement.isActive ? (
+                        <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => deactivate(requirement.id)}>
+                          {labels.requirementDeactivateButton}
+                        </Button>
+                      ) : null}
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -251,6 +257,7 @@ export function CompetenceRequirementManager({
 
       {error ? <p className="text-sm font-medium text-rose-600">{error}</p> : null}
 
+      {readOnly ? null : (
       <form className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2" onSubmit={submitNewRule}>
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-slate-700">{labels.requirementCompetenceTypeLabel}</span>
@@ -341,6 +348,7 @@ export function CompetenceRequirementManager({
           </Button>
         </div>
       </form>
+      )}
     </section>
   );
 }

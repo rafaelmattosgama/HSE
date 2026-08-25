@@ -37,6 +37,7 @@ import type {
   RegisterTrainingInput,
   UpdateCompetenceWorkerRoleInput,
   UpsertCompetenceRequirementInput,
+  UpsertCompetenceTypeInput,
 } from "@/lib/validation/dtos";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -1461,6 +1462,101 @@ export const CompetenceService = {
     }
 
     return updated;
+  },
+
+  /**
+   * §2.7: the catalog belongs to the plant's N3_SAFETY (N1_CORPORATE may also
+   * intervene) — see the route for the role gate. Reuses the same
+   * (plantId, code) unique constraint as an upsert target so re-creating a
+   * type with a previously-deactivated code revives that row instead of
+   * colliding with it.
+   */
+  async upsertCompetenceType(plantId: string, input: UpsertCompetenceTypeInput, actorUserId: string) {
+    const code = input.code.trim();
+    const name = input.name.trim();
+
+    const existing = input.id
+      ? await prisma.competenceType.findFirst({ where: { id: input.id, plantId } })
+      : null;
+    if (input.id && !existing) {
+      throw new Error(`Competence type not found for plant scope: ${input.id}`);
+    }
+
+    const data = {
+      code,
+      name,
+      category: input.category,
+      requiresTraining: input.requiresTraining,
+      requiresAssessment: input.requiresAssessment,
+      requiresAuthorization: input.requiresAuthorization,
+      validityMonths: input.validityMonths,
+      refresherMonths: input.refresherMonths ?? null,
+      legalReference: input.legalReference ?? null,
+      displayOrder: input.displayOrder,
+      isActive: true,
+    };
+
+    return prisma.$transaction(async (tx) => {
+      const type = existing
+        ? await tx.competenceType.update({ where: { id: existing.id }, data })
+        : await tx.competenceType.upsert({
+            where: { plantId_code: { plantId, code } },
+            update: data,
+            create: { plantId, ...data },
+          });
+
+      await writeAuditLog({
+        entityType: "CompetenceType",
+        entityId: type.id,
+        action: existing ? "UPDATED" : "CREATED",
+        actorUserId,
+        plantId,
+        diff: buildDiff(existing ?? null, data),
+      }, tx);
+
+      return type;
+    });
+  },
+
+  /**
+   * §2.7 item 5: a type with WorkerAuthorization, TrainingRecord or
+   * CompetenceAssessment history stays blocked from deactivation — those
+   * records would become orphaned in a matrix that no longer has the column
+   * to show them against. CompetenceRequirement rules are not part of this
+   * check; they deactivate independently.
+   */
+  async deactivateCompetenceType(plantId: string, competenceTypeId: string, actorUserId: string) {
+    const existing = await prisma.competenceType.findFirst({ where: { id: competenceTypeId, plantId } });
+    if (!existing) {
+      throw new Error(`Competence type not found for plant scope: ${competenceTypeId}`);
+    }
+
+    const [authorizationCount, trainingCount, assessmentCount] = await Promise.all([
+      prisma.workerAuthorization.count({ where: { competenceTypeId } }),
+      prisma.trainingRecord.count({ where: { competenceTypeId } }),
+      prisma.competenceAssessment.count({ where: { competenceTypeId } }),
+    ]);
+    const linkedCount = authorizationCount + trainingCount + assessmentCount;
+    if (linkedCount > 0) {
+      throw new Error(
+        `Cannot deactivate: ${linkedCount} linked record(s) exist (${authorizationCount} authorization(s), ${trainingCount} training record(s), ${assessmentCount} assessment(s))`,
+      );
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.competenceType.update({ where: { id: competenceTypeId }, data: { isActive: false } });
+
+      await writeAuditLog({
+        entityType: "CompetenceType",
+        entityId: competenceTypeId,
+        action: "DEACTIVATED",
+        actorUserId,
+        plantId,
+        diff: buildDiff({ isActive: true }, { isActive: false }),
+      }, tx);
+
+      return updated;
+    });
   },
 
   /** §3.2 admin screen: every requirement rule, active or not, with localized area/workstation names. */

@@ -79,26 +79,38 @@ export function CompetenceWorkerProfile({
 
       <AppPanel>
         <h2 className="app-section-eyebrow">{labels.profileCompetencesTitle}</h2>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {profile.competences.map((row) => {
-            const meta = STATE_META[row.state];
-            const Icon = meta.icon;
-            return (
-              <button
-                key={row.competenceTypeId}
-                type="button"
-                onClick={() => setActiveCompetenceTypeId(row.competenceTypeId)}
-                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50"
-              >
-                <span className="font-medium text-slate-900">{row.name}</span>
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.badgeClass}`}>
-                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                  {formatCompetenceCellText(row, labels)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {profile.competences.length === 0 ? (
+          <div className="app-empty mt-2 py-6 text-center" role="status">
+            <p className="font-semibold text-slate-700">{labels.catalogEmptyTitle}</p>
+            <p className="mt-1">{labels.catalogEmptyDescription}</p>
+            {viewerRole === "N1_CORPORATE" || viewerRole === "N3_SAFETY" ? (
+              <Link href={`/app/${plant}/admin`} className="mt-3 inline-block font-semibold text-emerald-700 hover:underline">
+                {labels.catalogEmptyLink}
+              </Link>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {profile.competences.map((row) => {
+              const meta = STATE_META[row.state];
+              const Icon = meta.icon;
+              return (
+                <button
+                  key={row.competenceTypeId}
+                  type="button"
+                  onClick={() => setActiveCompetenceTypeId(row.competenceTypeId)}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50"
+                >
+                  <span className="font-medium text-slate-900">{row.name}</span>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.badgeClass}`}>
+                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    {formatCompetenceCellText(row, labels)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </AppPanel>
 
       <AppPanel>
