@@ -8,12 +8,21 @@ export const SYSTEM_PARAMETER_KEYS = {
   COMPETENCE_EXPIRING_THRESHOLD_DAYS: "COMPETENCE_EXPIRING_THRESHOLD_DAYS",
   AUTHORIZATION_SEGREGATION_OF_DUTIES: "AUTHORIZATION_SEGREGATION_OF_DUTIES",
   MEDICAL_FITNESS_BLOCKS_AUTHORIZATION: "MEDICAL_FITNESS_BLOCKS_AUTHORIZATION",
+  FIRE_EQUIPMENT_QUARTERLY_WARNING_DAYS: "FIRE_EQUIPMENT_QUARTERLY_WARNING_DAYS",
+  FIRE_EQUIPMENT_ANNUAL_WARNING_DAYS: "FIRE_EQUIPMENT_ANNUAL_WARNING_DAYS",
 } as const;
 
 /** §5/§2.1 of docs/modulo-competencias-autorizacoes.md. */
 export const DEFAULT_COMPETENCE_EXPIRING_THRESHOLD_DAYS = 90;
 export const DEFAULT_AUTHORIZATION_SEGREGATION_OF_DUTIES = true;
 export const DEFAULT_MEDICAL_FITNESS_BLOCKS_AUTHORIZATION = false;
+
+/** §6 of docs/modulo-equipamentos-seguranca-incendio.md — proportional to
+ * each cycle's own length (~17% / ~12%), deliberately not the Competences
+ * module's 90-day literal, which would leave a 90-day quarterly cycle
+ * permanently amber. */
+export const DEFAULT_FIRE_EQUIPMENT_QUARTERLY_WARNING_DAYS = 15;
+export const DEFAULT_FIRE_EQUIPMENT_ANNUAL_WARNING_DAYS = 45;
 
 export const DEFAULT_SLA_DAYS = {
   LOW: 21,

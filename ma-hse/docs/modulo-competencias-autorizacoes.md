@@ -33,6 +33,7 @@ Todas as afirmações sobre o código existente nesta especificação foram veri
 | 2.3 | Quem concede a autorização formal? | **`N3_SAFETY`**, mais `N0_ADMIN` e `N1_CORPORATE` por bypass global |
 | 2.4 | Que validade manda na célula? | **A da autorização**, e formação caducada invalida-a |
 | 2.6 | Trabalhadores externos? | **Fora do âmbito** |
+| 2.7 | Quem define o catálogo de competências? | **`N3_SAFETY` da planta e `N1_CORPORATE`**. `N0_ADMIN` bloqueado. Nasce vazio, criado de raiz |
 | 3.1 | Periodicidades | **12 meses para todas**, por agora; específicas por tipo mais tarde |
 | 6.2 | Coluna "Turno" no modal | **Retirada** |
 | 7.1 | Janela flutuante | **Server-side**, exceto suspensão/revogação |
@@ -73,15 +74,17 @@ Combinada com a decisão 7.2, isto fecha o encaminhamento de alertas: o respons�
 
 A autorização é o ato pelo qual a empresa assume a responsabilidade. Fica no papel de Segurança da planta, com os dois papéis globais a poder intervir.
 
-| Papel | Ver matriz | Registar formação | Registar avaliação | **Conceder autorização** | Suspender | Revogar |
-|---|---|---|---|---|---|---|
-| `N5_OPERATOR` | própria ficha | — | — | — | — | — |
-| `N4_SUPERVISOR` | ✓ | ✓ | ✓ | **—** | ✓ | — |
-| `N3_SAFETY` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ |
-| `N2_PLANT_MANAGER` | ✓ | — | — | **—** | ✓ | — |
-| `N1_CORPORATE` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ |
-| `N0_ADMIN` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ |
-| `MEDICO` | — | — | — | — | — | — |
+| Papel | Ver matriz | Registar formação | Registar avaliação | **Conceder autorização** | Suspender | Revogar | Catálogo e requisitos (§2.7) |
+|---|---|---|---|---|---|---|---|
+| `N5_OPERATOR` | própria ficha | — | — | — | — | — | — |
+| `N4_SUPERVISOR` | ✓ | ✓ | ✓ | **—** | ✓ | — | — |
+| `N3_SAFETY` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ | **✓** |
+| `N2_PLANT_MANAGER` | ✓ | — | — | **—** | ✓ | — | — |
+| `N1_CORPORATE` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ | **✓** |
+| `N0_ADMIN` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ | **bloqueado** |
+| `MEDICO` | — | — | — | — | — | — | — |
+
+A última coluna é a única em que o `N0_ADMIN` é bloqueado em vez de admitido. A razão está no §2.7, e a implementação exige uma verificação explícita, porque o guard dá-lhe passagem incondicional.
 
 `N4_SUPERVISOR` pode suspender mas não revogar: suspender é uma medida cautelar imediata que quem está no terreno tem de poder tomar; revogar é definitivo e fica com quem concede. `N2_PLANT_MANAGER` pode suspender pela mesma razão, mas não registar formação nem avaliações — não é o seu papel operacional.
 
@@ -120,6 +123,16 @@ Consequência a antecipar: quando a formação caduca, a autorização fica com 
 ### 2.5 Renovação: nova autorização ou prolongamento?
 
 **Recomendação: nova autorização.** Cada renovação cria um registo novo em `WorkerAuthorization` e o anterior passa a `SUPERSEDED`. Vantagens: histórico completo preservado, e a chave de idempotência dos alertas (§7.3) fica naturalmente por ciclo — sem isto, o alerta de 30 dias de 2026 e o de 2031 colidem na mesma chave única.
+
+### 2.7 Quem define o catálogo de competências — `N3_SAFETY` e `N1_CORPORATE`, nunca `N0_ADMIN`
+
+O catálogo (`CompetenceType`) e a matriz de requisitos (`CompetenceRequirement`) pertencem à planta. Quem os define é o **`N3_SAFETY` dessa planta**, no módulo Admin da planta, com o `N1_CORPORATE` a poder intervir. O **`N0_ADMIN` está explicitamente bloqueado** de criar ou editar: é um papel de administração de sistema, não de segurança industrial, e não lhe compete decidir que competências uma fábrica exige.
+
+**O catálogo nasce vazio e é criado de raiz.** Sem valores por omissão, sem sugestões, sem pré-preenchimento no fluxo de criação de plantas. A autoria de cada tipo de competência é de uma pessoa identificada, registada no `AuditLog` — não do sistema.
+
+> **Consequência que obriga a um requisito.** Toda a planta nova entra no módulo com a matriz sem colunas. Sem um estado vazio explícito no ecrã da matriz, a única leitura possível é "o módulo está avariado" — foi exatamente o que aconteceu na `maap`. O estado vazio deixa de ser um detalhe de acabamento e passa a ser parte do caminho normal de arranque.
+
+Nota sobre o `prisma/seed.ts`: continua a criar os quatro tipos, mas **apenas** para as plantas de demonstração (`pl01`, `pl02`, `pl1`), que são fixtures de desenvolvimento a par das comunicações e S-EWO fictícios. Não se propaga ao fluxo de criação de plantas reais.
 
 ### 2.6 Trabalhadores externos — fora do âmbito
 

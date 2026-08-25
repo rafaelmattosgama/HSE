@@ -16,6 +16,7 @@ import { InternalAgentChat } from "@/components/feature/internal-agent-chat";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
 import { CompetenceUrgentAlert } from "@/components/feature/competence-urgent-alert";
+import { FireEquipmentUrgentAlert } from "@/components/feature/fire-equipment-urgent-alert";
 import { shouldShowInternalAgentChat } from "@/lib/agent/ui-access";
 import { normalizeInternalAgentLocale } from "@/lib/agent/i18n";
 import { env } from "@/lib/env";
@@ -38,6 +39,7 @@ const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?:
   { href: "smat", label: "SMAT", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
   { href: "occupational-health", label: "occupationalHealth", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY] },
   { href: "competences", label: "competences", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
+  { href: "fire-equipment", label: "fireEquipment", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
   { href: "monthly-inputs", label: "monthlyInputs", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
   { href: "contractors", label: "contractors", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
   { href: "mapa", label: "mapa", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
@@ -100,6 +102,9 @@ export default async function PlantLayout({
     || plantRole === RoleCode.N3_SAFETY
     || plantRole === RoleCode.N4_SUPERVISOR
     || plantRole === RoleCode.N5_OPERATOR;
+  // Must mirror notifications/fire-equipment/route.ts's VIEW_ROLES exactly —
+  // same reasoning as hasCompetenceUrgentAlerts just above.
+  const hasFireEquipmentUrgentAlerts = hasCompetenceUrgentAlerts;
   const [plantRecord, globalModuleParameter] = await Promise.all([
     isAllPlants
       ? Promise.resolve(null)
@@ -151,8 +156,23 @@ export default async function PlantLayout({
           },
           take: 10,
         }),
-      ]).then(([legacyChannelAlerts, competenceAlerts]) =>
-        [...legacyChannelAlerts, ...competenceAlerts].sort(
+        // Own per-channel take (same reasoning as competenceAlerts, item 15):
+        // a flood on one module's channel must not push the other module's
+        // alerts out of the combined top-10 below.
+        prisma.notification.findMany({
+          where: {
+            userId: session.user.id,
+            plantId: plantRecord.id,
+            channel: "FIRE_EQUIPMENT_ALERT",
+            status: "UNREAD",
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 10,
+        }),
+      ]).then(([legacyChannelAlerts, competenceAlerts, fireEquipmentAlerts]) =>
+        [...legacyChannelAlerts, ...competenceAlerts, ...fireEquipmentAlerts].sort(
           (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
         ),
       )
@@ -266,6 +286,11 @@ export default async function PlantLayout({
         plantCode={plant}
         labels={ui.competences}
         enabled={!isAllPlants && hasCompetenceUrgentAlerts && Boolean(moduleToggles.COMPETENCE_AUTHORIZATIONS)}
+      />
+      <FireEquipmentUrgentAlert
+        plantCode={plant}
+        labels={ui.fireEquipment}
+        enabled={!isAllPlants && hasFireEquipmentUrgentAlerts && Boolean(moduleToggles.FIRE_SAFETY_EQUIPMENT)}
       />
       {showInternalAgentChat ? <InternalAgentChat key={agentLocale} plantCode={plant} locale={agentLocale} /> : null}
     </>

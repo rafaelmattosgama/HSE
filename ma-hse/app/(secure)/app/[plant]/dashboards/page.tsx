@@ -19,6 +19,7 @@ import {
   isModuleEnabled,
 } from "@/lib/modules";
 import { CompetenceService } from "@/lib/services/competence-service";
+import { FireEquipmentService } from "@/lib/services/fire-equipment-service";
 import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
 import {
   buildCommunicationTypeTopEntries,
@@ -270,7 +271,9 @@ export default async function DashboardsPage({
   const ui = getUiDictionary(uiLocale);
   const actorRole = getSafetyDashboardRole(plant, session.user.plantRoles);
   const canViewCompetenceKpis = hasSafetyDashboardDetailedReadAccess(actorRole);
-  const [globalModuleParameter, plantModuleParameter] = canViewCompetenceKpis
+  // Fase 6: same detailed-read gate as competences — one flag, two modules.
+  const canViewDetailedModuleKpis = canViewCompetenceKpis;
+  const [globalModuleParameter, plantModuleParameter] = canViewDetailedModuleKpis
     ? await Promise.all([
         prisma.systemParameter.findFirst({ where: { plantId: null, key: GLOBAL_MODULE_TOGGLES_PARAMETER_KEY } }),
         prisma.systemParameter.findFirst({ where: { plantId: plantRow.id, key: MODULE_TOGGLES_PARAMETER_KEY } }),
@@ -282,6 +285,13 @@ export default async function DashboardsPage({
     plantModuleParameter?.valueJson,
   )
     ? await CompetenceService.getPlantAuthorizationCoverage(plantRow.id)
+    : null;
+  const fireEquipmentCoverage = canViewDetailedModuleKpis && isModuleEnabled(
+    "FIRE_SAFETY_EQUIPMENT",
+    globalModuleParameter?.valueJson,
+    plantModuleParameter?.valueJson,
+  )
+    ? await FireEquipmentService.getPlantComplianceCoverage(plantRow.id)
     : null;
   const period = resolveDashboardPeriod(currentSearchParams);
   const now = new Date();
@@ -1156,6 +1166,10 @@ export default async function DashboardsPage({
           competences: competenceCoverage ? {
             coveragePercent: competenceCoverage.coveragePercent,
             expiredCount: competenceCoverage.expiredCount,
+          } : undefined,
+          fireEquipment: fireEquipmentCoverage ? {
+            coveragePercent: fireEquipmentCoverage.coveragePercent,
+            problemCount: fireEquipmentCoverage.problemCount,
           } : undefined,
         }}
       />

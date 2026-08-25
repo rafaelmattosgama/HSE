@@ -9,6 +9,7 @@ import { handleRepetitiveAlerts } from "@/jobs/handlers/repetitive-alerts";
 import { handleSewoApprovedNotification, type SewoApprovedNotificationJob } from "@/jobs/handlers/sewo-approved-notification";
 import { handleMasterDataTranslation, type MasterDataTranslationJob } from "@/jobs/handlers/master-data-translation";
 import { handleCompetenceExpiry } from "@/jobs/handlers/competence-expiry";
+import { handleFireEquipmentDueDates } from "@/jobs/handlers/fire-equipment-due-dates";
 
 const connection = getQueueConnection();
 const scheduledReportQueues: ReadonlySet<string> = new Set([
@@ -27,6 +28,7 @@ const workerMap: [string, (data: unknown) => Promise<void>, number][] = [
   [QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, (data) => handleSewoApprovedNotification(data as SewoApprovedNotificationJob), 2],
   [QUEUE_NAMES.MASTER_DATA_TRANSLATION, (data) => handleMasterDataTranslation(data as MasterDataTranslationJob), 3],
   [QUEUE_NAMES.COMPETENCE_EXPIRY, (data) => handleCompetenceExpiry(data as { plantId: string }), 2],
+  [QUEUE_NAMES.FIRE_EQUIPMENT_DUE_DATES, (data) => handleFireEquipmentDueDates(data as { plantId: string }), 2],
 ];
 
 for (const [queueName, handler, concurrency] of workerMap) {

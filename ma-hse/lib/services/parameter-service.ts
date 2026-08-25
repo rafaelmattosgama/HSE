@@ -3,6 +3,8 @@ import {
   DEFAULT_ALERT_CONFIG,
   DEFAULT_AUTHORIZATION_SEGREGATION_OF_DUTIES,
   DEFAULT_COMPETENCE_EXPIRING_THRESHOLD_DAYS,
+  DEFAULT_FIRE_EQUIPMENT_ANNUAL_WARNING_DAYS,
+  DEFAULT_FIRE_EQUIPMENT_QUARTERLY_WARNING_DAYS,
   DEFAULT_MEDICAL_FITNESS_BLOCKS_AUTHORIZATION,
   DEFAULT_REPEATABILITY_ALERT_CONFIG,
   DEFAULT_SLA_DAYS,
@@ -297,4 +299,30 @@ export async function getMedicalFitnessBlocksAuthorization(plantId: string): Pro
   });
 
   return typeof parameter?.valueJson === "boolean" ? parameter.valueJson : DEFAULT_MEDICAL_FITNESS_BLOCKS_AUTHORIZATION;
+}
+
+export async function getFireEquipmentQuarterlyWarningDays(plantId: string): Promise<number> {
+  const parameter = await prisma.systemParameter.findUnique({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.FIRE_EQUIPMENT_QUARTERLY_WARNING_DAYS,
+      },
+    },
+  });
+
+  return typeof parameter?.valueJson === "number" ? parameter.valueJson : DEFAULT_FIRE_EQUIPMENT_QUARTERLY_WARNING_DAYS;
+}
+
+export async function getFireEquipmentAnnualWarningDays(plantId: string): Promise<number> {
+  const parameter = await prisma.systemParameter.findUnique({
+    where: {
+      plantId_key: {
+        plantId,
+        key: SYSTEM_PARAMETER_KEYS.FIRE_EQUIPMENT_ANNUAL_WARNING_DAYS,
+      },
+    },
+  });
+
+  return typeof parameter?.valueJson === "number" ? parameter.valueJson : DEFAULT_FIRE_EQUIPMENT_ANNUAL_WARNING_DAYS;
 }
