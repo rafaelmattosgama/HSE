@@ -428,7 +428,6 @@ export function FireEquipmentList({
           plant={plant}
           labels={labels}
           types={types}
-          areas={areas}
           workstations={workstations}
           onClose={() => setModalOpen(false)}
           onCreated={() => {

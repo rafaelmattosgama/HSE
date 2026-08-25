@@ -9,6 +9,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
+import { FIRE_EQUIPMENT_EXTINGUISHER_CODE } from "@/lib/defaults/fire-equipment-types";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getFireEquipmentAnnualWarningDays, getFireEquipmentQuarterlyWarningDays } from "@/lib/services/parameter-service";
@@ -25,6 +26,7 @@ type TransactionClient = Prisma.TransactionClient;
 
 export type FireEquipmentTypeOption = {
   id: string;
+  code: string;
   name: string;
   category: FireEquipmentCategory;
 };
@@ -344,7 +346,7 @@ export const FireEquipmentService = {
       prisma.fireEquipmentType.findMany({
         where: { plantId, isActive: true },
         orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, category: true },
+        select: { id: true, code: true, name: true, category: true },
       }),
       prisma.fireEquipment.findMany({
         where: { plantId, isActive: true },
@@ -499,26 +501,39 @@ export const FireEquipmentService = {
   },
 
   /**
-   * Fase 0 item 4: RecordCodeService is closed to COMMUNICATION/SEWO/REPORT,
-   * and copying WorkerAuthorization.sequenceNumber's own max+1 verbatim would
-   * copy a known race too (that counter has no advisory lock and is scoped to
-   * plantId only). internalCode is scoped to (plantId, fireEquipmentTypeId)
-   * and the read-then-create below is serialized by an advisory lock on that
-   * same pair, mirroring action-service.ts's lockCommunicationActionCreation.
-   * internalCode is computed once here and is never edited after creation.
+   * Fase 0 item 4 originally had this service auto-generate internalCode
+   * from codePrefix + sequenceNumber; the UI now collects it directly from
+   * the user instead (e.g. to match a physical tag already on the
+   * equipment), so it's validated for plant-wide uniqueness here rather than
+   * computed. sequenceNumber itself is unchanged — still advisory-lock
+   * protected against the WorkerAuthorization-style race described below —
+   * it just no longer feeds into the code string.
+   *
+   * RecordCodeService is closed to COMMUNICATION/SEWO/REPORT, and copying
+   * WorkerAuthorization.sequenceNumber's own max+1 verbatim would copy a
+   * known race too (that counter has no advisory lock and is scoped to
+   * plantId only). sequenceNumber here is scoped to (plantId,
+   * fireEquipmentTypeId) and the read-then-create below is serialized by an
+   * advisory lock on that same pair, mirroring action-service.ts's
+   * lockCommunicationActionCreation. internalCode is immutable after
+   * creation, same as before.
    */
   async create(plant: { id: string; code: string }, input: CreateFireEquipmentInput, actorUserId: string | null) {
     const fireEquipmentType = await prisma.fireEquipmentType.findFirst({
       where: { id: input.fireEquipmentTypeId, plantId: plant.id, isActive: true },
-      select: { id: true, codePrefix: true },
+      select: { id: true, code: true },
     });
     if (!fireEquipmentType) {
       throw new Error("Fire equipment type not found for plant scope");
     }
 
-    if (input.areaId) {
-      const area = await prisma.area.findFirst({ where: { id: input.areaId, plantId: plant.id }, select: { id: true } });
-      if (!area) throw new Error("Area not found for plant scope");
+    const internalCode = input.internalCode.trim();
+    const duplicate = await prisma.fireEquipment.findFirst({
+      where: { plantId: plant.id, internalCode },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new Error(`Equipment code "${internalCode}" is already in use in this plant`);
     }
 
     if (input.workstationId) {
@@ -529,6 +544,12 @@ export const FireEquipmentService = {
       if (!workstation) throw new Error("Workstation not found for plant scope");
     }
 
+    // extinguishingAgent only makes sense for extinguishers — the client only
+    // shows the field when this type is selected, but a stale payload from an
+    // older tab (or a direct API call) is normalized here rather than rejected.
+    const extinguishingAgent =
+      fireEquipmentType.code === FIRE_EQUIPMENT_EXTINGUISHER_CODE ? input.extinguishingAgent ?? null : null;
+
     return prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`fireEquipment:seq:${plant.id}:${fireEquipmentType.id}`}))`;
 
@@ -538,7 +559,6 @@ export const FireEquipmentService = {
         select: { sequenceNumber: true },
       });
       const sequenceNumber = (latest?.sequenceNumber ?? 0) + 1;
-      const internalCode = `${fireEquipmentType.codePrefix}-${plant.code.toUpperCase()}-${String(sequenceNumber).padStart(4, "0")}`;
 
       const equipment = await tx.fireEquipment.create({
         data: {
@@ -546,13 +566,10 @@ export const FireEquipmentService = {
           fireEquipmentTypeId: fireEquipmentType.id,
           sequenceNumber,
           internalCode,
-          areaId: input.areaId ?? null,
           workstationId: input.workstationId ?? null,
           locationDescription: input.locationDescription ?? null,
-          manufacturer: input.manufacturer ?? null,
-          model: input.model ?? null,
-          serialNumber: input.serialNumber ?? null,
-          capacity: input.capacity ?? null,
+          extinguishingAgent,
+          locationPhotoFileKey: input.locationPhotoFileKey ?? null,
           installedAt: input.installedAt ?? null,
           manufactureDate: input.manufactureDate ?? null,
           createdById: actorUserId,
@@ -569,7 +586,6 @@ export const FireEquipmentService = {
           diff: buildDiff(null, {
             fireEquipmentTypeId: fireEquipmentType.id,
             internalCode,
-            areaId: input.areaId ?? null,
             workstationId: input.workstationId ?? null,
           }),
         },

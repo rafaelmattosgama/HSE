@@ -3,18 +3,33 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { requireApiResponse } from "@/lib/client-api";
+import { requireApiResponse, uploadAttachment } from "@/lib/client-api";
+import { FIRE_EQUIPMENT_EXTINGUISHER_CODE } from "@/lib/defaults/fire-equipment-types";
 import type { FireEquipmentTypeOption } from "@/lib/services/fire-equipment-service";
 import type { FireEquipmentUiDictionary } from "@/lib/ui-language";
 
-type AreaOption = { id: string; name: string };
 type WorkstationOption = { id: string; name: string };
+type ExtinguishingAgentValue = "CO2" | "ABC" | "ABF" | "WATER";
+
+const EXTINGUISHING_AGENTS: ExtinguishingAgentValue[] = ["CO2", "ABC", "ABF", "WATER"];
+
+function extinguishingAgentLabel(labels: FireEquipmentUiDictionary, agent: ExtinguishingAgentValue) {
+  switch (agent) {
+    case "CO2":
+      return labels.extinguishingAgentCo2;
+    case "ABC":
+      return labels.extinguishingAgentAbc;
+    case "ABF":
+      return labels.extinguishingAgentAbf;
+    case "WATER":
+      return labels.extinguishingAgentWater;
+  }
+}
 
 export function AddFireEquipmentModal({
   plant,
   labels,
   types,
-  areas,
   workstations,
   onClose,
   onCreated,
@@ -22,29 +37,59 @@ export function AddFireEquipmentModal({
   plant: string;
   labels: FireEquipmentUiDictionary;
   types: FireEquipmentTypeOption[];
-  areas: AreaOption[];
   workstations: WorkstationOption[];
   onClose: () => void;
   onCreated: () => void;
 }) {
   const [fireEquipmentTypeId, setFireEquipmentTypeId] = useState("");
-  const [areaId, setAreaId] = useState("");
+  const [internalCode, setInternalCode] = useState("");
   const [workstationId, setWorkstationId] = useState("");
   const [locationDescription, setLocationDescription] = useState("");
-  const [manufacturer, setManufacturer] = useState("");
-  const [model, setModel] = useState("");
-  const [serialNumber, setSerialNumber] = useState("");
-  const [capacity, setCapacity] = useState("");
+  const [extinguishingAgent, setExtinguishingAgent] = useState<ExtinguishingAgentValue | "">("");
+  const [locationPhotoFileKey, setLocationPhotoFileKey] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [installedAt, setInstalledAt] = useState("");
   const [manufactureDate, setManufactureDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  const selectedType = types.find((type) => type.id === fireEquipmentTypeId);
+  const isExtinguisher = selectedType?.code === FIRE_EQUIPMENT_EXTINGUISHER_CODE;
+
+  function selectType(id: string) {
+    setFireEquipmentTypeId(id);
+    if (types.find((type) => type.id === id)?.code !== FIRE_EQUIPMENT_EXTINGUISHER_CODE) {
+      setExtinguishingAgent("");
+    }
+  }
+
+  async function handleLocationPhoto(file: File) {
+    setMessage("");
+    setPhotoUploading(true);
+    try {
+      const uploaded = await uploadAttachment({
+        plantCode: plant,
+        folder: "fire-equipment",
+        file,
+        fallbackErrorMessage: labels.photoUploadError,
+      });
+      setLocationPhotoFileKey(uploaded.key);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : labels.photoUploadError);
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
 
   async function submit() {
     setMessage("");
 
     if (!fireEquipmentTypeId) {
       setMessage(labels.selectTypeRequired);
+      return;
+    }
+    if (!internalCode.trim()) {
+      setMessage(labels.internalCodeRequired);
       return;
     }
 
@@ -55,13 +100,11 @@ export function AddFireEquipmentModal({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           fireEquipmentTypeId,
-          areaId: areaId || null,
+          internalCode: internalCode.trim(),
           workstationId: workstationId || null,
           locationDescription: locationDescription.trim() || null,
-          manufacturer: manufacturer.trim() || null,
-          model: model.trim() || null,
-          serialNumber: serialNumber.trim() || null,
-          capacity: capacity.trim() || null,
+          extinguishingAgent: isExtinguisher && extinguishingAgent ? extinguishingAgent : null,
+          locationPhotoFileKey,
           installedAt: installedAt || null,
           manufactureDate: manufactureDate || null,
         }),
@@ -94,7 +137,7 @@ export function AddFireEquipmentModal({
               <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldType}</span>
               <select
                 value={fireEquipmentTypeId}
-                onChange={(event) => setFireEquipmentTypeId(event.target.value)}
+                onChange={(event) => selectType(event.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="">{labels.fieldTypePlaceholder}</option>
@@ -104,28 +147,41 @@ export function AddFireEquipmentModal({
               </select>
             </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldArea}</span>
-              <select
-                value={areaId}
-                onChange={(event) => setAreaId(event.target.value)}
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldInternalCode}</span>
+              <input
+                type="text"
+                value={internalCode}
+                onChange={(event) => setInternalCode(event.target.value)}
+                placeholder={labels.fieldInternalCodePlaceholder}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">{labels.fieldAreaPlaceholder}</option>
-                {areas.map((area) => (
-                  <option key={area.id} value={area.id}>{area.name}</option>
-                ))}
-              </select>
+              />
             </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldWorkstation}</span>
+            {isExtinguisher ? (
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldExtinguishingAgent}</span>
+                <select
+                  value={extinguishingAgent}
+                  onChange={(event) => setExtinguishingAgent(event.target.value as ExtinguishingAgentValue | "")}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">{labels.fieldExtinguishingAgentPlaceholder}</option>
+                  {EXTINGUISHING_AGENTS.map((agent) => (
+                    <option key={agent} value={agent}>{extinguishingAgentLabel(labels, agent)}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldArea}</span>
               <select
                 value={workstationId}
                 onChange={(event) => setWorkstationId(event.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               >
-                <option value="">{labels.fieldWorkstationPlaceholder}</option>
+                <option value="">{labels.fieldAreaPlaceholder}</option>
                 {workstations.map((workstation) => (
                   <option key={workstation.id} value={workstation.id}>{workstation.name}</option>
                 ))}
@@ -143,44 +199,20 @@ export function AddFireEquipmentModal({
               />
             </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldManufacturer}</span>
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldLocationPhoto}</span>
               <input
-                type="text"
-                value={manufacturer}
-                onChange={(event) => setManufacturer(event.target.value)}
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleLocationPhoto(file);
+                }}
+                disabled={photoUploading}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldModel}</span>
-              <input
-                type="text"
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldSerialNumber}</span>
-              <input
-                type="text"
-                value={serialNumber}
-                onChange={(event) => setSerialNumber(event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-slate-700">{labels.fieldCapacity}</span>
-              <input
-                type="text"
-                value={capacity}
-                onChange={(event) => setCapacity(event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
+              {photoUploading ? <p className="mt-1 text-xs text-slate-500">{labels.photoUploading}</p> : null}
+              {locationPhotoFileKey ? <p className="mt-1 text-xs text-emerald-700">✓</p> : null}
             </label>
 
             <label className="block">
@@ -213,7 +245,7 @@ export function AddFireEquipmentModal({
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
               {labels.cancel}
             </Button>
-            <Button type="button" onClick={() => void submit()} disabled={saving}>
+            <Button type="button" onClick={() => void submit()} disabled={saving || photoUploading}>
               {saving ? labels.saving : labels.addEquipment}
             </Button>
           </div>

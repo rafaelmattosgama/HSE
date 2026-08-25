@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { FireEquipmentService } from "@/lib/services/fire-equipment-service";
+import { ensureDefaultFireEquipmentTypes } from "@/lib/services/fire-equipment-type-service";
 
 const VIEW_ROLES: RoleCode[] = [
   RoleCode.N0_ADMIN,
@@ -32,6 +33,8 @@ export default async function FireEquipmentPage({
     userLanguage: session.user.language,
     plantLanguage: plantRow.defaultLanguage,
   });
+
+  await ensureDefaultFireEquipmentTypes(plantRow.id);
 
   const [view, areas, workstations, ownerRows] = await Promise.all([
     FireEquipmentService.list(plantRow.id),
