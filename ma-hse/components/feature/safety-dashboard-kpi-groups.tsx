@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, Bandage, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, Eye, Gauge, HeartPulse, Inbox, ShieldCheck, Target, Users } from "lucide-react";
+import { AlertTriangle, Bandage, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, Eye, Flame, Gauge, HeartPulse, Inbox, ShieldCheck, Target, Users } from "lucide-react";
 import { AppPanel, AppSectionHeader } from "@/components/ui/app-surface";
 import { HelpPopover } from "@/components/ui/help-popover";
 import type { DashboardUiDictionary } from "@/lib/ui-language";
@@ -208,6 +208,10 @@ export function SafetyDashboardKpiGroups({
     competences?: {
       coveragePercent: number | null;
       expiredCount: number;
+    };
+    fireEquipment?: {
+      coveragePercent: number | null;
+      problemCount: number;
     };
   };
 }) {
@@ -418,6 +422,36 @@ export function SafetyDashboardKpiGroups({
           period: currentStock,
           definition: labels.kpiCompetenceExpiredDefinition,
           state: metrics.competences.expiredCount === 0 ? safeState : criticalState,
+          icon: <AlertTriangle className="h-5 w-5" />,
+        }} locale={locale} noDataLabel={noData} />
+      </KpiGroup> : null}
+
+      {metrics.fireEquipment ? <KpiGroup
+        id="fire-equipment-heading"
+        title={labels.kpiFireEquipment}
+        description={labels.kpiFireEquipmentDescription}
+        helpLabel={labels.help}
+      >
+        <KpiCard metric={{
+          title: labels.kpiFireEquipmentCoverage,
+          value: metrics.fireEquipment.coveragePercent,
+          unit: "%",
+          period: currentStock,
+          definition: labels.kpiFireEquipmentCoverageDefinition,
+          state: metrics.fireEquipment.coveragePercent === null
+            ? notApplicableState
+            : metrics.fireEquipment.coveragePercent >= 90 ? safeState : attentionState,
+          icon: <Flame className="h-5 w-5" />,
+          digits: 1,
+          emptyValueLabel: labels.kpiNotApplicable,
+        }} locale={locale} noDataLabel={noData} />
+        <KpiCard metric={{
+          title: labels.kpiFireEquipmentProblems,
+          value: metrics.fireEquipment.problemCount,
+          unit: labels.kpiUnitEquipment,
+          period: currentStock,
+          definition: labels.kpiFireEquipmentProblemsDefinition,
+          state: metrics.fireEquipment.problemCount === 0 ? safeState : criticalState,
           icon: <AlertTriangle className="h-5 w-5" />,
         }} locale={locale} noDataLabel={noData} />
       </KpiGroup> : null}

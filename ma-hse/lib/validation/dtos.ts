@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, CompetenceRequirementScope, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, CompetenceRequirementScope, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
 import {
   SMAT_ATTACHMENT_LIMITS,
@@ -217,7 +217,7 @@ export const reopenEntityInput = z.object({
 });
 
 export const createActionInput = z.object({
-  sourceType: z.enum(["COMMUNICATION", "SEWO", "SMAT", "MANUAL", "COMPETENCE"]),
+  sourceType: z.enum(["COMMUNICATION", "SEWO", "SMAT", "MANUAL", "COMPETENCE", "FIRE_SAFETY_EQUIPMENT"]),
   manualOrigin: z.nativeEnum(ActionManualOrigin).optional(),
   level: recordLevelInput.optional().nullable(),
   communicationId: z.string().uuid().optional(),
@@ -225,6 +225,7 @@ export const createActionInput = z.object({
   smatAuditId: z.string().uuid().optional(),
   competenceWorkerId: z.string().uuid().optional(),
   competenceTypeId: z.string().uuid().optional(),
+  fireEquipmentId: z.string().uuid().optional(),
   category: z.nativeEnum(ActionCategory),
   priority: z.nativeEnum(ActionPriority),
   title: z.string().min(3),
@@ -270,6 +271,14 @@ export const createActionInput = z.object({
       code: z.ZodIssueCode.custom,
       message: "Competence worker and competence type are required",
       path: ["competenceWorkerId"],
+    });
+  }
+
+  if (value.sourceType === "FIRE_SAFETY_EQUIPMENT" && !value.fireEquipmentId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Fire equipment is required",
+      path: ["fireEquipmentId"],
     });
   }
 });
@@ -487,7 +496,7 @@ export const updateRepeatabilityAlertConfigInput = z.object({
 export const uploadAttachmentInput = z.object({
   plantCode: z.string().min(2),
   contentType: z.string().min(3),
-  folder: z.enum(["communications", "actions", "sewo", "maps", "smat"]),
+  folder: z.enum(["communications", "actions", "sewo", "maps", "smat", "fire-equipment"]),
 });
 
 export const createPlantUserInput = z.object({
@@ -685,6 +694,19 @@ export const actionListExportInput = z.object({
   })).max(200),
 });
 
+export const fireEquipmentListExportInput = z.object({
+  rows: z.array(z.object({
+    code: z.string(),
+    type: z.string(),
+    location: z.string(),
+    status: z.string(),
+    quarterlyState: z.string(),
+    annualState: z.string(),
+    hasOpenNonConformity: z.string(),
+    tag: z.string(),
+  })).max(3000),
+});
+
 export const competenceMatrixExportInput = z.object({
   columns: z.array(z.object({
     key: z.string().trim().min(1).max(80),
@@ -731,6 +753,73 @@ export const upsertCompetenceTypeInput = z.object({
 
 export const deleteCompetenceTypeInput = z.object({
   id: z.string().uuid(),
+});
+
+export const upsertFireEquipmentTypeInput = z.object({
+  id: z.string().uuid().optional(),
+  code: z.string().trim().min(1).max(40),
+  name: z.string().trim().min(2).max(160),
+  category: z.nativeEnum(FireEquipmentCategory),
+  codePrefix: z.string().trim().min(1).max(10).regex(/^[A-Z0-9]+$/, "Use uppercase letters and digits only"),
+  legalReference: z.string().trim().max(160).nullable().optional(),
+  displayOrder: z.coerce.number().int().min(0).default(0),
+});
+
+export const deleteFireEquipmentTypeInput = z.object({
+  id: z.string().uuid(),
+});
+
+export const createFireEquipmentInput = z.object({
+  fireEquipmentTypeId: z.string().uuid(),
+  areaId: optionalUuid,
+  workstationId: optionalUuid,
+  locationDescription: z.string().trim().max(300).nullable().optional(),
+  manufacturer: z.string().trim().max(160).nullable().optional(),
+  model: z.string().trim().max(160).nullable().optional(),
+  serialNumber: z.string().trim().max(160).nullable().optional(),
+  capacity: z.string().trim().max(80).nullable().optional(),
+  installedAt: z.coerce.date().nullable().optional(),
+  manufactureDate: z.coerce.date().nullable().optional(),
+});
+
+// §3.5/§7.4: overallResult is never part of this input — it's always
+// calculated in fire-equipment-service.ts from itemResponses. performedByUserId
+// isn't part of it either — it's always the caller (§2.4), even for an
+// annual maintenance registered a posteriori from an external provider's
+// report (externalProviderName/externalCertificateFileKey capture that case).
+export const createFireChecklistExecutionInput = z.object({
+  fireEquipmentId: z.string().uuid(),
+  frequency: z.nativeEnum(FireChecklistFrequency),
+  performedAt: z.coerce.date().optional(),
+  externalProviderName: z.string().trim().max(160).nullable().optional(),
+  externalCertificateFileKey: z.string().trim().min(1).max(500).nullable().optional(),
+  observations: z.string().trim().max(2000).nullable().optional(),
+  itemResponses: z
+    .array(
+      z.object({
+        itemId: z.string().uuid(),
+        value: z.nativeEnum(FireChecklistItemValue),
+        numericValue: z.coerce.number().nullable().optional(),
+        textValue: z.string().trim().max(500).nullable().optional(),
+        notes: z.string().trim().max(500).nullable().optional(),
+      }),
+    )
+    .min(1, "At least one checklist item response is required"),
+  attachments: z
+    .array(
+      z.object({
+        fileKey: z.string().trim().min(3),
+        fileName: z.string().trim().min(1),
+      }),
+    )
+    .optional(),
+});
+
+// §5.6/§3.3: unassignReason only ever applies when there's a current active
+// tag being replaced — the service ignores it on a first-time assignment.
+export const assignFireEquipmentTagInput = z.object({
+  tagType: z.nativeEnum(FireEquipmentTagType).default(FireEquipmentTagType.NFC_AND_QR),
+  unassignReason: z.string().trim().max(300).nullable().optional(),
 });
 
 export const enrollCompetenceWorkersInput = z.object({
@@ -1058,6 +1147,11 @@ export type UpsertProfessionalRiskInput = z.infer<typeof upsertProfessionalRiskI
 export type UpsertUnsafeActTypeInput = z.infer<typeof upsertUnsafeActTypeInput>;
 export type UpsertCompetenceTypeInput = z.infer<typeof upsertCompetenceTypeInput>;
 export type DeleteCompetenceTypeInput = z.infer<typeof deleteCompetenceTypeInput>;
+export type UpsertFireEquipmentTypeInput = z.infer<typeof upsertFireEquipmentTypeInput>;
+export type DeleteFireEquipmentTypeInput = z.infer<typeof deleteFireEquipmentTypeInput>;
+export type CreateFireEquipmentInput = z.infer<typeof createFireEquipmentInput>;
+export type CreateFireChecklistExecutionInput = z.infer<typeof createFireChecklistExecutionInput>;
+export type AssignFireEquipmentTagInput = z.infer<typeof assignFireEquipmentTagInput>;
 export type EnrollCompetenceWorkersInput = z.infer<typeof enrollCompetenceWorkersInput>;
 export type RegisterTrainingInput = z.infer<typeof registerTrainingInput>;
 export type RegisterAssessmentInput = z.infer<typeof registerAssessmentInput>;

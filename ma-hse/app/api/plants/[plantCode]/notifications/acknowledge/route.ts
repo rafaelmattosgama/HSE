@@ -16,6 +16,8 @@ const ACKNOWLEDGEABLE_CHANNELS = [
   "ACTION_ALERT",
   "COMPETENCE_ALERT",
   "COMPETENCE_URGENT",
+  "FIRE_EQUIPMENT_ALERT",
+  "FIRE_EQUIPMENT_URGENT",
 ];
 
 const acknowledgeNotificationsInput = z.object({

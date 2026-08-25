@@ -32,6 +32,13 @@ model Plant {
   equipments                         Equipment[]
   externalCompanies                  ExternalCompany[]
   externalInvitations                ExternalCompanyInvitation[]
+  fireChecklistExecutions            FireChecklistExecution[]
+  fireChecklistTemplates             FireChecklistTemplate[]
+  fireEquipment                      FireEquipment[]
+  fireEquipmentAlertDeliveries       FireEquipmentAlertDelivery[]
+  fireEquipmentComplianceStates      FireEquipmentComplianceState[]
+  fireEquipmentTagAssignments        FireEquipmentTagAssignment[]
+  fireEquipmentTypes                 FireEquipmentType[]
   injuryTypes                        InjuryType[]
   lines                              Line[]
   mapDocuments                       MapDocument[]
@@ -111,6 +118,9 @@ model User {
   smatAttachment                            SmatAuditAttachment[]
   addedCompetenceWorkers                    CompetenceWorker[]                  @relation("CompetenceWorkerAddedBy")
   createdCompetenceRequirements             CompetenceRequirement[]             @relation("CompetenceRequirementCreatedBy")
+  createdFireEquipment                      FireEquipment[]                     @relation("FireEquipmentCreatedBy")
+  performedFireChecklistExecutions          FireChecklistExecution[]            @relation("FireChecklistExecutionPerformedBy")
+  assignedFireEquipmentTags                 FireEquipmentTagAssignment[]        @relation("FireEquipmentTagAssignedBy")
   employeeDirectory                         EmployeeDirectory?                  @relation(fields: [employeeDirectoryId], references: [id])
   competenceAssessmentsPerformed            CompetenceAssessment[]
   authorizationsGranted                     WorkerAuthorization[]               @relation("AuthorizationGrantedBy")
@@ -120,6 +130,7 @@ model User {
   trainingRecordAttachmentsUploaded         TrainingRecordAttachment[]
   competenceAssessmentAttachmentsUploaded   CompetenceAssessmentAttachment[]
   competenceAlertDeliveries                 CompetenceAlertDelivery[]
+  fireEquipmentAlertDeliveries              FireEquipmentAlertDelivery[]
   plantRoles                                UserPlantRole[]
 }
 
@@ -172,6 +183,7 @@ model Area {
   communications                     Communication[]
   competenceRequirements             CompetenceRequirement[]
   competenceWorkers                  CompetenceWorker[]
+  fireEquipment                      FireEquipment[]
   mapFeatures                        MapFeature[]
   sewoRecords                        SEWO[]
   safetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientDepartment")
@@ -202,6 +214,7 @@ model Workstation {
   sourceLanguage            String?
   communications            Communication[]
   competenceRequirements    CompetenceRequirement[]
+  fireEquipment             FireEquipment[]
   mapFeatures               MapFeature[]
   occupationalHealthWorkers OccupationalHealthWorker[]
   plant                     Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
@@ -734,6 +747,354 @@ model CompetenceActionLink {
   @@index([competenceWorkerId, competenceTypeId])
 }
 
+/// §9 (phase 5). Mirrors CompetenceActionLink exactly — a plain join, no
+/// plantId column of its own (scoped via actionId/fireEquipmentId only).
+/// Closing the linked Action never touches FireEquipmentComplianceState —
+/// unlike SEWOActionLink/Communication, there is no syncParentStatuses call
+/// for this sourceType. The equipment's state only ever changes through a
+/// new FireChecklistExecution that resolves the item (§6).
+model FireEquipmentActionLink {
+  id              String   @id @default(uuid())
+  actionId        String
+  fireEquipmentId String
+  createdAt       DateTime @default(now())
+
+  action        Action        @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  fireEquipment FireEquipment @relation(fields: [fireEquipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([actionId, fireEquipmentId])
+  @@index([fireEquipmentId])
+}
+
+/// Fire Safety Equipment module — phase 1 (catalog + equipment registry +
+/// read-only list). Fase 0 confirmed there is no generic Equipment/Asset
+/// registry to extend: the existing `Equipment` model (below) is master data
+/// used only to tag Communication.equipmentId, with no location, lifecycle,
+/// manufacturer/serial fields, or history — a different shape entirely.
+/// FireChecklistTemplate/Item/Execution, FireEquipmentComplianceState and
+/// FireEquipmentTagAssignment (§3.3-3.6) are added in later phases; the
+/// relations they would add to FireEquipmentType/FireEquipment are
+/// deliberately not declared yet, since the referenced models don't exist.
+model FireEquipmentType {
+  id             String                @id @default(uuid())
+  plantId        String
+  code           String
+  name           String
+  category       FireEquipmentCategory @default(OTHER)
+  codePrefix     String // "EXT", "CAR", "BAE", "CDI" — used to build FireEquipment.internalCode (§2.8)
+  legalReference String?
+  displayOrder   Int                   @default(0)
+  isActive       Boolean               @default(true)
+  sourceLanguage String?
+
+  plant              Plant                   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  equipments         FireEquipment[]
+  checklistTemplates FireChecklistTemplate[]
+
+  @@unique([plantId, code])
+  @@index([plantId, isActive, displayOrder])
+}
+
+enum FireEquipmentCategory {
+  PORTABLE_EXTINCTION
+  FIXED_EXTINCTION
+  EMERGENCY_LIGHTING
+  DETECTION_ALARM
+  OTHER
+}
+
+/// Fase 0 item 3: Workstation is reused elsewhere (CompetenceRequirement scope,
+/// OccupationalHealthWorker) as "production post/role", not as a free spatial
+/// location — areaId/workstationId stay optional qualifiers, locationDescription
+/// is the field a caller should actually rely on for common-area equipment
+/// (corridors, stairwells) instead of inventing a fictitious Workstation row.
+model FireEquipment {
+  id                  String              @id @default(uuid())
+  plantId             String
+  fireEquipmentTypeId String
+  // Fase 0 item 4: RecordCodeService is closed to COMMUNICATION/SEWO/REPORT and
+  // WorkerAuthorization.sequenceNumber's own max+1 (plantId only, no advisory
+  // lock) is itself a known race — this counter is scoped to (plantId,
+  // fireEquipmentTypeId) and must only be advanced under
+  // pg_advisory_xact_lock (fire-equipment-service.ts).
+  sequenceNumber      Int
+  internalCode        String // e.g. "EXT-MAAP-0032" — computed once at creation, never edited after (§2.8)
+  areaId              String?
+  workstationId       String?
+  locationDescription String?
+  manufacturer        String?
+  model               String?
+  serialNumber        String?
+  capacity            String?
+  installedAt         DateTime?
+  manufactureDate     DateTime?
+  status              FireEquipmentStatus @default(ACTIVE)
+  decommissionedAt    DateTime?
+  decommissionReason  String?
+  isActive            Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  createdById         String?
+
+  plant             Plant                         @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  fireEquipmentType FireEquipmentType             @relation(fields: [fireEquipmentTypeId], references: [id], onDelete: Cascade)
+  area              Area?                         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  workstation       Workstation?                  @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  createdBy         User?                         @relation("FireEquipmentCreatedBy", fields: [createdById], references: [id])
+  executions        FireChecklistExecution[]
+  complianceState   FireEquipmentComplianceState?
+  tagAssignments    FireEquipmentTagAssignment[]
+  alertDeliveries   FireEquipmentAlertDelivery[]
+  actionLinks       FireEquipmentActionLink[]
+
+  @@unique([plantId, internalCode])
+  @@unique([plantId, fireEquipmentTypeId, sequenceNumber])
+  @@index([plantId, fireEquipmentTypeId, isActive])
+  @@index([plantId, status])
+}
+
+enum FireEquipmentStatus {
+  ACTIVE
+  OUT_OF_SERVICE
+  DECOMMISSIONED
+}
+
+/// §3.3 / phase 3 (NFC/QR). Only one isActive = true row per fireEquipmentId
+/// at a time — enforced in fire-equipment-tag-service.ts (read current
+/// active row, deactivate it, create the new one, all in one transaction),
+/// not only by tagCode's global uniqueness. Replacing a tag never touches
+/// FireChecklistExecution/FireEquipmentComplianceState — history and
+/// compliance are keyed on fireEquipmentId, never on tagCode (§5.6).
+model FireEquipmentTagAssignment {
+  id              String               @id @default(uuid())
+  plantId         String
+  fireEquipmentId String
+  tagCode         String
+  tagType         FireEquipmentTagType @default(NFC_AND_QR)
+  assignedAt      DateTime             @default(now())
+  assignedById    String
+  unassignedAt    DateTime?
+  unassignReason  String?
+  isActive        Boolean              @default(true)
+
+  plant         Plant         @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  fireEquipment FireEquipment @relation(fields: [fireEquipmentId], references: [id], onDelete: Cascade)
+  assignedBy    User          @relation("FireEquipmentTagAssignedBy", fields: [assignedById], references: [id])
+
+  @@unique([tagCode])
+  @@index([fireEquipmentId, isActive])
+}
+
+enum FireEquipmentTagType {
+  NFC_AND_QR
+  QR_ONLY
+}
+
+/// Fire Safety Equipment module — phase 2 (checklist catalog, execution
+/// history, and the derived compliance-state cache). Fase 0/phase 1's own
+/// comment above already flagged these relations as deliberately absent
+/// until this phase; FireEquipmentTagAssignment (§3.3, NFC/QR) still isn't
+/// declared — that's phase 3.
+///
+/// §3.4 rule (item 3 of the phase-2 brief): once a FireChecklistItem has any
+/// FireChecklistItemResponse, its label/responseType must never be edited in
+/// place — deactivate it (isActive = false) and create a new item with a
+/// different code instead. Nothing in the schema enforces this; it's a
+/// service-layer rule (fire-equipment-service.ts / a future admin route).
+model FireChecklistTemplate {
+  id                  String                 @id @default(uuid())
+  plantId             String
+  fireEquipmentTypeId String
+  frequency           FireChecklistFrequency
+  name                String
+  legalReference      String?
+  version             Int                    @default(1)
+  isActive            Boolean                @default(true)
+  sourceLanguage      String?
+  createdAt           DateTime               @default(now())
+
+  plant             Plant                    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  fireEquipmentType FireEquipmentType        @relation(fields: [fireEquipmentTypeId], references: [id], onDelete: Cascade)
+  items             FireChecklistItem[]
+  executions        FireChecklistExecution[]
+
+  @@unique([plantId, fireEquipmentTypeId, frequency])
+  @@index([plantId, fireEquipmentTypeId, frequency, isActive])
+}
+
+enum FireChecklistFrequency {
+  QUARTERLY
+  ANNUAL
+}
+
+model FireChecklistItem {
+  id           String                        @id @default(uuid())
+  templateId   String
+  code         String
+  label        String
+  helpText     String?
+  responseType FireChecklistItemResponseType @default(OK_NOK)
+  isCritical   Boolean                       @default(false)
+  displayOrder Int                           @default(0)
+  isActive     Boolean                       @default(true)
+
+  template  FireChecklistTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  responses FireChecklistItemResponse[]
+
+  @@unique([templateId, code])
+  @@index([templateId, isActive, displayOrder])
+}
+
+enum FireChecklistItemResponseType {
+  OK_NOK
+  OK_NOK_NA
+  NUMERIC
+  TEXT
+}
+
+/// overallResult is always computed in fire-equipment-service.ts from
+/// itemResponses (§3.5) — never accepted as a free field from the client.
+model FireChecklistExecution {
+  id                         String                 @id @default(uuid())
+  plantId                    String
+  fireEquipmentId            String
+  templateId                 String
+  frequency                  FireChecklistFrequency
+  scheduledFor               DateTime?
+  performedAt                DateTime               @default(now())
+  performedByUserId          String
+  performedViaTag            Boolean                @default(false)
+  externalProviderName       String?
+  externalCertificateFileKey String?
+  overallResult              FireChecklistResult
+  observations               String?
+  createdAt                  DateTime               @default(now())
+
+  plant           Plant                              @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  fireEquipment   FireEquipment                      @relation(fields: [fireEquipmentId], references: [id], onDelete: Cascade)
+  template        FireChecklistTemplate              @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  performedBy     User                               @relation("FireChecklistExecutionPerformedBy", fields: [performedByUserId], references: [id])
+  itemResponses   FireChecklistItemResponse[]
+  attachments     FireChecklistExecutionAttachment[]
+  alertDeliveries FireEquipmentAlertDelivery[]
+
+  @@index([fireEquipmentId, frequency, performedAt])
+  @@index([plantId, overallResult, performedAt])
+}
+
+enum FireChecklistResult {
+  PASSED
+  PASSED_WITH_OBSERVATIONS
+  FAILED
+}
+
+model FireChecklistItemResponse {
+  id           String                 @id @default(uuid())
+  executionId  String
+  itemId       String
+  value        FireChecklistItemValue
+  numericValue Decimal?               @db.Decimal(8, 2)
+  textValue    String?
+  notes        String?
+
+  execution FireChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  item      FireChecklistItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, itemId])
+}
+
+enum FireChecklistItemValue {
+  OK
+  NOK
+  NOT_APPLICABLE
+}
+
+model FireChecklistExecutionAttachment {
+  id          String   @id @default(uuid())
+  executionId String
+  fileKey     String
+  fileName    String
+  uploadedAt  DateTime @default(now())
+
+  execution FireChecklistExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+}
+
+/// Cache of derived compliance state per equipment, recomputed inside the
+/// same $transaction as a FireChecklistExecution write (§3.6). No daily job
+/// yet (that's phase 4, mirroring WorkerCompetenceState's own precedent in
+/// the Competences module) — a row goes stale only for date-based
+/// transitions (VALID → DUE_SOON → OVERDUE) between executions, not for
+/// anything execution-driven. Equipment with no row yet (never had any
+/// execution) is treated as NEVER_DONE/NEVER_DONE by the service's read
+/// path rather than backfilled.
+model FireEquipmentComplianceState {
+  id                       String                  @id @default(uuid())
+  plantId                  String
+  fireEquipmentId          String                  @unique
+  quarterlyState           FireComplianceCellState
+  quarterlyDueDate         DateTime?
+  quarterlyLastExecutionId String?
+  annualState              FireComplianceCellState
+  annualDueDate            DateTime?
+  annualLastExecutionId    String?
+  hasOpenNonConformity     Boolean                 @default(false)
+  computedAt               DateTime                @default(now())
+
+  plant         Plant         @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  fireEquipment FireEquipment @relation(fields: [fireEquipmentId], references: [id], onDelete: Cascade)
+
+  @@index([plantId, quarterlyState])
+  @@index([plantId, annualState])
+}
+
+enum FireComplianceCellState {
+  VALID
+  DUE_SOON
+  OVERDUE
+  NEVER_DONE
+  NOT_APPLICABLE
+}
+
+/// §8 (alerts, phase 4). Mirrors CompetenceAlertDelivery's role in the
+/// Competences module exactly — same P2002-as-idempotency-guard pattern in
+/// fire-equipment-alert-service.ts. cycleKey for DUE_SOON/OVERDUE is
+/// "fireEquipmentId:frequency:dueDateIso" (§8), so a fresh due date — set
+/// only by a new FireChecklistExecution — is free to alert again even
+/// inside the same warning window; TAG_MISSING's cycleKey is "YYYY-MM"
+/// (Europe/Lisbon), relying on fireEquipmentId already being a separate
+/// column of the @@unique below to scope it per equipment rather than
+/// folding the id into the string itself; NON_CONFORMITY_FOUND's is the
+/// triggering execution's id.
+model FireEquipmentAlertDelivery {
+  id              String                 @id @default(uuid())
+  plantId         String
+  fireEquipmentId String
+  executionId     String?
+  userId          String
+  alertType       FireEquipmentAlertType
+  channel         ActionAlertChannel
+  cycleKey        String
+  notificationId  String?
+  sentAt          DateTime               @default(now())
+
+  plant         Plant                   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  fireEquipment FireEquipment           @relation(fields: [fireEquipmentId], references: [id], onDelete: Cascade)
+  execution     FireChecklistExecution? @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification  Notification?           @relation(fields: [notificationId], references: [id])
+
+  @@unique([fireEquipmentId, userId, alertType, channel, cycleKey])
+  @@index([userId, alertType, sentAt])
+  @@index([plantId, alertType, sentAt])
+}
+
+enum FireEquipmentAlertType {
+  DUE_SOON
+  OVERDUE
+  TAG_MISSING
+  NON_CONFORMITY_FOUND
+}
+
 model Communication {
   id                               String                            @id @default(uuid())
   plantId                          String
@@ -885,6 +1246,7 @@ model Action {
   sewoLinks           SEWOActionLink[]
   smatLinks           SmatAuditActionLink[]
   competenceLinks     CompetenceActionLink[]
+  fireEquipmentLinks  FireEquipmentActionLink[]
 
   @@unique([plantId, sequenceNumber])
   @@index([plantId, status, dueDate])
@@ -1440,6 +1802,7 @@ model Notification {
   readAt                          DateTime?
   actionAlertDeliveries           ActionAlertDelivery[]
   competenceAlertDeliveries       CompetenceAlertDelivery[]
+  fireEquipmentAlertDeliveries    FireEquipmentAlertDelivery[]
   plant                           Plant?                           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   user                            User?                            @relation(fields: [userId], references: [id], onDelete: Cascade)
   safetyCommunicationNotification SafetyCommunicationNotification?
@@ -1742,6 +2105,7 @@ enum ActionSourceType {
   MANUAL
   SMAT
   COMPETENCE
+  FIRE_SAFETY_EQUIPMENT
 }
 
 enum ActionManualOrigin {

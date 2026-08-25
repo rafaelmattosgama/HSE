@@ -4,6 +4,7 @@ import {
   alertsRepetitiveQueue,
   competenceExpiryQueue,
   digestWeeklyQueue,
+  fireEquipmentDueDatesQueue,
   reportAnnualQueue,
   reportMonthlyQueue,
 } from "@/jobs/queues";
@@ -60,6 +61,18 @@ async function upsertPlantJobs() {
       tz: ACTION_ALERT_TIMEZONE,
     }, {
       name: "competence-expiry",
+      data: { plantId: plant.id },
+      opts: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+      },
+    });
+
+    await fireEquipmentDueDatesQueue.upsertJobScheduler(`fire-equipment-due-dates-${plant.id}`, {
+      pattern: "0 8 * * *",
+      tz: ACTION_ALERT_TIMEZONE,
+    }, {
+      name: "fire-equipment-due-dates",
       data: { plantId: plant.id },
       opts: {
         attempts: 3,

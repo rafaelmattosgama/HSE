@@ -68,6 +68,17 @@ export default function LoginPage() {
         });
       }
 
+      // Fase 0 ponto 6 / SCIE §5.2: an explicit non-default callbackUrl (e.g.
+      // from /scie/[tagCode] after scanning an equipment tag) means the user
+      // has somewhere specific to return to — that intent wins over the
+      // generic role-based landing page below. "/" prefix + not "//" rules
+      // out an open redirect to an external host.
+      const isSameOriginPath = callbackUrl.startsWith("/") && !callbackUrl.startsWith("//");
+      if (isSameOriginPath && callbackUrl !== "/app/corporate") {
+        window.location.href = callbackUrl;
+        return;
+      }
+
       const isCorporate = session?.user?.plantRoles?.some((entry) => entry.role === "N0_ADMIN" || entry.role === "N1_CORPORATE");
       const availablePlants = session?.user?.plantRoles?.map((entry) => entry.plantCode).filter((code): code is string => Boolean(code)) ?? [];
       const lastPlant = decodeURIComponent(readCookie(LAST_PLANT_COOKIE) ?? "");

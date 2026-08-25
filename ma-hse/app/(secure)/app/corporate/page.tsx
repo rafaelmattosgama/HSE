@@ -20,6 +20,7 @@ import {
   isModuleEnabled,
 } from "@/lib/modules";
 import { CompetenceService } from "@/lib/services/competence-service";
+import { FireEquipmentService } from "@/lib/services/fire-equipment-service";
 import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
 import {
   buildCommunicationTypeTopEntries,
@@ -29,6 +30,7 @@ import {
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { CorporateActionPlans } from "@/components/feature/corporate-action-plans";
 import { CompetenceCorporateBoard } from "@/components/feature/competence-corporate-board";
+import { FireEquipmentCorporateBoard } from "@/components/feature/fire-equipment-corporate-board";
 import { EnvironmentDashboardBoard } from "@/components/feature/environment-dashboard-board";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
@@ -566,6 +568,33 @@ export default async function CorporatePage({
       };
     });
 
+  const fireEquipmentEnabledPlantIds = plants
+    .filter((plant) =>
+      isModuleEnabled(
+        "FIRE_SAFETY_EQUIPMENT",
+        globalModuleParameter?.valueJson,
+        plant.systemParameters[0]?.valueJson,
+      ),
+    )
+    .map((plant) => plant.id);
+  const fireEquipmentCoverageByPlant = await FireEquipmentService.getComplianceCoverageByPlant(fireEquipmentEnabledPlantIds);
+  const fireEquipmentPlants = plants
+    .filter((plant) => fireEquipmentEnabledPlantIds.includes(plant.id))
+    .map((plant) => {
+      const coverage = fireEquipmentCoverageByPlant.get(plant.id) ?? {
+        totalActive: 0,
+        compliantCount: 0,
+        coveragePercent: null,
+        problemCount: 0,
+      };
+      return {
+        id: plant.id,
+        code: plant.code,
+        name: plant.name,
+        ...coverage,
+      };
+    });
+
   const rankings: RankingGroup[] = [
     {
       id: "root-causes-top",
@@ -950,6 +979,10 @@ export default async function CorporatePage({
 
       {competencePlants.length > 0 ? (
         <CompetenceCorporateBoard plants={competencePlants} labels={ui.dashboard} />
+      ) : null}
+
+      {fireEquipmentPlants.length > 0 ? (
+        <FireEquipmentCorporateBoard plants={fireEquipmentPlants} labels={ui.dashboard} />
       ) : null}
 
       <div data-onboarding="corporate-comparison">

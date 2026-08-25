@@ -581,6 +581,241 @@ async function upsertCompetenceTypes(plantId: string) {
   }
 }
 
+/**
+ * Fire Safety Equipment catalog seed — phase 1 (§3.1). legalReference is left
+ * null: the specification's own §14 flags those references as unverified
+ * against HSE/legal, so nothing from this draft ships to an admin screen
+ * without that review.
+ */
+async function upsertFireEquipmentTypes(plantId: string) {
+  const fireEquipmentTypes: Array<{
+    code: string;
+    name: string;
+    category: "PORTABLE_EXTINCTION" | "FIXED_EXTINCTION" | "EMERGENCY_LIGHTING" | "DETECTION_ALARM";
+    codePrefix: string;
+    displayOrder: number;
+  }> = [
+    { code: "EXTINGUISHER", name: "Extintor", category: "PORTABLE_EXTINCTION", codePrefix: "EXT", displayOrder: 0 },
+    { code: "HOSE_REEL", name: "Carretel de incêndio", category: "FIXED_EXTINCTION", codePrefix: "CAR", displayOrder: 1 },
+    { code: "EMERGENCY_LIGHT", name: "Bloco autónomo de emergência", category: "EMERGENCY_LIGHTING", codePrefix: "BAE", displayOrder: 2 },
+    { code: "FIRE_PANEL", name: "Central de deteção e alarme de incêndio", category: "DETECTION_ALARM", codePrefix: "CDI", displayOrder: 3 },
+  ];
+
+  for (const type of fireEquipmentTypes) {
+    await prisma.fireEquipmentType.upsert({
+      where: { plantId_code: { plantId, code: type.code } },
+      update: {
+        name: type.name,
+        category: type.category,
+        codePrefix: type.codePrefix,
+        displayOrder: type.displayOrder,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        code: type.code,
+        name: type.name,
+        category: type.category,
+        codePrefix: type.codePrefix,
+        displayOrder: type.displayOrder,
+        legalReference: null,
+        sourceLanguage: "pt",
+      },
+    });
+  }
+}
+
+type FireChecklistItemSeed = {
+  code: string;
+  label: string;
+  responseType: "OK_NOK" | "OK_NOK_NA" | "NUMERIC" | "TEXT";
+  isCritical: boolean;
+};
+
+type FireChecklistTemplateSeed = {
+  typeCode: "EXTINGUISHER" | "HOSE_REEL" | "EMERGENCY_LIGHT" | "FIRE_PANEL";
+  frequency: "QUARTERLY" | "ANNUAL";
+  name: string;
+  items: FireChecklistItemSeed[];
+};
+
+/**
+ * §3.4 example checklists — a starting point to validate with HSE, not a
+ * normative list (the spec says so explicitly). isCritical is only set on
+ * the three items the phase-2 brief calls out by name: extinguisher weight,
+ * the emergency light's full autonomy test, and an attached external
+ * certificate/report — everything else defaults to non-critical.
+ */
+const FIRE_CHECKLIST_TEMPLATES: FireChecklistTemplateSeed[] = [
+  {
+    typeCode: "EXTINGUISHER",
+    frequency: "QUARTERLY",
+    name: "Verificação trimestral — Extintores",
+    items: [
+      { code: "LOCATION_ACCESS", label: "Localização e acessibilidade desimpedidas", responseType: "OK_NOK", isCritical: false },
+      { code: "SIGNAGE_VISIBLE", label: "Sinalética visível", responseType: "OK_NOK", isCritical: false },
+      { code: "SEAL_INTACT", label: "Selo/lacre intacto", responseType: "OK_NOK", isCritical: false },
+      { code: "PRESSURE_GAUGE", label: "Manómetro na zona verde", responseType: "NUMERIC", isCritical: false },
+      { code: "NO_CORROSION", label: "Sem corrosão ou danos visíveis", responseType: "OK_NOK", isCritical: false },
+      { code: "HOSE_CONDITION", label: "Mangueira/difusor em bom estado", responseType: "OK_NOK", isCritical: false },
+      { code: "LABEL_LEGIBLE", label: "Ficha de identificação/etiqueta legível", responseType: "OK_NOK", isCritical: false },
+    ],
+  },
+  {
+    typeCode: "EXTINGUISHER",
+    frequency: "ANNUAL",
+    name: "Manutenção anual — Extintores",
+    items: [
+      { code: "LOCATION_ACCESS", label: "Localização e acessibilidade desimpedidas", responseType: "OK_NOK", isCritical: false },
+      { code: "SIGNAGE_VISIBLE", label: "Sinalética visível", responseType: "OK_NOK", isCritical: false },
+      { code: "SEAL_INTACT", label: "Selo/lacre intacto", responseType: "OK_NOK", isCritical: false },
+      { code: "PRESSURE_GAUGE", label: "Manómetro na zona verde", responseType: "NUMERIC", isCritical: false },
+      { code: "NO_CORROSION", label: "Sem corrosão ou danos visíveis", responseType: "OK_NOK", isCritical: false },
+      { code: "HOSE_CONDITION", label: "Mangueira/difusor em bom estado", responseType: "OK_NOK", isCritical: false },
+      { code: "LABEL_LEGIBLE", label: "Ficha de identificação/etiqueta legível", responseType: "OK_NOK", isCritical: false },
+      { code: "WEIGHT_CHECK", label: "Peso conferido", responseType: "NUMERIC", isCritical: true },
+      { code: "VALVE_TRIGGER_TEST", label: "Válvula e mecanismo de disparo testados", responseType: "OK_NOK", isCritical: false },
+      { code: "AGENT_REPLACED", label: "Substituição de agente extintor, se aplicável", responseType: "OK_NOK_NA", isCritical: false },
+      { code: "CERTIFICATE_ATTACHED", label: "Relatório da entidade certificadora anexado", responseType: "OK_NOK", isCritical: true },
+    ],
+  },
+  {
+    typeCode: "HOSE_REEL",
+    frequency: "QUARTERLY",
+    name: "Verificação trimestral — Carretéis de incêndio",
+    items: [
+      { code: "ACCESS_SIGNAGE", label: "Acessibilidade e sinalética", responseType: "OK_NOK", isCritical: false },
+      { code: "VALVE_NO_LEAKS", label: "Válvula sem fugas", responseType: "OK_NOK", isCritical: false },
+      { code: "HOSE_NO_CRACKS", label: "Mangueira sem fissuras", responseType: "OK_NOK", isCritical: false },
+      { code: "NOZZLE_FUNCTIONAL", label: "Lança/agulheta funcional", responseType: "OK_NOK", isCritical: false },
+      { code: "CABINET_CLOSES", label: "Caixa/armário fecha corretamente", responseType: "OK_NOK", isCritical: false },
+    ],
+  },
+  {
+    typeCode: "HOSE_REEL",
+    frequency: "ANNUAL",
+    name: "Manutenção anual — Carretéis de incêndio",
+    items: [
+      { code: "ACCESS_SIGNAGE", label: "Acessibilidade e sinalética", responseType: "OK_NOK", isCritical: false },
+      { code: "VALVE_NO_LEAKS", label: "Válvula sem fugas", responseType: "OK_NOK", isCritical: false },
+      { code: "HOSE_NO_CRACKS", label: "Mangueira sem fissuras", responseType: "OK_NOK", isCritical: false },
+      { code: "NOZZLE_FUNCTIONAL", label: "Lança/agulheta funcional", responseType: "OK_NOK", isCritical: false },
+      { code: "CABINET_CLOSES", label: "Caixa/armário fecha corretamente", responseType: "OK_NOK", isCritical: false },
+      { code: "PRESSURE_FLOW_TEST", label: "Ensaio de pressão e caudal", responseType: "NUMERIC", isCritical: false },
+      { code: "HOSE_INTERNAL_STATE", label: "Estado interno da mangueira desenrolada por completo", responseType: "OK_NOK", isCritical: false },
+    ],
+  },
+  {
+    typeCode: "EMERGENCY_LIGHT",
+    frequency: "QUARTERLY",
+    name: "Verificação trimestral — Blocos autónomos de emergência",
+    items: [
+      { code: "CHARGE_INDICATOR_ON", label: "Indicador luminoso de carga aceso", responseType: "OK_NOK", isCritical: false },
+      { code: "QUICK_SWITCHOVER_TEST", label: "Teste funcional rápido (comutação para bateria)", responseType: "OK_NOK", isCritical: false },
+      { code: "DIFFUSER_CLEAN_VISIBLE", label: "Sinalética/difusor limpo e visível", responseType: "OK_NOK", isCritical: false },
+    ],
+  },
+  {
+    typeCode: "EMERGENCY_LIGHT",
+    frequency: "ANNUAL",
+    name: "Manutenção anual — Blocos autónomos de emergência",
+    items: [
+      { code: "FULL_AUTONOMY_TEST", label: "Ensaio de autonomia completo (60 minutos, conforme NP EN 62034)", responseType: "NUMERIC", isCritical: true },
+      { code: "BATTERY_REPLACED", label: "Substituição de bateria, se necessário", responseType: "OK_NOK_NA", isCritical: false },
+    ],
+  },
+  {
+    typeCode: "FIRE_PANEL",
+    frequency: "QUARTERLY",
+    name: "Verificação trimestral — Central de deteção e alarme de incêndio",
+    items: [
+      { code: "NO_ACTIVE_FAULTS", label: "Ausência de avarias ativas no painel", responseType: "OK_NOK", isCritical: false },
+      { code: "ZONE_SAMPLE_TEST", label: "Teste de uma zona/detetor por amostragem", responseType: "OK_NOK", isCritical: false },
+      { code: "EVENT_LOG_OPERATIONAL", label: "Impressora/registo de eventos operacional", responseType: "OK_NOK", isCritical: false },
+      { code: "ARC_COMMUNICATION", label: "Comunicação com a central de receção de alarmes confirmada, se aplicável", responseType: "OK_NOK_NA", isCritical: false },
+    ],
+  },
+  {
+    typeCode: "FIRE_PANEL",
+    frequency: "ANNUAL",
+    name: "Manutenção anual — Central de deteção e alarme de incêndio",
+    items: [
+      { code: "ALL_ZONES_TEST", label: "Teste funcional de todas as zonas", responseType: "OK_NOK", isCritical: false },
+      { code: "BACKUP_BATTERY_VOLTAGE", label: "Verificação de baterias de backup (tensão)", responseType: "NUMERIC", isCritical: false },
+      { code: "CERTIFICATE_ATTACHED", label: "Relatório da entidade certificadora anexado", responseType: "OK_NOK", isCritical: true },
+    ],
+  },
+];
+
+/**
+ * §3.4 checklist catalog seed — phase 2. Faithful to §3.4 rule 3: this only
+ * ever upserts by (templateId, code), so re-running the seed against a
+ * template that already has real responses just updates the row in place
+ * (label/order/critical flag) rather than duplicating it — the "deactivate
+ * and recreate with a new code" rule only applies once an admin edits an
+ * item that already has answers, which this seed never does.
+ */
+async function upsertFireChecklistTemplates(plantId: string) {
+  const types = await prisma.fireEquipmentType.findMany({
+    where: { plantId },
+    select: { id: true, code: true },
+  });
+  const typeIdByCode = new Map(types.map((type) => [type.code, type.id]));
+
+  for (const template of FIRE_CHECKLIST_TEMPLATES) {
+    const fireEquipmentTypeId = typeIdByCode.get(template.typeCode);
+    if (!fireEquipmentTypeId) continue;
+
+    const templateRow = await prisma.fireChecklistTemplate.upsert({
+      where: {
+        plantId_fireEquipmentTypeId_frequency: {
+          plantId,
+          fireEquipmentTypeId,
+          frequency: template.frequency,
+        },
+      },
+      update: {
+        name: template.name,
+        isActive: true,
+      },
+      create: {
+        plantId,
+        fireEquipmentTypeId,
+        frequency: template.frequency,
+        name: template.name,
+        legalReference: null,
+        sourceLanguage: "pt",
+      },
+    });
+
+    for (const [index, item] of template.items.entries()) {
+      await prisma.fireChecklistItem.upsert({
+        where: {
+          templateId_code: {
+            templateId: templateRow.id,
+            code: item.code,
+          },
+        },
+        update: {
+          label: item.label,
+          responseType: item.responseType,
+          isCritical: item.isCritical,
+          displayOrder: index,
+          isActive: true,
+        },
+        create: {
+          templateId: templateRow.id,
+          code: item.code,
+          label: item.label,
+          responseType: item.responseType,
+          isCritical: item.isCritical,
+          displayOrder: index,
+        },
+      });
+    }
+  }
+}
+
 async function upsertPl1MasterData(plantId: string) {
   for (const [index, name] of PL1_WORKSTATIONS.entries()) {
     await prisma.workstation.upsert({
@@ -1388,6 +1623,8 @@ async function main() {
   for (const plant of plants) {
     await upsertMasterData(plant.id);
     await upsertCompetenceTypes(plant.id);
+    await upsertFireEquipmentTypes(plant.id);
+    await upsertFireChecklistTemplates(plant.id);
     if (plant.code === "pl1") {
       await upsertPl1MasterData(plant.id);
     }

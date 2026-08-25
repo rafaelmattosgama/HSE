@@ -229,6 +229,15 @@ export const ActionService = {
         });
       }
 
+      if (input.payload.sourceType === ActionSourceType.FIRE_SAFETY_EQUIPMENT && input.payload.fireEquipmentId) {
+        await tx.fireEquipmentActionLink.create({
+          data: {
+            fireEquipmentId: input.payload.fireEquipmentId,
+            actionId: createdAction.id,
+          },
+        });
+      }
+
       return createdAction;
     });
 
@@ -283,6 +292,7 @@ export const ActionService = {
       await tx.sEWOActionLink.deleteMany({ where: { actionId: input.actionId } });
       await tx.smatAuditActionLink.deleteMany({ where: { actionId: input.actionId } });
       await tx.competenceActionLink.deleteMany({ where: { actionId: input.actionId } });
+      await tx.fireEquipmentActionLink.deleteMany({ where: { actionId: input.actionId } });
       await tx.action.delete({ where: { id: input.actionId } });
 
       await tx.auditLog.create({
