@@ -818,7 +818,12 @@ model FireEquipment {
   // fireEquipmentTypeId) and must only be advanced under
   // pg_advisory_xact_lock (fire-equipment-service.ts).
   sequenceNumber      Int
-  internalCode        String // e.g. "EXT-MAAP-0032" — computed once at creation, never edited after (§2.8)
+  // Typed by the user at creation (e.g. matching a physical tag already on
+  // the equipment) — see fire-equipment-service.ts's create(). Immutable
+  // after creation, same as before, but no longer auto-generated from
+  // codePrefix + sequenceNumber; sequenceNumber is kept purely as an
+  // internal, advisory-lock-protected counter (§2.8's original rationale).
+  internalCode        String
   areaId              String?
   workstationId       String?
   locationDescription String?
@@ -826,6 +831,14 @@ model FireEquipment {
   model               String?
   serialNumber        String?
   capacity            String?
+  // "Foto do local": the add-equipment form's own request — a single photo of
+  // where the equipment lives, not a multi-attachment gallery. Write-only key,
+  // same as WorkerAuthorization.documentFileKey / FireChecklistExecution's own
+  // externalCertificateFileKey — no render-URL plumbing exists yet either.
+  locationPhotoFileKey String?
+  // Only meaningful when fireEquipmentType.code === "EXTINGUISHER" — the
+  // service silently drops it for any other type rather than validating.
+  extinguishingAgent  FireExtinguishingAgent?
   installedAt         DateTime?
   manufactureDate     DateTime?
   status              FireEquipmentStatus @default(ACTIVE)
@@ -851,6 +864,13 @@ model FireEquipment {
   @@unique([plantId, fireEquipmentTypeId, sequenceNumber])
   @@index([plantId, fireEquipmentTypeId, isActive])
   @@index([plantId, status])
+}
+
+enum FireExtinguishingAgent {
+  CO2
+  ABC
+  ABF
+  WATER
 }
 
 enum FireEquipmentStatus {

@@ -18,6 +18,7 @@ import {
   SEWOStatus,
   SeverityPotential,
 } from "@prisma/client";
+import { DEFAULT_FIRE_EQUIPMENT_TYPES } from "../lib/defaults/fire-equipment-types";
 import { DEFAULT_NEAR_MISS_TYPES } from "../lib/defaults/near-miss-types";
 import { DEFAULT_PROFESSIONAL_RISKS } from "../lib/defaults/professional-risks";
 import { DEFAULT_UNSAFE_ACT_TYPES } from "../lib/defaults/unsafe-act-types";
@@ -592,22 +593,16 @@ async function upsertCompetenceTypes(plantId: string) {
  * null: the specification's own §14 flags those references as unverified
  * against HSE/legal, so nothing from this draft ships to an admin screen
  * without that review.
+ *
+ * The 5-type list itself lives in lib/defaults/fire-equipment-types.ts — it's
+ * a fixed, universal taxonomy provisioned into every plant (demo and real),
+ * not something each plant customizes the way the Competence catalog is.
+ * FIRE_PANEL (superseded by the more granular ALARM_BUTTON/SMOKE_DETECTOR
+ * split) is deactivated rather than removed, since its two checklist
+ * templates below still resolve against the row by code either way.
  */
 async function upsertFireEquipmentTypes(plantId: string) {
-  const fireEquipmentTypes: Array<{
-    code: string;
-    name: string;
-    category: "PORTABLE_EXTINCTION" | "FIXED_EXTINCTION" | "EMERGENCY_LIGHTING" | "DETECTION_ALARM";
-    codePrefix: string;
-    displayOrder: number;
-  }> = [
-    { code: "EXTINGUISHER", name: "Extintor", category: "PORTABLE_EXTINCTION", codePrefix: "EXT", displayOrder: 0 },
-    { code: "HOSE_REEL", name: "Carretel de incêndio", category: "FIXED_EXTINCTION", codePrefix: "CAR", displayOrder: 1 },
-    { code: "EMERGENCY_LIGHT", name: "Bloco autónomo de emergência", category: "EMERGENCY_LIGHTING", codePrefix: "BAE", displayOrder: 2 },
-    { code: "FIRE_PANEL", name: "Central de deteção e alarme de incêndio", category: "DETECTION_ALARM", codePrefix: "CDI", displayOrder: 3 },
-  ];
-
-  for (const type of fireEquipmentTypes) {
+  for (const type of DEFAULT_FIRE_EQUIPMENT_TYPES) {
     await prisma.fireEquipmentType.upsert({
       where: { plantId_code: { plantId, code: type.code } },
       update: {
@@ -629,6 +624,11 @@ async function upsertFireEquipmentTypes(plantId: string) {
       },
     });
   }
+
+  await prisma.fireEquipmentType.updateMany({
+    where: { plantId, code: "FIRE_PANEL" },
+    data: { isActive: false },
+  });
 }
 
 type FireChecklistItemSeed = {

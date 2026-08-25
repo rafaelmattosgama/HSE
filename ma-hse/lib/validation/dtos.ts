@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, CompetenceRequirementScope, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, CompetenceRequirementScope, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
 import {
   SMAT_ATTACHMENT_LIMITS,
@@ -771,13 +771,19 @@ export const deleteFireEquipmentTypeInput = z.object({
 
 export const createFireEquipmentInput = z.object({
   fireEquipmentTypeId: z.string().uuid(),
-  areaId: optionalUuid,
+  // Typed by the user, not auto-generated — the service validates it's
+  // unique within the plant (see fire-equipment-service.ts's create()).
+  internalCode: z.string().trim().min(1).max(60),
+  // The add-equipment form's "Área" field now sources its options from
+  // Workstation master data, not Area — workstationId is the only location
+  // FK the form can populate. areaId stays on the model for equipment
+  // created before this change; the service never writes it going forward.
   workstationId: optionalUuid,
   locationDescription: z.string().trim().max(300).nullable().optional(),
-  manufacturer: z.string().trim().max(160).nullable().optional(),
-  model: z.string().trim().max(160).nullable().optional(),
-  serialNumber: z.string().trim().max(160).nullable().optional(),
-  capacity: z.string().trim().max(80).nullable().optional(),
+  // Only persisted when the selected type is the extinguisher — the service
+  // drops it silently for any other type (see fire-equipment-service.ts).
+  extinguishingAgent: z.nativeEnum(FireExtinguishingAgent).nullable().optional(),
+  locationPhotoFileKey: z.string().trim().min(1).max(500).nullable().optional(),
   installedAt: z.coerce.date().nullable().optional(),
   manufactureDate: z.coerce.date().nullable().optional(),
 });

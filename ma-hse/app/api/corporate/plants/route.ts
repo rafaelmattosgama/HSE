@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { MasterDataEntityType, RoleCode } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { DEFAULT_SHIFT_MASTER_DATA } from "@/lib/defaults/shifts";
+import { DEFAULT_FIRE_EQUIPMENT_TYPES } from "@/lib/defaults/fire-equipment-types";
 import { DEFAULT_INJURY_TYPES } from "@/lib/defaults/injury-types";
 import { DEFAULT_NEAR_MISS_TYPES } from "@/lib/defaults/near-miss-types";
 import { DEFAULT_PROFESSIONAL_RISKS } from "@/lib/defaults/professional-risks";
@@ -36,6 +37,7 @@ const DEFAULT_MASTER_DATA = {
   unsafeActTypes: DEFAULT_UNSAFE_ACT_TYPES,
   unsafeConditionTypes: DEFAULT_UNSAFE_CONDITION_TYPES,
   nearMissTypes: DEFAULT_NEAR_MISS_TYPES,
+  fireEquipmentTypes: DEFAULT_FIRE_EQUIPMENT_TYPES,
   bodyParts: [
     { code: "BP01", name: "Head" },
     { code: "BP02", name: "Left Eye" },
@@ -153,6 +155,14 @@ async function ensurePlantDefaults(plantId: string) {
       await tx.nearMissType.upsert({
         where: { plantId_code: { plantId, code: row.code } },
         update: { name: row.name, isActive: true },
+        create: { plantId, ...row },
+      });
+    }
+
+    for (const row of DEFAULT_MASTER_DATA.fireEquipmentTypes) {
+      await tx.fireEquipmentType.upsert({
+        where: { plantId_code: { plantId, code: row.code } },
+        update: { name: row.name, category: row.category, codePrefix: row.codePrefix, displayOrder: row.displayOrder, isActive: true },
         create: { plantId, ...row },
       });
     }

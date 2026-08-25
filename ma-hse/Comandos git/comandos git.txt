@@ -15,7 +15,7 @@ sudo /usr/local/sbin/deploy-ma-hse
 
 Teste final  egq
 
-cd C:\HSE\ma-hse
+
 docker compose up -d
 npm run dev:all
 
