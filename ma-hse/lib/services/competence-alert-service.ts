@@ -1,4 +1,5 @@
 import { ActionAlertChannel, AuthorizationStatus, CompetenceAlertType, CompetenceCellState, RoleCode } from "@prisma/client";
+import { getISOWeek, getISOWeekYear } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { env } from "@/lib/env";
 import type { AppLocale } from "@/lib/i18n/routing";
@@ -86,6 +87,24 @@ async function resolveWorkerOwnAccount(employeeDirectoryId: string): Promise<Ale
 function monthlyCycleKey(referenceDate: Date) {
   const zoned = toZonedTime(referenceDate, ACTION_ALERT_TIMEZONE);
   return `${zoned.getFullYear()}-${String(zoned.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** item 14: ISO week ("YYYY-Www", Europe/Lisbon) so the weekly AWAITING_ASSESSMENT summary actually recurs weekly. */
+function weeklyCycleKey(referenceDate: Date) {
+  const zoned = toZonedTime(referenceDate, ACTION_ALERT_TIMEZONE);
+  return `${getISOWeekYear(zoned)}-W${String(getISOWeek(zoned)).padStart(2, "0")}`;
+}
+
+/** item 16: composite key matching CompetenceAlertDelivery's @@unique, used to skip a combination already delivered instead of relying on a P2002. */
+function deliveryKey(input: {
+  competenceWorkerId: string;
+  competenceTypeId: string;
+  userId: string;
+  alertType: CompetenceAlertType;
+  channel: ActionAlertChannel;
+  cycleKey: string;
+}) {
+  return [input.competenceWorkerId, input.competenceTypeId, input.userId, input.alertType, input.channel, input.cycleKey].join("|");
 }
 
 const competenceAlertCopy: Record<AppLocale, {
@@ -215,6 +234,22 @@ function buildAlertContent(input: {
   };
 }
 
+/** item 14: one summary body per recipient, listing every pending (worker, competence) pair instead of one message per pair. */
+function buildAwaitingAssessmentSummaryContent(input: {
+  locale: AppLocale;
+  plantCode: string;
+  rows: Array<{ workerName: string; competenceTypeName: string }>;
+}) {
+  const copy = competenceAlertCopy[input.locale];
+  const lines = input.rows.map((row) => `${copy.workerLabel}: ${row.workerName} — ${copy.competenceLabel}: ${row.competenceTypeName}`);
+
+  return {
+    title: copy.awaitingAssessment,
+    body: lines.join("\n"),
+    actionUrl: `/app/${input.plantCode}/competences`,
+  };
+}
+
 type DispatchContext = {
   plantId: string;
   plantName: string;
@@ -237,6 +272,10 @@ async function createSoftwareAlert(ctx: DispatchContext, recipient: AlertRecipie
           plantId: ctx.plantId,
           title: ctx.title,
           body: ctx.body,
+          // minor fix ("alerta in-app sem link"): ctx.actionUrl already existed
+          // and reached the email — it just never got attached to the in-app
+          // Notification, so RepeatabilityAlertModal had nothing to link to.
+          actionUrl: ctx.actionUrl,
           channel: notificationChannel,
           status: "UNREAD",
         },
@@ -301,14 +340,23 @@ async function dispatchToRecipients(input: {
   recipients: AlertRecipient[];
   notificationChannel: string;
   build: (recipient: AlertRecipient) => DispatchContext;
+  /** item 16: pre-loaded already-delivered combinations, to skip a write attempt instead of catching its P2002. */
+  deliveredKeys?: Set<string>;
 }) {
   let created = 0;
 
   for (const recipient of input.recipients) {
     try {
       const ctx = input.build(recipient);
-      if (await createSoftwareAlert(ctx, recipient, input.notificationChannel)) created += 1;
-      if (await sendEmailAlert(ctx, recipient)) created += 1;
+      const alreadySoftware = input.deliveredKeys?.has(
+        deliveryKey({ competenceWorkerId: ctx.competenceWorkerId, competenceTypeId: ctx.competenceTypeId, userId: recipient.id, alertType: ctx.alertType, channel: ActionAlertChannel.SOFTWARE, cycleKey: ctx.cycleKey }),
+      );
+      if (!alreadySoftware && await createSoftwareAlert(ctx, recipient, input.notificationChannel)) created += 1;
+
+      const alreadyEmail = input.deliveredKeys?.has(
+        deliveryKey({ competenceWorkerId: ctx.competenceWorkerId, competenceTypeId: ctx.competenceTypeId, userId: recipient.id, alertType: ctx.alertType, channel: ActionAlertChannel.EMAIL, cycleKey: ctx.cycleKey }),
+      );
+      if (!alreadyEmail && await sendEmailAlert(ctx, recipient)) created += 1;
     } catch (error) {
       logger.error({ error, userId: recipient.id }, "failed_to_dispatch_competence_alert");
     }
@@ -317,19 +365,98 @@ async function dispatchToRecipients(input: {
   return created;
 }
 
+// minor fix: findFirst + plantId, not a bare findUnique(id) — a stale or
+// cross-plant id must not resolve to another plant's worker/type.
 async function loadWorkerTypeContext(plantId: string, competenceWorkerId: string, competenceTypeId: string) {
   const [worker, competenceType, plant] = await Promise.all([
-    prisma.competenceWorker.findUnique({ where: { id: competenceWorkerId }, include: { employee: true } }),
-    prisma.competenceType.findUnique({ where: { id: competenceTypeId } }),
+    prisma.competenceWorker.findFirst({ where: { id: competenceWorkerId, plantId }, include: { employee: true } }),
+    prisma.competenceType.findFirst({ where: { id: competenceTypeId, plantId } }),
     prisma.plant.findUnique({ where: { id: plantId } }),
   ]);
   if (!worker || !competenceType || !plant) return null;
   return { worker, competenceType, plant };
 }
 
+type DailyAlertContext = {
+  plant: { id: string; code: string; name: string };
+  competenceTypesById: Map<string, { id: string; name: string }>;
+  workersById: Map<string, { id: string; areaId: string | null; employee: { name: string } }>;
+  n3Recipients: AlertRecipient[];
+  n2Recipients: AlertRecipient[];
+  recipientsByAreaId: Map<string, AlertRecipient[]>;
+  undocumentedAuthorizations: Array<{ id: string; competenceWorkerId: string; competenceTypeId: string }>;
+  deliveredKeys: Set<string>;
+};
+
+/**
+ * item 16: everything the daily job's per-cell dispatch needs, loaded once
+ * per plant rather than per cell. Before this, each cell in an expiry band
+ * re-ran three findUnique calls (loadWorkerTypeContext) plus two or three
+ * recipient findMany calls, and — because the bands use `<=` — the same
+ * cost repeated every day for as long as that authorization stayed in band.
+ */
+async function loadDailyAlertContext(
+  plantId: string,
+  computedStates: Array<{ competenceWorkerId: string; competenceTypeId: string; computed: ComputedCompetenceCellState }>,
+  referenceDate: Date,
+): Promise<DailyAlertContext | null> {
+  const [plant, competenceTypes, workers, n3Recipients, n2Recipients, undocumentedAuthorizations] = await Promise.all([
+    prisma.plant.findUnique({ where: { id: plantId }, select: { id: true, code: true, name: true } }),
+    prisma.competenceType.findMany({ where: { plantId }, select: { id: true, name: true } }),
+    prisma.competenceWorker.findMany({ where: { plantId }, select: { id: true, areaId: true, employee: { select: { name: true } } } }),
+    resolveN3Recipients(plantId),
+    resolveN2Recipients(plantId),
+    // minor fix: an inactive worker or a deactivated competence type must
+    // stop generating a MISSING_DOCUMENT reminder every month forever.
+    prisma.workerAuthorization.findMany({
+      where: {
+        plantId,
+        status: AuthorizationStatus.ACTIVE,
+        documentFileKey: null,
+        competenceWorker: { isActive: true },
+        competenceType: { isActive: true },
+      },
+      select: { id: true, competenceWorkerId: true, competenceTypeId: true },
+    }),
+  ]);
+  if (!plant) return null;
+
+  const competenceTypesById = new Map(competenceTypes.map((type) => [type.id, type]));
+  const workersById = new Map(workers.map((worker) => [worker.id, worker]));
+
+  const areaIds = Array.from(new Set(workers.map((worker) => worker.areaId).filter((id): id is string => Boolean(id))));
+  const recipientsByAreaId = new Map<string, AlertRecipient[]>(
+    await Promise.all(areaIds.map(async (areaId) => [areaId, await resolveDepartmentRecipients(plantId, areaId)] as const)),
+  );
+
+  // minor fix: authorizationId is not part of CompetenceAlertDelivery's
+  // @@unique, so MISSING_DOCUMENT's cycleKey folds it in here too — a
+  // renewal granted the same month as the old undocumented authorization
+  // must still get its own reminder.
+  const missingDocumentCycleKeySuffix = monthlyCycleKey(referenceDate);
+  const relevantCycleKeys = Array.from(new Set([
+    ...computedStates.map((row) => row.computed.currentAuthorizationId).filter((id): id is string => Boolean(id)),
+    ...undocumentedAuthorizations.map((authorization) => `${authorization.id}:${missingDocumentCycleKeySuffix}`),
+  ]));
+
+  const deliveries = relevantCycleKeys.length > 0
+    ? await prisma.competenceAlertDelivery.findMany({
+        where: { plantId, cycleKey: { in: relevantCycleKeys } },
+        select: { competenceWorkerId: true, competenceTypeId: true, userId: true, alertType: true, channel: true, cycleKey: true },
+      })
+    : [];
+  const deliveredKeys = new Set(deliveries.map((delivery) => deliveryKey(delivery)));
+
+  return { plant, competenceTypesById, workersById, n3Recipients, n2Recipients, recipientsByAreaId, undocumentedAuthorizations, deliveredKeys };
+}
+
 function pickExpiryAlertType(daysToExpiry: number): CompetenceAlertType | null {
+  // item 12: <= 0, not === 0 — if the job misses the exact expiry day, the
+  // next run must still be able to send EXPIRY_DAY (nothing else covers
+  // EXPIRED). Bounded to -30 so a very old, long-expired row stops retrying
+  // forever; cycleKey already caps it to one delivery per authorization.
+  if (daysToExpiry <= 0 && daysToExpiry >= -30) return CompetenceAlertType.EXPIRY_DAY;
   if (daysToExpiry < 0) return null;
-  if (daysToExpiry === 0) return CompetenceAlertType.EXPIRY_DAY;
   if (daysToExpiry <= 7) return CompetenceAlertType.EXPIRING_7;
   if (daysToExpiry <= 30) return CompetenceAlertType.EXPIRING_30;
   if (daysToExpiry <= 60) return CompetenceAlertType.EXPIRING_60;
@@ -340,9 +467,13 @@ function pickExpiryAlertType(daysToExpiry: number): CompetenceAlertType | null {
 export const CompetenceAlertService = {
   /**
    * §7.2, immediate: department responsible, N3_SAFETY, and the worker's own
-   * account if EmployeeDirectory is linked to a User. cycleKey = authorizationId
-   * (§7.3) — a renewal creates a new authorization, so the next suspension can
-   * always alert again.
+   * account if EmployeeDirectory is linked to a User. cycleKey includes
+   * suspendedAt (§7.3, crit 3) — reactivateAuthorization flips SUSPENDED back
+   * to ACTIVE on the same row, without a new authorizationId, so a bare
+   * authorization.id key would make a second suspend->reactivate->suspend
+   * cycle collide (P2002) with the first delivery and silently never alert.
+   * suspendedAt is rewritten on every suspend (competence-service.ts,
+   * suspendAuthorization), so each cycle gets a fresh key.
    */
   async dispatchAuthorizationSuspended(authorizationId: string) {
     const authorization = await prisma.workerAuthorization.findUnique({
@@ -381,7 +512,7 @@ export const CompetenceAlertService = {
           competenceTypeId: authorization.competenceTypeId,
           authorizationId: authorization.id,
           alertType: CompetenceAlertType.AUTHORIZATION_SUSPENDED,
-          cycleKey: authorization.id,
+          cycleKey: `${authorization.id}:${authorization.suspendedAt?.toISOString() ?? ""}`,
           ...content,
         };
       },
@@ -493,7 +624,14 @@ export const CompetenceAlertService = {
    * ACTIVE authorizations with no signed PDF; AWAITING_ASSESSMENT only on
    * the designated weekly day ("resumo semanal, não diário" — the monthly
    * cycleKey then caps it to once a month regardless of how many Mondays
-   * see the same gap).
+   * see the same gap); ROLE_WITHOUT_COMPETENCE for every required-but-MISSING
+   * cell (item 13 — writes already dispatch this on the spot, but the daily
+   * job is what actually sees gaps that were never touched by a write).
+   *
+   * crit 4: a failure resolving one row (network blip, pool exhaustion) must
+   * not cost every other row in the plant its alert for the day, and must
+   * not skip MISSING_DOCUMENT / ROLE_WITHOUT_COMPETENCE, which only run once
+   * per plant after the loop — each gets logged and isolated on its own.
    */
   async runDailyAlerts(
     plantId: string,
@@ -502,38 +640,88 @@ export const CompetenceAlertService = {
   ) {
     const zonedNow = toZonedTime(referenceDate, ACTION_ALERT_TIMEZONE);
     const isWeeklyAssessmentDay = zonedNow.getDay() === 1;
+    const roleWithoutCompetenceGaps: Array<{ competenceWorkerId: string; competenceTypeId: string }> = [];
+    const awaitingAssessmentRows: Array<{ competenceWorkerId: string; competenceTypeId: string }> = [];
     let sent = 0;
 
-    for (const row of computedStates) {
-      const { computed } = row;
-      if (computed.currentAuthorizationId && typeof computed.daysToExpiry === "number") {
-        const alertType = pickExpiryAlertType(computed.daysToExpiry);
-        if (alertType) {
-          sent += await this.dispatchExpiryAlert({
-            plantId,
-            competenceWorkerId: row.competenceWorkerId,
-            competenceTypeId: row.competenceTypeId,
-            authorizationId: computed.currentAuthorizationId,
-            alertType,
-            daysToExpiry: computed.daysToExpiry,
-            validUntil: computed.validUntil,
-          });
-        }
-      }
+    // item 16: loaded once for the whole plant/run, not once per cell.
+    const context = await loadDailyAlertContext(plantId, computedStates, referenceDate);
+    if (!context) return 0;
 
-      if (isWeeklyAssessmentDay && computed.state === CompetenceCellState.AWAITING_ASSESSMENT) {
-        sent += await this.dispatchAwaitingAssessment(plantId, row.competenceWorkerId, row.competenceTypeId, referenceDate);
+    for (const row of computedStates) {
+      try {
+        const { computed } = row;
+        // item 11: EXPIRED with a positive daysToExpiry means the training
+        // certificate lapsed (§5 step 8), not the authorization itself — an
+        // "expiring soon" email would be reassuring and wrong, and would
+        // burn the band's cycleKey with nothing to show for it.
+        if (
+          (computed.state === CompetenceCellState.VALID || computed.state === CompetenceCellState.EXPIRING)
+          && computed.currentAuthorizationId
+          && typeof computed.daysToExpiry === "number"
+        ) {
+          const alertType = pickExpiryAlertType(computed.daysToExpiry);
+          if (alertType) {
+            sent += await CompetenceAlertService.dispatchExpiryAlert({
+              context,
+              competenceWorkerId: row.competenceWorkerId,
+              competenceTypeId: row.competenceTypeId,
+              authorizationId: computed.currentAuthorizationId,
+              alertType,
+              daysToExpiry: computed.daysToExpiry,
+              validUntil: computed.validUntil,
+            });
+          }
+        }
+
+        if (computed.state === CompetenceCellState.AWAITING_ASSESSMENT) {
+          awaitingAssessmentRows.push({ competenceWorkerId: row.competenceWorkerId, competenceTypeId: row.competenceTypeId });
+        }
+
+        if (computed.isRequired && computed.state === CompetenceCellState.MISSING) {
+          roleWithoutCompetenceGaps.push({ competenceWorkerId: row.competenceWorkerId, competenceTypeId: row.competenceTypeId });
+        }
+      } catch (error) {
+        logger.error(
+          { error, plantId, competenceWorkerId: row.competenceWorkerId, competenceTypeId: row.competenceTypeId },
+          "failed_to_process_competence_alert_row",
+        );
       }
     }
 
-    sent += await this.dispatchMissingDocuments(plantId, referenceDate);
+    if (isWeeklyAssessmentDay && awaitingAssessmentRows.length > 0) {
+      try {
+        sent += await CompetenceAlertService.dispatchAwaitingAssessmentSummary(plantId, awaitingAssessmentRows, context, referenceDate);
+      } catch (error) {
+        logger.error({ error, plantId }, "failed_to_dispatch_competence_awaiting_assessment_summary");
+      }
+    }
+
+    try {
+      sent += await CompetenceAlertService.dispatchMissingDocuments(plantId, referenceDate, context);
+    } catch (error) {
+      logger.error({ error, plantId }, "failed_to_dispatch_competence_missing_documents");
+    }
+
+    if (roleWithoutCompetenceGaps.length > 0) {
+      try {
+        sent += await CompetenceAlertService.dispatchRoleWithoutCompetence(plantId, roleWithoutCompetenceGaps, referenceDate);
+      } catch (error) {
+        logger.error({ error, plantId }, "failed_to_dispatch_competence_role_without_competence");
+      }
+    }
 
     return sent;
   },
 
-  /** §7.2: department responsible + N3_SAFETY (+ N2_PLANT_MANAGER for EXPIRY_DAY only). cycleKey = authorizationId. */
+  /**
+   * §7.2: department responsible + N3_SAFETY (+ N2_PLANT_MANAGER for
+   * EXPIRY_DAY only). cycleKey = authorizationId. item 16: resolves worker,
+   * competence type and recipients from the shared context instead of a
+   * fresh loadWorkerTypeContext + recipient lookups per call.
+   */
   async dispatchExpiryAlert(input: {
-    plantId: string;
+    context: DailyAlertContext;
     competenceWorkerId: string;
     competenceTypeId: string;
     authorizationId: string;
@@ -541,33 +729,33 @@ export const CompetenceAlertService = {
     daysToExpiry: number;
     validUntil: Date | null;
   }) {
-    const context = await loadWorkerTypeContext(input.plantId, input.competenceWorkerId, input.competenceTypeId);
-    if (!context) return 0;
+    const { context } = input;
+    const worker = context.workersById.get(input.competenceWorkerId);
+    const competenceType = context.competenceTypesById.get(input.competenceTypeId);
+    if (!worker || !competenceType) return 0;
 
-    const [departmentRecipients, n3Recipients, n2Recipients] = await Promise.all([
-      resolveDepartmentRecipients(input.plantId, context.worker.areaId),
-      resolveN3Recipients(input.plantId),
-      input.alertType === CompetenceAlertType.EXPIRY_DAY ? resolveN2Recipients(input.plantId) : Promise.resolve([]),
-    ]);
-    const recipients = mergeRecipients(departmentRecipients, n3Recipients, n2Recipients);
+    const departmentRecipients = worker.areaId ? context.recipientsByAreaId.get(worker.areaId) ?? [] : [];
+    const n2Recipients = input.alertType === CompetenceAlertType.EXPIRY_DAY ? context.n2Recipients : [];
+    const recipients = mergeRecipients(departmentRecipients, context.n3Recipients, n2Recipients);
     if (recipients.length === 0) return 0;
 
     return dispatchToRecipients({
       recipients,
       notificationChannel: COMPETENCE_ALERT_CHANNEL,
+      deliveredKeys: context.deliveredKeys,
       build: (recipient) => {
         const content = buildAlertContent({
           alertType: input.alertType,
           locale: normalizeMasterDataLocale(recipient.language),
-          competenceTypeName: context.competenceType.name,
-          workerName: context.worker.employee.name,
+          competenceTypeName: competenceType.name,
+          workerName: worker.employee.name,
           validUntil: input.validUntil,
           daysToExpiry: input.daysToExpiry,
           plantCode: context.plant.code,
           competenceWorkerId: input.competenceWorkerId,
         });
         return {
-          plantId: input.plantId,
+          plantId: context.plant.id,
           plantName: context.plant.name,
           competenceWorkerId: input.competenceWorkerId,
           competenceTypeId: input.competenceTypeId,
@@ -580,71 +768,124 @@ export const CompetenceAlertService = {
     });
   },
 
-  /** §7.2: department responsible only, weekly summary. cycleKey = "YYYY-MM". */
-  async dispatchAwaitingAssessment(plantId: string, competenceWorkerId: string, competenceTypeId: string, referenceDate = new Date()) {
-    const context = await loadWorkerTypeContext(plantId, competenceWorkerId, competenceTypeId);
-    if (!context) return 0;
+  /**
+   * §7.2: department responsible, weekly summary (item 14). One
+   * notification and one email per recipient, listing every pending
+   * (worker, competence) pair in their department(s) — previously one of
+   * each PER PAIR per recipient, so a department with 80 pending
+   * assessments meant 80 emails the same morning. cycleKey is the ISO week
+   * ("YYYY-Www", Europe/Lisbon): the old monthly key suppressed every
+   * Monday after the first one in a month, so "weekly" never actually
+   * repeated within the month.
+   *
+   * CompetenceAlertDelivery still needs one (competenceWorkerId,
+   * competenceTypeId) pair per row (§3.8) even though one email covers
+   * many — the first pair after a deterministic sort is used purely as the
+   * idempotency anchor, not as "the" subject of the email.
+   */
+  async dispatchAwaitingAssessmentSummary(
+    plantId: string,
+    rows: Array<{ competenceWorkerId: string; competenceTypeId: string }>,
+    context: DailyAlertContext,
+    referenceDate = new Date(),
+  ) {
+    if (rows.length === 0) return 0;
 
-    const recipients = await resolveDepartmentRecipients(plantId, context.worker.areaId);
-    if (recipients.length === 0) return 0;
+    const byRecipientId = new Map<string, {
+      recipient: AlertRecipient;
+      rows: Array<{ competenceWorkerId: string; competenceTypeId: string; workerName: string; competenceTypeName: string }>;
+    }>();
 
-    return dispatchToRecipients({
-      recipients,
-      notificationChannel: COMPETENCE_ALERT_CHANNEL,
-      build: (recipient) => {
-        const content = buildAlertContent({
-          alertType: CompetenceAlertType.AWAITING_ASSESSMENT,
-          locale: normalizeMasterDataLocale(recipient.language),
-          competenceTypeName: context.competenceType.name,
-          workerName: context.worker.employee.name,
-          plantCode: context.plant.code,
-          competenceWorkerId,
+    const sortedRows = [...rows].sort(
+      (a, b) => a.competenceWorkerId.localeCompare(b.competenceWorkerId) || a.competenceTypeId.localeCompare(b.competenceTypeId),
+    );
+
+    for (const row of sortedRows) {
+      const worker = context.workersById.get(row.competenceWorkerId);
+      const competenceType = context.competenceTypesById.get(row.competenceTypeId);
+      if (!worker || !competenceType) continue;
+
+      // minor fix: a worker with no areaId yet (§2.2) has nowhere to resolve
+      // department recipients from — this used to return 0 in complete
+      // silence. Logged so a gap in worker data shows up somewhere, instead
+      // of the pending assessment just never reaching anyone.
+      if (!worker.areaId) {
+        logger.info(
+          { competenceWorkerId: row.competenceWorkerId, competenceTypeId: row.competenceTypeId },
+          "competence_awaiting_assessment_worker_without_area",
+        );
+      }
+      const recipients = worker.areaId ? context.recipientsByAreaId.get(worker.areaId) ?? [] : [];
+
+      for (const recipient of recipients) {
+        const entry = byRecipientId.get(recipient.id) ?? { recipient, rows: [] };
+        entry.rows.push({
+          competenceWorkerId: row.competenceWorkerId,
+          competenceTypeId: row.competenceTypeId,
+          workerName: worker.employee.name,
+          competenceTypeName: competenceType.name,
         });
-        return {
+        byRecipientId.set(recipient.id, entry);
+      }
+    }
+
+    const cycleKey = weeklyCycleKey(referenceDate);
+    let sent = 0;
+
+    for (const { recipient, rows: recipientRows } of byRecipientId.values()) {
+      const anchor = recipientRows[0];
+      const content = buildAwaitingAssessmentSummaryContent({
+        locale: normalizeMasterDataLocale(recipient.language),
+        plantCode: context.plant.code,
+        rows: recipientRows,
+      });
+
+      sent += await dispatchToRecipients({
+        recipients: [recipient],
+        notificationChannel: COMPETENCE_ALERT_CHANNEL,
+        build: () => ({
           plantId,
           plantName: context.plant.name,
-          competenceWorkerId,
-          competenceTypeId,
+          competenceWorkerId: anchor.competenceWorkerId,
+          competenceTypeId: anchor.competenceTypeId,
           authorizationId: null,
           alertType: CompetenceAlertType.AWAITING_ASSESSMENT,
-          cycleKey: monthlyCycleKey(referenceDate),
+          cycleKey,
           ...content,
-        };
-      },
-    });
+        }),
+      });
+    }
+
+    return sent;
   },
 
   /**
    * §7.2: N3_SAFETY only. An ACTIVE authorization with no signed PDF
    * (documentFileKey) is a gap independent of the authorization's own
-   * validity window, so cycleKey = "YYYY-MM" rather than authorizationId —
-   * it recurs monthly until someone uploads the document.
+   * validity window. item 16: the undocumented-authorizations list and
+   * N3 recipients come from the shared context, loaded once for the plant.
    */
-  async dispatchMissingDocuments(plantId: string, referenceDate = new Date()) {
-    const authorizations = await prisma.workerAuthorization.findMany({
-      where: { plantId, status: AuthorizationStatus.ACTIVE, documentFileKey: null },
-      select: { id: true, competenceWorkerId: true, competenceTypeId: true },
-    });
-    if (authorizations.length === 0) return 0;
-
-    const n3Recipients = await resolveN3Recipients(plantId);
-    if (n3Recipients.length === 0) return 0;
-    const cycleKey = monthlyCycleKey(referenceDate);
+  async dispatchMissingDocuments(plantId: string, referenceDate: Date, context: DailyAlertContext) {
+    if (context.undocumentedAuthorizations.length === 0) return 0;
+    if (context.n3Recipients.length === 0) return 0;
+    const cycleKeySuffix = monthlyCycleKey(referenceDate);
 
     let sent = 0;
-    for (const authorization of authorizations) {
-      const context = await loadWorkerTypeContext(plantId, authorization.competenceWorkerId, authorization.competenceTypeId);
-      if (!context) continue;
+    for (const authorization of context.undocumentedAuthorizations) {
+      const worker = context.workersById.get(authorization.competenceWorkerId);
+      const competenceType = context.competenceTypesById.get(authorization.competenceTypeId);
+      if (!worker || !competenceType) continue;
 
       sent += await dispatchToRecipients({
-        recipients: n3Recipients,
+        recipients: context.n3Recipients,
         notificationChannel: COMPETENCE_ALERT_CHANNEL,
+        deliveredKeys: context.deliveredKeys,
         build: (recipient) => {
           const content = buildAlertContent({
             alertType: CompetenceAlertType.MISSING_DOCUMENT,
             locale: normalizeMasterDataLocale(recipient.language),
-            competenceTypeName: context.competenceType.name,
-            workerName: context.worker.employee.name,
+            competenceTypeName: competenceType.name,
+            workerName: worker.employee.name,
             plantCode: context.plant.code,
             competenceWorkerId: authorization.competenceWorkerId,
           });
@@ -655,7 +896,10 @@ export const CompetenceAlertService = {
             competenceTypeId: authorization.competenceTypeId,
             authorizationId: authorization.id,
             alertType: CompetenceAlertType.MISSING_DOCUMENT,
-            cycleKey,
+            // minor fix: authorizationId is not part of the @@unique, so it
+            // is folded into the cycleKey — a renewal granted the same
+            // month as the old undocumented authorization still alerts.
+            cycleKey: `${authorization.id}:${cycleKeySuffix}`,
             ...content,
           };
         },
@@ -673,7 +917,12 @@ export const CompetenceAlertService = {
         plantId: input.plantId,
         channel: ActionAlertChannel.SOFTWARE,
         alertType: { in: [CompetenceAlertType.AUTHORIZATION_SUSPENDED, CompetenceAlertType.AUTHORIZATION_REVOKED] },
-        notification: { status: "UNREAD" },
+        // minor fix: this delivery log also carries COMPETENCE_ALERT-channel
+        // rows (item 15's per-channel query) — without filtering the
+        // notification's own channel, a coincidental unread COMPETENCE_ALERT
+        // notification could surface here even though it never went through
+        // COMPETENCE_URGENT (action-alert-service.ts:412-413 does the same).
+        notification: { channel: COMPETENCE_URGENT_CHANNEL, status: "UNREAD" },
       },
       include: { notification: true },
       orderBy: { sentAt: "desc" },

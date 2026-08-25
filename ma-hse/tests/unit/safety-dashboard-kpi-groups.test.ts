@@ -84,4 +84,82 @@ describe("SafetyDashboardKpiGroups", () => {
     expect(screen.getByText(labels.kpiAgeOver60Days)).toBeTruthy();
     expect(screen.getByRole("button", { name: `Definition: ${labels.frequencyRate}` })).toBeTruthy();
   });
+
+  it("does not render the competence KPI group when the metric is omitted (module disabled or viewer not detailed)", () => {
+    render(createElement(SafetyDashboardKpiGroups, {
+      locale: "en",
+      periodLabel: "2026-01-01 - 2026-08-18",
+      labels,
+      detailed: false,
+      showPendingValidationKpi: false,
+      canViewOpenCommunications: false,
+      metrics: {
+        validatedEvents: 0,
+        injuries: 0,
+        daysLost: 0,
+        firstAids: 0,
+        frequencyRate: null,
+        gravityRate: null,
+        firstAidRate: null,
+        nearMisses: 0,
+        unsafeActs: 0,
+        unsafeConditions: 0,
+        rootCauses: 0,
+        openActions: 0,
+        overdueActions: 0,
+        closedOnTimePercent: null,
+        unsafeActsClosedPercent: null,
+        unsafeConditionsClosedPercent: null,
+        pendingValidation: 0,
+        openCommunications: 0,
+        myOpenActions: 0,
+        hoursWorked: null,
+      },
+    }));
+
+    expect(screen.queryByRole("heading", { name: labels.kpiCompetenceAuthorizations })).toBeNull();
+  });
+
+  it("renders mandatory-authorization coverage and expired-count once the competence metric is provided", () => {
+    render(createElement(SafetyDashboardKpiGroups, {
+      locale: "en",
+      periodLabel: "2026-01-01 - 2026-08-18",
+      labels,
+      detailed: true,
+      showPendingValidationKpi: true,
+      canViewOpenCommunications: true,
+      metrics: {
+        validatedEvents: 0,
+        injuries: 0,
+        daysLost: 0,
+        firstAids: 0,
+        frequencyRate: null,
+        gravityRate: null,
+        firstAidRate: null,
+        nearMisses: 0,
+        unsafeActs: 0,
+        unsafeConditions: 0,
+        rootCauses: 0,
+        openActions: 0,
+        overdueActions: 0,
+        closedOnTimePercent: null,
+        unsafeActsClosedPercent: null,
+        unsafeConditionsClosedPercent: null,
+        pendingValidation: 0,
+        openCommunications: 0,
+        myOpenActions: 0,
+        hoursWorked: null,
+        competences: {
+          coveragePercent: 82.5,
+          expiredCount: 3,
+        },
+      },
+    }));
+
+    expect(screen.getByRole("heading", { name: labels.kpiCompetenceAuthorizations })).toBeTruthy();
+    expect(screen.getByText("82.5")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByText(labels.kpiCompetenceCoverage)).toBeTruthy();
+    expect(screen.getByText(labels.kpiCompetenceExpired)).toBeTruthy();
+  });
 });

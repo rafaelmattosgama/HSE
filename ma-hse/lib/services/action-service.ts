@@ -215,6 +215,20 @@ export const ActionService = {
         });
       }
 
+      if (
+        input.payload.sourceType === ActionSourceType.COMPETENCE
+        && input.payload.competenceWorkerId
+        && input.payload.competenceTypeId
+      ) {
+        await tx.competenceActionLink.create({
+          data: {
+            competenceWorkerId: input.payload.competenceWorkerId,
+            competenceTypeId: input.payload.competenceTypeId,
+            actionId: createdAction.id,
+          },
+        });
+      }
+
       return createdAction;
     });
 
@@ -268,6 +282,7 @@ export const ActionService = {
       await tx.actionCoOwner.deleteMany({ where: { actionId: input.actionId } });
       await tx.sEWOActionLink.deleteMany({ where: { actionId: input.actionId } });
       await tx.smatAuditActionLink.deleteMany({ where: { actionId: input.actionId } });
+      await tx.competenceActionLink.deleteMany({ where: { actionId: input.actionId } });
       await tx.action.delete({ where: { id: input.actionId } });
 
       await tx.auditLog.create({

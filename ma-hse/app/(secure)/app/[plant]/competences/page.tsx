@@ -39,7 +39,7 @@ export default async function CompetencesPage({
     plantLanguage: plantRow.defaultLanguage,
   });
 
-  const [matrix, employees, areas] = await Promise.all([
+  const [matrix, employees, areas, ownerRoles] = await Promise.all([
     CompetenceService.list(plantRow.id, uiLocale, { role, userId: session.user.id }),
     prisma.employeeDirectory.findMany({
       where: { plantId: plantRow.id, isActive: true },
@@ -51,9 +51,15 @@ export default async function CompetencesPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true, sourceLanguage: true },
     }),
+    prisma.userPlantRole.findMany({
+      where: { plantId: plantRow.id, user: { isActive: true } },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: "asc" } },
+    }),
   ]);
 
   const localizedAreas = await localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale);
+  const owners = Array.from(new Map(ownerRoles.map((entry) => [entry.user.id, entry.user])).values());
 
   return (
     <CompetenceMatrixManager
@@ -63,6 +69,7 @@ export default async function CompetencesPage({
       matrix={matrix}
       employees={employees}
       areas={localizedAreas.map((area) => ({ id: area.id, name: area.name }))}
+      owners={owners}
       viewerRole={role}
     />
   );

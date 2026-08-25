@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AddCompetenceWorkerModal } from "@/components/feature/add-competence-worker-modal";
 import { CompetenceCellDetailPanel } from "@/components/feature/competence-cell-detail-panel";
+import type { CompetenceActionOwnerOption } from "@/components/feature/create-competence-action";
 import { AppHero, AppKpiCard, AppPanel } from "@/components/ui/app-surface";
 import { Button } from "@/components/ui/button";
 import { formatCompetenceCellText } from "@/lib/competence-cell-text";
@@ -25,6 +26,15 @@ import type { CompetencesUiDictionary } from "@/lib/ui-language";
 
 type EmployeeOption = { id: string; employeeNo: string; name: string; dept: string | null };
 type AreaOption = { id: string; name: string };
+
+async function readExportError(response: Response, fallback: string) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const json = (await response.json().catch(() => null)) as { message?: string } | null;
+    return json?.message ?? `${fallback} (${response.status})`;
+  }
+  return `${fallback} (${response.status})`;
+}
 
 export type StateKey = keyof Pick<
   CompetencesUiDictionary,
@@ -75,6 +85,7 @@ export function CompetenceMatrixManager({
   matrix,
   employees,
   areas,
+  owners,
   viewerRole,
 }: {
   plant: string;
@@ -83,6 +94,7 @@ export function CompetenceMatrixManager({
   matrix: CompetenceMatrixView;
   employees: EmployeeOption[];
   areas: AreaOption[];
+  owners: CompetenceActionOwnerOption[];
   viewerRole: RoleCode;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -93,6 +105,8 @@ export function CompetenceMatrixManager({
   const [stateFilter, setStateFilter] = useState<Set<string>>(new Set());
   const [mandatoryOnly, setMandatoryOnly] = useState(false);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   const enrolledEmployeeIds = useMemo(
     () => new Set(matrix.workers.map((worker) => worker.employeeDirectoryId)),
@@ -201,9 +215,78 @@ export function CompetenceMatrixManager({
     setMandatoryOnly(false);
   }
 
+  const canExport = viewerRole === "N0_ADMIN"
+    || viewerRole === "N1_CORPORATE"
+    || viewerRole === "N2_PLANT_MANAGER"
+    || viewerRole === "N3_SAFETY"
+    || viewerRole === "N4_SUPERVISOR";
+
+  async function exportFiltered() {
+    setExporting(true);
+    setExportError("");
+    try {
+      const columns = [
+        { key: "no", header: labels.columnNumber },
+        { key: "worker", header: labels.columnWorker },
+        { key: "department", header: labels.columnDepartment },
+        { key: "role", header: labels.columnRole },
+        ...matrix.competenceTypes.map((type) => ({ key: type.id, header: type.name })),
+      ];
+      const rows = filteredWorkers.map((worker, index) => {
+        const row: Record<string, string> = {
+          no: String(index + 1),
+          worker: worker.name,
+          department: worker.areaName ?? worker.deptFallback ?? "—",
+          role: worker.roleName ?? "—",
+        };
+        worker.cells.forEach((cell) => {
+          row[cell.competenceTypeId] = formatCompetenceCellText(cell, labels);
+        });
+        return row;
+      });
+
+      const response = await fetch(`/api/plants/${plant}/competences/export`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ columns, rows }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readExportError(response, labels.formError));
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "competencias_matriz.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : labels.formError);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
-      <AppHero title={title} actions={<Button type="button" onClick={() => setModalOpen(true)}>{labels.addWorker}</Button>} />
+      <AppHero
+        title={title}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {canExport ? (
+              <Button type="button" variant="secondary" onClick={() => void exportFiltered()} disabled={exporting}>
+                {exporting ? labels.matrixExporting : labels.matrixExportButton}
+              </Button>
+            ) : null}
+            <Button type="button" onClick={() => setModalOpen(true)}>{labels.addWorker}</Button>
+          </div>
+        }
+      />
+      {exportError ? <p className="text-sm font-medium text-rose-600">{exportError}</p> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <button type="button" className="text-left" onClick={() => focusState("EXPIRED")}>
@@ -449,6 +532,7 @@ export function CompetenceMatrixManager({
           competenceTypeId={activeCell.competenceTypeId}
           competenceTypeName={activeCell.competenceTypeName}
           workerName={activeCell.workerName}
+          owners={owners}
           onClose={() => setActiveCell(null)}
           onChanged={() => window.location.reload()}
         />

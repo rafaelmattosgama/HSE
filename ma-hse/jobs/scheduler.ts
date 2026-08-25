@@ -61,6 +61,10 @@ async function upsertPlantJobs() {
     }, {
       name: "competence-expiry",
       data: { plantId: plant.id },
+      opts: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+      },
     });
   }
 }

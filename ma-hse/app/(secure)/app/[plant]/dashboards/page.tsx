@@ -13,6 +13,12 @@ import {
   type RankingSeriesSnapshot,
 } from "@/lib/dashboard-visualization";
 import { prisma } from "@/lib/prisma";
+import {
+  GLOBAL_MODULE_TOGGLES_PARAMETER_KEY,
+  MODULE_TOGGLES_PARAMETER_KEY,
+  isModuleEnabled,
+} from "@/lib/modules";
+import { CompetenceService } from "@/lib/services/competence-service";
 import { buildSewoRootCauseTopEntries, getSewoRootCauseCount } from "@/lib/sewo-root-causes";
 import {
   buildCommunicationTypeTopEntries,
@@ -263,6 +269,20 @@ export default async function DashboardsPage({
   });
   const ui = getUiDictionary(uiLocale);
   const actorRole = getSafetyDashboardRole(plant, session.user.plantRoles);
+  const canViewCompetenceKpis = hasSafetyDashboardDetailedReadAccess(actorRole);
+  const [globalModuleParameter, plantModuleParameter] = canViewCompetenceKpis
+    ? await Promise.all([
+        prisma.systemParameter.findFirst({ where: { plantId: null, key: GLOBAL_MODULE_TOGGLES_PARAMETER_KEY } }),
+        prisma.systemParameter.findFirst({ where: { plantId: plantRow.id, key: MODULE_TOGGLES_PARAMETER_KEY } }),
+      ])
+    : [null, null];
+  const competenceCoverage = canViewCompetenceKpis && isModuleEnabled(
+    "COMPETENCE_AUTHORIZATIONS",
+    globalModuleParameter?.valueJson,
+    plantModuleParameter?.valueJson,
+  )
+    ? await CompetenceService.getPlantAuthorizationCoverage(plantRow.id)
+    : null;
   const period = resolveDashboardPeriod(currentSearchParams);
   const now = new Date();
   const backlogReferenceDate = period.to < now ? period.to : now;
@@ -1133,6 +1153,10 @@ export default async function DashboardsPage({
             current: sifPsifIndicators,
             comparisons: sifPsifComparisons,
           },
+          competences: competenceCoverage ? {
+            coveragePercent: competenceCoverage.coveragePercent,
+            expiredCount: competenceCoverage.expiredCount,
+          } : undefined,
         }}
       />
 

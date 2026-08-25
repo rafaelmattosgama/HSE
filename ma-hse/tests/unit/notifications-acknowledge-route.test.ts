@@ -128,4 +128,33 @@ describe("notifications acknowledge route", () => {
       }),
     );
   });
+
+  // (menor) COMPETENCE_ALERT (item 15's RepeatabilityAlertModal feed) and
+  // COMPETENCE_URGENT (the suspend/revoke floating alert) must stay
+  // acknowledgeable — dropping either from ACKNOWLEDGEABLE_CHANNELS would
+  // leave the corresponding "Marcar como lido" a permanent 404 in production
+  // without failing any other test in this file.
+  it("acknowledges COMPETENCE_ALERT and COMPETENCE_URGENT notifications, not just the legacy channels", async () => {
+    guardsMock.requireAuth.mockResolvedValue({
+      session: {
+        user: {
+          id: "user-1",
+        },
+      },
+    });
+    plantMock.findPlantByCode.mockResolvedValue({ id: "plant-1" });
+    prismaMock.prisma.notification.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.prisma.safetyCommunicationNotification.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await POST(request(), routeContext());
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.prisma.notification.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: { in: expect.arrayContaining(["COMPETENCE_ALERT", "COMPETENCE_URGENT"]) },
+        }),
+      }),
+    );
+  });
 });
