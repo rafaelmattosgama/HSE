@@ -1407,7 +1407,7 @@ export const CompetenceService = {
    * every active type is recomputed here — not just the ones currently
    * shown as required.
    */
-  async updateWorkerRole(plantId: string, competenceWorkerId: string, input: UpdateCompetenceWorkerRoleInput, actorUserId: string) {
+  async updateWorkerRole(plantId: string, competenceWorkerId: string, input: UpdateCompetenceWorkerRoleInput, actorUserId: string | null) {
     const now = new Date();
     const worker = await prisma.competenceWorker.findFirst({ where: { id: competenceWorkerId, plantId } });
     if (!worker) {
