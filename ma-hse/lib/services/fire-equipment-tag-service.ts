@@ -102,16 +102,29 @@ export const FireEquipmentTagService = {
    * active assignment (first time this equipment gets a tag), this reduces
    * to a plain create. "Only one isActive = true row at a time" (§3.3) is
    * enforced here, not just by tagCode's DB-level uniqueness.
+   *
+   * input.tagCode lets a plant reuse a code already printed/written on a
+   * physical NFC tag it owns, instead of always minting a fresh random one —
+   * validated for global uniqueness, same as the auto-generated path
+   * (tagCode has no plant scoping, see the model's @@unique).
    */
   async assignOrReplaceTag(
     plant: { id: string },
     fireEquipmentId: string,
-    input: { tagType: FireEquipmentTagType; unassignReason?: string | null },
+    input: { tagType: FireEquipmentTagType; unassignReason?: string | null; tagCode?: string | null },
     actorUserId: string,
   ): Promise<FireEquipmentTagView> {
     const equipment = await prisma.fireEquipment.findFirst({ where: { id: fireEquipmentId, plantId: plant.id }, select: { id: true } });
     if (!equipment) {
       throw new Error("Fire equipment not found for plant scope");
+    }
+
+    const manualTagCode = input.tagCode?.trim() || null;
+    if (manualTagCode) {
+      const taken = await prisma.fireEquipmentTagAssignment.findUnique({ where: { tagCode: manualTagCode }, select: { id: true } });
+      if (taken) {
+        throw new Error(`Tag code "${manualTagCode}" is already assigned to another piece of equipment`);
+      }
     }
 
     return prisma.$transaction(async (tx) => {
@@ -130,7 +143,7 @@ export const FireEquipmentTagService = {
         });
       }
 
-      const tagCode = await generateUniqueTagCode(tx);
+      const tagCode = manualTagCode ?? (await generateUniqueTagCode(tx));
       const created = await tx.fireEquipmentTagAssignment.create({
         data: {
           plantId: plant.id,

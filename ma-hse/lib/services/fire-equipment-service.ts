@@ -6,6 +6,7 @@ import {
   FireComplianceCellState,
   type FireEquipmentCategory,
   FireEquipmentStatus,
+  type FireExtinguishingAgent,
   type Prisma,
 } from "@prisma/client";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
@@ -20,7 +21,12 @@ import {
 } from "@/lib/services/fire-equipment-state-service";
 import { FireEquipmentAlertService } from "@/lib/services/fire-equipment-alert-service";
 import { type FireEquipmentTagView, toTagView } from "@/lib/services/fire-equipment-tag-service";
-import type { CreateFireChecklistExecutionInput, CreateFireEquipmentInput } from "@/lib/validation/dtos";
+import type {
+  CreateFireChecklistExecutionInput,
+  CreateFireEquipmentInput,
+  DecommissionFireEquipmentInput,
+  UpdateFireEquipmentInput,
+} from "@/lib/validation/dtos";
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -137,6 +143,8 @@ export type FireEquipmentProfileView = {
     model: string | null;
     serialNumber: string | null;
     capacity: string | null;
+    extinguishingAgent: FireExtinguishingAgent | null;
+    locationPhotoFileKey: string | null;
     installedAt: Date | null;
     manufactureDate: Date | null;
     status: FireEquipmentStatus;
@@ -460,6 +468,8 @@ export const FireEquipmentService = {
         model: equipment.model,
         serialNumber: equipment.serialNumber,
         capacity: equipment.capacity,
+        extinguishingAgent: equipment.extinguishingAgent,
+        locationPhotoFileKey: equipment.locationPhotoFileKey,
         installedAt: equipment.installedAt,
         manufactureDate: equipment.manufactureDate,
         status: equipment.status,
@@ -588,6 +598,132 @@ export const FireEquipmentService = {
             internalCode,
             workstationId: input.workstationId ?? null,
           }),
+        },
+        tx,
+      );
+
+      return equipment;
+    });
+  },
+
+  /**
+   * Edits an existing equipment record in place — same field set as create().
+   * internalCode uniqueness is re-checked excluding this row's own id, so
+   * saving without changing the code never rejects itself as a duplicate.
+   */
+  async update(plant: { id: string }, fireEquipmentId: string, input: UpdateFireEquipmentInput, actorUserId: string | null) {
+    const existing = await prisma.fireEquipment.findFirst({
+      where: { id: fireEquipmentId, plantId: plant.id },
+    });
+    if (!existing) {
+      throw new Error("Fire equipment not found for plant scope");
+    }
+
+    const fireEquipmentType = await prisma.fireEquipmentType.findFirst({
+      where: { id: input.fireEquipmentTypeId, plantId: plant.id, isActive: true },
+      select: { id: true, code: true },
+    });
+    if (!fireEquipmentType) {
+      throw new Error("Fire equipment type not found for plant scope");
+    }
+
+    const internalCode = input.internalCode.trim();
+    const duplicate = await prisma.fireEquipment.findFirst({
+      where: { plantId: plant.id, internalCode, NOT: { id: fireEquipmentId } },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new Error(`Equipment code "${internalCode}" is already in use in this plant`);
+    }
+
+    if (input.workstationId) {
+      const workstation = await prisma.workstation.findFirst({
+        where: { id: input.workstationId, plantId: plant.id },
+        select: { id: true },
+      });
+      if (!workstation) throw new Error("Workstation not found for plant scope");
+    }
+
+    const extinguishingAgent =
+      fireEquipmentType.code === FIRE_EQUIPMENT_EXTINGUISHER_CODE ? input.extinguishingAgent ?? null : null;
+
+    const data = {
+      fireEquipmentTypeId: fireEquipmentType.id,
+      internalCode,
+      workstationId: input.workstationId ?? null,
+      locationDescription: input.locationDescription ?? null,
+      extinguishingAgent,
+      locationPhotoFileKey: input.locationPhotoFileKey ?? null,
+      installedAt: input.installedAt ?? null,
+      manufactureDate: input.manufactureDate ?? null,
+    };
+
+    return prisma.$transaction(async (tx) => {
+      const equipment = await tx.fireEquipment.update({ where: { id: fireEquipmentId }, data });
+
+      await writeAuditLog(
+        {
+          entityType: "FireEquipment",
+          entityId: fireEquipmentId,
+          action: "UPDATED",
+          actorUserId,
+          plantId: plant.id,
+          diff: buildDiff(
+            {
+              fireEquipmentTypeId: existing.fireEquipmentTypeId,
+              internalCode: existing.internalCode,
+              workstationId: existing.workstationId,
+            },
+            { fireEquipmentTypeId: data.fireEquipmentTypeId, internalCode: data.internalCode, workstationId: data.workstationId },
+          ),
+        },
+        tx,
+      );
+
+      return equipment;
+    });
+  },
+
+  /**
+   * "Eliminar equipamento" — a soft delete, not a row deletion: cascading a
+   * real DELETE would take FireChecklistExecution history, compliance state
+   * and tag assignments with it, which a safety audit trail can never lose.
+   * status moves to DECOMMISSIONED (resolveComplianceView already treats
+   * that as NOT_APPLICABLE for both periodicities) and isActive flips to
+   * false so it drops out of list()'s default view, matching every other
+   * soft-delete in this module (CompetenceType, professional risks, …).
+   */
+  async decommission(plant: { id: string }, fireEquipmentId: string, input: DecommissionFireEquipmentInput, actorUserId: string | null) {
+    const existing = await prisma.fireEquipment.findFirst({
+      where: { id: fireEquipmentId, plantId: plant.id },
+      select: { id: true, status: true },
+    });
+    if (!existing) {
+      throw new Error("Fire equipment not found for plant scope");
+    }
+    if (existing.status === FireEquipmentStatus.DECOMMISSIONED) {
+      throw new Error("Fire equipment is already decommissioned");
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const equipment = await tx.fireEquipment.update({
+        where: { id: fireEquipmentId },
+        data: {
+          status: FireEquipmentStatus.DECOMMISSIONED,
+          isActive: false,
+          decommissionedAt: new Date(),
+          decommissionReason: input.reason ?? null,
+        },
+      });
+
+      await writeAuditLog(
+        {
+          entityType: "FireEquipment",
+          entityId: fireEquipmentId,
+          action: "DECOMMISSIONED",
+          actorUserId,
+          plantId: plant.id,
+          diff: buildDiff({ status: existing.status }, { status: FireEquipmentStatus.DECOMMISSIONED }),
         },
         tx,
       );
