@@ -13,6 +13,17 @@ type ExtinguishingAgentValue = "CO2" | "ABC" | "ABF" | "WATER";
 
 const EXTINGUISHING_AGENTS: ExtinguishingAgentValue[] = ["CO2", "ABC", "ABF", "WATER"];
 
+export type FireEquipmentModalInitialValues = {
+  fireEquipmentTypeId: string;
+  internalCode: string;
+  workstationId: string | null;
+  locationDescription: string | null;
+  extinguishingAgent: ExtinguishingAgentValue | null;
+  locationPhotoFileKey: string | null;
+  installedAt: string | null;
+  manufactureDate: string | null;
+};
+
 function extinguishingAgentLabel(labels: FireEquipmentUiDictionary, agent: ExtinguishingAgentValue) {
   switch (agent) {
     case "CO2":
@@ -32,24 +43,32 @@ export function AddFireEquipmentModal({
   types,
   workstations,
   onClose,
-  onCreated,
+  onSaved,
+  mode = "create",
+  equipmentId,
+  initialValues,
 }: {
   plant: string;
   labels: FireEquipmentUiDictionary;
   types: FireEquipmentTypeOption[];
   workstations: WorkstationOption[];
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
+  mode?: "create" | "edit";
+  equipmentId?: string;
+  initialValues?: FireEquipmentModalInitialValues;
 }) {
-  const [fireEquipmentTypeId, setFireEquipmentTypeId] = useState("");
-  const [internalCode, setInternalCode] = useState("");
-  const [workstationId, setWorkstationId] = useState("");
-  const [locationDescription, setLocationDescription] = useState("");
-  const [extinguishingAgent, setExtinguishingAgent] = useState<ExtinguishingAgentValue | "">("");
-  const [locationPhotoFileKey, setLocationPhotoFileKey] = useState<string | null>(null);
+  const [fireEquipmentTypeId, setFireEquipmentTypeId] = useState(initialValues?.fireEquipmentTypeId ?? "");
+  const [internalCode, setInternalCode] = useState(initialValues?.internalCode ?? "");
+  const [workstationId, setWorkstationId] = useState(initialValues?.workstationId ?? "");
+  const [locationDescription, setLocationDescription] = useState(initialValues?.locationDescription ?? "");
+  const [extinguishingAgent, setExtinguishingAgent] = useState<ExtinguishingAgentValue | "">(
+    initialValues?.extinguishingAgent ?? "",
+  );
+  const [locationPhotoFileKey, setLocationPhotoFileKey] = useState<string | null>(initialValues?.locationPhotoFileKey ?? null);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [installedAt, setInstalledAt] = useState("");
-  const [manufactureDate, setManufactureDate] = useState("");
+  const [installedAt, setInstalledAt] = useState(initialValues?.installedAt ?? "");
+  const [manufactureDate, setManufactureDate] = useState(initialValues?.manufactureDate ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -95,8 +114,10 @@ export function AddFireEquipmentModal({
 
     setSaving(true);
     try {
-      const response = await fetch(`/api/plants/${plant}/fire-equipment`, {
-        method: "POST",
+      const endpoint =
+        mode === "edit" ? `/api/plants/${plant}/fire-equipment/${equipmentId}` : `/api/plants/${plant}/fire-equipment`;
+      const response = await fetch(endpoint, {
+        method: mode === "edit" ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           fireEquipmentTypeId,
@@ -110,7 +131,7 @@ export function AddFireEquipmentModal({
         }),
       });
       await requireApiResponse(response, labels.formError);
-      onCreated();
+      onSaved();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : labels.formError);
     } finally {
@@ -118,13 +139,17 @@ export function AddFireEquipmentModal({
     }
   }
 
+  const title = mode === "edit" ? labels.editEquipmentModalTitle : labels.addEquipmentModalTitle;
+  const description = mode === "edit" ? labels.editEquipmentModalDescription : labels.addEquipmentModalDescription;
+  const submitLabel = mode === "edit" ? labels.saveChangesButton : labels.addEquipment;
+
   return (
     <div className="fixed inset-0 z-[90] flex items-start justify-center bg-slate-950/40 px-4 py-10 backdrop-blur-[2px]">
       <div className="app-panel flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">{labels.addEquipmentModalTitle}</h2>
-            <p className="mt-1 text-sm text-slate-600">{labels.addEquipmentModalDescription}</p>
+            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+            <p className="mt-1 text-sm text-slate-600">{description}</p>
           </div>
           <button type="button" onClick={onClose} className="app-icon-button" aria-label={labels.cancel}>
             <X className="h-4 w-4" aria-hidden="true" />
@@ -246,7 +271,7 @@ export function AddFireEquipmentModal({
               {labels.cancel}
             </Button>
             <Button type="button" onClick={() => void submit()} disabled={saving || photoUploading}>
-              {saving ? labels.saving : labels.addEquipment}
+              {saving ? labels.saving : submitLabel}
             </Button>
           </div>
         </div>

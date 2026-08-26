@@ -788,6 +788,15 @@ export const createFireEquipmentInput = z.object({
   manufactureDate: z.coerce.date().nullable().optional(),
 });
 
+// Same shape as createFireEquipmentInput — editing an equipment record
+// touches the same fields creating it does. internalCode uniqueness is
+// re-checked excluding the equipment's own row (fire-equipment-service.ts).
+export const updateFireEquipmentInput = createFireEquipmentInput;
+
+export const decommissionFireEquipmentInput = z.object({
+  reason: z.string().trim().max(300).nullable().optional(),
+});
+
 // §3.5/§7.4: overallResult is never part of this input — it's always
 // calculated in fire-equipment-service.ts from itemResponses. performedByUserId
 // isn't part of it either — it's always the caller (§2.4), even for an
@@ -826,6 +835,10 @@ export const createFireChecklistExecutionInput = z.object({
 export const assignFireEquipmentTagInput = z.object({
   tagType: z.nativeEnum(FireEquipmentTagType).default(FireEquipmentTagType.NFC_AND_QR),
   unassignReason: z.string().trim().max(300).nullable().optional(),
+  // Reuse an already-existing physical tag's code instead of generating a
+  // fresh random one — validated for global uniqueness in
+  // fire-equipment-tag-service.ts (tagCode has no plant scoping).
+  tagCode: z.string().trim().min(1).max(60).nullable().optional(),
 });
 
 export const enrollCompetenceWorkersInput = z.object({
@@ -1156,6 +1169,8 @@ export type DeleteCompetenceTypeInput = z.infer<typeof deleteCompetenceTypeInput
 export type UpsertFireEquipmentTypeInput = z.infer<typeof upsertFireEquipmentTypeInput>;
 export type DeleteFireEquipmentTypeInput = z.infer<typeof deleteFireEquipmentTypeInput>;
 export type CreateFireEquipmentInput = z.infer<typeof createFireEquipmentInput>;
+export type UpdateFireEquipmentInput = z.infer<typeof updateFireEquipmentInput>;
+export type DecommissionFireEquipmentInput = z.infer<typeof decommissionFireEquipmentInput>;
 export type CreateFireChecklistExecutionInput = z.infer<typeof createFireChecklistExecutionInput>;
 export type AssignFireEquipmentTagInput = z.infer<typeof assignFireEquipmentTagInput>;
 export type EnrollCompetenceWorkersInput = z.infer<typeof enrollCompetenceWorkersInput>;

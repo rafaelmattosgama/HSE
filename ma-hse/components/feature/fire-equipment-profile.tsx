@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FireChecklistFrequency, FireComplianceCellState, FireChecklistResult, FireEquipmentTagType } from "@prisma/client";
 import { ArrowLeft } from "lucide-react";
+import { AddFireEquipmentModal } from "@/components/feature/add-fire-equipment-modal";
 import {
   CreateFireEquipmentAction,
   type FireEquipmentActionOwnerOption,
@@ -17,8 +19,15 @@ import { Button } from "@/components/ui/button";
 import { requireApiResponse } from "@/lib/client-api";
 import { formatFireComplianceCellText } from "@/lib/fire-compliance-cell-text";
 import type { FireEquipmentActionContext } from "@/lib/fire-equipment-action-prefill";
-import type { FireEquipmentProfileView } from "@/lib/services/fire-equipment-service";
+import type { FireEquipmentProfileView, FireEquipmentTypeOption } from "@/lib/services/fire-equipment-service";
 import type { FireEquipmentUiDictionary } from "@/lib/ui-language";
+
+type WorkstationOption = { id: string; name: string };
+
+function toDateInputValue(value: Date | string | null) {
+  if (!value) return null;
+  return new Date(value).toISOString().slice(0, 10);
+}
 
 const STATE_URGENCY: Record<FireComplianceCellState, number> = {
   OVERDUE: 0,
@@ -91,6 +100,7 @@ function TagSection({
   const [showForm, setShowForm] = useState(false);
   const [tagType, setTagType] = useState<FireEquipmentTagType>(tag?.tagType ?? FireEquipmentTagType.NFC_AND_QR);
   const [reason, setReason] = useState("");
+  const [manualTagCode, setManualTagCode] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -101,7 +111,11 @@ function TagSection({
       const response = await fetch(`/api/plants/${plant}/fire-equipment/${fireEquipmentId}/tag`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tagType, unassignReason: tag ? reason.trim() || null : null }),
+        body: JSON.stringify({
+          tagType,
+          unassignReason: tag ? reason.trim() || null : null,
+          tagCode: manualTagCode.trim() || null,
+        }),
       });
       await requireApiResponse(response, labels.formError);
       setShowForm(false);
@@ -161,6 +175,16 @@ function TagSection({
               <option value={FireEquipmentTagType.QR_ONLY}>{labels.tagTypeQrOnly}</option>
             </select>
           </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700">{labels.tagManualCodeLabel}</span>
+            <input
+              type="text"
+              value={manualTagCode}
+              onChange={(event) => setManualTagCode(event.target.value)}
+              placeholder={labels.tagManualCodePlaceholder}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
           {tag ? (
             <label className="block">
               <span className="mb-1 block text-sm font-medium text-slate-700">{labels.tagReplaceReasonLabel}</span>
@@ -188,20 +212,103 @@ function TagSection({
   );
 }
 
+/**
+ * "Eliminar equipamento" is a soft delete (see FireEquipmentService.decommission)
+ * — status moves to DECOMMISSIONED and the row drops out of the list, but
+ * checklist history, tags and compliance state all stay intact. Kept as its
+ * own de-emphasized panel rather than a header button, since it's a rare,
+ * effectively irreversible action (no "reactivate" flow exists) that
+ * shouldn't sit next to "Nova verificação" where a stray click is easy.
+ */
+function DecommissionSection({
+  plant,
+  fireEquipmentId,
+  labels,
+  onDecommissioned,
+}: {
+  plant: string;
+  fireEquipmentId: string;
+  labels: FireEquipmentUiDictionary;
+  onDecommissioned: () => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function submit() {
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/plants/${plant}/fire-equipment/${fireEquipmentId}`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() || null }),
+      });
+      await requireApiResponse(response, labels.deleteEquipmentError);
+      onDecommissioned();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : labels.deleteEquipmentError);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <AppPanel>
+      <h2 className="app-section-eyebrow">{labels.deleteEquipmentButton}</h2>
+      {showForm ? (
+        <div className="mt-3 space-y-2 rounded-lg border border-rose-200 bg-rose-50/40 p-3">
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700">{labels.deleteEquipmentReasonLabel}</span>
+            <input
+              type="text"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder={labels.deleteEquipmentReasonPlaceholder}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="destructive" onClick={() => void submit()} disabled={saving}>
+              {labels.deleteEquipmentConfirmButton}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setShowForm(false)} disabled={saving}>
+              {labels.cancel}
+            </Button>
+          </div>
+          {message ? <p className="text-sm text-rose-600">{message}</p> : null}
+        </div>
+      ) : (
+        <div className="mt-2">
+          <Button type="button" variant="ghost" onClick={() => setShowForm(true)}>
+            {labels.deleteEquipmentButton}
+          </Button>
+        </div>
+      )}
+    </AppPanel>
+  );
+}
+
 export function FireEquipmentProfile({
   plant,
   labels,
   profile,
   owners,
+  types,
+  workstations,
   autoOpenExecutionForm = false,
 }: {
   plant: string;
   labels: FireEquipmentUiDictionary;
   profile: FireEquipmentProfileView;
   owners: FireEquipmentActionOwnerOption[];
+  types: FireEquipmentTypeOption[];
+  workstations: WorkstationOption[];
   autoOpenExecutionForm?: boolean;
 }) {
+  const router = useRouter();
   const [formOpen, setFormOpen] = useState(autoOpenExecutionForm);
+  const [editOpen, setEditOpen] = useState(false);
   const [expandedExecutionId, setExpandedExecutionId] = useState<string | null>(null);
   const [actionReasons, setActionReasons] = useState<FireEquipmentActionReasonOption[] | null>(null);
 
@@ -248,7 +355,12 @@ export function FireEquipmentProfile({
         }
         title={profile.equipment.internalCode}
         description={profile.equipment.fireEquipmentTypeName}
-        actions={<Button type="button" onClick={() => setFormOpen(true)}>{labels.profileNewVerification}</Button>}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" onClick={() => setEditOpen(true)}>{labels.editEquipmentButton}</Button>
+            <Button type="button" onClick={() => setFormOpen(true)}>{labels.profileNewVerification}</Button>
+          </div>
+        }
       />
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -380,6 +492,36 @@ export function FireEquipmentProfile({
           </ol>
         )}
       </AppPanel>
+
+      <DecommissionSection
+        plant={plant}
+        fireEquipmentId={profile.equipment.id}
+        labels={labels}
+        onDecommissioned={() => router.push(`/app/${plant}/fire-equipment`)}
+      />
+
+      {editOpen ? (
+        <AddFireEquipmentModal
+          plant={plant}
+          labels={labels}
+          types={types}
+          workstations={workstations}
+          mode="edit"
+          equipmentId={profile.equipment.id}
+          initialValues={{
+            fireEquipmentTypeId: profile.equipment.fireEquipmentTypeId,
+            internalCode: profile.equipment.internalCode,
+            workstationId: profile.equipment.workstationId,
+            locationDescription: profile.equipment.locationDescription,
+            extinguishingAgent: profile.equipment.extinguishingAgent,
+            locationPhotoFileKey: profile.equipment.locationPhotoFileKey,
+            installedAt: toDateInputValue(profile.equipment.installedAt),
+            manufactureDate: toDateInputValue(profile.equipment.manufactureDate),
+          }}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => window.location.reload()}
+        />
+      ) : null}
 
       {formOpen ? (
         <FireChecklistExecutionForm

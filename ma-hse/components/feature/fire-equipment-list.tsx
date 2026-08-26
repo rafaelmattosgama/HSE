@@ -430,7 +430,7 @@ export function FireEquipmentList({
           types={types}
           workstations={workstations}
           onClose={() => setModalOpen(false)}
-          onCreated={() => {
+          onSaved={() => {
             window.location.reload();
           }}
         />

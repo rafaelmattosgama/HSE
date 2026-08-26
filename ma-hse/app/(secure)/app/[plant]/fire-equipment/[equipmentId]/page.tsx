@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { FireEquipmentService } from "@/lib/services/fire-equipment-service";
+import { ensureDefaultFireEquipmentTypes } from "@/lib/services/fire-equipment-type-service";
 
 const VIEW_ROLES: RoleCode[] = [
   RoleCode.N0_ADMIN,
@@ -36,12 +37,24 @@ export default async function FireEquipmentProfilePage({
     plantLanguage: plantRow.defaultLanguage,
   });
 
-  const [profile, ownerRows] = await Promise.all([
+  await ensureDefaultFireEquipmentTypes(plantRow.id);
+
+  const [profile, ownerRows, types, workstations] = await Promise.all([
     FireEquipmentService.getProfile(plantRow.id, equipmentId),
     prisma.userPlantRole.findMany({
       where: { plantId: plantRow.id, user: { isActive: true } },
       include: { user: { select: { id: true, name: true } } },
       orderBy: { user: { name: "asc" } },
+    }),
+    prisma.fireEquipmentType.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+      select: { id: true, code: true, name: true, category: true },
+    }),
+    prisma.workstation.findMany({
+      where: { plantId: plantRow.id, isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
   ]);
   if (!profile) notFound();
@@ -54,6 +67,8 @@ export default async function FireEquipmentProfilePage({
       labels={ui.fireEquipment}
       profile={profile}
       owners={owners}
+      types={types}
+      workstations={workstations}
       autoOpenExecutionForm={fromTag === "1"}
     />
   );
