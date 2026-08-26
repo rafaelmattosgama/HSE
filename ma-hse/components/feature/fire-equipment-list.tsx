@@ -10,6 +10,7 @@ import {
   type FireEquipmentActionOwnerOption,
   type FireEquipmentActionReasonOption,
 } from "@/components/feature/create-fire-equipment-action";
+import { FireEquipmentTagEnrolment } from "@/components/feature/fire-equipment-tag-enrolment";
 import { FireEquipmentTagScanButton } from "@/components/feature/fire-equipment-tag-scan-button";
 import { AppHero, AppKpiCard, AppPanel } from "@/components/ui/app-surface";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,7 @@ export function FireEquipmentList({
   const [areaFilter, setAreaFilter] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
   const [onlyWithoutTag, setOnlyWithoutTag] = useState(false);
+  const [enrolmentOpen, setEnrolmentOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -224,7 +226,16 @@ export function FireEquipmentList({
         title={title}
         actions={
           <>
-            <FireEquipmentTagScanButton mode="read" labels={labels} />
+            <FireEquipmentTagScanButton
+              mode="discover"
+              plant={plant}
+              labels={labels}
+              equipmentOptions={equipment.filter((row) => !row.tag).map((row) => ({
+                id: row.id,
+                internalCode: row.internalCode,
+                fireEquipmentTypeName: row.fireEquipmentTypeName,
+              }))}
+            />
             <Button type="button" variant="ghost" onClick={() => void exportFiltered()} disabled={exporting}>
               <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
               {exporting ? labels.exporting : labels.exportXlsx}
@@ -232,6 +243,10 @@ export function FireEquipmentList({
             <Button type="button" variant="ghost" onClick={printSelectedLabels} disabled={selectedIds.length === 0}>
               <Printer className="mr-1.5 h-4 w-4" aria-hidden="true" />
               {labels.printSelectedLabels}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setEnrolmentOpen(true)}>
+              <Tag className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              {labels.enrolmentButton}
             </Button>
             <Button type="button" onClick={() => setModalOpen(true)}>{labels.addEquipment}</Button>
           </>
@@ -433,6 +448,25 @@ export function FireEquipmentList({
           onSaved={() => {
             window.location.reload();
           }}
+        />
+      ) : null}
+
+      {enrolmentOpen ? (
+        <FireEquipmentTagEnrolment
+          plant={plant}
+          labels={labels}
+          areas={areas}
+          equipmentWithoutTag={equipment.filter((row) => !row.tag).map((row) => ({
+            id: row.id,
+            internalCode: row.internalCode,
+            fireEquipmentTypeName: row.fireEquipmentTypeName,
+            areaId: row.areaId,
+          }))}
+          onClose={() => {
+            setEnrolmentOpen(false);
+            window.location.reload();
+          }}
+          onBound={() => {}}
         />
       ) : null}
 

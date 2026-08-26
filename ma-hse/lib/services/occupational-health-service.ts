@@ -39,6 +39,13 @@ type OccupationalHealthWorkerRow = {
   updatedAt: Date;
 };
 
+export type OccupationalHealthWorkerAttachmentView = {
+  id: string;
+  fileName: string;
+  contentType: string;
+  createdAt: string;
+};
+
 export type OccupationalHealthWorkerView = {
   id: string;
   employeeNo: string;
@@ -59,6 +66,7 @@ export type OccupationalHealthWorkerView = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  attachments: OccupationalHealthWorkerAttachmentView[];
 };
 
 function pdfBufferFromDocument(doc: PdfDocument) {
@@ -169,6 +177,21 @@ function mapWorker(row: OccupationalHealthWorkerRow): OccupationalHealthWorkerVi
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    attachments: [],
+  };
+}
+
+function toAttachmentView(attachment: {
+  id: string;
+  fileName: string;
+  contentType: string;
+  createdAt: Date;
+}): OccupationalHealthWorkerAttachmentView {
+  return {
+    id: attachment.id,
+    fileName: attachment.fileName,
+    contentType: attachment.contentType,
+    createdAt: attachment.createdAt.toISOString(),
   };
 }
 
@@ -237,6 +260,22 @@ export const OccupationalHealthService = {
     `);
 
     const workers = rows.map(mapWorker);
+    if (workers.length) {
+      const attachments = await prisma.occupationalHealthWorkerAttachment.findMany({
+        where: { occupationalHealthWorkerId: { in: workers.map((worker) => worker.id) } },
+        orderBy: { createdAt: "asc" },
+      });
+      const attachmentsByWorkerId = new Map<string, OccupationalHealthWorkerAttachmentView[]>();
+      for (const attachment of attachments) {
+        const list = attachmentsByWorkerId.get(attachment.occupationalHealthWorkerId) ?? [];
+        list.push(toAttachmentView(attachment));
+        attachmentsByWorkerId.set(attachment.occupationalHealthWorkerId, list);
+      }
+      for (const worker of workers) {
+        worker.attachments = attachmentsByWorkerId.get(worker.id) ?? [];
+      }
+    }
+
     if (!locale) return workers;
     const workstationIds = Array.from(
       new Set(workers.flatMap((worker) => (worker.workstationId ? [worker.workstationId] : []))),
@@ -263,7 +302,7 @@ export const OccupationalHealthService = {
     }));
   },
 
-  async upsert(plantId: string, input: UpsertOccupationalHealthWorkerInput, workerId?: string) {
+  async upsert(plantId: string, input: UpsertOccupationalHealthWorkerInput, workerId?: string, actorUserId?: string | null) {
     const existing = workerId
       ? await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
           SELECT "id"
@@ -337,7 +376,24 @@ export const OccupationalHealthService = {
       LIMIT 1
     `);
 
-    return mapWorker(row);
+    if (input.newAttachments?.length) {
+      await prisma.occupationalHealthWorkerAttachment.createMany({
+        data: input.newAttachments.map((attachment) => ({
+          occupationalHealthWorkerId: id,
+          fileKey: attachment.fileKey,
+          fileName: attachment.fileName,
+          contentType: attachment.contentType,
+          uploadedById: actorUserId ?? null,
+        })),
+      });
+    }
+
+    const attachments = await prisma.occupationalHealthWorkerAttachment.findMany({
+      where: { occupationalHealthWorkerId: id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return { ...mapWorker(row), attachments: attachments.map(toAttachmentView) };
   },
 
   async setActive(plantId: string, workerId: string, isActive: boolean) {

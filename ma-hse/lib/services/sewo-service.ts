@@ -476,20 +476,37 @@ function isApprovedLifecycleState(sewo: {
   return sewo.status === SEWOStatus.APPROVED || Boolean(sewo.approvedAt || sewo.approvedByUserId);
 }
 
-async function safeNotifySewoSubmitted(input: {
-  sewoId: string;
-  actorRole: RoleCode | null;
-}) {
+async function enqueueSewoSubmittedNotification(sewoId: string, actorRole: RoleCode | null) {
   try {
-    await notifySewoSubmitted(input);
+    const { sewoSubmittedNotificationQueue } = await import("@/jobs/queues");
+    await sewoSubmittedNotificationQueue.add(
+      "send-sewo-submitted-notification",
+      { sewoId, actorRole },
+      {
+        jobId: `sewo-submitted-notification:${sewoId}:${Date.now()}`,
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 60_000,
+        },
+        removeOnComplete: {
+          age: 7 * 24 * 60 * 60,
+          count: 1000,
+        },
+        removeOnFail: {
+          age: 30 * 24 * 60 * 60,
+          count: 1000,
+        },
+      },
+    );
   } catch (error) {
     logger.error(
       {
         error,
-        sewoId: input.sewoId,
-        actorRole: input.actorRole,
+        sewoId,
+        actorRole,
       },
-      "failed_to_notify_sewo_submitted",
+      "failed_to_enqueue_sewo_submitted_notification",
     );
   }
 }
@@ -528,21 +545,37 @@ async function enqueueSewoApprovedNotification(sewoId: string) {
   }
 }
 
-async function safeNotifySewoRejected(input: {
-  sewoId: string;
-  actorUserId: string;
-  approvalComment: string;
-}) {
+async function enqueueSewoRejectedNotification(sewoId: string, actorUserId: string, approvalComment: string) {
   try {
-    await notifySewoRejected(input);
+    const { sewoRejectedNotificationQueue } = await import("@/jobs/queues");
+    await sewoRejectedNotificationQueue.add(
+      "send-sewo-rejected-notification",
+      { sewoId, actorUserId, approvalComment },
+      {
+        jobId: `sewo-rejected-notification:${sewoId}:${Date.now()}`,
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 60_000,
+        },
+        removeOnComplete: {
+          age: 7 * 24 * 60 * 60,
+          count: 1000,
+        },
+        removeOnFail: {
+          age: 30 * 24 * 60 * 60,
+          count: 1000,
+        },
+      },
+    );
   } catch (error) {
     logger.error(
       {
         error,
-        sewoId: input.sewoId,
-        actorUserId: input.actorUserId,
+        sewoId,
+        actorUserId,
       },
-      "failed_to_notify_sewo_rejected",
+      "failed_to_enqueue_sewo_rejected_notification",
     );
   }
 }
@@ -1055,10 +1088,7 @@ export const SewaService = {
     });
 
     if (sewo.status === SEWOStatus.IN_APPROVAL) {
-      await safeNotifySewoSubmitted({
-        sewoId: sewo.id,
-        actorRole,
-      });
+      void enqueueSewoSubmittedNotification(sewo.id, actorRole);
     }
 
     return sewo;
@@ -1174,10 +1204,7 @@ export const SewaService = {
     });
 
     if (isNewSubmission) {
-      await safeNotifySewoSubmitted({
-        sewoId: updated.id,
-        actorRole,
-      });
+      void enqueueSewoSubmittedNotification(updated.id, actorRole);
     }
 
     return updated;
@@ -1208,10 +1235,7 @@ export const SewaService = {
     });
 
     if (before.status !== SEWOStatus.IN_APPROVAL) {
-      await safeNotifySewoSubmitted({
-        sewoId: updated.id,
-        actorRole,
-      });
+      void enqueueSewoSubmittedNotification(updated.id, actorRole);
     }
 
     return updated;
@@ -1253,11 +1277,7 @@ export const SewaService = {
       return updated;
     }
 
-    await safeNotifySewoRejected({
-      sewoId: updated.id,
-      actorUserId: input.actorUserId,
-      approvalComment: input.payload.approvalComment,
-    });
+    void enqueueSewoRejectedNotification(updated.id, input.actorUserId, input.payload.approvalComment);
 
     return updated;
   },
@@ -1297,11 +1317,7 @@ export const SewaService = {
     });
 
     if (!input.payload.approved) {
-      await safeNotifySewoRejected({
-        sewoId: updated.id,
-        actorUserId: input.actorUserId,
-        approvalComment: input.payload.approvalComment,
-      });
+      void enqueueSewoRejectedNotification(updated.id, input.actorUserId, input.payload.approvalComment);
     }
 
     return updated;
@@ -1339,6 +1355,14 @@ export const SewaService = {
 
   async sendApprovedNotifications(sewoId: string) {
     await notifySewoApproved(sewoId);
+  },
+
+  async sendSubmittedNotifications(sewoId: string, actorRole: RoleCode | null) {
+    await notifySewoSubmitted({ sewoId, actorRole });
+  },
+
+  async sendRejectedNotifications(sewoId: string, actorUserId: string, approvalComment: string) {
+    await notifySewoRejected({ sewoId, actorUserId, approvalComment });
   },
 
   async manualClose(input: {

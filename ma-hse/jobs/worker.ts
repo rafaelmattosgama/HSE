@@ -7,6 +7,8 @@ import { handleAnnualReport } from "@/jobs/handlers/annual-report";
 import { handleOverdueActions } from "@/jobs/handlers/overdue-actions";
 import { handleRepetitiveAlerts } from "@/jobs/handlers/repetitive-alerts";
 import { handleSewoApprovedNotification, type SewoApprovedNotificationJob } from "@/jobs/handlers/sewo-approved-notification";
+import { handleSewoSubmittedNotification, type SewoSubmittedNotificationJob } from "@/jobs/handlers/sewo-submitted-notification";
+import { handleSewoRejectedNotification, type SewoRejectedNotificationJob } from "@/jobs/handlers/sewo-rejected-notification";
 import { handleMasterDataTranslation, type MasterDataTranslationJob } from "@/jobs/handlers/master-data-translation";
 import { handleCompetenceExpiry } from "@/jobs/handlers/competence-expiry";
 import { handleFireEquipmentDueDates } from "@/jobs/handlers/fire-equipment-due-dates";
@@ -26,6 +28,8 @@ const workerMap: [string, (data: unknown) => Promise<void>, number][] = [
   [QUEUE_NAMES.ACTIONS_OVERDUE, (data) => handleOverdueActions(data as { plantId?: string }), 4],
   [QUEUE_NAMES.ALERTS_REPETITIVE, (data) => handleRepetitiveAlerts(data as { plantId: string }), 2],
   [QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, (data) => handleSewoApprovedNotification(data as SewoApprovedNotificationJob), 2],
+  [QUEUE_NAMES.SEWO_SUBMITTED_NOTIFICATION, (data) => handleSewoSubmittedNotification(data as SewoSubmittedNotificationJob), 2],
+  [QUEUE_NAMES.SEWO_REJECTED_NOTIFICATION, (data) => handleSewoRejectedNotification(data as SewoRejectedNotificationJob), 2],
   [QUEUE_NAMES.MASTER_DATA_TRANSLATION, (data) => handleMasterDataTranslation(data as MasterDataTranslationJob), 3],
   [QUEUE_NAMES.COMPETENCE_EXPIRY, (data) => handleCompetenceExpiry(data as { plantId: string }), 2],
   [QUEUE_NAMES.FIRE_EQUIPMENT_DUE_DATES, (data) => handleFireEquipmentDueDates(data as { plantId: string }), 2],

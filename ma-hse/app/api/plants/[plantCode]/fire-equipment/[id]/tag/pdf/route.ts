@@ -44,13 +44,17 @@ export async function GET(request: Request, context: { params: Promise<{ plantCo
     return fail("NOT_FOUND", "Fire equipment not found", 404);
   }
 
+  // A row can theoretically have an active assignment with no tagCode
+  // (schema allows it, see the model comment), even though every current
+  // binding path always mints one — there's simply nothing printable for
+  // those, so they're excluded the same way equipment with no tag at all is.
   const labels = equipmentRows
-    .filter((row) => row.tagAssignments[0])
+    .filter((row) => row.tagAssignments[0]?.tagCode)
     .map((row) => ({
       internalCode: row.internalCode,
       fireEquipmentTypeName: row.fireEquipmentType.name,
-      tagCode: row.tagAssignments[0].tagCode,
-      url: tagUrl(row.tagAssignments[0].tagCode),
+      tagCode: row.tagAssignments[0].tagCode as string,
+      url: tagUrl(row.tagAssignments[0].tagCode as string),
     }));
 
   if (labels.length === 0) {

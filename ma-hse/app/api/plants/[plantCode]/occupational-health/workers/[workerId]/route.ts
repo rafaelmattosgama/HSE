@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { RoleCode } from "@prisma/client";
-import { ok } from "@/lib/api";
+import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
@@ -20,8 +20,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ plant
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
-  const worker = await OccupationalHealthService.upsert(plant.id, parsed.data, workerId);
-  return ok({ worker });
+
+  try {
+    const worker = await OccupationalHealthService.upsert(plant.id, parsed.data, workerId, auth.session.user.id);
+    return ok({ worker });
+  } catch (error) {
+    return fail("UPDATE_OCCUPATIONAL_HEALTH_WORKER_FAILED", error instanceof Error ? error.message : "Failed to update worker", 422);
+  }
 }
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string; workerId: string }> }) {
