@@ -18,6 +18,10 @@ const prismaMock = vi.hoisted(() => ({
   employeeDirectory: {
     findMany: vi.fn(),
     upsert: vi.fn(),
+    // Not enrolled in Competências by default — these tests exercise the
+    // import/export flow only, see occupational-health-competence-sync.test.ts
+    // for the CompetenceWorker.roleName propagation behavior itself.
+    findUnique: vi.fn().mockResolvedValue(null),
   },
   workstation: {
     findFirst: vi.fn(),

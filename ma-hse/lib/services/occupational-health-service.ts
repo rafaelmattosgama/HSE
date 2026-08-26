@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
+import { CompetenceService } from "@/lib/services/competence-service";
 import {
   calculateAgeOnDate,
   calculateOccupationalHealthExamValidUntil,
@@ -230,6 +231,34 @@ async function findWorkstationId(plantId: string, workstationName: string) {
   return translatedWorkstation?.id ?? null;
 }
 
+/// Keeps CompetenceWorker.roleName (the Competências module's ROLE-scope key,
+/// see competence-service.ts's own note on it) aligned with the role entered
+/// here in Medicina do Trabalho — the only place a role is actually captured
+/// for a worker. A no-op when the worker isn't enrolled in Competências yet,
+/// or when the role hasn't actually changed (updateWorkerRole recomputes
+/// every competence type and can trigger alerts, so it's only invoked on a
+/// real change).
+async function syncCompetenceWorkerRole(
+  plantId: string,
+  employeeNo: string,
+  roleName: string | null,
+  actorUserId: string | null,
+) {
+  const employee = await prisma.employeeDirectory.findUnique({
+    where: { plantId_employeeNo: { plantId, employeeNo } },
+    select: { id: true },
+  });
+  if (!employee) return;
+
+  const competenceWorker = await prisma.competenceWorker.findUnique({
+    where: { plantId_employeeDirectoryId: { plantId, employeeDirectoryId: employee.id } },
+    select: { id: true, roleName: true },
+  });
+  if (!competenceWorker || competenceWorker.roleName === roleName) return;
+
+  await CompetenceService.updateWorkerRole(plantId, competenceWorker.id, { roleName }, actorUserId);
+}
+
 export const OccupationalHealthService = {
   async list(plantId: string, locale?: string | null) {
     const rows = await prisma.$queryRaw<OccupationalHealthWorkerRow[]>(Prisma.sql`
@@ -392,6 +421,8 @@ export const OccupationalHealthService = {
       where: { occupationalHealthWorkerId: id },
       orderBy: { createdAt: "asc" },
     });
+
+    await syncCompetenceWorkerRole(plantId, input.employeeNo.trim(), input.roleName?.trim() || null, actorUserId ?? null);
 
     return { ...mapWorker(row), attachments: attachments.map(toAttachmentView) };
   },

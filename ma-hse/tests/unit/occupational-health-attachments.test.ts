@@ -10,6 +10,12 @@ const prismaMock = vi.hoisted(() => ({
   workstation: {
     findFirst: vi.fn(),
   },
+  // Not enrolled in Competências by default — these tests exercise the
+  // attachments flow only, see occupational-health-competence-sync.test.ts
+  // for the CompetenceWorker.roleName propagation behavior itself.
+  employeeDirectory: {
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
