@@ -84,15 +84,23 @@ function CurrentStateCell({
   );
 }
 
+function bindingModeLabel(labels: FireEquipmentUiDictionary, bindingMode: NonNullable<FireEquipmentProfileView["tag"]>["bindingMode"]) {
+  if (bindingMode === "FULL") return labels.tagBindingModeFull;
+  if (bindingMode === "UID_ONLY") return labels.tagBindingModeUidOnly;
+  return labels.tagBindingModeCodeOnly;
+}
+
 function TagSection({
   plant,
   fireEquipmentId,
+  fireEquipmentInternalCode,
   tag,
   labels,
   onChanged,
 }: {
   plant: string;
   fireEquipmentId: string;
+  fireEquipmentInternalCode: string;
   tag: FireEquipmentProfileView["tag"];
   labels: FireEquipmentUiDictionary;
   onChanged: () => void;
@@ -132,11 +140,18 @@ function TagSection({
       <h2 className="app-section-eyebrow">{labels.tagSectionTitle}</h2>
       {tag ? (
         <div className="mt-2 space-y-2 text-sm">
-          <Row label={labels.tagColumnLabel} value={tag.tagCode} />
+          <Row label={labels.tagColumnLabel} value={tag.tagCode ?? "—"} />
+          {tag.tagUid ? <Row label={labels.tagUidLabel} value={tag.tagUid} /> : null}
           <Row
             label={labels.tagTypeLabel}
             value={tag.tagType === FireEquipmentTagType.QR_ONLY ? labels.tagTypeQrOnly : labels.tagTypeNfcAndQr}
           />
+          <Row label={labels.tagBindingModeLabel} value={bindingModeLabel(labels, tag.bindingMode)} />
+          {tag.chipType ? <Row label={labels.tagChipTypeLabel} value={tag.chipType} /> : null}
+          <Row label={labels.tagWrittenAtLabel} value={tag.writtenAt ? formatDateTime(tag.writtenAt) : labels.tagWrittenAtNever} />
+          {tag.bindingMode !== "FULL" ? (
+            <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{labels.tagBindingModeWarning}</p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <a
               href={`/api/plants/${plant}/fire-equipment/${fireEquipmentId}/tag/pdf`}
@@ -146,16 +161,29 @@ function TagSection({
             >
               {labels.tagPrintLabel}
             </a>
-            {tag.tagType !== FireEquipmentTagType.QR_ONLY ? (
-              <FireEquipmentTagScanButton mode="write" url={tag.url} labels={labels} />
-            ) : null}
+            <FireEquipmentTagScanButton
+              mode="bind"
+              plant={plant}
+              labels={labels}
+              fireEquipmentId={fireEquipmentId}
+              fireEquipmentInternalCode={fireEquipmentInternalCode}
+              onBound={() => onChanged()}
+            />
             <Button type="button" variant="ghost" onClick={() => setShowForm((current) => !current)}>
               {labels.tagReplace}
             </Button>
           </div>
         </div>
       ) : (
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <FireEquipmentTagScanButton
+            mode="bind"
+            plant={plant}
+            labels={labels}
+            fireEquipmentId={fireEquipmentId}
+            fireEquipmentInternalCode={fireEquipmentInternalCode}
+            onBound={() => onChanged()}
+          />
           <Button type="button" variant="ghost" onClick={() => setShowForm((current) => !current)}>
             {labels.tagAssign}
           </Button>
@@ -412,6 +440,7 @@ export function FireEquipmentProfile({
       <TagSection
         plant={plant}
         fireEquipmentId={profile.equipment.id}
+        fireEquipmentInternalCode={profile.equipment.internalCode}
         tag={profile.tag}
         labels={labels}
         onChanged={() => window.location.reload()}

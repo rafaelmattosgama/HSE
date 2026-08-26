@@ -13,6 +13,8 @@ export const QUEUE_NAMES = {
   ACTIONS_OVERDUE: "actions-overdue",
   ALERTS_REPETITIVE: "alerts-repetitive",
   SEWO_APPROVED_NOTIFICATION: "sewo-approved-notification",
+  SEWO_SUBMITTED_NOTIFICATION: "sewo-submitted-notification",
+  SEWO_REJECTED_NOTIFICATION: "sewo-rejected-notification",
   MASTER_DATA_TRANSLATION: "master-data-translation",
   COMPETENCE_EXPIRY: "competence-expiry",
   FIRE_EQUIPMENT_DUE_DATES: "fire-equipment-due-dates",
@@ -24,6 +26,8 @@ export const reportAnnualQueue = new Queue(QUEUE_NAMES.REPORT_ANNUAL, { connecti
 export const actionsOverdueQueue = new Queue(QUEUE_NAMES.ACTIONS_OVERDUE, { connection });
 export const alertsRepetitiveQueue = new Queue(QUEUE_NAMES.ALERTS_REPETITIVE, { connection });
 export const sewoApprovedNotificationQueue = new Queue(QUEUE_NAMES.SEWO_APPROVED_NOTIFICATION, { connection });
+export const sewoSubmittedNotificationQueue = new Queue(QUEUE_NAMES.SEWO_SUBMITTED_NOTIFICATION, { connection });
+export const sewoRejectedNotificationQueue = new Queue(QUEUE_NAMES.SEWO_REJECTED_NOTIFICATION, { connection });
 export const masterDataTranslationQueue = new Queue(QUEUE_NAMES.MASTER_DATA_TRANSLATION, { connection });
 export const competenceExpiryQueue = new Queue(QUEUE_NAMES.COMPETENCE_EXPIRY, { connection });
 export const fireEquipmentDueDatesQueue = new Queue(QUEUE_NAMES.FIRE_EQUIPMENT_DUE_DATES, { connection });

@@ -841,6 +841,26 @@ export const assignFireEquipmentTagInput = z.object({
   tagCode: z.string().trim().min(1).max(60).nullable().optional(),
 });
 
+// §5.3/§5.1: the Web-NFC scan-and-bind path — sent ONCE, after the client
+// already knows whether the physical write succeeded (see
+// fire-equipment-tag-service.ts's bindByUid for why). tagCode is generated
+// client-side before the write, so it's supplied here rather than minted
+// server-side.
+export const bindFireEquipmentTagByUidInput = z.object({
+  tagUid: z.string().trim().min(1).max(120),
+  tagCode: z.string().trim().min(1).max(60),
+  chipType: z.string().trim().max(80).nullable().optional(),
+  writeSucceeded: z.boolean(),
+  // Must match the equipment currently holding the conflicting active
+  // assignment — proof the caller already saw the conflict and explicitly
+  // chose to transfer, never inferred (§5.1 rule 3).
+  transferFromEquipmentId: z.string().uuid().optional(),
+});
+
+export const tagLookupInput = z.object({
+  tagUid: z.string().trim().min(1).max(120),
+});
+
 export const enrollCompetenceWorkersInput = z.object({
   workers: z.array(z.object({
     employeeDirectoryId: z.string().uuid(),
@@ -965,6 +985,15 @@ export const upsertMasterDataTranslationInput = z.object({
   value: z.string().trim().min(1).max(240),
 });
 
+// Additive only — the floating window only ever sends newly uploaded
+// documents, never a full replace list, so existing attachments are left
+// untouched by every save (see occupational-health-service.ts's upsert()).
+const occupationalHealthAttachmentInput = z.object({
+  fileKey: z.string().min(3),
+  fileName: z.string().min(1),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
+});
+
 export const upsertOccupationalHealthWorkerInput = z.object({
   employeeNo: z.string().min(1),
   name: z.string().min(2),
@@ -980,6 +1009,7 @@ export const upsertOccupationalHealthWorkerInput = z.object({
   status: z.enum(["VALID", "EXPIRED", "DUE_SOON", "PENDING"]).default("VALID"),
   observation: z.string().optional(),
   isActive: z.boolean().default(true),
+  newAttachments: z.array(occupationalHealthAttachmentInput).optional(),
 });
 
 export const createCorporatePlantInput = z.object({
@@ -1173,6 +1203,8 @@ export type UpdateFireEquipmentInput = z.infer<typeof updateFireEquipmentInput>;
 export type DecommissionFireEquipmentInput = z.infer<typeof decommissionFireEquipmentInput>;
 export type CreateFireChecklistExecutionInput = z.infer<typeof createFireChecklistExecutionInput>;
 export type AssignFireEquipmentTagInput = z.infer<typeof assignFireEquipmentTagInput>;
+export type BindFireEquipmentTagByUidInput = z.infer<typeof bindFireEquipmentTagByUidInput>;
+export type TagLookupInput = z.infer<typeof tagLookupInput>;
 export type EnrollCompetenceWorkersInput = z.infer<typeof enrollCompetenceWorkersInput>;
 export type RegisterTrainingInput = z.infer<typeof registerTrainingInput>;
 export type RegisterAssessmentInput = z.infer<typeof registerAssessmentInput>;

@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
-import { FireEquipmentTagType, type Prisma } from "@prisma/client";
+import { FireEquipmentTagType, FireTagBindingMode, type Prisma } from "@prisma/client";
 import QRCode from "qrcode";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
+import { TAG_CODE_ALPHABET, TAG_CODE_LENGTH } from "@/lib/fire-equipment-tag-code";
 import { appUrl } from "@/lib/helpers";
 import { prisma } from "@/lib/prisma";
 import { createPdfDocument } from "@/lib/services/pdfkit-helper";
@@ -9,10 +10,6 @@ import { createPdfDocument } from "@/lib/services/pdfkit-helper";
 type TransactionClient = Prisma.TransactionClient;
 type PdfDocument = ReturnType<typeof createPdfDocument>;
 
-// Ambiguous characters (0/O, 1/I/L) are dropped — §5.4 prints tagCode in
-// human-readable text on the label for manual entry when the QR is unreadable.
-const TAG_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-const TAG_CODE_LENGTH = 8;
 const TAG_CODE_MAX_ATTEMPTS = 5;
 
 function randomTagCode(): string {
@@ -36,16 +33,50 @@ export function tagUrl(tagCode: string) {
   return appUrl(`/scie/${tagCode}`);
 }
 
+/** Thrown by bindByUid when the uid is already actively bound elsewhere — the route surfaces this as a structured 409, never a silent reassignment (§5.1 rule 3). */
+export class FireEquipmentTagConflictError extends Error {
+  constructor(
+    public readonly equipmentId: string,
+    public readonly equipmentInternalCode: string,
+  ) {
+    super(`Tag already assigned to equipment ${equipmentInternalCode}`);
+    this.name = "FireEquipmentTagConflictError";
+  }
+}
+
 export type FireEquipmentTagView = {
   id: string;
-  tagCode: string;
+  tagUid: string | null;
+  tagCode: string | null;
   tagType: FireEquipmentTagType;
+  chipType: string | null;
+  bindingMode: FireTagBindingMode;
   assignedAt: Date;
-  url: string;
+  writtenAt: Date | null;
+  url: string | null;
 };
 
-export function toTagView(row: { id: string; tagCode: string; tagType: FireEquipmentTagType; assignedAt: Date }): FireEquipmentTagView {
-  return { id: row.id, tagCode: row.tagCode, tagType: row.tagType, assignedAt: row.assignedAt, url: tagUrl(row.tagCode) };
+export function toTagView(row: {
+  id: string;
+  tagUid: string | null;
+  tagCode: string | null;
+  tagType: FireEquipmentTagType;
+  chipType: string | null;
+  bindingMode: FireTagBindingMode;
+  assignedAt: Date;
+  writtenAt: Date | null;
+}): FireEquipmentTagView {
+  return {
+    id: row.id,
+    tagUid: row.tagUid,
+    tagCode: row.tagCode,
+    tagType: row.tagType,
+    chipType: row.chipType,
+    bindingMode: row.bindingMode,
+    assignedAt: row.assignedAt,
+    writtenAt: row.writtenAt,
+    url: row.tagCode ? tagUrl(row.tagCode) : null,
+  };
 }
 
 export type FireEquipmentTagLabelInput = {
@@ -53,6 +84,12 @@ export type FireEquipmentTagLabelInput = {
   fireEquipmentTypeName: string;
   tagCode: string;
   url: string;
+};
+
+export type FireEquipmentTagLookupResult = {
+  fireEquipmentId: string;
+  internalCode: string;
+  fireEquipmentTypeName: string;
 };
 
 function pdfBufferFromDocument(doc: PdfDocument) {
@@ -90,9 +127,30 @@ export const FireEquipmentTagService = {
   async getActiveTag(fireEquipmentId: string): Promise<FireEquipmentTagView | null> {
     const active = await prisma.fireEquipmentTagAssignment.findFirst({
       where: { fireEquipmentId, isActive: true },
-      select: { id: true, tagCode: true, tagType: true, assignedAt: true },
+      select: { id: true, tagUid: true, tagCode: true, tagType: true, chipType: true, bindingMode: true, assignedAt: true, writtenAt: true },
     });
     return active ? toTagView(active) : null;
+  },
+
+  /**
+   * §5.1 rule 2: resolve by UID, scoped to this plant. Used both for the
+   * "scan an unknown tag out in the field" discovery flow and as the
+   * conflict check ahead of bindByUid. A miss is a normal outcome (rule 3),
+   * not an error — callers get null, not a thrown exception.
+   */
+  async resolveByUid(plantId: string, tagUid: string): Promise<FireEquipmentTagLookupResult | null> {
+    const assignment = await prisma.fireEquipmentTagAssignment.findFirst({
+      where: { tagUid, isActive: true, plantId },
+      select: {
+        fireEquipment: { select: { id: true, internalCode: true, fireEquipmentType: { select: { name: true } } } },
+      },
+    });
+    if (!assignment) return null;
+    return {
+      fireEquipmentId: assignment.fireEquipment.id,
+      internalCode: assignment.fireEquipment.internalCode,
+      fireEquipmentTypeName: assignment.fireEquipment.fireEquipmentType.name,
+    };
   },
 
   /**
@@ -103,10 +161,11 @@ export const FireEquipmentTagService = {
    * to a plain create. "Only one isActive = true row at a time" (§3.3) is
    * enforced here, not just by tagCode's DB-level uniqueness.
    *
-   * input.tagCode lets a plant reuse a code already printed/written on a
-   * physical NFC tag it owns, instead of always minting a fresh random one —
-   * validated for global uniqueness, same as the auto-generated path
-   * (tagCode has no plant scoping, see the model's @@unique).
+   * This is the no-scan path — no tagUid is ever involved here, so
+   * bindingMode is always CODE_ONLY. input.tagCode lets a plant reuse a code
+   * already printed on a physical label it owns instead of always minting a
+   * fresh random one — validated for global uniqueness, same as the
+   * auto-generated path.
    */
   async assignOrReplaceTag(
     plant: { id: string },
@@ -150,6 +209,7 @@ export const FireEquipmentTagService = {
           fireEquipmentId,
           tagCode,
           tagType: input.tagType,
+          bindingMode: FireTagBindingMode.CODE_ONLY,
           assignedById: actorUserId,
         },
       });
@@ -164,6 +224,126 @@ export const FireEquipmentTagService = {
           diff: buildDiff(
             current ? { tagCode: current.tagCode, tagType: current.tagType } : null,
             { tagCode: created.tagCode, tagType: created.tagType },
+          ),
+        },
+        tx,
+      );
+
+      return toTagView(created);
+    });
+  },
+
+  /**
+   * §5.3, the core of Fase 3 — binds a physical tag discovered by Web NFC
+   * scan to fireEquipmentId, by UID. Called ONCE, after the client already
+   * knows whether the physical write (step 4 of the flow) succeeded — that's
+   * what lets rule 5's "single transaction" persist tagUid + tagCode +
+   * chipType + writtenAt together, instead of a two-phase create-then-
+   * confirm dance. tagCode is generated CLIENT-SIDE (same alphabet/length,
+   * see TAG_CODE_ALPHABET/TAG_CODE_LENGTH) before the write, because the
+   * write needs a code to embed in the URL before this call ever happens;
+   * the tiny collision risk is handled below by rejecting rather than
+   * silently reassigning a different code than what's physically on the tag.
+   *
+   * transferFromEquipmentId must match the CURRENT conflicting equipment's
+   * id, confirming the caller already saw the conflict and explicitly chose
+   * to transfer (rule 3 — never reassign in silence). On a transfer, the
+   * losing equipment's row is deactivated AND has tagUid cleared (not the
+   * tagCode) — an inactive row must stop claiming a uid that's now bound
+   * elsewhere, which is what keeps tagUid's plain unique constraint safe
+   * without needing a partial/filtered index (see the schema comment).
+   */
+  async bindByUid(
+    plant: { id: string },
+    fireEquipmentId: string,
+    input: {
+      tagUid: string;
+      tagCode: string;
+      chipType?: string | null;
+      writeSucceeded: boolean;
+      transferFromEquipmentId?: string;
+    },
+    actorUserId: string,
+  ): Promise<FireEquipmentTagView> {
+    const equipment = await prisma.fireEquipment.findFirst({
+      where: { id: fireEquipmentId, plantId: plant.id },
+      select: { id: true, internalCode: true },
+    });
+    if (!equipment) {
+      throw new Error("Fire equipment not found for plant scope");
+    }
+
+    const tagUid = input.tagUid.trim();
+    const tagCode = input.tagCode.trim();
+    if (!tagUid || !tagCode) {
+      throw new Error("tagUid and tagCode are required");
+    }
+
+    const codeTaken = await prisma.fireEquipmentTagAssignment.findUnique({ where: { tagCode }, select: { id: true } });
+    if (codeTaken) {
+      throw new Error("Generated tag code collided with an existing one — please scan again");
+    }
+
+    const conflicting = await prisma.fireEquipmentTagAssignment.findFirst({
+      where: { tagUid, isActive: true, NOT: { fireEquipmentId } },
+      select: { id: true, fireEquipmentId: true, fireEquipment: { select: { internalCode: true } } },
+    });
+
+    if (conflicting && conflicting.fireEquipmentId !== input.transferFromEquipmentId) {
+      throw new FireEquipmentTagConflictError(conflicting.fireEquipmentId, conflicting.fireEquipment.internalCode);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      if (conflicting) {
+        await tx.fireEquipmentTagAssignment.update({
+          where: { id: conflicting.id },
+          data: {
+            isActive: false,
+            tagUid: null,
+            unassignedAt: new Date(),
+            unassignReason: `Transferred to equipment ${equipment.internalCode}`,
+          },
+        });
+      }
+
+      const current = await tx.fireEquipmentTagAssignment.findFirst({
+        where: { fireEquipmentId, isActive: true },
+      });
+      if (current) {
+        await tx.fireEquipmentTagAssignment.update({
+          where: { id: current.id },
+          data: {
+            isActive: false,
+            unassignedAt: new Date(),
+            unassignReason: conflicting ? "Replaced via NFC transfer" : "Replaced via NFC scan",
+          },
+        });
+      }
+
+      const created = await tx.fireEquipmentTagAssignment.create({
+        data: {
+          plantId: plant.id,
+          fireEquipmentId,
+          tagUid,
+          tagCode,
+          tagType: FireEquipmentTagType.NFC_AND_QR,
+          chipType: input.chipType?.trim() || null,
+          bindingMode: input.writeSucceeded ? FireTagBindingMode.FULL : FireTagBindingMode.UID_ONLY,
+          writtenAt: input.writeSucceeded ? new Date() : null,
+          assignedById: actorUserId,
+        },
+      });
+
+      await writeAuditLog(
+        {
+          entityType: "FireEquipmentTagAssignment",
+          entityId: created.id,
+          action: conflicting ? "TRANSFERRED" : current ? "REPLACED" : "ASSIGNED",
+          actorUserId,
+          plantId: plant.id,
+          diff: buildDiff(
+            current ? { tagUid: current.tagUid, tagCode: current.tagCode } : null,
+            { tagUid: created.tagUid, tagCode: created.tagCode, bindingMode: created.bindingMode },
           ),
         },
         tx,

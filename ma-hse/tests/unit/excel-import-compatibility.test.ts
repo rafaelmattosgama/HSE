@@ -27,6 +27,10 @@ const prismaMock = vi.hoisted(() => ({
   masterDataTranslation: {
     findMany: vi.fn(),
   },
+  occupationalHealthWorkerAttachment: {
+    findMany: vi.fn(),
+    createMany: vi.fn(),
+  },
   $transaction: vi.fn(),
   $executeRaw: vi.fn(),
   $queryRaw: vi.fn(),
@@ -85,6 +89,7 @@ describe("importable Excel compatibility", () => {
     prismaMock.workstation.findMany.mockResolvedValue([{ id: "workstation-1", code: "WS1", name: "Linha 1", sourceLanguage: "pt" }]);
     prismaMock.workstation.upsert.mockResolvedValue({});
     prismaMock.masterDataTranslation.findMany.mockResolvedValue([]);
+    prismaMock.occupationalHealthWorkerAttachment.findMany.mockResolvedValue([]);
     prismaMock.$transaction.mockImplementation((operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
     prismaMock.$executeRaw.mockResolvedValue(1);
     prismaMock.$queryRaw.mockResolvedValue([occupationalWorkerRow]);

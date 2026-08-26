@@ -364,7 +364,7 @@ export const FireEquipmentService = {
           area: { select: { id: true, name: true } },
           workstation: { select: { id: true, name: true } },
           complianceState: true,
-          tagAssignments: { where: { isActive: true }, select: { id: true, tagCode: true, tagType: true, assignedAt: true } },
+          tagAssignments: { where: { isActive: true }, select: { id: true, tagUid: true, tagCode: true, tagType: true, chipType: true, bindingMode: true, assignedAt: true, writtenAt: true } },
         },
       }),
     ]);
@@ -426,7 +426,7 @@ export const FireEquipmentService = {
         area: { select: { id: true, name: true } },
         workstation: { select: { id: true, name: true } },
         complianceState: true,
-        tagAssignments: { where: { isActive: true }, select: { id: true, tagCode: true, tagType: true, assignedAt: true } },
+        tagAssignments: { where: { isActive: true }, select: { id: true, tagUid: true, tagCode: true, tagType: true, chipType: true, bindingMode: true, assignedAt: true, writtenAt: true } },
       },
     });
     if (!equipment) return null;

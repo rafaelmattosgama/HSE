@@ -1,5 +1,5 @@
 import { RoleCode } from "@prisma/client";
-import { ok } from "@/lib/api";
+import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
@@ -25,6 +25,11 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
-  const worker = await OccupationalHealthService.upsert(plant.id, parsed.data);
-  return ok({ worker }, { status: 201 });
+
+  try {
+    const worker = await OccupationalHealthService.upsert(plant.id, parsed.data, undefined, auth.session.user.id);
+    return ok({ worker }, { status: 201 });
+  } catch (error) {
+    return fail("CREATE_OCCUPATIONAL_HEALTH_WORKER_FAILED", error instanceof Error ? error.message : "Failed to create worker", 422);
+  }
 }

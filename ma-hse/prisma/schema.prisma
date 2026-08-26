@@ -100,6 +100,7 @@ model User {
   reportedCommunications                    Communication[]                     @relation("ReporterUser")
   validatedCommunications                   Communication[]                     @relation("ValidatedByUser")
   communicationAtt                          CommunicationAttachment[]
+  occupationalHealthWorkerAttachments        OccupationalHealthWorkerAttachment[]
   contractorCompanies                       ExternalCompany[]                   @relation("ExternalContractorOwner")
   reviewedExternalCompanyDocuments          ExternalCompanyDocument[]           @relation("ExternalCompanyDocumentReviewer")
   contractorInvitationsSent                 ExternalCompanyInvitation[]         @relation("ExternalInvitationSponsor")
@@ -243,9 +244,31 @@ model OccupationalHealthWorker {
   updatedAt     DateTime     @updatedAt
   plant         Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
   workstation   Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  attachments   OccupationalHealthWorkerAttachment[]
 
   @@unique([plantId, employeeNo])
   @@index([plantId, isActive, examDate])
+}
+
+/// PDF/image documents attached to a worker's occupational health record —
+/// additive only (no delete/replace flow yet, mirrors the minimal scope
+/// actually requested). Same shape as CommunicationAttachment/SEWOAttachment;
+/// viewed via a nested GET route that streams the object inline, not a
+/// bare fileKey column (see fire-equipment-service.ts's own note on why a
+/// lone fileKey field never gets a working view mechanism).
+model OccupationalHealthWorkerAttachment {
+  id                          String                   @id @default(uuid())
+  occupationalHealthWorkerId  String
+  fileKey                     String
+  fileName                    String
+  contentType                 String
+  createdAt                   DateTime                 @default(now())
+  uploadedById                String?
+
+  occupationalHealthWorker OccupationalHealthWorker @relation(fields: [occupationalHealthWorkerId], references: [id], onDelete: Cascade)
+  uploadedBy               User?                     @relation(fields: [uploadedById], references: [id])
+
+  @@index([occupationalHealthWorkerId])
 }
 
 model Equipment {
@@ -885,14 +908,36 @@ enum FireEquipmentStatus {
 /// not only by tagCode's global uniqueness. Replacing a tag never touches
 /// FireChecklistExecution/FireEquipmentComplianceState — history and
 /// compliance are keyed on fireEquipmentId, never on tagCode (§5.6).
+/// Fase 3 (§5.1): the factory's already-installed tags are identified by BOTH
+/// tagUid (the chip's hardware serial, read-only, never written) and tagCode
+/// (our own 8-char code, written as the NDEF URL's last segment) — resolution
+/// always tries tagUid first (§5.1 rule 2). Both are nullable+unique so a row
+/// can exist with only one of them (tagUid before the code was minted is
+/// never the case in practice, but a CODE_ONLY row from the manual/no-scan
+/// path never has a tagUid, and a UID_ONLY row still gets a tagCode minted
+/// for a possible backup QR print even though it was never physically
+/// written). A cross-equipment TRANSFER nulls out tagUid on the LOSING row
+/// (see fire-equipment-tag-service.ts's transferTag) rather than leaving it
+/// there — an inactive row must never keep claiming a uid that's active
+/// elsewhere, which is what keeps the plain @unique below safe: a straight
+/// global-permanent unique (like tagCode already was) would make a
+/// transfer's second attempt at binding that same physical tag permanently
+/// impossible once the first (now-inactive) row existed.
 model FireEquipmentTagAssignment {
   id              String               @id @default(uuid())
   plantId         String
   fireEquipmentId String
-  tagCode         String
+  tagUid          String?
+  tagCode         String?
   tagType         FireEquipmentTagType @default(NFC_AND_QR)
+  // Free text — Web NFC exposes no reliable chip-technology field; this is
+  // whatever the person binding the tag chooses to note (e.g. from a
+  // separate NFC-inspection app), never auto-detected.
+  chipType        String?
+  bindingMode     FireTagBindingMode   @default(CODE_ONLY)
   assignedAt      DateTime             @default(now())
   assignedById    String
+  writtenAt       DateTime?
   unassignedAt    DateTime?
   unassignReason  String?
   isActive        Boolean              @default(true)
@@ -901,6 +946,7 @@ model FireEquipmentTagAssignment {
   fireEquipment FireEquipment @relation(fields: [fireEquipmentId], references: [id], onDelete: Cascade)
   assignedBy    User          @relation("FireEquipmentTagAssignedBy", fields: [assignedById], references: [id])
 
+  @@unique([tagUid])
   @@unique([tagCode])
   @@index([fireEquipmentId, isActive])
 }
@@ -908,6 +954,18 @@ model FireEquipmentTagAssignment {
 enum FireEquipmentTagType {
   NFC_AND_QR
   QR_ONLY
+}
+
+/// FULL: uid read AND url successfully written to the chip.
+/// UID_ONLY: uid read but the chip refused the write (read-only/locked) —
+/// tap-to-open never works on iPhone for this tag, only the in-app Android
+/// NFC read (uid lookup) or the printed QR.
+/// CODE_ONLY: no NFC scan was ever involved (manual code entry, or a fresh
+/// label printed for equipment that has no physical tag yet).
+enum FireTagBindingMode {
+  FULL
+  UID_ONLY
+  CODE_ONLY
 }
 
 /// Fire Safety Equipment module — phase 2 (checklist catalog, execution

@@ -1,15 +1,24 @@
 "use client";
 
-import { Pencil, Plus, UserX, X } from "lucide-react";
+import { Paperclip, Pencil, Plus, UserX, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { uploadAttachment } from "@/lib/client-api";
 import { COUNTRY_OPTIONS_PT } from "@/lib/constants/countries-pt";
 import { calculateOccupationalHealthExamValidUntilInput } from "@/lib/occupational-health-validity";
+
+const ATTACHMENT_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
 
 type WorkstationOption = {
   id: string;
   name: string;
+};
+
+type AttachmentRow = {
+  id: string;
+  fileName: string;
+  contentType: string;
 };
 
 type WorkerRow = {
@@ -30,7 +39,10 @@ type WorkerRow = {
   status: string;
   observation: string | null;
   isActive: boolean;
+  attachments: AttachmentRow[];
 };
+
+type NewAttachment = { fileKey: string; fileName: string; contentType: string };
 
 type FormState = {
   id?: string;
@@ -48,6 +60,8 @@ type FormState = {
   status: "VALID" | "EXPIRED" | "DUE_SOON" | "PENDING";
   observation: string;
   isActive: boolean;
+  existingAttachments: AttachmentRow[];
+  newAttachments: NewAttachment[];
 };
 
 const EMPTY_FORM: FormState = {
@@ -65,15 +79,9 @@ const EMPTY_FORM: FormState = {
   status: "VALID",
   observation: "",
   isActive: true,
+  existingAttachments: [],
+  newAttachments: [],
 };
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
 
 function calculateAge(birthDate: string) {
   if (!birthDate) return 0;
@@ -106,10 +114,17 @@ export function OccupationalHealthManager({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [message, setMessage] = useState("");
+  // listMessage covers actions outside the modal (import/inactivate);
+  // formMessage is rendered INSIDE the modal — the modal's fixed inset-0
+  // overlay otherwise covers listMessage entirely, so a save error was
+  // silently invisible (looked exactly like the window "freezing").
+  const [listMessage, setListMessage] = useState("");
+  const [formMessage, setFormMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedCount = selectedIds.length;
   const age = useMemo(() => calculateAge(form.birthDate), [form.birthDate]);
@@ -118,14 +133,10 @@ export function OccupationalHealthManager({
     [form.birthDate, form.examDate],
   );
 
-  const normalizedCountryMap = useMemo(
-    () => new Map(COUNTRY_OPTIONS_PT.map((country) => [normalizeText(country), country])),
-    [],
-  );
-
   function openCreateModal() {
     setEditing(false);
     setForm(EMPTY_FORM);
+    setFormMessage("");
     setModalOpen(true);
   }
 
@@ -147,24 +158,49 @@ export function OccupationalHealthManager({
       status: (worker.status as FormState["status"]) ?? "VALID",
       observation: worker.observation ?? "",
       isActive: worker.isActive,
+      existingAttachments: worker.attachments,
+      newAttachments: [],
     });
+    setFormMessage("");
     setModalOpen(true);
+  }
+
+  async function uploadNewAttachment(file: File) {
+    setFormMessage("");
+    setAttachmentUploading(true);
+    try {
+      const uploaded = await uploadAttachment({
+        plantCode: plant,
+        folder: "occupational-health",
+        file,
+        fallbackErrorMessage: "Failed to upload the attachment.",
+      });
+      setForm((current) => ({
+        ...current,
+        newAttachments: [
+          ...current.newAttachments,
+          { fileKey: uploaded.key, fileName: file.name, contentType: file.type },
+        ],
+      }));
+    } catch (error) {
+      setFormMessage(error instanceof Error ? error.message : "Failed to upload the attachment.");
+    } finally {
+      setAttachmentUploading(false);
+    }
+  }
+
+  function removePendingAttachment(fileKey: string) {
+    setForm((current) => ({
+      ...current,
+      newAttachments: current.newAttachments.filter((attachment) => attachment.fileKey !== fileKey),
+    }));
   }
 
   async function saveWorker(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
-    setMessage("");
+    setFormMessage("");
     try {
-      const normalizedNationality = normalizeText(form.nationality);
-      const nationalityValue = form.nationality
-        ? normalizedCountryMap.get(normalizedNationality)
-        : undefined;
-
-      if (form.nationality && !nationalityValue) {
-        throw new Error("Select a nationality from the searchable list.");
-      }
-
       const endpoint = form.id
         ? `/api/plants/${plant}/occupational-health/workers/${form.id}`
         : `/api/plants/${plant}/occupational-health/workers`;
@@ -180,11 +216,12 @@ export function OccupationalHealthManager({
           hireDate: form.hireDate,
           roleStartDate: form.roleStartDate,
           roleName: form.roleName || undefined,
-          nationality: nationalityValue,
+          nationality: form.nationality.trim() || undefined,
           examDate: form.examDate,
           status: form.status,
           observation: form.observation || undefined,
           isActive: form.isActive,
+          newAttachments: form.newAttachments.length ? form.newAttachments : undefined,
         }),
       });
       const json = await response.json();
@@ -194,9 +231,9 @@ export function OccupationalHealthManager({
       setWorkers((current) => [...current.filter((item) => item.id !== worker.id), worker].sort((a, b) => a.name.localeCompare(b.name)));
       setModalOpen(false);
       setForm(EMPTY_FORM);
-      setMessage(form.id ? "Worker updated." : "Worker created.");
+      setListMessage(form.id ? "Worker updated." : "Worker created.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to save worker");
+      setFormMessage(error instanceof Error ? error.message : "Failed to save worker");
     } finally {
       setSaving(false);
     }
@@ -204,11 +241,11 @@ export function OccupationalHealthManager({
 
   async function inactivateSelected() {
     if (!selectedIds.length) {
-      setMessage("Select at least one worker.");
+      setListMessage("Select at least one worker.");
       return;
     }
 
-    setMessage("");
+    setListMessage("");
     for (const workerId of selectedIds) {
       const response = await fetch(`/api/plants/${plant}/occupational-health/workers/${workerId}`, {
         method: "POST",
@@ -217,14 +254,14 @@ export function OccupationalHealthManager({
       });
       const json = await response.json();
       if (!response.ok || !json.ok) {
-        setMessage(json.message ?? "Failed to inactivate selected workers");
+        setListMessage(json.message ?? "Failed to inactivate selected workers");
         return;
       }
     }
 
     setWorkers((current) => current.map((worker) => (selectedIds.includes(worker.id) ? { ...worker, isActive: false } : worker)));
     setSelectedIds([]);
-    setMessage("Selected workers inactivated.");
+    setListMessage("Selected workers inactivated.");
   }
 
   function toggleSelection(workerId: string, checked: boolean) {
@@ -232,7 +269,7 @@ export function OccupationalHealthManager({
   }
 
   async function importExcel(file: File) {
-    setMessage("");
+    setListMessage("");
     const formData = new FormData();
     formData.append("file", file);
 
@@ -242,7 +279,7 @@ export function OccupationalHealthManager({
     });
     const json = await response.json();
     if (!response.ok || !json.ok) {
-      setMessage(json.message ?? "Failed to import Excel");
+      setListMessage(json.message ?? "Failed to import Excel");
       return;
     }
 
@@ -345,7 +382,7 @@ export function OccupationalHealthManager({
       </section>
 
       <p className="text-sm text-slate-600">{selectedCount} worker(s) selected.</p>
-      {message ? <p className="text-sm text-slate-600">{message}</p> : null}
+      {listMessage ? <p className="text-sm text-slate-600">{listMessage}</p> : null}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-[90] flex items-start justify-center bg-slate-950/40 px-4 py-10 backdrop-blur-[2px]">
@@ -446,9 +483,68 @@ export function OccupationalHealthManager({
                 <textarea value={form.observation} onChange={(event) => setForm((current) => ({ ...current, observation: event.target.value }))} rows={4} className="w-full rounded-md border border-slate-300 px-3 py-2" />
               </label>
 
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-slate-700">Attachments (PDF or image)</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => attachmentInputRef.current?.click()}
+                    disabled={attachmentUploading}
+                  >
+                    <Paperclip className="mr-2 h-4 w-4" />
+                    {attachmentUploading ? "Uploading..." : "Attach document"}
+                  </Button>
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    accept={ATTACHMENT_ACCEPT}
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadNewAttachment(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </div>
+                {form.existingAttachments.length > 0 || form.newAttachments.length > 0 ? (
+                  <ul className="mt-3 space-y-1.5">
+                    {form.existingAttachments.map((attachment) => (
+                      <li key={attachment.id} className="flex items-center justify-between gap-2 text-sm">
+                        <a
+                          href={`/api/plants/${plant}/occupational-health/workers/${form.id}/attachments/${attachment.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-700 hover:underline"
+                        >
+                          {attachment.fileName}
+                        </a>
+                      </li>
+                    ))}
+                    {form.newAttachments.map((attachment) => (
+                      <li key={attachment.fileKey} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-slate-700">✓ {attachment.fileName} (not saved yet)</span>
+                        <button
+                          type="button"
+                          onClick={() => removePendingAttachment(attachment.fileKey)}
+                          className="text-xs font-semibold text-rose-600 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">No documents attached yet.</p>
+                )}
+              </div>
+
+              {formMessage ? <p className="text-sm font-medium text-rose-600">{formMessage}</p> : null}
+
               <div className="flex justify-end gap-2">
                 <Button type="button" size="sm" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button type="submit" size="sm" disabled={saving}>{saving ? "Saving..." : editing ? "Save changes" : "Create worker"}</Button>
+                <Button type="submit" size="sm" disabled={saving || attachmentUploading}>{saving ? "Saving..." : editing ? "Save changes" : "Create worker"}</Button>
               </div>
             </form>
             <datalist id="nationality-options">

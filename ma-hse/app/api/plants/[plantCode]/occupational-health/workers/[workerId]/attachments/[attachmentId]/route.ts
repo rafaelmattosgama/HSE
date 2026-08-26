@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { RoleCode } from "@prisma/client";
+import { fail } from "@/lib/api";
+import { getPlantByCode } from "@/lib/plant";
+import { prisma } from "@/lib/prisma";
+import { requirePlantAccess } from "@/lib/rbac/guards";
+import { StorageService } from "@/lib/services/storage-service";
+
+// Mirrors admin/occupational-health's own workers route roles (Fase 0
+// precedent for this module): viewing an attached medical document follows
+// the same access as editing the worker record itself.
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ plantCode: string; workerId: string; attachmentId: string }> },
+) {
+  const { plantCode, workerId, attachmentId } = await context.params;
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  if ("error" in auth) return auth.error;
+
+  const plant = await getPlantByCode(plantCode);
+  const attachment = await prisma.occupationalHealthWorkerAttachment.findFirst({
+    where: {
+      id: attachmentId,
+      occupationalHealthWorkerId: workerId,
+      occupationalHealthWorker: { plantId: plant.id },
+    },
+    select: { fileKey: true, fileName: true, contentType: true },
+  });
+
+  if (!attachment) {
+    return fail("NOT_FOUND", "Attachment not found", 404);
+  }
+
+  const buffer = await StorageService.getObjectBuffer({ key: attachment.fileKey });
+  const safeFileName = attachment.fileName.replace(/[\r\n"]/g, "");
+
+  return new NextResponse(buffer, {
+    headers: {
+      "cache-control": "private, no-store",
+      "content-disposition": `inline; filename="${safeFileName}"`,
+      "content-type": attachment.contentType,
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
