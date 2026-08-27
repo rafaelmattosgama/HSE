@@ -10,6 +10,7 @@ import {
   RoleCode,
   TrainingResult,
 } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { addMonths, differenceInCalendarDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
@@ -31,6 +32,7 @@ import type {
   EnrollCompetenceWorkersInput,
   GrantAuthorizationInput,
   RegisterAssessmentInput,
+  RegisterCompetenceEntryInput,
   RegisterTrainingInput,
   SetCompetenceWorkerRequirementInput,
   UpdateCompetenceWorkerRoleInput,
@@ -232,6 +234,50 @@ async function assertWorkerAndTypeInPlant(plantId: string, competenceWorkerId: s
   }
 
   return { competenceWorker, competenceType };
+}
+
+/**
+ * §2.3/§4 (revised): compares the actor granting an authorization against the
+ * assessor of the SPECIFIC assessment backing it — not "did the actor ever
+ * assess this worker/type at all" (the old, over-broad rule this replaces).
+ * The supporting assessment is `assessmentId` when given, otherwise the most
+ * recent COMPETENT one — the same definition §5 step 7 of the state machine
+ * already uses for "the" assessment that matters.
+ */
+async function assertSegregationOfDuties(
+  tx: TransactionClient,
+  input: {
+    plantId: string;
+    competenceWorkerId: string;
+    competenceTypeId: string;
+    assessmentId: string | null;
+    actorUserId: string;
+  },
+) {
+  const assessment = input.assessmentId
+    ? await tx.competenceAssessment.findFirst({
+        where: { id: input.assessmentId, plantId: input.plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
+        select: { assessorUserId: true },
+      })
+    : await tx.competenceAssessment.findFirst({
+        where: { plantId: input.plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: CompetenceAssessmentResult.COMPETENT },
+        orderBy: { assessedAt: "desc" },
+        select: { assessorUserId: true },
+      });
+
+  if (input.assessmentId && !assessment) {
+    throw new CompetenceValidationError(
+      "ASSESSMENT_NOT_FOUND",
+      "The referenced assessment was not found for this worker and competence type in this plant.",
+    );
+  }
+
+  if (assessment?.assessorUserId && assessment.assessorUserId === input.actorUserId) {
+    throw new CompetenceValidationError(
+      "SEGREGATION_OF_DUTIES",
+      "Segregation of duties: the user who performed the competent practical assessment backing this authorization cannot grant it.",
+    );
+  }
 }
 
 function isBeforeInLisbon(target: Date, now: Date) {
@@ -692,6 +738,216 @@ export const CompetenceService = {
 
       return assessmentRecord;
     });
+  },
+
+  /**
+   * §3.2/§3.3 (revised): one submission across all three levels, sharing one
+   * entryGroupId and one prisma.$transaction() — replaces separately calling
+   * registerTraining / registerAssessment / grantAuthorization from the UI.
+   * `training` is required unless `entryGroupId` names an entry already
+   * started in a prior submission (the "complete later" flow), in which case
+   * this call only appends the assessment and/or authorization sections to
+   * that entry's existing training record.
+   *
+   * Intentionally does not reuse grantAuthorization's own transaction body —
+   * that method owns its single-purpose endpoint and its own tests; the
+   * validation that actually needed to change (segregation of duties) is
+   * factored into assertSegregationOfDuties above and shared by both.
+   */
+  async registerCompetenceEntry(plantId: string, input: RegisterCompetenceEntryInput, actorUserId: string) {
+    const now = new Date();
+    const { competenceType } = await assertWorkerAndTypeInPlant(plantId, input.competenceWorkerId, input.competenceTypeId);
+    const [expiringThresholdDays, medicalFitnessBlocksAuthorization, segregationOfDuties] = await Promise.all([
+      getCompetenceExpiringThresholdDays(plantId),
+      getMedicalFitnessBlocksAuthorization(plantId),
+      getAuthorizationSegregationOfDuties(plantId),
+    ]);
+
+    const result = await prisma.$transaction(async (tx) => {
+      let entryGroupId = input.entryGroupId ?? null;
+      let trainingRecordId: string | null = null;
+
+      if (entryGroupId) {
+        const existingTraining = await tx.trainingRecord.findFirst({
+          where: { entryGroupId, plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
+          select: { id: true },
+        });
+        if (!existingTraining) {
+          throw new CompetenceValidationError("ENTRY_NOT_FOUND", "The referenced entry was not found for this worker and competence type.");
+        }
+        trainingRecordId = existingTraining.id;
+      } else {
+        entryGroupId = randomUUID();
+        const trainingRecord = await tx.trainingRecord.create({
+          data: {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            entryGroupId,
+            provider: input.training!.provider ?? null,
+            trainerName: input.training!.trainerName ?? null,
+            completedAt: input.training!.completedAt,
+            durationHours: input.training!.durationHours ?? null,
+            certificateNumber: input.training!.certificateNumber ?? null,
+            certificateExpiresAt: input.training!.certificateExpiresAt ?? null,
+            result: input.training!.result,
+            notes: input.training!.notes ?? null,
+            createdById: actorUserId,
+          },
+        });
+        trainingRecordId = trainingRecord.id;
+
+        await writeAuditLog({
+          entityType: "TrainingRecord",
+          entityId: trainingRecord.id,
+          action: "REGISTERED",
+          actorUserId,
+          plantId,
+          diff: buildDiff(null, { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: input.training!.result, entryGroupId }),
+        }, tx);
+      }
+
+      let assessmentRecordId: string | null = null;
+
+      if (input.assessment) {
+        if (competenceType.requiresTraining && !trainingRecordId) {
+          throw new CompetenceValidationError(
+            "TRAINING_LINK_REQUIRED",
+            `Competence type "${competenceType.name}" requires training: link the passed training record when registering this assessment.`,
+          );
+        }
+
+        const assessmentRecord = await tx.competenceAssessment.create({
+          data: {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            entryGroupId,
+            trainingRecordId,
+            assessedAt: input.assessment.assessedAt,
+            assessorUserId: input.assessment.assessorUserId ?? null,
+            assessorName: input.assessment.assessorUserId ? null : (input.assessment.assessorName ?? null),
+            method: input.assessment.method,
+            result: input.assessment.result,
+            score: input.assessment.score ?? null,
+            observations: input.assessment.observations ?? null,
+            createdById: actorUserId,
+          },
+        });
+        assessmentRecordId = assessmentRecord.id;
+
+        await writeAuditLog({
+          entityType: "CompetenceAssessment",
+          entityId: assessmentRecord.id,
+          action: "REGISTERED",
+          actorUserId,
+          plantId,
+          diff: buildDiff(null, { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: input.assessment.result, entryGroupId }),
+        }, tx);
+      }
+
+      let authorizationId: string | null = null;
+
+      if (input.authorization) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`authorization:seq:${plantId}`}))`;
+
+        if (!competenceType.requiresAuthorization) {
+          throw new CompetenceValidationError("AUTHORIZATION_NOT_REQUIRED", `Competence type "${competenceType.name}" does not require a formal authorization.`);
+        }
+        if (competenceType.requiresTraining && !trainingRecordId) {
+          throw new CompetenceValidationError("TRAINING_REQUIRED", `Competence type "${competenceType.name}" requires a passed training record before an authorization can be granted.`);
+        }
+
+        let supportingAssessmentId = assessmentRecordId;
+        if (!supportingAssessmentId && competenceType.requiresAssessment) {
+          const existingAssessment = await tx.competenceAssessment.findFirst({
+            where: { plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: CompetenceAssessmentResult.COMPETENT },
+            orderBy: { assessedAt: "desc" },
+            select: { id: true },
+          });
+          if (!existingAssessment) {
+            throw new CompetenceValidationError("ASSESSMENT_REQUIRED", `Competence type "${competenceType.name}" requires a competent practical assessment before an authorization can be granted.`);
+          }
+          supportingAssessmentId = existingAssessment.id;
+        }
+
+        if (segregationOfDuties) {
+          await assertSegregationOfDuties(tx, {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            assessmentId: supportingAssessmentId,
+            actorUserId,
+          });
+        }
+
+        const previousCurrent = await tx.workerAuthorization.findFirst({
+          where: {
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            status: { in: [AuthorizationStatus.ACTIVE, AuthorizationStatus.SUSPENDED] },
+          },
+          orderBy: { grantedAt: "desc" },
+        });
+        if (previousCurrent?.status === AuthorizationStatus.SUSPENDED) {
+          throw new CompetenceValidationError(
+            "SUSPENDED_AUTHORIZATION_REQUIRES_REACTIVATION",
+            `This worker has a SUSPENDED authorization for this competence (reason: ${previousCurrent.suspensionReason ?? "not recorded"}). Reactivate it explicitly before granting a new one.`,
+          );
+        }
+
+        const latest = await tx.workerAuthorization.findFirst({
+          where: { plantId, sequenceNumber: { not: null } },
+          orderBy: { sequenceNumber: "desc" },
+          select: { sequenceNumber: true },
+        });
+
+        const validUntil = addMonths(input.authorization.validFrom, competenceType.validityMonths);
+        const authorization = await tx.workerAuthorization.create({
+          data: {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            entryGroupId,
+            trainingRecordId,
+            assessmentId: supportingAssessmentId,
+            sequenceNumber: (latest?.sequenceNumber ?? 0) + 1,
+            grantedByUserId: actorUserId,
+            validFrom: input.authorization.validFrom,
+            validUntil,
+            restrictions: input.authorization.restrictions ?? null,
+            status: AuthorizationStatus.ACTIVE,
+          },
+        });
+        authorizationId = authorization.id;
+
+        if (previousCurrent) {
+          await tx.workerAuthorization.update({ where: { id: previousCurrent.id }, data: { status: AuthorizationStatus.SUPERSEDED, supersededById: authorization.id } });
+        }
+
+        await writeAuditLog({
+          entityType: "WorkerAuthorization",
+          entityId: authorization.id,
+          action: "GRANTED",
+          actorUserId,
+          plantId,
+          diff: buildDiff(previousCurrent ? { supersededAuthorizationId: previousCurrent.id } : null, { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, validFrom: input.authorization.validFrom, validUntil, entryGroupId }),
+        }, tx);
+      }
+
+      await recomputeAndSaveState(tx, {
+        plantId,
+        competenceWorkerId: input.competenceWorkerId,
+        competenceTypeId: input.competenceTypeId,
+        now,
+        expiringThresholdDays,
+        medicalFitnessBlocksAuthorization,
+      });
+
+      return { entryGroupId, trainingRecordId, assessmentRecordId, authorizationId };
+    });
+
+    return result;
   },
 
   /**

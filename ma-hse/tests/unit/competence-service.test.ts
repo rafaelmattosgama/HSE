@@ -1213,3 +1213,103 @@ describe("CompetenceService.getAuthorizationCoverageByPlant / getPlantAuthorizat
     expect(prismaMock.prisma.workerCompetenceState.groupBy).not.toHaveBeenCalled();
   });
 });
+
+describe("CompetenceService.registerCompetenceEntry — §3.2/§3.3, one submission across all three levels", () => {
+  beforeEach(() => {
+    prismaMock.prisma.competenceWorker.findFirst.mockResolvedValue({ id: "worker-1", plantId: "plant-1" });
+    prismaMock.prisma.competenceType.findFirst.mockResolvedValue({
+      id: "type-forklift", plantId: "plant-1", name: "Forklift", requiresTraining: true, requiresAssessment: true, requiresAuthorization: true, validityMonths: 12,
+    });
+    transactionMock.$executeRaw.mockResolvedValue(0);
+    transactionMock.trainingRecord.create = vi.fn().mockResolvedValue({ id: "training-1", result: "PASSED" });
+    transactionMock.competenceAssessment.create = vi.fn().mockResolvedValue({ id: "assessment-1", result: "COMPETENT", assessorUserId: null });
+    transactionMock.competenceAssessment.findFirst = vi.fn().mockResolvedValue(null);
+    transactionMock.trainingRecord.findFirst = vi.fn().mockResolvedValue({ id: "training-1" });
+    transactionMock.workerAuthorization.findFirst = vi.fn().mockResolvedValue(null);
+    transactionMock.workerAuthorization.create = vi.fn().mockResolvedValue({ id: "auth-1", sequenceNumber: 1 });
+    stubRecomputeDependencies();
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("creates training only when assessment and authorization are both omitted, with a fresh entryGroupId", async () => {
+    const result = await CompetenceService.registerCompetenceEntry(
+      "plant-1",
+      {
+        competenceWorkerId: "worker-1",
+        competenceTypeId: "type-forklift",
+        training: { completedAt: new Date("2026-08-01"), result: "PASSED" as const, provider: null, trainerName: null, durationHours: null, certificateNumber: null, certificateExpiresAt: null, notes: null },
+      },
+      "user-1",
+    );
+
+    expect(transactionMock.trainingRecord.create).toHaveBeenCalledTimes(1);
+    expect(transactionMock.trainingRecord.create.mock.calls[0][0].data.entryGroupId).toEqual(expect.any(String));
+    expect(transactionMock.competenceAssessment.create).not.toHaveBeenCalled();
+    expect(transactionMock.workerAuthorization.create).not.toHaveBeenCalled();
+    expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledTimes(1);
+    expect(result.trainingRecordId).toBe("training-1");
+    expect(result.assessmentRecordId).toBeNull();
+    expect(result.authorizationId).toBeNull();
+  });
+
+  it("creates training, assessment and authorization together in one submission, reusing the same entryGroupId across all three rows", async () => {
+    // Segregation-of-duties re-fetches the supporting assessment by id inside
+    // the same tx — in a real Postgres transaction that read-your-own-writes
+    // and would see the row `competenceAssessment.create` just inserted
+    // below. The unmocked default (null) can't simulate that read, so this
+    // test wires it to reflect the assessorUserId the request just set.
+    transactionMock.competenceAssessment.findFirst = vi.fn().mockResolvedValue({ assessorUserId: "assessor-1" });
+
+    const result = await CompetenceService.registerCompetenceEntry(
+      "plant-1",
+      {
+        competenceWorkerId: "worker-1",
+        competenceTypeId: "type-forklift",
+        training: { completedAt: new Date("2026-08-01"), result: "PASSED" as const, provider: null, trainerName: null, durationHours: null, certificateNumber: null, certificateExpiresAt: null, notes: null },
+        assessment: { assessedAt: new Date("2026-08-02"), result: "COMPETENT" as const, assessorUserId: "assessor-1", assessorName: null, method: "PRACTICAL_TEST" as const, score: null, observations: null },
+        authorization: { validFrom: new Date("2026-08-03"), restrictions: null },
+      },
+      "user-1",
+    );
+
+    const trainingGroupId = transactionMock.trainingRecord.create.mock.calls[0][0].data.entryGroupId;
+    expect(transactionMock.competenceAssessment.create.mock.calls[0][0].data.entryGroupId).toBe(trainingGroupId);
+    expect(transactionMock.workerAuthorization.create.mock.calls[0][0].data.entryGroupId).toBe(trainingGroupId);
+    expect(transactionMock.workerAuthorization.create.mock.calls[0][0].data.trainingRecordId).toBe("training-1");
+    expect(transactionMock.workerAuthorization.create.mock.calls[0][0].data.assessmentId).toBe("assessment-1");
+    expect(result.authorizationId).toBe("auth-1");
+  });
+
+  it("continues an existing entry by entryGroupId, without creating a new training record", async () => {
+    transactionMock.trainingRecord.findFirst = vi.fn().mockResolvedValue({ id: "training-1" });
+
+    const result = await CompetenceService.registerCompetenceEntry(
+      "plant-1",
+      {
+        competenceWorkerId: "worker-1",
+        competenceTypeId: "type-forklift",
+        entryGroupId: "existing-group-1",
+        assessment: { assessedAt: new Date("2026-08-02"), result: "COMPETENT" as const, assessorUserId: "assessor-1", assessorName: null, method: "PRACTICAL_TEST" as const, score: null, observations: null },
+      },
+      "user-1",
+    );
+
+    expect(transactionMock.trainingRecord.create).not.toHaveBeenCalled();
+    expect(transactionMock.competenceAssessment.create.mock.calls[0][0].data.trainingRecordId).toBe("training-1");
+    expect(result.trainingRecordId).toBe("training-1");
+    expect(result.entryGroupId).toBe("existing-group-1");
+  });
+
+  it("rejects continuing an entryGroupId that has no training record for this worker/type", async () => {
+    transactionMock.trainingRecord.findFirst = vi.fn().mockResolvedValue(null);
+
+    await expect(
+      CompetenceService.registerCompetenceEntry(
+        "plant-1",
+        { competenceWorkerId: "worker-1", competenceTypeId: "type-forklift", entryGroupId: "missing-group", assessment: { assessedAt: new Date(), result: "COMPETENT" as const, assessorUserId: "assessor-1", assessorName: null, method: "PRACTICAL_TEST" as const, score: null, observations: null } },
+        "user-1",
+      ),
+    ).rejects.toThrow(/not found/i);
+  });
+});

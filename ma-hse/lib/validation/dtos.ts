@@ -916,6 +916,54 @@ export const grantAuthorizationInput = z.object({
   }
 });
 
+export const registerCompetenceEntryInput = z.object({
+  competenceWorkerId: z.string().uuid(),
+  competenceTypeId: z.string().uuid(),
+  // Present when appending an assessment/authorization to an entry whose
+  // training was already registered in a previous submission — absent when
+  // starting a brand-new entry, in which case `training` is required.
+  entryGroupId: z.string().uuid().optional(),
+  training: z.object({
+    provider: z.string().trim().max(160).nullable().optional(),
+    trainerName: z.string().trim().max(160).nullable().optional(),
+    completedAt: z.coerce.date(),
+    durationHours: z.coerce.number().positive().max(999).nullable().optional(),
+    certificateNumber: z.string().trim().max(80).nullable().optional(),
+    certificateExpiresAt: z.coerce.date().nullable().optional(),
+    result: z.nativeEnum(TrainingResult).default(TrainingResult.PASSED),
+    notes: z.string().trim().max(2000).nullable().optional(),
+  }).optional(),
+  assessment: z.object({
+    assessedAt: z.coerce.date(),
+    assessorUserId: z.string().uuid().nullable().optional(),
+    assessorName: z.string().trim().max(160).nullable().optional(),
+    method: z.nativeEnum(CompetenceAssessmentMethod).default(CompetenceAssessmentMethod.PRACTICAL_TEST),
+    result: z.nativeEnum(CompetenceAssessmentResult),
+    score: z.coerce.number().int().min(0).max(100).nullable().optional(),
+    observations: z.string().trim().max(2000).nullable().optional(),
+  }).superRefine((value, ctx) => {
+    const hasInternal = Boolean(value.assessorUserId);
+    const hasExternal = Boolean(value.assessorName && value.assessorName.trim());
+    if (hasInternal === hasExternal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assessorUserId"],
+        message: "Choose exactly one: an internal user (assessorUserId) or an external assessor name (assessorName)",
+      });
+    }
+  }).optional(),
+  authorization: z.object({
+    validFrom: z.coerce.date(),
+    restrictions: z.string().trim().max(500).nullable().optional(),
+  }).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.entryGroupId && !value.training) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["training"], message: "training is required when starting a new entry" });
+  }
+});
+
+export type RegisterCompetenceEntryInput = z.infer<typeof registerCompetenceEntryInput>;
+
 export const suspendAuthorizationInput = z.object({
   reason: z.string().trim().min(1).max(500),
 });
