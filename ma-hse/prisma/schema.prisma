@@ -25,7 +25,6 @@ model Plant {
   communications                     Communication[]
   competenceAlertDeliveries          CompetenceAlertDelivery[]
   competenceAssessments              CompetenceAssessment[]
-  competenceRequirements             CompetenceRequirement[]
   competenceWorkerRequirements       CompetenceWorkerRequirement[]
   competenceTypes                    CompetenceType[]
   competenceWorkers                  CompetenceWorker[]
@@ -119,7 +118,6 @@ model User {
   smatAuditsCreated                         SmatAudit[]                         @relation("SMATAuditorUser")
   smatAttachment                            SmatAuditAttachment[]
   addedCompetenceWorkers                    CompetenceWorker[]                  @relation("CompetenceWorkerAddedBy")
-  createdCompetenceRequirements             CompetenceRequirement[]             @relation("CompetenceRequirementCreatedBy")
   setCompetenceWorkerRequirements           CompetenceWorkerRequirement[]       @relation("CompetenceWorkerRequirementSetBy")
   createdFireEquipment                      FireEquipment[]                     @relation("FireEquipmentCreatedBy")
   performedFireChecklistExecutions          FireChecklistExecution[]            @relation("FireChecklistExecutionPerformedBy")
@@ -184,7 +182,6 @@ model Area {
   sourceLanguage                     String?
   plant                              Plant                               @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications                     Communication[]
-  competenceRequirements             CompetenceRequirement[]
   competenceWorkers                  CompetenceWorker[]
   fireEquipment                      FireEquipment[]
   mapFeatures                        MapFeature[]
@@ -216,7 +213,6 @@ model Workstation {
   isActive                  Boolean                    @default(true)
   sourceLanguage            String?
   communications            Communication[]
-  competenceRequirements    CompetenceRequirement[]
   fireEquipment             FireEquipment[]
   mapFeatures               MapFeature[]
   occupationalHealthWorkers OccupationalHealthWorker[]
@@ -443,7 +439,6 @@ model CompetenceType {
   isActive              Boolean                   @default(true)
   sourceLanguage        String?
   plant                 Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  requirements          CompetenceRequirement[]
   workerRequirements    CompetenceWorkerRequirement[]
   states                WorkerCompetenceState[]
   trainingRecords       TrainingRecord[]
@@ -462,36 +457,6 @@ enum CompetenceCategory {
   SAFETY_ROLE
   LEGAL_MANDATORY
   OTHER
-}
-
-model CompetenceRequirement {
-  id                 String                     @id @default(uuid())
-  plantId            String
-  competenceTypeId   String
-  scopeType          CompetenceRequirementScope
-  scopeRoleName      String?
-  scopeAreaId        String?
-  scopeWorkstationId String?
-  isMandatory        Boolean                    @default(true)
-  notes              String?
-  isActive           Boolean                    @default(true)
-  createdAt          DateTime                   @default(now())
-  createdById        String?
-
-  plant          Plant          @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  competenceType CompetenceType @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
-  area           Area?          @relation(fields: [scopeAreaId], references: [id], onDelete: Cascade)
-  workstation    Workstation?   @relation(fields: [scopeWorkstationId], references: [id], onDelete: Cascade)
-  createdBy      User?          @relation("CompetenceRequirementCreatedBy", fields: [createdById], references: [id])
-
-  @@index([plantId, competenceTypeId, isActive])
-}
-
-enum CompetenceRequirementScope {
-  ROLE
-  AREA
-  WORKSTATION
-  ALL_WORKERS
 }
 
 model CompetenceWorker {

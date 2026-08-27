@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, CompetenceRequirementScope, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
 import {
   SMAT_ATTACHMENT_LIMITS,
@@ -928,29 +928,9 @@ export const reactivateAuthorizationInput = z.object({
   note: z.string().trim().max(500).nullable().optional(),
 });
 
-export const upsertCompetenceRequirementInput = z.object({
-  id: z.string().uuid().optional(),
-  competenceTypeId: z.string().uuid(),
-  scopeType: z.nativeEnum(CompetenceRequirementScope),
-  scopeRoleName: z.string().trim().min(1).max(160).nullable().optional(),
-  scopeAreaId: optionalUuid,
-  scopeWorkstationId: optionalUuid,
-  isMandatory: z.boolean().default(true),
+export const setCompetenceWorkerRequirementInput = z.object({
+  isRequired: z.boolean(),
   notes: z.string().trim().max(500).nullable().optional(),
-}).superRefine((value, ctx) => {
-  if (value.scopeType === CompetenceRequirementScope.ROLE && !value.scopeRoleName) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scopeRoleName"], message: "scopeRoleName is required for ROLE scope" });
-  }
-  if (value.scopeType === CompetenceRequirementScope.AREA && !value.scopeAreaId) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scopeAreaId"], message: "scopeAreaId is required for AREA scope" });
-  }
-  if (value.scopeType === CompetenceRequirementScope.WORKSTATION && !value.scopeWorkstationId) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scopeWorkstationId"], message: "scopeWorkstationId is required for WORKSTATION scope" });
-  }
-});
-
-export const deleteCompetenceRequirementInput = z.object({
-  id: z.string().uuid(),
 });
 
 export const updateCompetenceWorkerRoleInput = z.object({
@@ -1212,8 +1192,7 @@ export type GrantAuthorizationInput = z.infer<typeof grantAuthorizationInput>;
 export type SuspendAuthorizationInput = z.infer<typeof suspendAuthorizationInput>;
 export type RevokeAuthorizationInput = z.infer<typeof revokeAuthorizationInput>;
 export type ReactivateAuthorizationInput = z.infer<typeof reactivateAuthorizationInput>;
-export type UpsertCompetenceRequirementInput = z.infer<typeof upsertCompetenceRequirementInput>;
-export type DeleteCompetenceRequirementInput = z.infer<typeof deleteCompetenceRequirementInput>;
+export type SetCompetenceWorkerRequirementInput = z.infer<typeof setCompetenceWorkerRequirementInput>;
 export type UpdateCompetenceWorkerRoleInput = z.infer<typeof updateCompetenceWorkerRoleInput>;
 export type CreateWorkerInput = z.infer<typeof createWorkerInput>;
 export type UpsertOccupationalHealthWorkerInput = z.infer<typeof upsertOccupationalHealthWorkerInput>;

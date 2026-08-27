@@ -15,7 +15,6 @@ import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
-import { CompetenceRequirementManager } from "@/components/feature/competence-requirement-manager";
 import { CompetenceTypeManager } from "@/components/feature/competence-type-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
@@ -99,8 +98,6 @@ export default async function AdminPage({
     repeatabilityConfig,
     safetyDaysConfig,
     competenceTypes,
-    competenceRequirements,
-    competenceRequirementCoverage,
   ] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
@@ -173,12 +170,6 @@ export default async function AdminPage({
     canViewCompetenceCatalog
       ? prisma.competenceType.findMany({ where: { plantId: plantRow.id }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] })
       : Promise.resolve([]),
-    canViewCompetenceCatalog
-      ? CompetenceService.listRequirements(plantRow.id, uiLocale)
-      : Promise.resolve([]),
-    canViewCompetenceCatalog
-      ? CompetenceService.getRequirementCoverage(plantRow.id)
-      : Promise.resolve({ totalRoles: 0, rolesWithRequirement: 0, roleNamesWithoutRequirement: [], workersWithoutRoleName: 0, totalWorkers: 0 }),
   ]);
   const [localizedAreas, localizedWorkstations, localizedEquipments] = await Promise.all([
     localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
@@ -307,37 +298,25 @@ export default async function AdminPage({
       )}
 
       {canViewCompetenceCatalog ? (
-        <>
-          <CompetenceTypeManager
-            plant={plant}
-            labels={ui.competences}
-            initialTypes={competenceTypes.map((type) => ({
-              id: type.id,
-              code: type.code,
-              name: type.name,
-              category: type.category,
-              requiresTraining: type.requiresTraining,
-              requiresAssessment: type.requiresAssessment,
-              requiresAuthorization: type.requiresAuthorization,
-              validityMonths: type.validityMonths,
-              refresherMonths: type.refresherMonths,
-              legalReference: type.legalReference,
-              displayOrder: type.displayOrder,
-              isActive: type.isActive,
-            }))}
-            readOnly={!canManageCompetenceCatalog}
-          />
-          <CompetenceRequirementManager
-            plant={plant}
-            labels={ui.competences}
-            competenceTypes={competenceTypes.filter((type) => type.isActive).map((type) => ({ id: type.id, name: type.name }))}
-            areas={localizedAreas.map((item) => ({ id: item.id, name: item.name }))}
-            workstations={localizedWorkstations.map((item) => ({ id: item.id, name: item.name }))}
-            initialRequirements={competenceRequirements}
-            initialCoverage={competenceRequirementCoverage}
-            readOnly={!canManageCompetenceCatalog}
-          />
-        </>
+        <CompetenceTypeManager
+          plant={plant}
+          labels={ui.competences}
+          initialTypes={competenceTypes.map((type) => ({
+            id: type.id,
+            code: type.code,
+            name: type.name,
+            category: type.category,
+            requiresTraining: type.requiresTraining,
+            requiresAssessment: type.requiresAssessment,
+            requiresAuthorization: type.requiresAuthorization,
+            validityMonths: type.validityMonths,
+            refresherMonths: type.refresherMonths,
+            legalReference: type.legalReference,
+            displayOrder: type.displayOrder,
+            isActive: type.isActive,
+          }))}
+          readOnly={!canManageCompetenceCatalog}
+        />
       ) : null}
 
       {actorRole === RoleCode.N0_ADMIN ? (

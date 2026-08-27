@@ -19,7 +19,6 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:repair:encoding": "node scripts/repair-db-mojibake.mjs",
     "db:backfill-master-data-translations": "tsx scripts/backfill-master-data-translations.ts",
-    "db:backfill-competence-worker-requirements": "tsx scripts/backfill-competence-worker-requirements.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "admin:ensure-n0": "tsx scripts/ensure-n0-admin.ts",
