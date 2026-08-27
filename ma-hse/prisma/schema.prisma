@@ -26,6 +26,7 @@ model Plant {
   competenceAlertDeliveries          CompetenceAlertDelivery[]
   competenceAssessments              CompetenceAssessment[]
   competenceRequirements             CompetenceRequirement[]
+  competenceWorkerRequirements       CompetenceWorkerRequirement[]
   competenceTypes                    CompetenceType[]
   competenceWorkers                  CompetenceWorker[]
   employees                          EmployeeDirectory[]
@@ -119,6 +120,7 @@ model User {
   smatAttachment                            SmatAuditAttachment[]
   addedCompetenceWorkers                    CompetenceWorker[]                  @relation("CompetenceWorkerAddedBy")
   createdCompetenceRequirements             CompetenceRequirement[]             @relation("CompetenceRequirementCreatedBy")
+  setCompetenceWorkerRequirements           CompetenceWorkerRequirement[]       @relation("CompetenceWorkerRequirementSetBy")
   createdFireEquipment                      FireEquipment[]                     @relation("FireEquipmentCreatedBy")
   performedFireChecklistExecutions          FireChecklistExecution[]            @relation("FireChecklistExecutionPerformedBy")
   assignedFireEquipmentTags                 FireEquipmentTagAssignment[]        @relation("FireEquipmentTagAssignedBy")
@@ -442,6 +444,7 @@ model CompetenceType {
   sourceLanguage        String?
   plant                 Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
   requirements          CompetenceRequirement[]
+  workerRequirements    CompetenceWorkerRequirement[]
   states                WorkerCompetenceState[]
   trainingRecords       TrainingRecord[]
   assessments           CompetenceAssessment[]
@@ -507,6 +510,7 @@ model CompetenceWorker {
   area            Area?                     @relation(fields: [areaId], references: [id], onDelete: SetNull)
   addedBy         User?                     @relation("CompetenceWorkerAddedBy", fields: [addedById], references: [id])
   states          WorkerCompetenceState[]
+  requirements    CompetenceWorkerRequirement[]
   trainingRecords TrainingRecord[]
   assessments     CompetenceAssessment[]
   authorizations  WorkerAuthorization[]
@@ -538,6 +542,30 @@ model WorkerCompetenceState {
   @@unique([competenceWorkerId, competenceTypeId])
   @@index([plantId, state])
   @@index([plantId, validUntil])
+}
+
+/// §3.2 (revised): replaces CompetenceRequirement's role/area/workstation
+/// scope matching. One row per (worker, competenceType) — set explicitly by
+/// a supervisor who knows that worker's real duties, not inferred from a
+/// role-name string match that depended on data nobody kept filled in.
+model CompetenceWorkerRequirement {
+  id                 String   @id @default(uuid())
+  plantId            String
+  competenceWorkerId String
+  competenceTypeId   String
+  isRequired         Boolean  @default(true)
+  notes              String?
+  setById            String?
+  setAt              DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  plant            Plant            @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  competenceWorker CompetenceWorker @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  setBy            User?            @relation("CompetenceWorkerRequirementSetBy", fields: [setById], references: [id])
+
+  @@unique([competenceWorkerId, competenceTypeId])
+  @@index([plantId, isRequired])
 }
 
 enum CompetenceCellState {
