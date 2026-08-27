@@ -1498,7 +1498,7 @@ export const CompetenceService = {
     plantId: string,
     competenceWorkerId: string,
     competenceTypeId: string,
-    input: SetCompetenceWorkerRequirementInput,
+    input: Omit<SetCompetenceWorkerRequirementInput, "competenceTypeId">,
     actorUserId: string,
   ) {
     const { competenceWorker, competenceType } = await assertWorkerAndTypeInPlant(plantId, competenceWorkerId, competenceTypeId);

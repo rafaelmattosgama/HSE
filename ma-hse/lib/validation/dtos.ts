@@ -929,6 +929,7 @@ export const reactivateAuthorizationInput = z.object({
 });
 
 export const setCompetenceWorkerRequirementInput = z.object({
+  competenceTypeId: z.string().uuid(),
   isRequired: z.boolean(),
   notes: z.string().trim().max(500).nullable().optional(),
 });
