@@ -25,9 +25,7 @@ import { CompetenceAlertService } from "@/lib/services/competence-alert-service"
 import {
   COMPETENCE_TIMEZONE,
   computeCompetenceCellState,
-  resolveCompetenceRequirement,
   type ComputedCompetenceCellState,
-  type RequirementRuleForResolution,
 } from "@/lib/services/competence-state-service";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import type {
@@ -244,28 +242,6 @@ async function loadActiveCompetenceTypes(plantId: string) {
   });
 }
 
-async function loadActiveRequirements(plantId: string): Promise<RequirementRuleForResolution[]> {
-  return prisma.competenceRequirement.findMany({
-    where: { plantId, isActive: true },
-    select: {
-      competenceTypeId: true,
-      scopeType: true,
-      scopeRoleName: true,
-      scopeAreaId: true,
-      scopeWorkstationId: true,
-    },
-  });
-}
-
-async function loadWorkstationIdsByEmployeeNo(plantId: string, employeeNos: string[]): Promise<Map<string, string | null>> {
-  if (employeeNos.length === 0) return new Map();
-  const rows = await prisma.occupationalHealthWorker.findMany({
-    where: { plantId, employeeNo: { in: employeeNos } },
-    select: { employeeNo: true, workstationId: true },
-  });
-  return new Map(rows.map((row) => [row.employeeNo, row.workstationId]));
-}
-
 async function assertWorkerAndTypeInPlant(plantId: string, competenceWorkerId: string, competenceTypeId: string) {
   const [competenceWorker, competenceType] = await Promise.all([
     prisma.competenceWorker.findFirst({ where: { id: competenceWorkerId, plantId } }),
@@ -302,7 +278,7 @@ async function recomputeAndSaveState(
     medicalFitnessBlocksAuthorization: boolean;
   },
 ) {
-  const [competenceType, competenceWorker, authorizations, trainingRecords, assessments, requirements] = await Promise.all([
+  const [competenceType, competenceWorker, authorizations, trainingRecords, assessments, workerRequirement] = await Promise.all([
     tx.competenceType.findUniqueOrThrow({ where: { id: input.competenceTypeId } }),
     tx.competenceWorker.findUniqueOrThrow({
       where: { id: input.competenceWorkerId },
@@ -328,31 +304,29 @@ async function recomputeAndSaveState(
       where: { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
       select: { id: true, result: true, assessedAt: true, trainingRecordId: true },
     }),
-    // Re-resolved on every recompute, never carried forward from the previous
-    // WorkerCompetenceState row — a rule can change (or the worker's role can
-    // change) between two recomputes, and a stale isRequired would defeat the
-    // whole point of the requirement matrix (§3.2, phase-3 brief).
-    loadActiveRequirements(input.plantId),
+    // §3.2 (revised): direct per-(worker,type) lookup, replacing the old
+    // role/area/workstation rule resolution — a rule set no longer exists,
+    // only this one row (or its absence, meaning not required).
+    tx.competenceWorkerRequirement.findUnique({
+      where: {
+        competenceWorkerId_competenceTypeId: {
+          competenceWorkerId: input.competenceWorkerId,
+          competenceTypeId: input.competenceTypeId,
+        },
+      },
+      include: { setBy: { select: { name: true } } },
+    }),
   ]);
 
-  // Read unconditionally: workstationId feeds WORKSTATION-scope resolution
-  // regardless of the medical-fitness parameter. validUntil is still the only
-  // occupational-health field ever read for medical fitness (never examDate
-  // or status, §2.1).
+  // Read unconditionally: validUntil is still the only occupational-health
+  // field ever read for medical fitness (never examDate or status, §2.1).
   const occupationalHealthWorker = await tx.occupationalHealthWorker.findUnique({
     where: { plantId_employeeNo: { plantId: input.plantId, employeeNo: competenceWorker.employee.employeeNo } },
-    select: { validUntil: true, workstationId: true },
+    select: { validUntil: true },
   });
 
-  const { isRequired, requirementSource } = resolveCompetenceRequirement(
-    {
-      areaId: competenceWorker.areaId,
-      roleName: competenceWorker.roleName,
-      workstationId: occupationalHealthWorker?.workstationId ?? null,
-    },
-    input.competenceTypeId,
-    requirements,
-  );
+  const isRequired = workerRequirement?.isRequired ?? false;
+  const requirementSource = workerRequirement?.setBy?.name ?? null;
 
   const medicalFitnessExpired = Boolean(
     input.medicalFitnessBlocksAuthorization
@@ -510,16 +484,18 @@ export const CompetenceService = {
   },
 
   /**
-   * Enrolls one or more employees into the competence matrix and computes
-   * their initial WorkerCompetenceState rows. Phase 1 has no training,
-   * assessment or authorization records yet, so every state is either
-   * MISSING (the competence is required) or NOT_APPLICABLE.
+   * Enrolls one or more employees into the competence matrix. §3.2 (revised):
+   * nothing is required at enrollment time — CompetenceWorkerRequirement
+   * rows are set explicitly afterward, per worker, from the profile screen
+   * (Task 8). Every cell starts NOT_APPLICABLE, computed through the same
+   * recomputeAndSaveState path a later requirement-toggle uses, so enrollment
+   * never produces a state a normal recompute couldn't also produce.
    */
   async enroll(plantId: string, input: EnrollCompetenceWorkersInput, actorUserId: string | null) {
     const employeeIds = input.workers.map((worker) => worker.employeeDirectoryId);
     const areaIds = Array.from(new Set(input.workers.map((worker) => worker.areaId)));
 
-    const [employees, areas, competenceTypes, requirements] = await Promise.all([
+    const [employees, areas, competenceTypes, expiringThresholdDays, medicalFitnessBlocksAuthorization] = await Promise.all([
       prisma.employeeDirectory.findMany({
         where: { id: { in: employeeIds }, plantId },
         select: { id: true, employeeNo: true, name: true, dept: true },
@@ -529,15 +505,12 @@ export const CompetenceService = {
         select: { id: true },
       }),
       loadActiveCompetenceTypes(plantId),
-      loadActiveRequirements(plantId),
+      getCompetenceExpiringThresholdDays(plantId),
+      getMedicalFitnessBlocksAuthorization(plantId),
     ]);
 
     const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
     const validAreaIds = new Set(areas.map((area) => area.id));
-    const workstationIdByEmployeeNo = await loadWorkstationIdsByEmployeeNo(
-      plantId,
-      employees.map((employee) => employee.employeeNo),
-    );
 
     for (const worker of input.workers) {
       if (!employeeById.has(worker.employeeDirectoryId)) {
@@ -548,12 +521,12 @@ export const CompetenceService = {
       }
     }
 
+    const now = new Date();
     const enrolled = await prisma.$transaction(async (tx) => {
       const results = [];
 
       for (const workerInput of input.workers) {
         const employee = employeeById.get(workerInput.employeeDirectoryId)!;
-        const roleName = null as string | null;
 
         const competenceWorker = await tx.competenceWorker.upsert({
           where: {
@@ -570,43 +543,19 @@ export const CompetenceService = {
             plantId,
             employeeDirectoryId: workerInput.employeeDirectoryId,
             areaId: workerInput.areaId,
-            roleName,
+            roleName: null,
             addedById: actorUserId,
           },
         });
 
         for (const competenceType of competenceTypes) {
-          const { isRequired, requirementSource } = resolveCompetenceRequirement(
-            {
-              areaId: competenceWorker.areaId,
-              roleName: competenceWorker.roleName,
-              workstationId: workstationIdByEmployeeNo.get(employee.employeeNo) ?? null,
-            },
-            competenceType.id,
-            requirements,
-          );
-
-          await tx.workerCompetenceState.upsert({
-            where: {
-              competenceWorkerId_competenceTypeId: {
-                competenceWorkerId: competenceWorker.id,
-                competenceTypeId: competenceType.id,
-              },
-            },
-            update: {
-              isRequired,
-              requirementSource,
-              state: isRequired ? CompetenceCellState.MISSING : CompetenceCellState.NOT_APPLICABLE,
-              computedAt: new Date(),
-            },
-            create: {
-              plantId,
-              competenceWorkerId: competenceWorker.id,
-              competenceTypeId: competenceType.id,
-              isRequired,
-              requirementSource,
-              state: isRequired ? CompetenceCellState.MISSING : CompetenceCellState.NOT_APPLICABLE,
-            },
+          await recomputeAndSaveState(tx, {
+            plantId,
+            competenceWorkerId: competenceWorker.id,
+            competenceTypeId: competenceType.id,
+            now,
+            expiringThresholdDays,
+            medicalFitnessBlocksAuthorization,
           });
         }
 

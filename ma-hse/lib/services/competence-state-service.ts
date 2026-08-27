@@ -2,7 +2,6 @@ import {
   AuthorizationStatus,
   CompetenceAssessmentResult,
   CompetenceCellState,
-  CompetenceRequirementScope,
   TrainingResult,
 } from "@prisma/client";
 import { differenceInCalendarDays } from "date-fns";
@@ -80,83 +79,6 @@ function latestBy<T>(items: T[], getDate: (item: T) => Date): T | null {
     if (!latest || getDate(item).getTime() > getDate(latest).getTime()) return item;
     return latest;
   }, null);
-}
-
-function normalizeText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
-    .toLowerCase()
-    .trim();
-}
-
-export type RequirementRuleForResolution = {
-  competenceTypeId: string;
-  scopeType: CompetenceRequirementScope;
-  scopeRoleName: string | null;
-  scopeAreaId: string | null;
-  scopeWorkstationId: string | null;
-};
-
-export type WorkerForRequirementResolution = {
-  areaId: string | null;
-  roleName: string | null;
-  workstationId: string | null;
-};
-
-export type ResolvedCompetenceRequirement = {
-  isRequired: boolean;
-  requirementSource: string | null;
-};
-
-/**
- * §3.2: a competence is required if at least one active rule matches the
- * worker's role, area, workstation, or the whole plant. Rules only add, they
- * never subtract — there are no negative exceptions, so the first matching
- * rule is enough; which one is found first only affects requirementSource,
- * never the isRequired result.
- */
-export function resolveCompetenceRequirement(
-  worker: WorkerForRequirementResolution,
-  competenceTypeId: string,
-  rules: RequirementRuleForResolution[],
-): ResolvedCompetenceRequirement {
-  for (const rule of rules) {
-    if (rule.competenceTypeId !== competenceTypeId) continue;
-
-    if (rule.scopeType === CompetenceRequirementScope.ALL_WORKERS) {
-      return { isRequired: true, requirementSource: "ALL_WORKERS" };
-    }
-
-    if (
-      rule.scopeType === CompetenceRequirementScope.ROLE
-      && rule.scopeRoleName
-      && worker.roleName
-      && normalizeText(rule.scopeRoleName) === normalizeText(worker.roleName)
-    ) {
-      return { isRequired: true, requirementSource: `ROLE:${rule.scopeRoleName}` };
-    }
-
-    if (
-      rule.scopeType === CompetenceRequirementScope.AREA
-      && rule.scopeAreaId
-      && worker.areaId
-      && rule.scopeAreaId === worker.areaId
-    ) {
-      return { isRequired: true, requirementSource: `AREA:${rule.scopeAreaId}` };
-    }
-
-    if (
-      rule.scopeType === CompetenceRequirementScope.WORKSTATION
-      && rule.scopeWorkstationId
-      && worker.workstationId
-      && rule.scopeWorkstationId === worker.workstationId
-    ) {
-      return { isRequired: true, requirementSource: `WORKSTATION:${rule.scopeWorkstationId}` };
-    }
-  }
-
-  return { isRequired: false, requirementSource: null };
 }
 
 export function computeCompetenceCellState(input: ComputeCompetenceCellStateInput): ComputedCompetenceCellState {

@@ -41,6 +41,9 @@ const transactionMock = vi.hoisted(() => ({
   occupationalHealthWorker: {
     findUnique: vi.fn(),
   },
+  competenceWorkerRequirement: {
+    findUnique: vi.fn(),
+  },
 }));
 
 const prismaMock = vi.hoisted(() => ({
@@ -141,18 +144,13 @@ function stubRecomputeDependencies() {
   transactionMock.trainingRecord.findMany.mockResolvedValue([]);
   transactionMock.competenceAssessment.findMany.mockResolvedValue([]);
   transactionMock.workerCompetenceState.upsert.mockResolvedValue({});
-  // recomputeAndSaveState re-resolves the requirement on every call (phase-3
-  // fix — see competence-service.ts); an ALL_WORKERS rule keeps these tests'
-  // existing isRequired/requirementSource expectations unchanged.
-  prismaMock.prisma.competenceRequirement.findMany.mockResolvedValue([
-    {
-      competenceTypeId: "type-forklift",
-      scopeType: CompetenceRequirementScope.ALL_WORKERS,
-      scopeRoleName: null,
-      scopeAreaId: null,
-      scopeWorkstationId: null,
-    },
-  ]);
+  // §3.2 (revised): isRequired now comes from a direct per-(worker,type) row,
+  // not a resolved rule set. Individual tests override this per-call when
+  // they need a specific pair to be required or not.
+  transactionMock.competenceWorkerRequirement.findUnique.mockResolvedValue({
+    isRequired: true,
+    setBy: { name: "N3 Safety" },
+  });
   prismaMock.prisma.occupationalHealthWorker.findUnique.mockResolvedValue(null);
 }
 
@@ -165,23 +163,13 @@ describe("CompetenceService.enroll", () => {
     vi.clearAllMocks();
   });
 
-  it("marks a competence MISSING when an ALL_WORKERS requirement applies, and NOT_APPLICABLE otherwise", async () => {
+  it("enrolls a worker with every competence type NOT_APPLICABLE — no CompetenceWorkerRequirement row exists yet at enrollment time", async () => {
     prismaMock.prisma.employeeDirectory.findMany.mockResolvedValue([
       { id: "employee-1", employeeNo: "001", name: "Ana Silva", dept: "Logistics" },
     ]);
     prismaMock.prisma.area.findMany.mockResolvedValue([{ id: "area-1" }]);
     prismaMock.prisma.competenceType.findMany.mockResolvedValue([
       { id: "type-forklift", code: "FORKLIFT", isActive: true, displayOrder: 0 },
-      { id: "type-mewp", code: "MEWP", isActive: true, displayOrder: 1 },
-    ]);
-    prismaMock.prisma.competenceRequirement.findMany.mockResolvedValue([
-      {
-        competenceTypeId: "type-forklift",
-        scopeType: CompetenceRequirementScope.ALL_WORKERS,
-        scopeRoleName: null,
-        scopeAreaId: null,
-        scopeWorkstationId: null,
-      },
     ]);
     transactionMock.competenceWorker.upsert.mockResolvedValue({
       id: "worker-1",
@@ -190,6 +178,19 @@ describe("CompetenceService.enroll", () => {
       areaId: "area-1",
       roleName: null,
     });
+    transactionMock.competenceType.findUniqueOrThrow.mockResolvedValue({ id: "type-forklift", requiresAssessment: true });
+    transactionMock.competenceWorker.findUniqueOrThrow.mockResolvedValue({
+      id: "worker-1",
+      areaId: "area-1",
+      roleName: null,
+      employee: { employeeNo: "001" },
+    });
+    transactionMock.workerAuthorization.findMany.mockResolvedValue([]);
+    transactionMock.trainingRecord.findMany.mockResolvedValue([]);
+    transactionMock.competenceAssessment.findMany.mockResolvedValue([]);
+    transactionMock.competenceWorkerRequirement.findUnique.mockResolvedValue(null);
+    transactionMock.occupationalHealthWorker.findUnique.mockResolvedValue(null);
+    transactionMock.workerCompetenceState.upsert.mockResolvedValue({});
 
     const result = await CompetenceService.enroll(
       "plant-1",
@@ -198,111 +199,10 @@ describe("CompetenceService.enroll", () => {
     );
 
     expect(result).toHaveLength(1);
-    expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledTimes(2);
-
-    const forkliftCall = transactionMock.workerCompetenceState.upsert.mock.calls.find(
-      (call) => call[0].create.competenceTypeId === "type-forklift",
-    );
-    expect(forkliftCall?.[0].create).toMatchObject({
-      isRequired: true,
-      requirementSource: "ALL_WORKERS",
-      state: CompetenceCellState.MISSING,
-    });
-
-    const mewpCall = transactionMock.workerCompetenceState.upsert.mock.calls.find(
-      (call) => call[0].create.competenceTypeId === "type-mewp",
-    );
-    expect(mewpCall?.[0].create).toMatchObject({
-      isRequired: false,
-      requirementSource: null,
-      state: CompetenceCellState.NOT_APPLICABLE,
-    });
-
-    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ entityType: "CompetenceWorker", action: "ENROLLED", plantId: "plant-1" }),
-      transactionMock,
-    );
-  });
-
-  it("resolves an AREA-scoped requirement only for workers assigned to that area", async () => {
-    prismaMock.prisma.employeeDirectory.findMany.mockResolvedValue([
-      { id: "employee-1", employeeNo: "001", name: "Ana Silva", dept: null },
-    ]);
-    prismaMock.prisma.area.findMany.mockResolvedValue([{ id: "area-logistics" }]);
-    prismaMock.prisma.competenceType.findMany.mockResolvedValue([
-      { id: "type-forklift", code: "FORKLIFT", isActive: true, displayOrder: 0 },
-    ]);
-    prismaMock.prisma.competenceRequirement.findMany.mockResolvedValue([
-      {
-        competenceTypeId: "type-forklift",
-        scopeType: CompetenceRequirementScope.AREA,
-        scopeRoleName: null,
-        scopeAreaId: "area-logistics",
-        scopeWorkstationId: null,
-      },
-    ]);
-    transactionMock.competenceWorker.upsert.mockResolvedValue({
-      id: "worker-1",
-      plantId: "plant-1",
-      employeeDirectoryId: "employee-1",
-      areaId: "area-logistics",
-      roleName: null,
-    });
-
-    await CompetenceService.enroll(
-      "plant-1",
-      { workers: [{ employeeDirectoryId: "employee-1", areaId: "area-logistics" }] },
-      "user-1",
-    );
-
+    expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledTimes(1);
     expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ isRequired: true, requirementSource: "AREA:area-logistics", state: CompetenceCellState.MISSING }),
-      }),
-    );
-  });
-
-  it("resolves a WORKSTATION-scoped requirement from the employee's linked occupational-health record, not from CompetenceWorker itself", async () => {
-    prismaMock.prisma.employeeDirectory.findMany.mockResolvedValue([
-      { id: "employee-1", employeeNo: "001", name: "Ana Silva", dept: null },
-    ]);
-    prismaMock.prisma.area.findMany.mockResolvedValue([{ id: "area-1" }]);
-    prismaMock.prisma.competenceType.findMany.mockResolvedValue([
-      { id: "type-forklift", code: "FORKLIFT", isActive: true, displayOrder: 0 },
-    ]);
-    prismaMock.prisma.competenceRequirement.findMany.mockResolvedValue([
-      {
-        competenceTypeId: "type-forklift",
-        scopeType: CompetenceRequirementScope.WORKSTATION,
-        scopeRoleName: null,
-        scopeAreaId: null,
-        scopeWorkstationId: "workstation-dock-3",
-      },
-    ]);
-    prismaMock.prisma.occupationalHealthWorker.findMany.mockResolvedValue([
-      { employeeNo: "001", workstationId: "workstation-dock-3" },
-    ]);
-    transactionMock.competenceWorker.upsert.mockResolvedValue({
-      id: "worker-1",
-      plantId: "plant-1",
-      employeeDirectoryId: "employee-1",
-      areaId: "area-1",
-      roleName: null,
-    });
-
-    await CompetenceService.enroll(
-      "plant-1",
-      { workers: [{ employeeDirectoryId: "employee-1", areaId: "area-1" }] },
-      "user-1",
-    );
-
-    expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          isRequired: true,
-          requirementSource: "WORKSTATION:workstation-dock-3",
-          state: CompetenceCellState.MISSING,
-        }),
+        create: expect.objectContaining({ isRequired: false, state: CompetenceCellState.NOT_APPLICABLE }),
       }),
     );
   });
@@ -311,12 +211,10 @@ describe("CompetenceService.enroll", () => {
     prismaMock.prisma.employeeDirectory.findMany.mockResolvedValue([]);
     prismaMock.prisma.area.findMany.mockResolvedValue([{ id: "area-1" }]);
     prismaMock.prisma.competenceType.findMany.mockResolvedValue([]);
-    prismaMock.prisma.competenceRequirement.findMany.mockResolvedValue([]);
 
     await expect(
       CompetenceService.enroll("plant-1", { workers: [{ employeeDirectoryId: "employee-x", areaId: "area-1" }] }, "user-1"),
     ).rejects.toThrow(/Employee not found/);
-
     expect(prismaMock.prisma.$transaction).not.toHaveBeenCalled();
   });
 });
@@ -1001,6 +899,16 @@ describe("CompetenceService.updateWorkerRole — §3.2 note: changing roleName r
       { id: "type-mewp", isActive: true, displayOrder: 1 },
     ]);
     transactionMock.competenceWorker.update.mockResolvedValue({ id: "worker-1", roleName: "Operador Logística" });
+    // Override the default uniform stub: only type-forklift has a
+    // CompetenceWorkerRequirement row (isRequired: true) — type-mewp has
+    // none, so it resolves to not-required.
+    transactionMock.competenceWorkerRequirement.findUnique.mockImplementation(({ where }) =>
+      Promise.resolve(
+        where.competenceWorkerId_competenceTypeId.competenceTypeId === "type-forklift"
+          ? { isRequired: true, setBy: { name: "N3 Safety" } }
+          : null,
+      ),
+    );
 
     await CompetenceService.updateWorkerRole("plant-1", "worker-1", { roleName: "Operador Logística" }, "user-1");
 
@@ -1010,8 +918,9 @@ describe("CompetenceService.updateWorkerRole — §3.2 note: changing roleName r
     });
     expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledTimes(2);
     expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "ROLE_UPDATED" }), transactionMock);
-    // type-forklift is ALL_WORKERS-required (per stubRecomputeDependencies) and has no training/authorization
-    // yet, so it computes to MISSING — that is exactly the §7.2 ROLE_WITHOUT_COMPETENCE trigger.
+    // type-forklift has an active CompetenceWorkerRequirement row and no
+    // training/authorization yet, so it computes to MISSING — that is
+    // exactly the §7.2 ROLE_WITHOUT_COMPETENCE trigger.
     expect(competenceAlertServiceMock.CompetenceAlertService.dispatchRoleWithoutCompetence).toHaveBeenCalledWith(
       "plant-1",
       [{ competenceWorkerId: "worker-1", competenceTypeId: "type-forklift" }],
