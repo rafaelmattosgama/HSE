@@ -78,13 +78,16 @@ const prismaMock = vi.hoisted(() => ({
     competenceAssessment: {
       findUnique: vi.fn(),
       count: vi.fn(),
+      findMany: vi.fn(),
     },
     workerAuthorization: {
       findFirst: vi.fn(),
       count: vi.fn(),
+      findMany: vi.fn(),
     },
     trainingRecord: {
       count: vi.fn(),
+      findMany: vi.fn(),
     },
     occupationalHealthWorker: {
       findUnique: vi.fn(),
@@ -95,6 +98,13 @@ const prismaMock = vi.hoisted(() => ({
     },
     workerCompetenceState: {
       groupBy: vi.fn(),
+      findMany: vi.fn(),
+    },
+    competenceActionLink: {
+      findMany: vi.fn(),
+    },
+    competenceWorkerRequirement: {
+      findMany: vi.fn(),
     },
   },
 }));
@@ -834,6 +844,41 @@ describe("CompetenceService — N5_OPERATOR only sees their own record, enforced
     });
 
     expect(profile).toBeNull();
+  });
+});
+
+describe("CompetenceService.getWorkerProfile — requirement metadata (§2.4)", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("includes requirementSetAt alongside the existing requirementSource (who) for each competence row", async () => {
+    prismaMock.prisma.competenceWorker.findFirst.mockResolvedValue({
+      id: "worker-1",
+      plantId: "plant-1",
+      employeeDirectoryId: "employee-1",
+      areaId: null,
+      roleName: null,
+      employee: { employeeNo: "001", name: "Ana Silva", dept: null },
+      area: null,
+    });
+    prismaMock.prisma.competenceType.findMany.mockResolvedValue([
+      { id: "type-forklift", code: "FORKLIFT", name: "Forklift", category: "EQUIPMENT_OPERATION", isActive: true, displayOrder: 0 },
+    ]);
+    prismaMock.prisma.workerCompetenceState.findMany.mockResolvedValue([
+      { competenceTypeId: "type-forklift", state: "MISSING", isRequired: true, requirementSource: "N3 Safety", validUntil: null, daysToExpiry: null, blockedReason: null, currentAuthorizationId: null },
+    ]);
+    prismaMock.prisma.occupationalHealthWorker.findUnique.mockResolvedValue(null);
+    prismaMock.prisma.trainingRecord.findMany.mockResolvedValue([]);
+    prismaMock.prisma.competenceAssessment.findMany.mockResolvedValue([]);
+    prismaMock.prisma.workerAuthorization.findMany.mockResolvedValue([]);
+    prismaMock.prisma.workstation.findMany.mockResolvedValue([]);
+    prismaMock.prisma.competenceActionLink.findMany.mockResolvedValue([]);
+    prismaMock.prisma.competenceWorkerRequirement.findMany.mockResolvedValue([
+      { competenceTypeId: "type-forklift", setAt: new Date("2026-08-20T10:00:00.000Z") },
+    ]);
+
+    const profile = await CompetenceService.getWorkerProfile("plant-1", "worker-1", "pt", { role: RoleCode.N3_SAFETY, userId: "user-1" });
+
+    expect(profile?.competences[0].requirementSetAt).toEqual(new Date("2026-08-20T10:00:00.000Z"));
   });
 });
 

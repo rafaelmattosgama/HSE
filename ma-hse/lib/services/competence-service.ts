@@ -154,6 +154,7 @@ export type CompetenceWorkerCompetenceRow = {
   state: CompetenceCellState;
   isRequired: boolean;
   requirementSource: string | null;
+  requirementSetAt: Date | null;
   validUntil: Date | null;
   daysToExpiry: number | null;
   blockedReason: string | null;
@@ -1108,7 +1109,7 @@ export const CompetenceService = {
       }
     }
 
-    const [competenceTypes, states, occupationalHealthWorker, trainingRecords, assessments, authorizations, workstations, actionLinkRows] =
+    const [competenceTypes, states, occupationalHealthWorker, trainingRecords, assessments, authorizations, workstations, actionLinkRows, workerRequirements] =
       await Promise.all([
         loadActiveCompetenceTypes(plantId),
         prisma.workerCompetenceState.findMany({ where: { competenceWorkerId } }),
@@ -1128,6 +1129,7 @@ export const CompetenceService = {
           include: { action: true },
           orderBy: { createdAt: "desc" },
         }),
+        prisma.competenceWorkerRequirement.findMany({ where: { competenceWorkerId }, select: { competenceTypeId: true, setAt: true } }),
       ]);
 
     const actionLinks: CompetenceLinkedActionView[] = actionLinkRows.map((link) => ({
@@ -1150,6 +1152,7 @@ export const CompetenceService = {
       : null;
 
     const stateByTypeId = new Map(states.map((state) => [state.competenceTypeId, state]));
+    const requirementSetAtByTypeId = new Map(workerRequirements.map((row) => [row.competenceTypeId, row.setAt]));
     const competences: CompetenceWorkerCompetenceRow[] = competenceTypes.map((type) => {
       const state = stateByTypeId.get(type.id);
       return {
@@ -1160,6 +1163,7 @@ export const CompetenceService = {
         state: state?.state ?? CompetenceCellState.NOT_APPLICABLE,
         isRequired: state?.isRequired ?? false,
         requirementSource: state?.requirementSource ?? null,
+        requirementSetAt: requirementSetAtByTypeId.get(type.id) ?? null,
         validUntil: state?.validUntil ?? null,
         daysToExpiry: state?.daysToExpiry ?? null,
         blockedReason: state?.blockedReason ?? null,
