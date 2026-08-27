@@ -550,6 +550,7 @@ enum CompetenceCellState {
 model TrainingRecord {
   id                   String         @id @default(uuid())
   plantId              String
+  entryGroupId         String?
   competenceWorkerId   String
   competenceTypeId     String
   provider             String?
@@ -571,6 +572,7 @@ model TrainingRecord {
   authorizations   WorkerAuthorization[]
 
   @@index([competenceWorkerId, competenceTypeId, completedAt])
+  @@index([entryGroupId])
 }
 
 enum TrainingResult {
@@ -595,6 +597,7 @@ model TrainingRecordAttachment {
 model CompetenceAssessment {
   id                 String                     @id @default(uuid())
   plantId            String
+  entryGroupId       String?
   competenceWorkerId String
   competenceTypeId   String
   trainingRecordId   String?
@@ -617,6 +620,7 @@ model CompetenceAssessment {
   authorizations   WorkerAuthorization[]
 
   @@index([competenceWorkerId, competenceTypeId, assessedAt])
+  @@index([entryGroupId])
 }
 
 enum CompetenceAssessmentMethod {
@@ -650,6 +654,7 @@ model CompetenceAssessmentAttachment {
 model WorkerAuthorization {
   id                  String              @id @default(uuid())
   plantId             String
+  entryGroupId        String?
   competenceWorkerId  String
   competenceTypeId    String
   trainingRecordId    String?
@@ -691,6 +696,7 @@ model WorkerAuthorization {
   @@unique([plantId, sequenceNumber])
   @@index([plantId, status, validUntil])
   @@index([competenceWorkerId, competenceTypeId, status])
+  @@index([entryGroupId])
 }
 
 enum AuthorizationStatus {
