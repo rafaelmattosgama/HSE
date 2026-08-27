@@ -163,10 +163,16 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
   const zonedToday = toZonedTime(input.now, COMPETENCE_TIMEZONE);
   const base = { isRequired: input.isRequired, requirementSource: input.requirementSource };
 
-  // Step 1 — deliberate exception: a competence no longer required but with
-  // an active authorization still shows its real state, not NOT_APPLICABLE.
-  const hasActiveAuthorization = input.authorizations.some((a) => a.status === AuthorizationStatus.ACTIVE);
-  if (!input.isRequired && !hasActiveAuthorization) {
+  // Step 1 — deliberate exception: NOT_APPLICABLE is reserved for a
+  // competence that is neither required nor has ANY record at all. A worker
+  // with a PASSED training and a COMPETENT assessment, but no requirement and
+  // no authorization, must not read "Not required" — that hides completed
+  // work, which is worse than showing the real (pending) state.
+  const hasAnyRecord =
+    input.authorizations.length > 0
+    || input.trainingRecords.length > 0
+    || input.assessments.length > 0;
+  if (!input.isRequired && !hasAnyRecord) {
     return {
       ...base,
       state: CompetenceCellState.NOT_APPLICABLE,
