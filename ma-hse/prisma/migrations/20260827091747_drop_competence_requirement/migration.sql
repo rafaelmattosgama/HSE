@@ -17,7 +17,7 @@ INSERT INTO "CompetenceWorkerRequirement" (
   "setAt",
   "updatedAt"
 )
-SELECT DISTINCT ON ("competenceWorkerId", "competenceTypeId")
+SELECT DISTINCT ON (cw."id", cr."competenceTypeId")
   md5(random()::text || clock_timestamp()::text || cw."id" || cr."id"),
   cw."plantId",
   cw."id",
