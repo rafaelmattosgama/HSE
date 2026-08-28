@@ -154,8 +154,6 @@ Senha padrao: valor de `SEED_DEFAULT_PASSWORD` (default `ChangeMe123!`).
 - `supervisor.pl02@ma-hse.local` (N4, PL02)
 - `operator.pl01@ma-hse.local` (N5, PL01)
 - `operator.pl02@ma-hse.local` (N5, PL02)
-- `hr.pl01@ma-hse.local` (N6_HR, PL01)
-- `hr.pl02@ma-hse.local` (N6_HR, PL02)
 
 ### Provisionamento de senha para novos usuarios
 
