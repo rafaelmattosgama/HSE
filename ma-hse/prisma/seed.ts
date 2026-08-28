@@ -103,7 +103,7 @@ const roles: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
-  RoleCode.MEDICO,
+  RoleCode.N6_HR,
 ];
 
 const PL1_WORKSTATIONS = [
@@ -1701,15 +1701,15 @@ async function main() {
     },
     {
       email: "doctor.pl01@ma-hse.local",
-      name: "Doctor PL01 (MEDICO)",
+      name: "HR PL01 (N6_HR)",
       language: "it",
-      roleBindings: [{ plantCode: "pl01", role: RoleCode.MEDICO }],
+      roleBindings: [{ plantCode: "pl01", role: RoleCode.N6_HR }],
     },
     {
       email: "doctor.pl02@ma-hse.local",
-      name: "Doctor PL02 (MEDICO)",
+      name: "HR PL02 (N6_HR)",
       language: "pt",
-      roleBindings: [{ plantCode: "pl02", role: RoleCode.MEDICO }],
+      roleBindings: [{ plantCode: "pl02", role: RoleCode.N6_HR }],
     },
   ];
 
@@ -2068,7 +2068,7 @@ async function main() {
   console.log("- N3: safety.pl01@ma-hse.local, safety.pl02@ma-hse.local");
   console.log("- N4: supervisor.pl01@ma-hse.local, supervisor.pl02@ma-hse.local");
   console.log("- N5: operator.pl01@ma-hse.local, operator.pl02@ma-hse.local");
-  console.log("- MEDICO: doctor.pl01@ma-hse.local, doctor.pl02@ma-hse.local");
+  console.log("- N6_HR: doctor.pl01@ma-hse.local, doctor.pl02@ma-hse.local");
   console.log("- N6: token-only flow (no email login). Use fixed QR token routes below.");
   console.log("Sample QR tokens:");
   console.log("- pl01 REPORT token: pl01-report-seed-token");

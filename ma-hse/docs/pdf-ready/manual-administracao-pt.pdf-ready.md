@@ -91,7 +91,7 @@ Pode:
 - reabrir comunicacoes e acoes;
 - administrar dados da planta;
 - gerir SLA, alertas, QR tokens e destinatarios quando autorizado;
-- criar utilizadores N4/N5/MEDICO na propria planta;
+- criar utilizadores N4/N5/N6_HR na propria planta;
 - criar S-EWO sem aprovacao final N2.
 
 ### N4_SUPERVISOR
@@ -134,11 +134,9 @@ As submissoes publicas sao controladas por tokens de planta e registadas como or
 - 5S Improvement
 - Improvement Suggestion
 
-### MEDICO
+### N6_HR
 
-Perfil medico.
-
-Pode consultar comunicacoes, incluindo campos clinicos. Nao cria comunicacoes/acoes e nao acede a mutacoes administrativas ou S-EWO.
+Perfil de Recursos Humanos da planta. Tem acesso total a Competências, igual ao N3_SAFETY; acesso total a Comunicações e Medicina do Trabalho; e consulta de Ações e S-EWO.
 
 ## 3. Arranque Local
 
@@ -314,8 +312,9 @@ Administradores autorizados podem:
 
 Regras principais:
 
-- N1 cria N1/N2/N3.
-- N3 cria N4/N5/MEDICO na propria planta.
+- N1 cria N1/N2/N3/N6_HR.
+- N2 cria e gere apenas N6_HR na sua planta.
+- N3 cria N4/N5/N6_HR na propria planta.
 - N0 tem administracao global.
 
 ## 6. Gestao de Comunicacoes

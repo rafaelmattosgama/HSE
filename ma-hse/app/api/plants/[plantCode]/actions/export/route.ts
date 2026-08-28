@@ -15,6 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     RoleCode.N3_SAFETY,
     RoleCode.N4_SUPERVISOR,
     RoleCode.N5_OPERATOR,
+    RoleCode.N6_HR,
   ]);
   if ("error" in auth) return auth.error;
 

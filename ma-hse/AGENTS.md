@@ -41,7 +41,7 @@ tests/e2e/                        Playwright smoke test
 4. **N3_SAFETY** — Validates communications, manages plant admin
 5. **N4_SUPERVISOR** — Creates/closes actions with evidence
 6. **N5_OPERATOR** — Creates communications/actions
-7. **MEDICO** — Read-only clinical data
+7. **N6_HR** — Plant HR role: full Competences access (same as N3), full Communications and Occupational Health access, and read-only Actions/S-EWO
 
 Public QR/link submissions are not user roles; they are represented by `PlantAccessTokenType` and `CommunicationSource`.
 
@@ -49,7 +49,7 @@ Public QR/link submissions are not user roles; they are represented by `PlantAcc
 - Session type: `{ user: { id, language, mustChangePassword, plantRoles: [{ plantId, plantCode, role, canSeeClinical }] } }`
 - API guard: `const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, ...]); if ("error" in auth) return auth.error;`
 - N0 bypass: `hasPlantAccess()` always returns true for N0; N1 bypasses plant scope for non-N0-only routes
-- Scope rule: N0/N1 must have `plantId: null`; N2/N3/N4/N5/MEDICO must have a plant. Multi-plant N3 is represented by one `UserPlantRole` per plant.
+- Scope rule: N0/N1 must have `plantId: null`; N2/N3/N4/N5/N6_HR must have a plant. Multi-plant N3 is represented by one `UserPlantRole` per plant.
 - Default admin created on login attempt in non-prod (`ensure-default-admin.ts`)
 - Login redirect: N0 → `/app/settings`, N1 → `/app/corporate`, others → `/app/{primaryPlant}/dashboards`
 

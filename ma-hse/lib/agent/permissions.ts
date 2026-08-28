@@ -49,7 +49,7 @@ export const AGENT_COMMUNICATION_READ_ROLES = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
-  RoleCode.MEDICO,
+  RoleCode.N6_HR,
 ] as const;
 
 export const AGENT_COMMUNICATION_WRITE_ROLES = [
@@ -93,7 +93,7 @@ export const AGENT_KPI_READ_ROLES = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
-  RoleCode.MEDICO,
+  RoleCode.N6_HR,
 ] as const;
 
 export type AgentToolResult<T> =

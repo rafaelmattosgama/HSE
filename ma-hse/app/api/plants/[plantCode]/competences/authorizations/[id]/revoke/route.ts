@@ -9,7 +9,7 @@ import { revokeAuthorizationInput } from "@/lib/validation/dtos";
 // §2.3: revocation is definitive and stays with whoever can grant —
 // N3_SAFETY only. N0_ADMIN and N1_CORPORATE pass through requirePlantAccess's
 // global bypass. N2_PLANT_MANAGER and N4_SUPERVISOR can suspend but not revoke.
-const REVOKE_ROLES: RoleCode[] = [RoleCode.N3_SAFETY];
+const REVOKE_ROLES: RoleCode[] = [RoleCode.N3_SAFETY, RoleCode.N6_HR];
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;

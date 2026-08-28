@@ -82,7 +82,7 @@ A autorização é o ato pelo qual a empresa assume a responsabilidade. Fica no 
 | `N2_PLANT_MANAGER` | ✓ | — | — | **—** | ✓ | — | — |
 | `N1_CORPORATE` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ | **✓** |
 | `N0_ADMIN` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ | **bloqueado** |
-| `MEDICO` | — | — | — | — | — | — | — |
+| `N6_HR` | ✓ | ✓ | ✓ | **✓** | ✓ | ✓ | — |
 
 A última coluna é a única em que o `N0_ADMIN` é bloqueado em vez de admitido. A razão está no §2.7, e a implementação exige uma verificação explícita, porque o guard dá-lhe passagem incondicional.
 
@@ -108,6 +108,8 @@ Para os papéis que **não** devem conceder — `N2_PLANT_MANAGER` e `N4_SUPERVI
 
 > **Parâmetro:** `AUTHORIZATION_SEGREGATION_OF_DUTIES` · **Omissão:** `true`
 > O utilizador que registou a avaliação prática não pode conceder a autorização correspondente. Continua a fazer sentido, porque um N3 pode registar avaliações — e é precisamente esse o caso que a regra impede. Com N1 também a poder conceder, o impasse desaparece: numa planta com um único N3, quando ele próprio fez a avaliação, o N1 concede. Verificação no **serviço** (`competence-service.ts`), não só na rota, para que qualquer chamador futuro — job, importador, agente interno — passe pelo mesmo bloqueio.
+
+> **Revisão.** A verificação compara o `assessorUserId` da avaliação de suporte concreta (a indicada por `assessmentId`, ou a avaliação competente mais recente na sua ausência) com quem concede. Não bloqueia por uma avaliação antiga e irrelevante feita pelo mesmo utilizador.
 
 ### 2.4 Validade — manda a da autorização
 
@@ -208,40 +210,32 @@ Três consequências de arrancar com 12 meses que vale ter presentes:
 
 > As periodicidades não estão fixadas na lei portuguesa de forma uniforme — dependem do fabricante do equipamento, da avaliação de risco e frequentemente da seguradora. Vale confirmar com HSE/jurídico antes de fixar os valores definitivos.
 
-### 3.2 Matriz de requisitos — o que resolve o cinzento
+### 3.2 Requisito por trabalhador — o que resolve o cinzento
+
+A matriz de regras por função, área ou posto dependia de campos que frequentemente não estavam preenchidos e devolvia silenciosamente “Não necessária”. O requisito é agora uma decisão direta, auditável, para cada par trabalhador/competência:
 
 ```prisma
-model CompetenceRequirement {
-  id                String   @id @default(uuid())
-  plantId           String
-  competenceTypeId  String
-  scopeType         CompetenceRequirementScope
-  scopeRoleName     String?   // quando scopeType = ROLE
-  scopeAreaId       String?   // quando scopeType = AREA
-  scopeWorkstationId String?  // quando scopeType = WORKSTATION
-  isMandatory       Boolean  @default(true)
-  notes             String?
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  createdById       String?
+model CompetenceWorkerRequirement {
+  id                 String   @id @default(uuid())
+  plantId            String
+  competenceWorkerId String
+  competenceTypeId   String
+  isRequired         Boolean  @default(true)
+  notes              String?
+  setById            String?
+  setAt              DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  plant             Plant           @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  competenceType    CompetenceType  @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
-  area              Area?           @relation(fields: [scopeAreaId], references: [id], onDelete: Cascade)
-  workstation       Workstation?    @relation(fields: [scopeWorkstationId], references: [id], onDelete: Cascade)
+  competenceWorker CompetenceWorker @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  setBy            User?            @relation("CompetenceWorkerRequirementSetBy", fields: [setById], references: [id])
 
-  @@index([plantId, competenceTypeId, isActive])
-}
-
-enum CompetenceRequirementScope {
-  ROLE          // por função (roleName)
-  AREA          // por departamento/área
-  WORKSTATION   // por posto de trabalho
-  ALL_WORKERS   // toda a planta
+  @@unique([competenceWorkerId, competenceTypeId])
+  @@index([plantId, isRequired])
 }
 ```
 
-**Resolução:** uma competência é exigida a um trabalhador se existir *pelo menos uma* regra ativa que corresponda à sua função, área, posto ou a toda a planta. Regras adicionam-se, nunca se subtraem — não há exceções negativas, para evitar matrizes impossíveis de auditar. Uma dispensa individual é registada como `CompetenceRequirementException` se e quando for necessário (fora do âmbito da v1).
+**Resolução:** uma competência é exigida se e só se existir uma linha deste modelo com `isRequired = true`. Sem linha, o estado inicial é explicitamente “Não necessária”; os registos de formação, avaliação ou autorização existentes continuam sempre visíveis.
 
 ### 3.3 Trabalhador inscrito no módulo
 
@@ -409,6 +403,10 @@ enum AuthorizationStatus {
 - **Replicar o `max+1` do `Action`** — mais simples, e consistente com o modelo que este espelha. Recomendado.
 - **Estender o `RecordCodeService`** — exige acrescentar `"AUTHORIZATION"` a `SequenceEntityType` e um código novo a `RECORD_CODE_TYPES` em `lib/record-code.ts`. Só vale a pena se quiserem um código legível com ano e fábrica (`AUT-MAAP-2026-0148`).
 
+### 3.6a Uma entrada, três níveis, uma submissão
+
+`TrainingRecord`, `CompetenceAssessment` e `WorkerAuthorization` têm `entryGroupId`. O formulário unificado grava formação, avaliação e autorização numa única `prisma.$transaction()` através de `CompetenceService.registerCompetenceEntry`; os registos da mesma submissão partilham o identificador e surgem agrupados no histórico. Uma entrada iniciada com formação pode ser concluída mais tarde, reutilizando o mesmo grupo. Registos antigos sem `entryGroupId` continuam individuais.
+
 ### 3.7 Cache de estado derivado
 
 ```prisma
@@ -447,7 +445,7 @@ enum CompetenceCellState {
 }
 ```
 
-Recalculado em três momentos: (a) na escrita de qualquer formação / avaliação / autorização, dentro da mesma `prisma.$transaction()`; (b) na alteração da matriz de requisitos ou da função do trabalhador; (c) no job diário, para capturar a passagem do tempo.
+Recalculado em três momentos: (a) na escrita de qualquer formação / avaliação / autorização, dentro da mesma `prisma.$transaction()`; (b) na marcação ou desmarcação de um requisito por trabalhador; (c) no job diário, para capturar a passagem do tempo.
 
 ### 3.8 Entrega de alertas e ligação a Ações
 
@@ -532,8 +530,9 @@ A ordem de precedência é a parte que costuma sair errada. Avaliar de cima para
 ```
 função calcularEstado(trabalhador, competência, hoje):
 
-  1. requisito = resolverRequisito(trabalhador, competência)
-     se requisito == NÃO_EXIGIDA e não existe autorização ativa:
+  1. requisito = CompetenceWorkerRequirement(trabalhador, competência)
+     se requisito não existe ou requisito.isRequired == false, e não existe nenhum registo
+     (formação, avaliação ou autorização) para este par:
         → NOT_APPLICABLE
 
   2. autorização = autorizaçãoMaisRecente(status ∈ {ACTIVE, SUSPENDED})
@@ -576,7 +575,7 @@ função calcularEstado(trabalhador, competência, hoje):
 
 Notas de implementação:
 
-- O passo 1 tem uma exceção deliberada: se a competência deixou de ser exigida mas o trabalhador ainda tem autorização ativa, o estado real é mostrado, não cinzento. Esconder uma autorização ativa porque a função mudou é como se perdem autorizações que continuam legalmente válidas.
+- O passo 1 tem uma exceção deliberada para qualquer registo, não apenas para uma autorização ativa: formação, avaliação ou autorização existente mantém o estado real visível, mesmo quando a competência não está marcada como necessária.
 - **O passo 7 tolera uma avaliação sem formação ligada.** `CompetenceAssessment.trainingRecordId` é anulável, e uma avaliação órfã tem de contar como avaliação — senão o passo 8 devolve `AWAITING_ASSESSMENT` para quem já foi avaliado, e registar outra avaliação não resolve nada. A célula fica presa em "Aguarda avaliação" para sempre. Do lado da escrita, a ligação deve ser **obrigatória** quando `requiresTraining` é `true`; a tolerância na leitura existe para os registos que escapem a essa validação, não para os legitimar.
 - O limiar de `EXPIRING` (90 dias) vem de `SystemParameter`, chave `COMPETENCE_EXPIRING_THRESHOLD_DAYS`, para não ficar literal no código.
 - Datas em `Europe/Lisbon` via `toZonedTime`, e `differenceInCalendarDays` para a diferença — exatamente o padrão de `action-alert-service.ts`. Usar diferença em milissegundos produz erros de um dia nas mudanças de hora.
@@ -625,6 +624,10 @@ As colunas de competência são geradas do catálogo, não fixas no código — 
 **Dados complementares** — de `OccupationalHealthWorker`, resolvido por `(plantId, employeeNo)`: `birthDate`, `gender`, `hireDate`, `roleStartDate`, `roleName`, `nationality`, `workstation`. **Não são lidos** `examDate`, `validUntil` nem `status`, conforme §2.1.
 
 **Competências** — uma linha por tipo exigido ou com registo, com o estado e a linha temporal dos três níveis.
+
+Cada cartão tem a opção “Necessária para este trabalhador”, gravada de imediato em `PATCH .../competences/workers/[id]/requirements`, e mostra quem a marcou e quando. O resumo de marcações e os comandos “Marcar todas” / “Desmarcar todas” usam o mesmo endpoint sequencialmente. `N3_SAFETY`, `N4_SUPERVISOR` e `N6_HR` podem alterar estes requisitos; N0/N1 mantêm o bypass global. Quando ainda não há nenhuma marcação, a ficha explica explicitamente esse estado normal em vez de deixar uma grelha cinzenta ambígua.
+
+O painel lateral usa um formulário único para formação, avaliação prática e autorização. As três secções são opcionais conforme o fluxo e só quem tem poder de conceder pode abrir a secção de autorização.
 
 **Documentos** — certificados e autorizações em PDF, via `StorageService.uploadObject()`, com upload `multipart/form-data` através da rota Next (limite de 15 MB, `ATTACHMENT_UPLOAD_LIMITS`).
 

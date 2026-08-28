@@ -18,6 +18,7 @@ export const SAFETY_DASHBOARD_VIEW_ROLES: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
+  RoleCode.N6_HR,
 ] as const;
 
 /**
@@ -31,6 +32,7 @@ export const SAFETY_DASHBOARD_DETAILED_VIEW_ROLES: RoleCode[] = [
   RoleCode.N2_PLANT_MANAGER,
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
+  RoleCode.N6_HR,
 ] as const;
 
 export function getSafetyDashboardRole(plantCode: string, roles: PlantRoleEntry[]) {

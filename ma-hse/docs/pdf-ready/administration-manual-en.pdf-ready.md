@@ -91,7 +91,7 @@ Can:
 - reopen communications and actions;
 - administer plant data;
 - manage SLA, alerts, QR tokens and recipients where authorized;
-- create N4/N5/MEDICO users in the same plant;
+- create N4/N5/N6_HR users in the same plant;
 - create S-EWO without final N2 approval.
 
 ### N4_SUPERVISOR
@@ -134,11 +134,9 @@ Public submissions are controlled by plant tokens and recorded as a public sourc
 - 5S Improvement
 - Improvement Suggestion
 
-### MEDICO
+### N6_HR
 
-Medical role.
-
-Can view communications, including clinical fields. Cannot create communications/actions or access administrative/S-EWO mutations.
+Plant HR role. Has full Competences access, equal to N3_SAFETY; full Communications and Occupational Health access; and read-only Actions and S-EWO access.
 
 ## 3. Local Startup
 
@@ -314,8 +312,9 @@ Authorized administrators can:
 
 Main rules:
 
-- N1 creates N1/N2/N3.
-- N3 creates N4/N5/MEDICO in the same plant.
+- N1 creates N1/N2/N3/N6_HR.
+- N2 creates and manages only N6_HR in its plant.
+- N3 creates N4/N5/N6_HR in the same plant.
 - N0 has global administration.
 
 ## 6. Communication Management

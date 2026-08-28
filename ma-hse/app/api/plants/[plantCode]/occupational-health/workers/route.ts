@@ -8,7 +8,7 @@ import { upsertOccupationalHealthWorkerInput } from "@/lib/validation/dtos";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);
@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, upsertOccupationalHealthWorkerInput);

@@ -14,7 +14,11 @@ function normalizeEmail(email: string) {
 }
 
 function manageableByN3(role: RoleCode) {
-  return role === RoleCode.N4_SUPERVISOR || role === RoleCode.N5_OPERATOR || role === RoleCode.MEDICO;
+  return role === RoleCode.N4_SUPERVISOR || role === RoleCode.N5_OPERATOR || role === RoleCode.N6_HR;
+}
+
+function manageableByN2(role: RoleCode) {
+  return role === RoleCode.N6_HR;
 }
 
 function canManageGlobalN1(actorRole: RoleCode) {
@@ -26,7 +30,7 @@ export async function PATCH(
   context: { params: Promise<{ plantCode: string; userId: string }> },
 ) {
   const { plantCode, userId } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
   const actorRole = "role" in auth ? auth.role : RoleCode.N0_ADMIN;
 
@@ -72,6 +76,12 @@ export async function PATCH(
     const hasPrivilegedRole = plantRoleRow.user.plantRoles.some((entry) => !manageableByN3(entry.role.code));
     if (hasPrivilegedRole || !manageableByN3(parsed.data.role)) {
       return fail("FORBIDDEN", "N3 cannot manage privileged user accounts", 403);
+    }
+  }
+  if (actorRole === RoleCode.N2_PLANT_MANAGER) {
+    const hasNonN6Role = plantRoleRow.user.plantRoles.some((entry) => !manageableByN2(entry.role.code));
+    if (hasNonN6Role || !manageableByN2(parsed.data.role)) {
+      return fail("FORBIDDEN", "N2 can only manage N6_HR user accounts", 403);
     }
   }
 
@@ -195,7 +205,7 @@ export async function DELETE(
   context: { params: Promise<{ plantCode: string; userId: string }> },
 ) {
   const { plantCode, userId } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
   if ("error" in auth) return auth.error;
   const actorRole = "role" in auth ? auth.role : RoleCode.N0_ADMIN;
 
@@ -230,6 +240,12 @@ export async function DELETE(
     const hasPrivilegedRole = plantRoleRow.user.plantRoles.some((entry) => !manageableByN3(entry.role.code));
     if (hasPrivilegedRole) {
       return fail("FORBIDDEN", "N3 cannot manage privileged user accounts", 403);
+    }
+  }
+  if (actorRole === RoleCode.N2_PLANT_MANAGER) {
+    const hasNonN6Role = plantRoleRow.user.plantRoles.some((entry) => !manageableByN2(entry.role.code));
+    if (hasNonN6Role) {
+      return fail("FORBIDDEN", "N2 can only manage N6_HR user accounts", 403);
     }
   }
 

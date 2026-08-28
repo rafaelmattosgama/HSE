@@ -10,7 +10,7 @@ import { setCompetenceWorkerRequirementInput } from "@/lib/validation/dtos";
 // for a worker they know — the same roles allowed to register training and
 // assessments (../../../trainings/route.ts). N0_ADMIN and N1_CORPORATE pass
 // through requirePlantAccess's global bypass.
-const REQUIREMENT_ROLES: RoleCode[] = [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR];
+const REQUIREMENT_ROLES: RoleCode[] = [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR];
 
 export async function PATCH(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;

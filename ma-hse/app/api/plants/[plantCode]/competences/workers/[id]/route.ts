@@ -14,12 +14,13 @@ const VIEW_ROLES: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
+  RoleCode.N6_HR,
 ];
 
 // Mirrors ENROLL_ROLES in ../../route.ts: editing roleName is part of
 // managing the same enrollment record, so the same roles that can enroll a
 // worker can also correct their function.
-const UPDATE_ROLE_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR];
+const UPDATE_ROLE_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR];
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;

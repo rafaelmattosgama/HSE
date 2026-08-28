@@ -13,7 +13,7 @@ const toggleWorkerInput = z.object({
 
 export async function PATCH(request: Request, context: { params: Promise<{ plantCode: string; workerId: string }> }) {
   const { plantCode, workerId } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, upsertOccupationalHealthWorkerInput);
@@ -31,7 +31,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ plant
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string; workerId: string }> }) {
   const { plantCode, workerId } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const parsed = await parseBody(request, toggleWorkerInput);

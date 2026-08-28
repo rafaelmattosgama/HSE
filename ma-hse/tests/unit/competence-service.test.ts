@@ -500,7 +500,7 @@ describe("CompetenceService.grantAuthorization", () => {
     ).resolves.toBeDefined();
   });
 
-  it("(crit 1) blocks granting when the actor performed a competent assessment for this worker/type, even if assessmentId is omitted", async () => {
+  it("blocks granting when the actor performed the most recent competent assessment and assessmentId is omitted", async () => {
     transactionMock.competenceAssessment.findFirst.mockResolvedValue({ assessorUserId: "user-1" });
 
     await expect(
@@ -511,18 +511,21 @@ describe("CompetenceService.grantAuthorization", () => {
       ),
     ).rejects.toThrow(/Segregation of duties/);
 
-    expect(transactionMock.competenceAssessment.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          plantId: "plant-1",
-          competenceWorkerId: "worker-1",
-          competenceTypeId: "type-forklift",
-          result: CompetenceAssessmentResult.COMPETENT,
-          assessorUserId: "user-1",
-        }),
-      }),
-    );
     expect(transactionMock.workerAuthorization.create).not.toHaveBeenCalled();
+  });
+
+  it("does not block when a different person performed the most recent competent assessment", async () => {
+    transactionMock.competenceAssessment.findFirst.mockResolvedValue({ assessorUserId: "someone-else" });
+    transactionMock.workerAuthorization.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    transactionMock.workerAuthorization.create.mockResolvedValue({ id: "auth-1" });
+
+    await expect(
+      CompetenceService.grantAuthorization(
+        "plant-1",
+        { competenceWorkerId: "worker-1", competenceTypeId: "type-forklift", validFrom: new Date("2026-01-01") },
+        "user-1",
+      ),
+    ).resolves.toBeDefined();
   });
 
   it("(crit 2) rejects an assessmentId that does not belong to this plant/worker/type", async () => {

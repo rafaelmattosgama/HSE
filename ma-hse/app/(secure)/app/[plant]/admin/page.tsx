@@ -29,7 +29,6 @@ import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-servic
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
-import { CompetenceService } from "@/lib/services/competence-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
@@ -68,7 +67,16 @@ export default async function AdminPage({
     : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
 
   const canManageUsers =
-    actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
+    actorRole === RoleCode.N0_ADMIN ||
+    actorRole === RoleCode.N1_CORPORATE ||
+    actorRole === RoleCode.N2_PLANT_MANAGER ||
+    actorRole === RoleCode.N3_SAFETY;
+  const manageableUserRoles =
+    actorRole === RoleCode.N2_PLANT_MANAGER
+      ? [RoleCode.N6_HR]
+      : actorRole === RoleCode.N3_SAFETY
+        ? [RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR]
+        : undefined;
   const canViewAgentAudit =
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const canManageSafetyCommunicationRecipients = canManageSafetyCommunicationAlertRecipients(actorRole);
@@ -381,7 +389,12 @@ export default async function AdminPage({
       </section>
 
       {canManageUsers ? (
-        <UserManager users={users} allowedCreateRoles={allowedCreateRoles} labels={masterDataUi} />
+        <UserManager
+          users={users}
+          allowedCreateRoles={allowedCreateRoles}
+          manageableRoles={manageableUserRoles}
+          labels={masterDataUi}
+        />
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
           {ui.dashboard.userManagementUnavailable}

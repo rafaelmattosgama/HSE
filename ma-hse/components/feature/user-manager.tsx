@@ -21,6 +21,7 @@ type ManagedUser = {
 type UserManagerProps = {
   users: ManagedUser[];
   allowedCreateRoles: RoleCode[];
+  manageableRoles?: RoleCode[];
   plantCode?: string;
   labels?: N0MasterDataUi;
 };
@@ -71,7 +72,7 @@ function formatDate(value: string | Date) {
   return new Date(value).toISOString().slice(0, 16).replace("T", " ");
 }
 
-export function UserManager({ users, allowedCreateRoles, plantCode, labels = getStaticN0MasterDataUi("en") }: UserManagerProps) {
+export function UserManager({ users, allowedCreateRoles, manageableRoles, plantCode, labels = getStaticN0MasterDataUi("en") }: UserManagerProps) {
   const pathname = usePathname();
   const plant = plantCode ?? pathname.split("/")[2];
 
@@ -366,17 +367,19 @@ export function UserManager({ users, allowedCreateRoles, plantCode, labels = get
                 <td className="px-3 py-2">{formatDate(entry.createdAt)}</td>
                 <td className="px-3 py-2">{formatDate(entry.updatedAt)}</td>
                 <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="secondary" onClick={() => startEdit(entry)} disabled={rowActionId === entry.id}>
-                      {labels.edit}
-                    </Button>
-                    <Button type="button" size="sm" variant={entry.isActive ? "destructive" : "secondary"} onClick={() => toggleUserStatus(entry)} disabled={rowActionId === entry.id}>
-                      {rowActionId === entry.id ? labels.saving : entry.isActive ? labels.users.deactivate : labels.users.activate}
-                    </Button>
-                    <Button type="button" size="sm" variant="destructive" onClick={() => deleteUser(entry)} disabled={rowActionId === entry.id}>
-                      {labels.users.delete}
-                    </Button>
-                  </div>
+                  {!manageableRoles || manageableRoles.includes(entry.role) ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="secondary" onClick={() => startEdit(entry)} disabled={rowActionId === entry.id}>
+                        {labels.edit}
+                      </Button>
+                      <Button type="button" size="sm" variant={entry.isActive ? "destructive" : "secondary"} onClick={() => toggleUserStatus(entry)} disabled={rowActionId === entry.id}>
+                        {rowActionId === entry.id ? labels.saving : entry.isActive ? labels.users.deactivate : labels.users.activate}
+                      </Button>
+                      <Button type="button" size="sm" variant="destructive" onClick={() => deleteUser(entry)} disabled={rowActionId === entry.id}>
+                        {labels.users.delete}
+                      </Button>
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}

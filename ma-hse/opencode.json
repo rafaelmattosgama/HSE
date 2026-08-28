@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "summary": "Multi-plant EHS platform built with Next.js 16 + Prisma + PostgreSQL 16. Manages safety communications, actions, S-EWO investigations, SMAT audits, occupational health, contractors, and KPI dashboards across multiple plants with 8 RBAC roles (N0_ADMIN..MEDICO). 7 locales (pt/it/en/pl/de/ro/fr).",
+  "summary": "Multi-plant EHS platform built with Next.js 16 + Prisma + PostgreSQL 16. Manages safety communications, actions, S-EWO investigations, SMAT audits, occupational health, contractors, and KPI dashboards across multiple plants with 7 RBAC roles (N0_ADMIN..N6_HR). 7 locales (pt/it/en/pl/de/ro/fr).",
   "instructions": ["AGENTS.md"],
   "agent": {
     "plan": {
@@ -39,7 +39,7 @@
           "*": "ask"
         }
       },
-      "prompt": "És especialista no sistema RBAC da MA-HSE. Conheces os 8 roles (N0_ADMIN..MEDICO), as funções em lib/rbac/ (guards.ts, evaluator.ts, permissions.ts, user-management.ts), o session type em types/next-auth.d.ts, e os padrões de guard nas API routes. Respondes apenas sobre RBAC e controlo de acesso."
+      "prompt": "És especialista no sistema RBAC da MA-HSE. Conheces os 7 roles (N0_ADMIN..N6_HR), as funções em lib/rbac/ (guards.ts, evaluator.ts, permissions.ts, user-management.ts), o session type em types/next-auth.d.ts, e os padrões de guard nas API routes. Respondes apenas sobre RBAC e controlo de acesso."
     }
   }
 }

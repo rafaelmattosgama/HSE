@@ -7,8 +7,9 @@ import { X } from "lucide-react";
 import { STATE_META } from "@/components/feature/competence-matrix-manager";
 import { CreateCompetenceAction, type CompetenceActionOwnerOption } from "@/components/feature/create-competence-action";
 import { Button } from "@/components/ui/button";
-import { requireApiResponse } from "@/lib/client-api";
+import { ApiError, requireApiResponse } from "@/lib/client-api";
 import { formatCompetenceBlockedReason, formatCompetenceCellText } from "@/lib/competence-cell-text";
+import { groupCompetenceHistory } from "@/lib/competence-history-grouping";
 import {
   BLOCKED_REASON_MEDICAL_FITNESS_EXPIRED,
   BLOCKED_REASON_TRAINING_CERTIFICATE_EXPIRED,
@@ -30,9 +31,9 @@ type CompetenceRowWire = {
 };
 
 type HistoryEventWire =
-  | { type: "TRAINING"; id: string; occurredAt: string; competenceTypeId: string; result: string; provider: string | null; trainerName: string | null; certificateExpiresAt: string | null }
-  | { type: "ASSESSMENT"; id: string; occurredAt: string; competenceTypeId: string; result: string; method: string; assessorName: string | null }
-  | { type: "AUTHORIZATION_GRANTED"; id: string; occurredAt: string; competenceTypeId: string; validFrom: string; validUntil: string; restrictions: string | null; grantedByName: string | null }
+  | { type: "TRAINING"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; result: string; provider: string | null; trainerName: string | null; certificateExpiresAt: string | null }
+  | { type: "ASSESSMENT"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; result: string; method: string; assessorName: string | null }
+  | { type: "AUTHORIZATION_GRANTED"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; validFrom: string; validUntil: string; restrictions: string | null; grantedByName: string | null }
   | { type: "AUTHORIZATION_SUSPENDED"; id: string; occurredAt: string; competenceTypeId: string; reason: string | null; actorName: string | null }
   | { type: "AUTHORIZATION_REACTIVATED"; id: string; occurredAt: string; competenceTypeId: string; actorName: string | null }
   | { type: "AUTHORIZATION_REVOKED"; id: string; occurredAt: string; competenceTypeId: string; reason: string | null; actorName: string | null };
@@ -57,7 +58,7 @@ type ProfileWire = {
   actionLinks: LinkedActionWire[];
 };
 
-type ActiveForm = "training" | "assessment" | "authorization" | "suspend" | "reactivate" | "revoke" | "action" | null;
+type ActiveForm = "entry" | "suspend" | "reactivate" | "revoke" | "action" | null;
 
 function roleCanAny(viewerRole: RoleCode, allowed: RoleCode[]) {
   return viewerRole === RoleCode.N0_ADMIN || viewerRole === RoleCode.N1_CORPORATE || allowed.includes(viewerRole);
@@ -78,8 +79,10 @@ export function CompetenceCellDetailPanel({
   competenceWorkerId,
   competenceTypeId,
   competenceTypeName,
+  competenceType,
   workerName,
   owners,
+  assessorOptions,
   onClose,
   onChanged,
 }: {
@@ -89,8 +92,10 @@ export function CompetenceCellDetailPanel({
   competenceWorkerId: string;
   competenceTypeId: string;
   competenceTypeName: string;
+  competenceType: { requiresAssessment: boolean; requiresAuthorization: boolean };
   workerName: string;
   owners: CompetenceActionOwnerOption[];
+  assessorOptions: Array<{ id: string; name: string }>;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -122,6 +127,8 @@ export function CompetenceCellDetailPanel({
     [profile, competenceTypeId],
   );
 
+  const historyGroups = useMemo(() => groupCompetenceHistory(relevantHistory), [relevantHistory]);
+
   const latestPassedTraining = relevantHistory.find(
     (event): event is HistoryEventWire & { type: "TRAINING" } => event.type === "TRAINING" && event.result === "PASSED",
   );
@@ -129,10 +136,9 @@ export function CompetenceCellDetailPanel({
     (event): event is HistoryEventWire & { type: "ASSESSMENT" } => event.type === "ASSESSMENT" && event.result === "COMPETENT",
   );
 
-  const canRegister = roleCanAny(viewerRole, [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
-  const canGrant = roleCanAny(viewerRole, [RoleCode.N3_SAFETY]);
-  const canSuspendOrReactivate = roleCanAny(viewerRole, [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
-  const canRevoke = roleCanAny(viewerRole, [RoleCode.N3_SAFETY]);
+  const canRegister = roleCanAny(viewerRole, [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR]);
+  const canSuspendOrReactivate = roleCanAny(viewerRole, [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR]);
+  const canRevoke = roleCanAny(viewerRole, [RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   const canCreateAction = roleCanAny(viewerRole, [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
 
   const hasActiveAuthorization = currentRow ? ["VALID", "EXPIRING", "EXPIRED"].includes(currentRow.state) && currentRow.currentAuthorizationId : false;
@@ -156,7 +162,11 @@ export function CompetenceCellDetailPanel({
       setActiveForm(null);
       onChanged();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : labels.formError);
+      if (error instanceof ApiError && error.errorCode === "SEGREGATION_OF_DUTIES") {
+        setFormError(labels.errorSegregationOfDuties);
+      } else {
+        setFormError(error instanceof Error ? error.message : labels.formError);
+      }
     } finally {
       setSaving(false);
     }
@@ -207,7 +217,11 @@ export function CompetenceCellDetailPanel({
               <p className="mt-2 text-sm text-slate-500">{labels.cellPanelNoHistory}</p>
             ) : (
               <ol className="mt-2 space-y-3">
-                {relevantHistory.map((event) => (
+                {historyGroups.map((group, groupIndex) => (
+                  <li key={group.entryGroupId ?? `legacy-${groupIndex}`} className="rounded-lg border border-slate-200 p-3 text-sm">
+                    {group.events.length > 1 ? <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{labels.entryGroupHistoryLabel}</p> : null}
+                    <ol className="space-y-2">
+                    {group.events.map((event) => (
                   <li key={`${event.type}-${event.id}`} className="rounded-lg border border-slate-200 p-3 text-sm">
                     <p className="font-semibold text-slate-900">
                       {event.type === "TRAINING" && labels.eventTraining}
@@ -244,6 +258,9 @@ export function CompetenceCellDetailPanel({
                     {event.type === "AUTHORIZATION_REACTIVATED" && event.actorName ? (
                       <p className="mt-1 text-slate-700">{event.actorName}</p>
                     ) : null}
+                    </li>
+                    ))}
+                    </ol>
                   </li>
                 ))}
               </ol>
@@ -282,47 +299,20 @@ export function CompetenceCellDetailPanel({
 
           {formError ? <p className="text-sm font-medium text-rose-600">{formError}</p> : null}
 
-          {activeForm === "training" ? (
-            <TrainingForm
+          {activeForm === "entry" ? (
+            <CompetenceEntryForm
               labels={labels}
               saving={saving}
-              onCancel={() => setActiveForm(null)}
-              onSubmit={(payload) =>
-                submit(`/api/plants/${plant}/competences/trainings`, "POST", {
-                  competenceWorkerId,
-                  competenceTypeId,
-                  ...payload,
-                })
+              competenceType={competenceType}
+              allowAuthorization={canRevoke}
+              existingEntry={
+                latestPassedTraining?.entryGroupId && !latestCompetentAssessment
+                  ? { entryGroupId: latestPassedTraining.entryGroupId, trainingCompletedAt: new Date(latestPassedTraining.occurredAt).toLocaleDateString() }
+                  : null
               }
-            />
-          ) : activeForm === "assessment" ? (
-            <AssessmentForm
-              labels={labels}
-              saving={saving}
+              assessorOptions={assessorOptions}
               onCancel={() => setActiveForm(null)}
-              onSubmit={(payload) =>
-                submit(`/api/plants/${plant}/competences/assessments`, "POST", {
-                  competenceWorkerId,
-                  competenceTypeId,
-                  trainingRecordId: latestPassedTraining?.id ?? null,
-                  ...payload,
-                })
-              }
-            />
-          ) : activeForm === "authorization" ? (
-            <AuthorizationForm
-              labels={labels}
-              saving={saving}
-              onCancel={() => setActiveForm(null)}
-              onSubmit={(payload) =>
-                submit(`/api/plants/${plant}/competences/authorizations`, "POST", {
-                  competenceWorkerId,
-                  competenceTypeId,
-                  trainingRecordId: latestPassedTraining?.id ?? null,
-                  assessmentId: latestCompetentAssessment?.id ?? null,
-                  ...payload,
-                })
-              }
+              onSubmit={(payload) => submit(`/api/plants/${plant}/competences/entries`, "POST", { competenceWorkerId, competenceTypeId, ...payload })}
             />
           ) : activeForm === "suspend" || activeForm === "revoke" ? (
             <ReasonForm
@@ -373,18 +363,8 @@ export function CompetenceCellDetailPanel({
           ) : (
             <div className="flex flex-wrap gap-2">
               {canRegister ? (
-                <Button type="button" size="sm" variant="secondary" onClick={() => setActiveForm("training")}>
-                  {labels.actionRegisterTraining}
-                </Button>
-              ) : null}
-              {canRegister ? (
-                <Button type="button" size="sm" variant="secondary" onClick={() => setActiveForm("assessment")}>
-                  {labels.actionRegisterAssessment}
-                </Button>
-              ) : null}
-              {canGrant ? (
-                <Button type="button" size="sm" onClick={() => setActiveForm("authorization")}>
-                  {labels.actionGrantAuthorization}
+                <Button type="button" size="sm" onClick={() => setActiveForm("entry")}>
+                  {labels.entryFormOpenButton}
                 </Button>
               ) : null}
               {canSuspendOrReactivate && hasActiveAuthorization ? (
@@ -415,163 +395,99 @@ export function CompetenceCellDetailPanel({
   );
 }
 
-function TrainingForm({
+function CompetenceEntryForm({
   labels,
   saving,
+  competenceType,
+  allowAuthorization,
+  existingEntry,
+  assessorOptions,
   onSubmit,
   onCancel,
 }: {
   labels: CompetencesUiDictionary;
   saving: boolean;
+  competenceType: { requiresAssessment: boolean; requiresAuthorization: boolean };
+  allowAuthorization: boolean;
+  existingEntry: { entryGroupId: string; trainingCompletedAt: string } | null;
+  assessorOptions: Array<{ id: string; name: string }>;
   onSubmit: (payload: {
-    completedAt: string;
-    result: "PASSED" | "FAILED";
-    provider: string | null;
-    certificateExpiresAt: string | null;
-    notes: string | null;
+    entryGroupId?: string;
+    training?: { completedAt: string; result: "PASSED" | "FAILED"; provider: string | null; certificateExpiresAt: string | null; notes: string | null };
+    assessment?: { assessedAt: string; result: "COMPETENT" | "NOT_YET_COMPETENT"; method: "PRACTICAL_TEST" | "OBSERVATION" | "THEORY_TEST" | "SIMULATOR"; assessorUserId: string | null; assessorName: string | null; score: number | null; observations: string | null };
+    authorization?: { validFrom: string; restrictions: string | null };
   }) => void;
   onCancel: () => void;
 }) {
   const [completedAt, setCompletedAt] = useState(todayInputValue());
-  const [result, setResult] = useState<"PASSED" | "FAILED">("PASSED");
+  const [trainingResult, setTrainingResult] = useState<"PASSED" | "FAILED">("PASSED");
   const [provider, setProvider] = useState("");
   const [certificateExpiresAt, setCertificateExpiresAt] = useState("");
   const [notes, setNotes] = useState("");
-
-  return (
-    <form
-      className="space-y-3 rounded-lg border border-slate-200 p-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit({
-          completedAt,
-          result,
-          provider: provider.trim() || null,
-          certificateExpiresAt: certificateExpiresAt || null,
-          notes: notes.trim() || null,
-        });
-      }}
-    >
-      <FormField label={labels.formCompletedAt}>
-        <input type="date" required value={completedAt} onChange={(event) => setCompletedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      </FormField>
-      <FormField label={labels.formTrainingResult}>
-        <select value={result} onChange={(event) => setResult(event.target.value as "PASSED" | "FAILED")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-          <option value="PASSED">{labels.trainingResultPassed}</option>
-          <option value="FAILED">{labels.trainingResultFailed}</option>
-        </select>
-      </FormField>
-      <FormField label={labels.formProvider}>
-        <input type="text" value={provider} onChange={(event) => setProvider(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      </FormField>
-      <FormField label={labels.formCertificateExpiresAt}>
-        <input type="date" value={certificateExpiresAt} onChange={(event) => setCertificateExpiresAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      </FormField>
-      <FormField label={labels.formNotes}>
-        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={2} />
-      </FormField>
-      <FormActions labels={labels} saving={saving} onCancel={onCancel} />
-    </form>
-  );
-}
-
-function AssessmentForm({
-  labels,
-  saving,
-  onSubmit,
-  onCancel,
-}: {
-  labels: CompetencesUiDictionary;
-  saving: boolean;
-  onSubmit: (payload: {
-    assessedAt: string;
-    result: "COMPETENT" | "NOT_YET_COMPETENT";
-    method: "PRACTICAL_TEST" | "OBSERVATION" | "THEORY_TEST" | "SIMULATOR";
-    score: number | null;
-    observations: string | null;
-  }) => void;
-  onCancel: () => void;
-}) {
+  const [assessmentOpen, setAssessmentOpen] = useState(false);
   const [assessedAt, setAssessedAt] = useState(todayInputValue());
-  const [result, setResult] = useState<"COMPETENT" | "NOT_YET_COMPETENT">("COMPETENT");
+  const [assessmentResult, setAssessmentResult] = useState<"COMPETENT" | "NOT_YET_COMPETENT">("COMPETENT");
   const [method, setMethod] = useState<"PRACTICAL_TEST" | "OBSERVATION" | "THEORY_TEST" | "SIMULATOR">("PRACTICAL_TEST");
+  const [assessorType, setAssessorType] = useState<"internal" | "external">("internal");
+  const [assessorUserId, setAssessorUserId] = useState("");
+  const [assessorName, setAssessorName] = useState("");
   const [score, setScore] = useState("");
   const [observations, setObservations] = useState("");
+  const [authorizationOpen, setAuthorizationOpen] = useState(false);
+  const [validFrom, setValidFrom] = useState(todayInputValue());
+  const [restrictions, setRestrictions] = useState("");
+  const authorizationAvailable = !competenceType.requiresAssessment || (assessmentOpen && assessmentResult === "COMPETENT");
 
   return (
     <form
-      className="space-y-3 rounded-lg border border-slate-200 p-3"
+      className="space-y-4 rounded-lg border border-slate-200 p-3"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit({
-          assessedAt,
-          result,
-          method,
-          score: score.trim() ? Number(score) : null,
-          observations: observations.trim() || null,
+          entryGroupId: existingEntry?.entryGroupId,
+          training: existingEntry ? undefined : { completedAt, result: trainingResult, provider: provider.trim() || null, certificateExpiresAt: certificateExpiresAt || null, notes: notes.trim() || null },
+          assessment: assessmentOpen
+            ? { assessedAt, result: assessmentResult, method, assessorUserId: assessorType === "internal" ? assessorUserId || null : null, assessorName: assessorType === "external" ? assessorName.trim() || null : null, score: score ? Number(score) : null, observations: observations.trim() || null }
+            : undefined,
+          authorization: authorizationOpen && authorizationAvailable ? { validFrom, restrictions: restrictions.trim() || null } : undefined,
         });
       }}
     >
-      <FormField label={labels.formAssessedAt}>
-        <input type="date" required value={assessedAt} onChange={(event) => setAssessedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      </FormField>
-      <FormField label={labels.formAssessmentResult}>
-        <select value={result} onChange={(event) => setResult(event.target.value as "COMPETENT" | "NOT_YET_COMPETENT")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-          <option value="COMPETENT">{labels.assessmentResultCompetent}</option>
-          <option value="NOT_YET_COMPETENT">{labels.assessmentResultNotYetCompetent}</option>
-        </select>
-      </FormField>
-      <FormField label={labels.formAssessmentMethod}>
-        <select
-          value={method}
-          onChange={(event) => setMethod(event.target.value as "PRACTICAL_TEST" | "OBSERVATION" | "THEORY_TEST" | "SIMULATOR")}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="PRACTICAL_TEST">{labels.assessmentMethodPracticalTest}</option>
-          <option value="OBSERVATION">{labels.assessmentMethodObservation}</option>
-          <option value="THEORY_TEST">{labels.assessmentMethodTheoryTest}</option>
-          <option value="SIMULATOR">{labels.assessmentMethodSimulator}</option>
-        </select>
-      </FormField>
-      <FormField label={labels.formScore}>
-        <input type="number" min={0} max={100} value={score} onChange={(event) => setScore(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      </FormField>
-      <FormField label={labels.formObservations}>
-        <textarea value={observations} onChange={(event) => setObservations(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={2} />
-      </FormField>
-      <FormActions labels={labels} saving={saving} onCancel={onCancel} />
-    </form>
-  );
-}
+      <section className="space-y-3">
+        <h4 className="text-sm font-semibold text-slate-900">{labels.entryFormTrainingSectionTitle}</h4>
+        {existingEntry ? <p className="text-sm text-slate-500">{labels.entryFormContinuingNotice.replace("{date}", existingEntry.trainingCompletedAt)}</p> : (
+          <>
+            <FormField label={labels.formCompletedAt}><input type="date" required value={completedAt} onChange={(event) => setCompletedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField>
+            <FormField label={labels.formTrainingResult}><select value={trainingResult} onChange={(event) => setTrainingResult(event.target.value as "PASSED" | "FAILED")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="PASSED">{labels.trainingResultPassed}</option><option value="FAILED">{labels.trainingResultFailed}</option></select></FormField>
+            <FormField label={labels.formProvider}><input value={provider} onChange={(event) => setProvider(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField>
+            <FormField label={labels.formCertificateExpiresAt}><input type="date" value={certificateExpiresAt} onChange={(event) => setCertificateExpiresAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField>
+            <FormField label={labels.formNotes}><textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={2} /></FormField>
+          </>
+        )}
+      </section>
 
-function AuthorizationForm({
-  labels,
-  saving,
-  onSubmit,
-  onCancel,
-}: {
-  labels: CompetencesUiDictionary;
-  saving: boolean;
-  onSubmit: (payload: { validFrom: string; restrictions: string | null }) => void;
-  onCancel: () => void;
-}) {
-  const [validFrom, setValidFrom] = useState(todayInputValue());
-  const [restrictions, setRestrictions] = useState("");
+      <section className="space-y-3 border-t border-slate-200 pt-3">
+        <button type="button" onClick={() => setAssessmentOpen((open) => !open)} className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-900">
+          {labels.entryFormAssessmentSectionTitle}<span className="text-xs font-normal text-slate-500">{assessmentOpen ? labels.entryFormCollapse : labels.entryFormExpand}</span>
+        </button>
+        {assessmentOpen ? <>
+          <FormField label={labels.formAssessedAt}><input type="date" required value={assessedAt} onChange={(event) => setAssessedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField>
+          <FormField label={labels.formAssessmentResult}><select value={assessmentResult} onChange={(event) => setAssessmentResult(event.target.value as "COMPETENT" | "NOT_YET_COMPETENT")} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="COMPETENT">{labels.assessmentResultCompetent}</option><option value="NOT_YET_COMPETENT">{labels.assessmentResultNotYetCompetent}</option></select></FormField>
+          <FormField label={labels.formAssessmentMethod}><select value={method} onChange={(event) => setMethod(event.target.value as typeof method)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="PRACTICAL_TEST">{labels.assessmentMethodPracticalTest}</option><option value="OBSERVATION">{labels.assessmentMethodObservation}</option><option value="THEORY_TEST">{labels.assessmentMethodTheoryTest}</option><option value="SIMULATOR">{labels.assessmentMethodSimulator}</option></select></FormField>
+          <FormField label={labels.entryFormAssessorTypeLabel}><div className="flex gap-4"><label className="flex items-center gap-1.5"><input type="radio" checked={assessorType === "internal"} onChange={() => setAssessorType("internal")} />{labels.entryFormAssessorTypeInternal}</label><label className="flex items-center gap-1.5"><input type="radio" checked={assessorType === "external"} onChange={() => setAssessorType("external")} />{labels.entryFormAssessorTypeExternal}</label></div></FormField>
+          {assessorType === "internal" ? <FormField label={labels.entryFormAssessorUserLabel}><select required value={assessorUserId} onChange={(event) => setAssessorUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"><option value="">{labels.entryFormAssessorUserPlaceholder}</option>{assessorOptions.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></FormField> : <FormField label={labels.entryFormAssessorNameLabel}><input required value={assessorName} onChange={(event) => setAssessorName(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField>}
+          <FormField label={labels.formScore}><input type="number" min={0} max={100} value={score} onChange={(event) => setScore(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField>
+          <FormField label={labels.formObservations}><textarea value={observations} onChange={(event) => setObservations(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={2} /></FormField>
+        </> : null}
+      </section>
 
-  return (
-    <form
-      className="space-y-3 rounded-lg border border-slate-200 p-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit({ validFrom, restrictions: restrictions.trim() || null });
-      }}
-    >
-      <FormField label={labels.formValidFrom}>
-        <input type="date" required value={validFrom} onChange={(event) => setValidFrom(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-      </FormField>
-      <FormField label={labels.formRestrictions}>
-        <textarea value={restrictions} onChange={(event) => setRestrictions(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={2} />
-      </FormField>
+      {competenceType.requiresAuthorization && allowAuthorization ? <section className="space-y-3 border-t border-slate-200 pt-3">
+        <button type="button" disabled={!authorizationAvailable} onClick={() => setAuthorizationOpen((open) => !open)} className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400">
+          {labels.entryFormAuthorizationSectionTitle}<span className="text-xs font-normal text-slate-500">{authorizationOpen ? labels.entryFormCollapse : labels.entryFormExpand}</span>
+        </button>
+        {!authorizationAvailable ? <p className="text-xs text-slate-500">{labels.entryFormAuthorizationDisabledReason}</p> : null}
+        {authorizationOpen && authorizationAvailable ? <><FormField label={labels.formValidFrom}><input type="date" required value={validFrom} onChange={(event) => setValidFrom(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" /></FormField><FormField label={labels.formRestrictions}><textarea value={restrictions} onChange={(event) => setRestrictions(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={2} /></FormField></> : null}
+      </section> : null}
       <FormActions labels={labels} saving={saving} onCancel={onCancel} />
     </form>
   );

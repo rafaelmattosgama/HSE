@@ -18,7 +18,7 @@ Stack: Next.js App Router + TypeScript, Prisma + PostgreSQL, NextAuth, BullMQ + 
 - Auditoria detalhada de entidades criticas.
 - Gestao de usuarios por planta:
   - N1 cria N1/N2/N3.
-  - N3 cria N4/N5/MEDICO na propria planta.
+  - N3 cria N4/N5/N6_HR na propria planta.
   - Se senha nao for informada no cadastro: sistema gera senha temporaria, envia por e-mail e exige troca no primeiro login.
 
 ## Decisao BullMQ vs pg-boss
@@ -154,9 +154,8 @@ Senha padrao: valor de `SEED_DEFAULT_PASSWORD` (default `ChangeMe123!`).
 - `supervisor.pl02@ma-hse.local` (N4, PL02)
 - `operator.pl01@ma-hse.local` (N5, PL01)
 - `operator.pl02@ma-hse.local` (N5, PL02)
-- `doctor.pl01@ma-hse.local` (MEDICO, PL01)
-- `doctor.pl02@ma-hse.local` (MEDICO, PL02)
-- N6 nao usa login/email no MVP; acesso por QR token (`/r/*`).
+- `hr.pl01@ma-hse.local` (N6_HR, PL01)
+- `hr.pl02@ma-hse.local` (N6_HR, PL02)
 
 ### Provisionamento de senha para novos usuarios
 
@@ -216,7 +215,7 @@ Na tela `Plant Admin`, o bloco `QR Token Manager` agora:
   - Fecha comunicacao manualmente (`/communications/[id]/manual-close`).
   - Reabre comunicacao/acao.
   - Admin da planta: master data, recipients, SLA, alert rules, QR tokens.
-  - Cria e vincula usuarios N4/N5/MEDICO na propria planta.
+  - Cria e vincula usuarios N4/N5/N6_HR na propria planta.
   - Le/Cria S-EWO (sem aprovacao final N2).
 - N4 Supervisor:
   - Le/Cria comunicacoes e acoes; fecha acao com evidencia.
@@ -225,13 +224,10 @@ Na tela `Plant Admin`, o bloco `QR Token Manager` agora:
 - N5 Operator:
   - Le/Cria comunicacoes e acoes; fecha acao com evidencia.
   - Nao acessa S-EWO API, nem validacao/admin.
-- N6 QR Reporter:
-  - Sem sessao/login.
-  - Acesso apenas por token fixo em `/r/[plantCode]/report` e `/r/[plantCode]/kiosk`.
-  - Pode submeter apenas `UNSAFE_ACT`, `UNSAFE_CONDITION`, `NEAR_MISS`.
-- MEDICO:
-  - Le comunicacoes (incluindo campos clinicos).
-  - Nao cria comunicacao/acao e nao acessa admin/S-EWO mutacoes.
+- N6 HR:
+  - Acesso completo a Competências, igual ao N3 Safety.
+  - Acesso completo a Comunicações e Medicina do Trabalho.
+  - Consulta Ações e S-EWO, sem permissões de criação, alteração ou aprovação.
 
 Observacao importante:
 - As paginas server-rendered em `/app/[plant]/*` hoje validam autenticacao + escopo de planta no layout.

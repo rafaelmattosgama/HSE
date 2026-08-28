@@ -509,8 +509,7 @@ model WorkerCompetenceState {
   @@index([plantId, validUntil])
 }
 
-/// §3.2 (revised): replaces CompetenceRequirement's role/area/workstation
-/// scope matching. One row per (worker, competenceType) — set explicitly by
+/// §3.2 (revised): one row per (worker, competenceType), set explicitly by
 /// a supervisor who knows that worker's real duties, not inferred from a
 /// role-name string match that depended on data nobody kept filled in.
 model CompetenceWorkerRequirement {
@@ -825,8 +824,8 @@ enum FireEquipmentCategory {
   OTHER
 }
 
-/// Fase 0 item 3: Workstation is reused elsewhere (CompetenceRequirement scope,
-/// OccupationalHealthWorker) as "production post/role", not as a free spatial
+/// Fase 0 item 3: Workstation is reused by OccupationalHealthWorker as a
+/// "production post/role", not as a free spatial
 /// location — areaId/workstationId stay optional qualifiers, locationDescription
 /// is the field a caller should actually rely on for common-area equipment
 /// (corridors, stairwells) instead of inventing a fictitious Workstation row.
@@ -2090,7 +2089,7 @@ enum RoleCode {
   N3_SAFETY
   N4_SUPERVISOR
   N5_OPERATOR
-  MEDICO
+  N6_HR
 }
 
 enum OnboardingStatus {

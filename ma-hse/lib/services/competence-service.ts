@@ -79,6 +79,8 @@ export type CompetenceMatrixTypeView = {
   code: string;
   name: string;
   category: string;
+  requiresAssessment: boolean;
+  requiresAuthorization: boolean;
   displayOrder: number;
 };
 
@@ -100,6 +102,7 @@ export type CompetenceHistoryEvent =
       id: string;
       occurredAt: Date;
       competenceTypeId: string;
+      entryGroupId: string | null;
       result: TrainingResult;
       provider: string | null;
       trainerName: string | null;
@@ -110,6 +113,7 @@ export type CompetenceHistoryEvent =
       id: string;
       occurredAt: Date;
       competenceTypeId: string;
+      entryGroupId: string | null;
       result: CompetenceAssessmentResult;
       method: CompetenceAssessmentMethod;
       assessorName: string | null;
@@ -119,6 +123,7 @@ export type CompetenceHistoryEvent =
       id: string;
       occurredAt: Date;
       competenceTypeId: string;
+      entryGroupId: string | null;
       validFrom: Date;
       validUntil: Date;
       restrictions: string | null;
@@ -153,6 +158,8 @@ export type CompetenceWorkerCompetenceRow = {
   code: string;
   name: string;
   category: string;
+  requiresAssessment: boolean;
+  requiresAuthorization: boolean;
   state: CompetenceCellState;
   isRequired: boolean;
   requirementSource: string | null;
@@ -204,14 +211,6 @@ export type CompetenceLinkedActionView = {
   closedAt: Date | null;
   createdAt: Date;
 };
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
-    .toLowerCase()
-    .trim();
-}
 
 async function loadActiveCompetenceTypes(plantId: string) {
   return prisma.competenceType.findMany({
@@ -475,6 +474,8 @@ export const CompetenceService = {
         code: type.code,
         name: type.name,
         category: type.category,
+        requiresAssessment: type.requiresAssessment,
+        requiresAuthorization: type.requiresAuthorization,
         displayOrder: type.displayOrder,
       })),
       workers: visibleWorkers.map((worker) => {
@@ -1018,52 +1019,27 @@ export const CompetenceService = {
         }
       }
 
-      // Resolved from data, not from input.assessmentId: the field is optional, so the
-      // same assessor who evaluated this worker could otherwise omit it and self-grant.
-      if (segregationOfDuties) {
-        const blocking = await tx.competenceAssessment.findFirst({
-          where: {
-            plantId,
-            competenceWorkerId: input.competenceWorkerId,
-            competenceTypeId: input.competenceTypeId,
-            result: CompetenceAssessmentResult.COMPETENT,
-            assessorUserId: actorUserId,
-          },
-          orderBy: { assessedAt: "desc" },
-        });
-        if (blocking) {
-          throw new CompetenceValidationError(
-            "SEGREGATION_OF_DUTIES",
-            "Segregation of duties: the user who performed a competent practical assessment for this worker and competence type cannot grant this authorization.",
-          );
-        }
-      }
-
-      // Additive, not a substitute for the data-driven check above: still validates
-      // that a client-supplied assessmentId is in scope and, if segregation applies,
-      // was not authored by this same actor.
       if (input.assessmentId) {
-        const assessmentRecord = await tx.competenceAssessment.findFirst({
-          where: {
-            id: input.assessmentId,
-            plantId,
-            competenceWorkerId: input.competenceWorkerId,
-            competenceTypeId: input.competenceTypeId,
-          },
-          select: { assessorUserId: true },
+        const assessmentExists = await tx.competenceAssessment.findFirst({
+          where: { id: input.assessmentId, plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
+          select: { id: true },
         });
-        if (!assessmentRecord) {
+        if (!assessmentExists) {
           throw new CompetenceValidationError(
             "ASSESSMENT_NOT_FOUND",
             "The referenced assessment was not found for this worker and competence type in this plant.",
           );
         }
-        if (segregationOfDuties && assessmentRecord.assessorUserId && assessmentRecord.assessorUserId === actorUserId) {
-          throw new CompetenceValidationError(
-            "SEGREGATION_OF_DUTIES",
-            "Segregation of duties: the user who performed the referenced practical assessment cannot grant this authorization.",
-          );
-        }
+      }
+
+      if (segregationOfDuties) {
+        await assertSegregationOfDuties(tx, {
+          plantId,
+          competenceWorkerId: input.competenceWorkerId,
+          competenceTypeId: input.competenceTypeId,
+          assessmentId: input.assessmentId ?? null,
+          actorUserId,
+        });
       }
 
       if (input.trainingRecordId) {
@@ -1416,6 +1392,8 @@ export const CompetenceService = {
         code: type.code,
         name: type.name,
         category: type.category,
+        requiresAssessment: type.requiresAssessment,
+        requiresAuthorization: type.requiresAuthorization,
         state: state?.state ?? CompetenceCellState.NOT_APPLICABLE,
         isRequired: state?.isRequired ?? false,
         requirementSource: state?.requirementSource ?? null,
@@ -1434,6 +1412,7 @@ export const CompetenceService = {
         id: record.id,
         occurredAt: record.completedAt,
         competenceTypeId: record.competenceTypeId,
+        entryGroupId: record.entryGroupId,
         result: record.result,
         provider: record.provider,
         trainerName: record.trainerName,
@@ -1446,6 +1425,7 @@ export const CompetenceService = {
         id: record.id,
         occurredAt: record.assessedAt,
         competenceTypeId: record.competenceTypeId,
+        entryGroupId: record.entryGroupId,
         result: record.result,
         method: record.method,
         assessorName: record.assessorName,
@@ -1457,6 +1437,7 @@ export const CompetenceService = {
         id: record.id,
         occurredAt: record.grantedAt,
         competenceTypeId: record.competenceTypeId,
+        entryGroupId: record.entryGroupId,
         validFrom: record.validFrom,
         validUntil: record.validUntil,
         restrictions: record.restrictions,
@@ -1522,11 +1503,9 @@ export const CompetenceService = {
   },
 
   /**
-   * §3.7(b): bulk recompute triggered when a CompetenceRequirement rule for
-   * this competence type changes. Recomputes every active worker's cell for
-   * that one type — resolution is re-read fresh inside recomputeAndSaveState,
-   * so this is always correct even though it does not try to guess which
-   * workers the scope change actually touches.
+   * Recomputes every active worker's cell for one competence type. This is a
+   * maintenance utility for catalog-wide state refreshes; direct requirement
+   * changes recompute only their affected worker/type pair.
    */
   async recomputeCompetenceTypeStates(plantId: string, competenceTypeId: string) {
     const now = new Date();
@@ -1706,8 +1685,8 @@ export const CompetenceService = {
    * §2.7 item 5: a type with WorkerAuthorization, TrainingRecord or
    * CompetenceAssessment history stays blocked from deactivation — those
    * records would become orphaned in a matrix that no longer has the column
-   * to show them against. CompetenceRequirement rules are not part of this
-   * check; they deactivate independently.
+   * to show them against. Per-worker requirement rows are cascade-deleted
+   * with their competence type and do not affect this protection.
    */
   async deactivateCompetenceType(plantId: string, competenceTypeId: string, actorUserId: string) {
     const existing = await prisma.competenceType.findFirst({ where: { id: competenceTypeId, plantId } });

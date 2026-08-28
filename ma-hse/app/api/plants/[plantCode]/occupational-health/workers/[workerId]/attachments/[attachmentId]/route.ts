@@ -14,7 +14,7 @@ export async function GET(
   context: { params: Promise<{ plantCode: string; workerId: string; attachmentId: string }> },
 ) {
   const { plantCode, workerId, attachmentId } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);

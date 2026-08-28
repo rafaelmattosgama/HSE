@@ -3,12 +3,12 @@ import { fail, ok } from "@/lib/api";
 import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { CompetenceService } from "@/lib/services/competence-service";
+import { CompetenceService, CompetenceValidationError } from "@/lib/services/competence-service";
 import { registerAssessmentInput } from "@/lib/validation/dtos";
 
 // §2.3: N3_SAFETY and N4_SUPERVISOR register assessments; N0_ADMIN and
 // N1_CORPORATE pass through requirePlantAccess's global bypass.
-const REGISTER_ROLES: RoleCode[] = [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR];
+const REGISTER_ROLES: RoleCode[] = [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR];
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
@@ -24,6 +24,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     const assessmentRecord = await CompetenceService.registerAssessment(plant.id, parsed.data, auth.session.user.id);
     return ok(assessmentRecord, { status: 201 });
   } catch (error) {
+    if (error instanceof CompetenceValidationError) return fail(error.code, error.message, error.status);
     return fail("REGISTER_ASSESSMENT_FAILED", error instanceof Error ? error.message : "Failed to register assessment", 422);
   }
 }

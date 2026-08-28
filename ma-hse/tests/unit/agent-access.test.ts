@@ -13,7 +13,7 @@ describe("agent access controls", () => {
     expect(canUseAgent({ role: RoleCode.N4_SUPERVISOR })).toBe(true);
 
     expect(canUseAgent({ role: RoleCode.N5_OPERATOR })).toBe(false);
-    expect(canUseAgent({ role: RoleCode.MEDICO })).toBe(false);
+    expect(canUseAgent({ role: RoleCode.N6_HR })).toBe(false);
     expect(canUseAgent({ role: null })).toBe(false);
   });
 
@@ -25,7 +25,7 @@ describe("agent access controls", () => {
     expect(isAgentRateLimitExempt({ role: RoleCode.N2_PLANT_MANAGER })).toBe(false);
     expect(isAgentRateLimitExempt({ role: RoleCode.N4_SUPERVISOR })).toBe(false);
     expect(isAgentRateLimitExempt({ role: RoleCode.N5_OPERATOR })).toBe(false);
-    expect(isAgentRateLimitExempt({ role: RoleCode.MEDICO })).toBe(false);
+    expect(isAgentRateLimitExempt({ role: RoleCode.N6_HR })).toBe(false);
   });
 
   it("separates agent rate limit keys by user and plant", () => {

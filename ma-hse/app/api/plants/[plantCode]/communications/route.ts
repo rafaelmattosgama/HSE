@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pla
     RoleCode.N3_SAFETY,
     RoleCode.N4_SUPERVISOR,
     RoleCode.N5_OPERATOR,
-    RoleCode.MEDICO,
+    RoleCode.N6_HR,
   ]);
   if ("error" in auth) return auth.error;
   const actorRole = "role" in auth ? auth.role : undefined;
