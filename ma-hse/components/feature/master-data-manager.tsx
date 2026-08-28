@@ -20,6 +20,7 @@ type Worker = {
   employeeNo: string;
   name: string;
   dept: string | null;
+  isActive?: boolean;
 };
 
 type EditingState = {
@@ -223,7 +224,7 @@ export function MasterDataManager({
         throw new Error(json.message ?? labels.failedToSaveWorker);
       }
 
-      setWorkers((current) => current.filter((entry) => entry.id !== item.id));
+      setWorkers((current) => current.map((entry) => (entry.id === item.id ? { ...entry, isActive: false } : entry)));
       if (editing.employeeNo === item.employeeNo) cancelWorkerEdit();
       setMessage(labels.workerDeleteSuccess);
     } catch (error) {
@@ -252,9 +253,32 @@ export function MasterDataManager({
         throw new Error(json.message ?? labels.workerDeleteAllSuccess);
       }
 
-      setWorkers([]);
+      setWorkers((current) => current.map((worker) => ({ ...worker, isActive: false })));
       cancelWorkerEdit();
       setMessage(labels.workerDeleteAllSuccess);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function permanentlyDeleteWorker() {
+    const id = workers.find((worker) => worker.employeeNo === editing.employeeNo)?.id;
+    if (!id || !window.confirm(labels.workerPermanentDeleteConfirm)) return;
+    setDeleting({ type: "worker", id, scope: "single" });
+    setMessage("");
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/workers`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, hardDelete: true }),
+      });
+      const json = await response.json();
+      if (!response.ok || !json.ok) throw new Error(json.message ?? labels.failedToUpdateWorker);
+      setWorkers((current) => current.filter((worker) => worker.id !== id));
+      cancelWorkerEdit();
+      setMessage(labels.workerPermanentDeleteSuccess);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
     } finally {
@@ -617,9 +641,14 @@ export function MasterDataManager({
                 {isDeletingAll("worker") ? labels.deactivatingAll : labels.deactivateAll}
               </button>
               {editing.employeeNo ? (
-                <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkerEdit}>
-                  {labels.cancel}
-                </button>
+                <>
+                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void permanentlyDeleteWorker()} disabled={Boolean(deleting)}>
+                    {labels.workerPermanentDelete}
+                  </button>
+                  <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={cancelWorkerEdit}>
+                    {labels.cancel}
+                  </button>
+                </>
               ) : null}
             </div>
           </div>
@@ -649,12 +678,12 @@ export function MasterDataManager({
             {workers.length === 0 ? <p>{labels.noWorkers}</p> : null}
             {workers.map((item) => (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
-                <p className="min-w-0 truncate">{item.employeeNo} - {item.name}{item.dept ? ` (${item.dept})` : ""}</p>
+                <p className="min-w-0 truncate">{item.employeeNo} - {item.name}{item.dept ? ` (${item.dept})` : ""} · {item.isActive === false ? labels.inactive : labels.active}</p>
                 <div className="flex shrink-0 items-center gap-2">
                   <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50" onClick={() => startWorkerEdit(item)} disabled={Boolean(deleting)}>
                     {labels.edit}
                   </button>
-                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteWorker(item)} disabled={Boolean(deleting)}>
+                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void deleteWorker(item)} disabled={Boolean(deleting) || item.isActive === false}>
                     {isDeleting("worker", item.id) ? labels.updating : labels.deactivate}
                   </button>
                 </div>

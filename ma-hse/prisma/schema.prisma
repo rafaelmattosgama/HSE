@@ -47,6 +47,7 @@ model Plant {
   nearMissTypes                      NearMissType[]
   notifications                      Notification[]
   occupationalHealthWorkers          OccupationalHealthWorker[]
+  occupationalHealthExams            OccupationalHealthExam[]
   accessTokens                       PlantAccessToken[]
   monthlyInputs                      PlantMonthlyInput[]
   recipientLists                     ReportRecipientList[]
@@ -101,6 +102,7 @@ model User {
   validatedCommunications                   Communication[]                     @relation("ValidatedByUser")
   communicationAtt                          CommunicationAttachment[]
   occupationalHealthWorkerAttachments        OccupationalHealthWorkerAttachment[]
+  occupationalHealthExamAttachments          OccupationalHealthExamAttachment[]
   contractorCompanies                       ExternalCompany[]                   @relation("ExternalContractorOwner")
   reviewedExternalCompanyDocuments          ExternalCompanyDocument[]           @relation("ExternalCompanyDocumentReviewer")
   contractorInvitationsSent                 ExternalCompanyInvitation[]         @relation("ExternalInvitationSponsor")
@@ -222,30 +224,36 @@ model Workstation {
 }
 
 model OccupationalHealthWorker {
-  id            String       @id @default(uuid())
-  plantId       String
-  employeeNo    String
-  name          String
-  birthDate     DateTime
-  workstationId String?
-  gender        String
-  hireDate      DateTime
-  roleStartDate DateTime
-  roleName      String?
-  nationality   String?
-  examDate      DateTime
-  validUntil    DateTime?
-  status        String       @default("VALID")
-  observation   String?
-  isActive      Boolean      @default(true)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  plant         Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  workstation   Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
-  attachments   OccupationalHealthWorkerAttachment[]
+  id                  String       @id @default(uuid())
+  plantId             String
+  employeeDirectoryId String?      @unique
+  employeeNo          String
+  name                String
+  birthDate           DateTime
+  workstationId       String?
+  gender              String
+  hireDate            DateTime
+  roleStartDate       DateTime
+  roleName            String?
+  nationality         String?
+  /// Legacy summary fields are retained for backwards compatibility. New
+  /// reads use the most recent OccupationalHealthExam instead.
+  examDate            DateTime?
+  validUntil          DateTime?
+  status              String       @default("VALID")
+  observation         String?
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  plant               Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  employeeDirectory   EmployeeDirectory? @relation(fields: [employeeDirectoryId], references: [id], onDelete: SetNull)
+  workstation         Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  attachments         OccupationalHealthWorkerAttachment[]
+  exams               OccupationalHealthExam[]
 
   @@unique([plantId, employeeNo])
   @@index([plantId, isActive, examDate])
+  @@index([plantId, employeeDirectoryId])
 }
 
 /// PDF/image documents attached to a worker's occupational health record —
@@ -267,6 +275,44 @@ model OccupationalHealthWorkerAttachment {
   uploadedBy               User?                     @relation(fields: [uploadedById], references: [id])
 
   @@index([occupationalHealthWorkerId])
+}
+
+/// Each clinical examination belongs to the stable occupational-health worker
+/// record. This deliberately does not use employeeNo: Admin can change that
+/// number without breaking the medical history.
+model OccupationalHealthExam {
+  id                         String   @id @default(uuid())
+  plantId                    String
+  occupationalHealthWorkerId String
+  examDate                   DateTime
+  validUntil                 DateTime
+  status                     String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  plant       Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  worker      OccupationalHealthWorker @relation(fields: [occupationalHealthWorkerId], references: [id], onDelete: Cascade)
+  attachments OccupationalHealthExamAttachment[]
+
+  @@index([occupationalHealthWorkerId, examDate])
+  @@index([plantId, examDate])
+}
+
+/// New documents belong to an examination. The older worker-level table is
+/// intentionally retained so its rows can be copied safely during migration.
+model OccupationalHealthExamAttachment {
+  id                        String                 @id @default(uuid())
+  occupationalHealthExamId  String
+  fileKey                   String
+  fileName                  String
+  contentType               String
+  createdAt                 DateTime               @default(now())
+  uploadedById              String?
+
+  exam       OccupationalHealthExam @relation(fields: [occupationalHealthExamId], references: [id], onDelete: Cascade)
+  uploadedBy User?                  @relation(fields: [uploadedById], references: [id])
+
+  @@index([occupationalHealthExamId])
 }
 
 model Equipment {
@@ -413,6 +459,7 @@ model EmployeeDirectory {
   shift                        Shift?                          @relation(fields: [shiftId], references: [id])
   contractorCompanyAssignments ExternalCompany[]               @relation("ExternalContractorSponsor")
   competenceWorkers            CompetenceWorker[]
+  occupationalHealthWorker     OccupationalHealthWorker?
   linkedUser                   User?
 
   @@unique([plantId, employeeNo])

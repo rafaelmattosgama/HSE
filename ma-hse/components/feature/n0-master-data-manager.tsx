@@ -24,6 +24,7 @@ type Worker = {
   employeeNo: string;
   name: string;
   dept: string | null;
+  isActive?: boolean;
 };
 
 export type MasterDataType =
@@ -576,7 +577,7 @@ export function N0MasterDataManager({
         throw new Error(response.status === 403 ? labels.permissionDenied : json?.message ?? labels.failedToUpdateWorker);
       }
 
-      setWorkers((current) => current.filter((entry) => entry.id !== worker.id));
+      setWorkers((current) => current.map((entry) => (entry.id === worker.id ? { ...entry, isActive: false } : entry)));
       if (workerForm.id === worker.id) {
         setWorkerForm({ ...EMPTY_WORKER_FORM });
       }
@@ -608,9 +609,31 @@ export function N0MasterDataManager({
         throw new Error(response.status === 403 ? labels.permissionDenied : json?.message ?? labels.failedToUpdateWorker);
       }
 
-      setWorkers([]);
+      setWorkers((current) => current.map((worker) => ({ ...worker, isActive: false })));
       setWorkerForm({ ...EMPTY_WORKER_FORM });
       setWorkerMessage(labels.workerDeleteAllSuccess);
+    } catch (error) {
+      setWorkerMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
+    } finally {
+      setDeletingKey(null);
+    }
+  }
+
+  async function permanentlyDeleteWorker() {
+    if (!workerForm.id || !window.confirm(labels.workerPermanentDeleteConfirm)) return;
+    setDeletingKey(`worker:${workerForm.id}`);
+    setWorkerMessage("");
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/workers`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: workerForm.id, hardDelete: true }),
+      });
+      const json = await parseApiResponse(response);
+      if (!response.ok || !json?.ok) throw new Error(json?.message ?? labels.failedToUpdateWorker);
+      setWorkers((current) => current.filter((worker) => worker.id !== workerForm.id));
+      setWorkerForm({ ...EMPTY_WORKER_FORM });
+      setWorkerMessage(labels.workerPermanentDeleteSuccess);
     } catch (error) {
       setWorkerMessage(error instanceof Error ? error.message : labels.failedToUpdateWorker);
     } finally {
@@ -882,9 +905,14 @@ export function N0MasterDataManager({
                 {deletingKey === "worker:all" ? labels.deactivatingAll : labels.deactivateAll}
               </button>
               {workerForm.id ? (
-                <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => setWorkerForm({ ...EMPTY_WORKER_FORM })}>
-                  {labels.cancel}
-                </button>
+                <>
+                  <button type="button" className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50" onClick={() => void permanentlyDeleteWorker()} disabled={Boolean(deletingKey)}>
+                    {labels.workerPermanentDelete}
+                  </button>
+                  <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-700" onClick={() => setWorkerForm({ ...EMPTY_WORKER_FORM })}>
+                    {labels.cancel}
+                  </button>
+                </>
               ) : null}
             </div>
           </div>
@@ -923,7 +951,7 @@ export function N0MasterDataManager({
                 <div key={worker.id} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-1.5">
                   <p className="min-w-0 truncate">
                     <span data-no-translate>{worker.employeeNo}</span>
-                    <span> - {worker.name}{worker.dept ? ` (${worker.dept})` : ""}</span>
+                    <span> - {worker.name}{worker.dept ? ` (${worker.dept})` : ""} · {worker.isActive === false ? labels.inactive : labels.active}</span>
                   </p>
                   <div className="flex shrink-0 items-center gap-2">
                     <button type="button" className="text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => startWorkerEdit(worker)} disabled={Boolean(deletingKey)}>
@@ -933,7 +961,7 @@ export function N0MasterDataManager({
                       type="button"
                       className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-50"
                       onClick={() => void deactivateWorker(worker)}
-                      disabled={Boolean(deletingKey)}
+                      disabled={Boolean(deletingKey) || worker.isActive === false}
                     >
                       {deletingKey === `worker:${worker.id}` ? labels.updating : labels.deactivate}
                     </button>

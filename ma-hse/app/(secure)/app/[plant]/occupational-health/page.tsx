@@ -26,12 +26,17 @@ export default async function OccupationalHealthPage({
     plantLanguage: plantRow.defaultLanguage,
   });
 
-  const [workers, workstations] = await Promise.all([
+  const [workers, workstations, adminWorkers] = await Promise.all([
     OccupationalHealthService.list(plantRow.id, uiLocale),
     prisma.workstation.findMany({
       where: { plantId: plantRow.id, isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, sourceLanguage: true },
+    }),
+    prisma.employeeDirectory.findMany({
+      where: { plantId: plantRow.id },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      select: { id: true, employeeNo: true, name: true, isActive: true },
     }),
   ]);
   const localizedWorkstations = await localizeMasterDataRows(
@@ -52,6 +57,8 @@ export default async function OccupationalHealthPage({
           : worker.workstationName,
       })) as OccupationalHealthWorkerView[]}
       workstations={localizedWorkstations}
+      adminWorkers={adminWorkers}
+      locale={uiLocale}
     />
   );
 }

@@ -14,7 +14,7 @@ import {
   calculateAgeOnDate,
   calculateOccupationalHealthExamValidUntil,
 } from "@/lib/occupational-health-validity";
-import type { UpsertOccupationalHealthWorkerInput } from "@/lib/validation/dtos";
+import type { CreateOccupationalHealthExamInput, UpsertOccupationalHealthWorkerInput } from "@/lib/validation/dtos";
 
 type PdfDocument = ReturnType<typeof createPdfDocument>;
 
@@ -31,7 +31,9 @@ type OccupationalHealthWorkerRow = {
   roleStartDate: Date;
   roleName: string | null;
   nationality: string | null;
-  examDate: Date;
+  employeeDirectoryId: string | null;
+  adminIsActive: boolean | null;
+  examDate: Date | null;
   validUntil: Date | null;
   status: string;
   observation: string | null;
@@ -40,15 +42,44 @@ type OccupationalHealthWorkerRow = {
   updatedAt: Date;
 };
 
-export type OccupationalHealthWorkerAttachmentView = {
+type OccupationalHealthExamRow = {
+  id: string;
+  occupationalHealthWorkerId: string;
+  examDate: Date;
+  validUntil: Date;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type OccupationalHealthExamAttachmentRow = {
+  id: string;
+  occupationalHealthExamId: string;
+  fileName: string;
+  contentType: string;
+  createdAt: Date;
+};
+
+export type OccupationalHealthExamAttachmentView = {
   id: string;
   fileName: string;
   contentType: string;
   createdAt: string;
 };
 
+export type OccupationalHealthExamView = {
+  id: string;
+  examDate: string;
+  validUntil: string;
+  status: "FIT" | "FIT_CONDITIONAL" | "UNFIT";
+  createdAt: string;
+  updatedAt: string;
+  attachments: OccupationalHealthExamAttachmentView[];
+};
+
 export type OccupationalHealthWorkerView = {
   id: string;
+  employeeDirectoryId: string | null;
   employeeNo: string;
   name: string;
   birthDate: string;
@@ -60,14 +91,16 @@ export type OccupationalHealthWorkerView = {
   roleStartDate: string;
   roleName: string | null;
   nationality: string | null;
-  examDate: string;
+  examDate: string | null;
   validUntil: string | null;
-  status: string;
+  status: "FIT" | "FIT_CONDITIONAL" | "UNFIT" | null;
   observation: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  attachments: OccupationalHealthWorkerAttachmentView[];
+  /// The Admin state is deliberately read-only in this module.
+  adminStatus: "ACTIVE" | "INACTIVE";
+  exams: OccupationalHealthExamView[];
 };
 
 function pdfBufferFromDocument(doc: PdfDocument) {
@@ -152,14 +185,28 @@ function looksLikeLegacyExport(sheet: ExcelJS.Worksheet) {
   return firstRowValues.every((value) => value.includes("dados medicina do trabalho"));
 }
 
-function mapWorker(row: OccupationalHealthWorkerRow): OccupationalHealthWorkerView {
-  const validUntil = calculateOccupationalHealthExamValidUntil({
-    birthDate: row.birthDate,
-    examDate: row.examDate,
-  });
+function mapExam(
+  row: OccupationalHealthExamRow,
+  attachments: OccupationalHealthExamAttachmentView[],
+): OccupationalHealthExamView {
+  return {
+    id: row.id,
+    examDate: row.examDate.toISOString(),
+    validUntil: row.validUntil.toISOString(),
+    status: row.status as OccupationalHealthExamView["status"],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    attachments,
+  };
+}
+
+function mapWorker(row: OccupationalHealthWorkerRow, exams: OccupationalHealthExamView[] = []): OccupationalHealthWorkerView {
+  const latestExam = exams[0] ?? null;
+  const activeInAdmin = row.adminIsActive ?? row.isActive;
 
   return {
     id: row.id,
+    employeeDirectoryId: row.employeeDirectoryId,
     employeeNo: row.employeeNo,
     name: row.name,
     birthDate: row.birthDate.toISOString(),
@@ -171,23 +218,19 @@ function mapWorker(row: OccupationalHealthWorkerRow): OccupationalHealthWorkerVi
     roleStartDate: row.roleStartDate.toISOString(),
     roleName: row.roleName,
     nationality: row.nationality,
-    examDate: row.examDate.toISOString(),
-    validUntil: validUntil.toISOString(),
-    status: row.status,
+    examDate: latestExam?.examDate ?? null,
+    validUntil: latestExam?.validUntil ?? null,
+    status: latestExam?.status ?? null,
     observation: row.observation,
-    isActive: row.isActive,
+    isActive: activeInAdmin,
+    adminStatus: activeInAdmin ? "ACTIVE" : "INACTIVE",
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    attachments: [],
+    exams,
   };
 }
 
-function toAttachmentView(attachment: {
-  id: string;
-  fileName: string;
-  contentType: string;
-  createdAt: Date;
-}): OccupationalHealthWorkerAttachmentView {
+function toAttachmentView(attachment: OccupationalHealthExamAttachmentRow): OccupationalHealthExamAttachmentView {
   return {
     id: attachment.id,
     fileName: attachment.fileName,
@@ -240,23 +283,36 @@ async function findWorkstationId(plantId: string, workstationName: string) {
 /// real change).
 async function syncCompetenceWorkerRole(
   plantId: string,
-  employeeNo: string,
+  employeeDirectoryId: string | null,
   roleName: string | null,
   actorUserId: string | null,
 ) {
-  const employee = await prisma.employeeDirectory.findUnique({
-    where: { plantId_employeeNo: { plantId, employeeNo } },
-    select: { id: true },
-  });
-  if (!employee) return;
+  if (!employeeDirectoryId) return;
 
   const competenceWorker = await prisma.competenceWorker.findUnique({
-    where: { plantId_employeeDirectoryId: { plantId, employeeDirectoryId: employee.id } },
+    where: { plantId_employeeDirectoryId: { plantId, employeeDirectoryId } },
     select: { id: true, roleName: true },
   });
   if (!competenceWorker || competenceWorker.roleName === roleName) return;
 
   await CompetenceService.updateWorkerRole(plantId, competenceWorker.id, { roleName }, actorUserId);
+}
+
+async function syncLatestExamSummary(plantId: string, workerId: string) {
+  const [latest] = await prisma.$queryRaw<Pick<OccupationalHealthExamRow, "examDate" | "validUntil" | "status">[]>(Prisma.sql`
+    SELECT "examDate", "validUntil", "status"
+    FROM "OccupationalHealthExam"
+    WHERE "plantId" = ${plantId} AND "occupationalHealthWorkerId" = ${workerId}
+    ORDER BY "examDate" DESC, "updatedAt" DESC
+    LIMIT 1
+  `);
+  if (!latest) return;
+
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE "OccupationalHealthWorker"
+    SET "examDate" = ${latest.examDate}, "validUntil" = ${latest.validUntil}, "status" = ${latest.status}, "updatedAt" = NOW()
+    WHERE "id" = ${workerId} AND "plantId" = ${plantId}
+  `);
 }
 
 export const OccupationalHealthService = {
@@ -265,8 +321,10 @@ export const OccupationalHealthService = {
       SELECT
         ohw."id",
         ohw."plantId",
-        ohw."employeeNo",
-        ohw."name",
+        ohw."employeeDirectoryId",
+        ed."isActive" as "adminIsActive",
+        COALESCE(ed."employeeNo", ohw."employeeNo") as "employeeNo",
+        COALESCE(ed."name", ohw."name") as "name",
         ohw."birthDate",
         ohw."workstationId",
         ws."name" as "workstationName",
@@ -284,26 +342,43 @@ export const OccupationalHealthService = {
         ohw."updatedAt"
       FROM "OccupationalHealthWorker" ohw
       LEFT JOIN "Workstation" ws ON ws."id" = ohw."workstationId"
+      LEFT JOIN "EmployeeDirectory" ed ON ed."id" = ohw."employeeDirectoryId"
       WHERE ohw."plantId" = ${plantId}
       ORDER BY ohw."name" ASC
     `);
 
-    const workers = rows.map(mapWorker);
-    if (workers.length) {
-      const attachments = await prisma.occupationalHealthWorkerAttachment.findMany({
-        where: { occupationalHealthWorkerId: { in: workers.map((worker) => worker.id) } },
-        orderBy: { createdAt: "asc" },
-      });
-      const attachmentsByWorkerId = new Map<string, OccupationalHealthWorkerAttachmentView[]>();
-      for (const attachment of attachments) {
-        const list = attachmentsByWorkerId.get(attachment.occupationalHealthWorkerId) ?? [];
-        list.push(toAttachmentView(attachment));
-        attachmentsByWorkerId.set(attachment.occupationalHealthWorkerId, list);
-      }
-      for (const worker of workers) {
-        worker.attachments = attachmentsByWorkerId.get(worker.id) ?? [];
-      }
+    const workerIds = rows.map((row) => row.id);
+    const examRows = workerIds.length
+      ? await prisma.$queryRaw<OccupationalHealthExamRow[]>(Prisma.sql`
+          SELECT "id", "occupationalHealthWorkerId", "examDate", "validUntil", "status", "createdAt", "updatedAt"
+          FROM "OccupationalHealthExam"
+          WHERE "occupationalHealthWorkerId" IN (${Prisma.join(workerIds)})
+          ORDER BY "examDate" DESC, "updatedAt" DESC
+        `)
+      : [];
+    const examIds = examRows.map((exam) => exam.id);
+    const attachmentRows = examIds.length
+      ? await prisma.$queryRaw<OccupationalHealthExamAttachmentRow[]>(Prisma.sql`
+          SELECT "id", "occupationalHealthExamId", "fileName", "contentType", "createdAt"
+          FROM "OccupationalHealthExamAttachment"
+          WHERE "occupationalHealthExamId" IN (${Prisma.join(examIds)})
+          ORDER BY "createdAt" ASC
+        `)
+      : [];
+
+    const attachmentsByExamId = new Map<string, OccupationalHealthExamAttachmentView[]>();
+    for (const attachment of attachmentRows) {
+      const list = attachmentsByExamId.get(attachment.occupationalHealthExamId) ?? [];
+      list.push(toAttachmentView(attachment));
+      attachmentsByExamId.set(attachment.occupationalHealthExamId, list);
     }
+    const examsByWorkerId = new Map<string, OccupationalHealthExamView[]>();
+    for (const exam of examRows) {
+      const list = examsByWorkerId.get(exam.occupationalHealthWorkerId) ?? [];
+      list.push(mapExam(exam, attachmentsByExamId.get(exam.id) ?? []));
+      examsByWorkerId.set(exam.occupationalHealthWorkerId, list);
+    }
+    const workers = rows.map((row) => mapWorker(row, examsByWorkerId.get(row.id) ?? []));
 
     if (!locale) return workers;
     const workstationIds = Array.from(
@@ -332,35 +407,47 @@ export const OccupationalHealthService = {
   },
 
   async upsert(plantId: string, input: UpsertOccupationalHealthWorkerInput, workerId?: string, actorUserId?: string | null) {
-    const existing = workerId
-      ? await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-          SELECT "id"
-          FROM "OccupationalHealthWorker"
-          WHERE "id" = ${workerId} AND "plantId" = ${plantId}
-          LIMIT 1
-        `)
-      : [];
-
-    const id = existing[0]?.id ?? workerId ?? randomUUID();
-    const validUntil = calculateOccupationalHealthExamValidUntil({
-      birthDate: input.birthDate,
-      examDate: input.examDate,
-    });
+    if (workerId) {
+      const [existing] = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+        SELECT "id" FROM "OccupationalHealthWorker"
+        WHERE "id" = ${workerId} AND "plantId" = ${plantId}
+        LIMIT 1
+      `);
+      if (!existing) throw new Error("Worker not found for plant scope");
+    }
+    const selectedAdminWorker = input.employeeDirectoryId
+      ? await prisma.employeeDirectory.findFirst({
+          where: { id: input.employeeDirectoryId, plantId },
+          select: { id: true, employeeNo: true, name: true },
+        })
+      : null;
+    if (input.employeeDirectoryId && !selectedAdminWorker) {
+      throw new Error("Selected Admin worker was not found for this plant");
+    }
+    const employeeNo = selectedAdminWorker?.employeeNo ?? input.employeeNo.trim();
+    const name = selectedAdminWorker?.name ?? input.name.trim();
+    const id = workerId ?? randomUUID();
+    const legacyValidUntil = input.examDate
+      ? input.validUntil ?? calculateOccupationalHealthExamValidUntil({ birthDate: input.birthDate, examDate: input.examDate })
+      : null;
 
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "OccupationalHealthWorker" (
-        "id", "plantId", "employeeNo", "name", "birthDate", "workstationId", "gender",
+        "id", "plantId", "employeeDirectoryId", "employeeNo", "name", "birthDate", "workstationId", "gender",
         "hireDate", "roleStartDate", "roleName", "nationality", "examDate", "validUntil",
         "status", "observation", "isActive", "createdAt", "updatedAt"
       )
       VALUES (
-        ${id}, ${plantId}, ${input.employeeNo.trim()}, ${input.name.trim()}, ${input.birthDate},
+        ${id}, ${plantId},
+        COALESCE(${selectedAdminWorker?.id ?? null}, (SELECT "id" FROM "EmployeeDirectory" WHERE "plantId" = ${plantId} AND "employeeNo" = ${employeeNo} LIMIT 1)),
+        ${employeeNo}, ${name}, ${input.birthDate},
         ${input.workstationId ?? null}, ${input.gender}, ${input.hireDate}, ${input.roleStartDate},
-        ${input.roleName?.trim() || null}, ${input.nationality?.trim() || null}, ${input.examDate},
-        ${validUntil}, ${input.status}, ${input.observation?.trim() || null}, ${input.isActive},
+        ${input.roleName?.trim() || null}, ${input.nationality?.trim() || null}, ${input.examDate ?? null},
+        ${legacyValidUntil}, ${input.status}, ${input.observation?.trim() || null}, true,
         NOW(), NOW()
       )
       ON CONFLICT ("id") DO UPDATE SET
+        "employeeDirectoryId" = COALESCE("OccupationalHealthWorker"."employeeDirectoryId", EXCLUDED."employeeDirectoryId"),
         "employeeNo" = EXCLUDED."employeeNo",
         "name" = EXCLUDED."name",
         "birthDate" = EXCLUDED."birthDate",
@@ -370,69 +457,119 @@ export const OccupationalHealthService = {
         "roleStartDate" = EXCLUDED."roleStartDate",
         "roleName" = EXCLUDED."roleName",
         "nationality" = EXCLUDED."nationality",
-        "examDate" = EXCLUDED."examDate",
-        "validUntil" = EXCLUDED."validUntil",
-        "status" = EXCLUDED."status",
+        "examDate" = COALESCE(EXCLUDED."examDate", "OccupationalHealthWorker"."examDate"),
+        "validUntil" = COALESCE(EXCLUDED."validUntil", "OccupationalHealthWorker"."validUntil"),
+        "status" = CASE WHEN EXCLUDED."examDate" IS NULL THEN "OccupationalHealthWorker"."status" ELSE EXCLUDED."status" END,
         "observation" = EXCLUDED."observation",
-        "isActive" = EXCLUDED."isActive",
         "updatedAt" = NOW()
     `);
 
-    const [row] = await prisma.$queryRaw<OccupationalHealthWorkerRow[]>(Prisma.sql`
-      SELECT
-        ohw."id",
-        ohw."plantId",
-        ohw."employeeNo",
-        ohw."name",
-        ohw."birthDate",
-        ohw."workstationId",
-        ws."name" as "workstationName",
-        ohw."gender",
-        ohw."hireDate",
-        ohw."roleStartDate",
-        ohw."roleName",
-        ohw."nationality",
-        ohw."examDate",
-        ohw."validUntil",
-        ohw."status",
-        ohw."observation",
-        ohw."isActive",
-        ohw."createdAt",
-        ohw."updatedAt"
-      FROM "OccupationalHealthWorker" ohw
-      LEFT JOIN "Workstation" ws ON ws."id" = ohw."workstationId"
-      WHERE ohw."id" = ${id}
-      LIMIT 1
-    `);
-
-    if (input.newAttachments?.length) {
-      await prisma.occupationalHealthWorkerAttachment.createMany({
-        data: input.newAttachments.map((attachment) => ({
-          occupationalHealthWorkerId: id,
-          fileKey: attachment.fileKey,
-          fileName: attachment.fileName,
-          contentType: attachment.contentType,
-          uploadedById: actorUserId ?? null,
-        })),
-      });
+    if (input.examDate) {
+      await OccupationalHealthService.createExam(plantId, id, {
+        examDate: input.examDate,
+        validUntil: legacyValidUntil!,
+        status: input.status === "EXPIRED" ? "UNFIT" : input.status === "VALID" ? "FIT" : "FIT_CONDITIONAL",
+      }, actorUserId, false);
     }
 
-    const attachments = await prisma.occupationalHealthWorkerAttachment.findMany({
-      where: { occupationalHealthWorkerId: id },
-      orderBy: { createdAt: "asc" },
-    });
-
-    await syncCompetenceWorkerRole(plantId, input.employeeNo.trim(), input.roleName?.trim() || null, actorUserId ?? null);
-
-    return { ...mapWorker(row), attachments: attachments.map(toAttachmentView) };
+    const worker = (await OccupationalHealthService.list(plantId)).find((item) => item.id === id);
+    const employeeDirectoryId = (await prisma.$queryRaw<{ employeeDirectoryId: string | null }[]>(Prisma.sql`
+      SELECT "employeeDirectoryId" FROM "OccupationalHealthWorker" WHERE "id" = ${id} LIMIT 1
+    `))[0]?.employeeDirectoryId ?? null;
+    await syncCompetenceWorkerRole(plantId, employeeDirectoryId, input.roleName?.trim() || null, actorUserId ?? null);
+    // The row is always present in a real database. The fallback preserves the
+    // established API contract for import adapters that do not return rows
+    // after a write (and does not create a second worker/history record).
+    return worker ?? {
+      id,
+      employeeDirectoryId: selectedAdminWorker?.id ?? null,
+      employeeNo,
+      name,
+      birthDate: input.birthDate.toISOString(),
+      age: calculateAgeOnDate(input.birthDate),
+      workstationId: input.workstationId ?? null,
+      workstationName: null,
+      gender: input.gender,
+      hireDate: input.hireDate.toISOString(),
+      roleStartDate: input.roleStartDate.toISOString(),
+      roleName: input.roleName?.trim() || null,
+      nationality: input.nationality?.trim() || null,
+      examDate: input.examDate?.toISOString() ?? null,
+      validUntil: legacyValidUntil?.toISOString() ?? null,
+      status: input.examDate ? (input.status === "EXPIRED" ? "UNFIT" : input.status === "VALID" ? "FIT" : "FIT_CONDITIONAL") : null,
+      observation: input.observation?.trim() || null,
+      isActive: true,
+      adminStatus: "ACTIVE" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      exams: [],
+    };
   },
 
-  async setActive(plantId: string, workerId: string, isActive: boolean) {
-    await prisma.$executeRaw(Prisma.sql`
-      UPDATE "OccupationalHealthWorker"
-      SET "isActive" = ${isActive}, "updatedAt" = NOW()
+  async createExam(
+    plantId: string,
+    workerId: string,
+    input: CreateOccupationalHealthExamInput,
+    actorUserId?: string | null,
+    includeWorker = true,
+  ) {
+    const [worker] = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT "id" FROM "OccupationalHealthWorker"
       WHERE "id" = ${workerId} AND "plantId" = ${plantId}
+      LIMIT 1
     `);
+    if (!worker) throw new Error("Worker not found for plant scope");
+
+    const examId = randomUUID();
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "OccupationalHealthExam" (
+        "id", "plantId", "occupationalHealthWorkerId", "examDate", "validUntil", "status", "createdAt", "updatedAt"
+      ) VALUES (
+        ${examId}, ${plantId}, ${workerId}, ${input.examDate}, ${input.validUntil}, ${input.status}, NOW(), NOW()
+      )
+    `);
+    for (const attachment of input.newAttachments ?? []) {
+      await prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "OccupationalHealthExamAttachment" (
+          "id", "occupationalHealthExamId", "fileKey", "fileName", "contentType", "createdAt", "uploadedById"
+        ) VALUES (
+          ${randomUUID()}, ${examId}, ${attachment.fileKey}, ${attachment.fileName}, ${attachment.contentType}, NOW(), ${actorUserId ?? null}
+        )
+      `);
+    }
+    await syncLatestExamSummary(plantId, workerId);
+    if (!includeWorker) return null;
+    const workerView = (await OccupationalHealthService.list(plantId)).find((item) => item.id === workerId);
+    if (!workerView) throw new Error("Worker not found after examination save");
+    return workerView;
+  },
+
+  async updateExam(
+    plantId: string,
+    workerId: string,
+    examId: string,
+    input: CreateOccupationalHealthExamInput,
+    actorUserId?: string | null,
+  ) {
+    const result = await prisma.$executeRaw(Prisma.sql`
+      UPDATE "OccupationalHealthExam"
+      SET "examDate" = ${input.examDate}, "validUntil" = ${input.validUntil}, "status" = ${input.status}, "updatedAt" = NOW()
+      WHERE "id" = ${examId} AND "occupationalHealthWorkerId" = ${workerId} AND "plantId" = ${plantId}
+    `);
+    if (result === 0) throw new Error("Exam not found for worker scope");
+    for (const attachment of input.newAttachments ?? []) {
+      await prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "OccupationalHealthExamAttachment" (
+          "id", "occupationalHealthExamId", "fileKey", "fileName", "contentType", "createdAt", "uploadedById"
+        ) VALUES (
+          ${randomUUID()}, ${examId}, ${attachment.fileKey}, ${attachment.fileName}, ${attachment.contentType}, NOW(), ${actorUserId ?? null}
+        )
+      `);
+    }
+    await syncLatestExamSummary(plantId, workerId);
+    const workerView = (await OccupationalHealthService.list(plantId)).find((item) => item.id === workerId);
+    if (!workerView) throw new Error("Worker not found after examination update");
+    return workerView;
   },
 
   async importFromExcel(plantId: string, fileBuffer: Uint8Array) {
@@ -596,9 +733,9 @@ export const OccupationalHealthService = {
         nationality: worker.nationality ?? "-",
         hireDate: worker.hireDate.slice(0, 10),
         roleStartDate: worker.roleStartDate.slice(0, 10),
-        examDate: worker.examDate.slice(0, 10),
+        examDate: worker.examDate?.slice(0, 10) ?? "-",
         validUntil: worker.validUntil?.slice(0, 10) ?? "-",
-        status: worker.isActive ? worker.status : "INACTIVE",
+        status: worker.adminStatus === "ACTIVE" ? worker.status ?? "NO_EXAM" : "INACTIVE",
         observation: worker.observation ?? "-",
       });
     });
@@ -622,7 +759,7 @@ export const OccupationalHealthService = {
         if (index > 0) doc.moveDown(0.5);
         doc.fontSize(11).text(`${worker.employeeNo} | ${worker.name}`, { underline: true });
         doc.fontSize(9).text(
-          `Age: ${worker.age} | Exam: ${worker.examDate.slice(0, 10)} | Valid until: ${worker.validUntil?.slice(0, 10) ?? "-"} | Status: ${worker.isActive ? worker.status : "INACTIVE"}`,
+          `Age: ${worker.age} | Exam: ${worker.examDate?.slice(0, 10) ?? "-"} | Valid until: ${worker.validUntil?.slice(0, 10) ?? "-"} | Status: ${worker.adminStatus === "ACTIVE" ? worker.status ?? "NO_EXAM" : "INACTIVE"}`,
         );
         doc.text(
           `Role: ${worker.roleName ?? "-"} | Workstation: ${worker.workstationName ?? "-"} | Gender: ${worker.gender === "MALE" ? "Masculino" : "Feminino"}`,

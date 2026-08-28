@@ -996,12 +996,20 @@ export const createWorkerInput = z.object({
 export const deleteWorkerInput = z.object({
   id: z.string().uuid().optional(),
   deleteAll: z.boolean().default(false),
+  hardDelete: z.boolean().default(false),
 }).superRefine((value, ctx) => {
   if (!value.deleteAll && !value.id) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["id"],
       message: "Worker id is required when deleteAll is false",
+    });
+  }
+  if (value.deleteAll && value.hardDelete) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["hardDelete"],
+      message: "Bulk permanent deletion is not allowed",
     });
   }
 });
@@ -1024,6 +1032,9 @@ const occupationalHealthAttachmentInput = z.object({
 });
 
 export const upsertOccupationalHealthWorkerInput = z.object({
+  // UI-created records select a worker from the Admin directory. Optional so
+  // legacy Excel imports remain supported when the directory has no match.
+  employeeDirectoryId: z.string().uuid().optional().nullable(),
   employeeNo: z.string().min(1),
   name: z.string().min(2),
   birthDate: z.coerce.date(),
@@ -1033,13 +1044,34 @@ export const upsertOccupationalHealthWorkerInput = z.object({
   roleStartDate: z.coerce.date(),
   roleName: z.string().optional(),
   nationality: z.string().optional(),
-  examDate: z.coerce.date(),
+  // Legacy profile/import compatibility. New examination records use the
+  // dedicated DTO below, while a worker may now have no examination yet.
+  examDate: z.coerce.date().optional(),
   validUntil: z.coerce.date().optional().nullable(),
   status: z.enum(["VALID", "EXPIRED", "DUE_SOON", "PENDING"]).default("VALID"),
   observation: z.string().optional(),
   isActive: z.boolean().default(true),
   newAttachments: z.array(occupationalHealthAttachmentInput).optional(),
 });
+
+export const occupationalHealthExamStatusInput = z.enum(["FIT", "FIT_CONDITIONAL", "UNFIT"]);
+
+export const createOccupationalHealthExamInput = z.object({
+  examDate: z.coerce.date(),
+  validUntil: z.coerce.date(),
+  status: occupationalHealthExamStatusInput,
+  newAttachments: z.array(occupationalHealthAttachmentInput).max(1).optional(),
+}).superRefine((value, ctx) => {
+  if (value.validUntil < value.examDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["validUntil"],
+      message: "Valid until cannot be before exam date",
+    });
+  }
+});
+
+export const updateOccupationalHealthExamInput = createOccupationalHealthExamInput;
 
 export const createCorporatePlantInput = z.object({
   code: z.string().min(2),
@@ -1245,6 +1277,7 @@ export type SetCompetenceWorkerRequirementInput = z.infer<typeof setCompetenceWo
 export type UpdateCompetenceWorkerRoleInput = z.infer<typeof updateCompetenceWorkerRoleInput>;
 export type CreateWorkerInput = z.infer<typeof createWorkerInput>;
 export type UpsertOccupationalHealthWorkerInput = z.infer<typeof upsertOccupationalHealthWorkerInput>;
+export type CreateOccupationalHealthExamInput = z.infer<typeof createOccupationalHealthExamInput>;
 export type CreateCorporatePlantInput = z.infer<typeof createCorporatePlantInput>;
 export type UpdateCorporatePlantLanguageInput = z.infer<typeof updateCorporatePlantLanguageInput>;
 export type UpdateCorporatePlantInput = z.infer<typeof updateCorporatePlantInput>;

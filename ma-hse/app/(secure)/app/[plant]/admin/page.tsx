@@ -147,8 +147,11 @@ export default async function AdminPage({
       orderBy: { name: "asc" },
     }),
     prisma.employeeDirectory.findMany({
-      where: { plantId: plantRow.id, isActive: true },
-      orderBy: { name: "asc" },
+      // Admin is the source of truth for worker status. Keep inactive rows
+      // visible here so they can be audited/reactivated instead of appearing
+      // to have been deleted.
+      where: { plantId: plantRow.id },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
     }),
     prisma.unsafeActType.findMany({
       where: { plantId: plantRow.id, isActive: true },
@@ -282,7 +285,7 @@ export default async function AdminPage({
             originalName: item.originalName,
             isActive: item.isActive,
           }))}
-          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept, isActive: item.isActive }))}
           initialNearMissTypes={nearMissTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
           initialUnsafeActTypes={unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
           initialUnsafeConditionTypes={unsafeConditionTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
@@ -300,7 +303,7 @@ export default async function AdminPage({
           plantCode={plant}
           initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
           initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
-          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept, isActive: item.isActive }))}
           labels={masterDataUi}
         />
       )}
