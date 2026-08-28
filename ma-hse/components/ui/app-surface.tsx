@@ -116,7 +116,9 @@ export function AppKpiCard({
         </div>
         {icon ? <div className="app-kpi-card__icon">{icon}</div> : null}
       </div>
-      {detail ? <p className="app-kpi-card__detail">{detail}</p> : null}
+      {/* detail accepts arbitrary React content (including lists and buttons),
+          so it must not be a paragraph wrapper. */}
+      {detail ? <div className="app-kpi-card__detail">{detail}</div> : null}
     </article>
   );
 }

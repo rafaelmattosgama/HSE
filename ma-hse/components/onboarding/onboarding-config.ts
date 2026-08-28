@@ -242,8 +242,8 @@ const roleConfigs: Record<RoleCode, RoleOnboardingConfig> = {
       userMenuStep,
     ],
   },
-  MEDICO: {
-    role: "MEDICO",
+  N6_HR: {
+    role: "N6_HR",
     steps: [topbarStep, dashboardStep, userMenuStep],
   },
 };

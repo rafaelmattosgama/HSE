@@ -5,7 +5,7 @@ import { OccupationalHealthService } from "@/lib/services/occupational-health-se
 
 export async function GET(_: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);

@@ -11,7 +11,7 @@ import { deleteSEWOInput, updateSEWOInput } from "@/lib/validation/dtos";
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;
-  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY]);
+  const auth = await requirePlantAccess(plantCode, [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   if ("error" in auth) return auth.error;
 
   const plant = await getPlantByCode(plantCode);

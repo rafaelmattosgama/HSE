@@ -17,31 +17,37 @@ describe("user management role policy", () => {
       RoleCode.N3_SAFETY,
       RoleCode.N4_SUPERVISOR,
       RoleCode.N5_OPERATOR,
-      RoleCode.MEDICO,
+      RoleCode.N6_HR,
     ]);
     expect(canCreateRole(RoleCode.N0_ADMIN, RoleCode.N0_ADMIN)).toBe(false);
   });
 
-  it("allows N1 to create only N1/N2/N3", () => {
+  it("allows N1 to create N1/N2/N3/N6_HR", () => {
     expect(getCreatableRoles(RoleCode.N1_CORPORATE)).toEqual([
       RoleCode.N1_CORPORATE,
       RoleCode.N2_PLANT_MANAGER,
       RoleCode.N3_SAFETY,
+      RoleCode.N6_HR,
     ]);
   });
 
-  it("allows N3 to create only N4/N5/MEDICO", () => {
+  it("allows N2 to create only N6_HR", () => {
+    expect(getCreatableRoles(RoleCode.N2_PLANT_MANAGER)).toEqual([RoleCode.N6_HR]);
+    expect(canCreateRole(RoleCode.N2_PLANT_MANAGER, RoleCode.N6_HR)).toBe(true);
+  });
+
+  it("allows N3 to create only N4/N5/N6_HR", () => {
     expect(getCreatableRoles(RoleCode.N3_SAFETY)).toEqual([
       RoleCode.N4_SUPERVISOR,
       RoleCode.N5_OPERATOR,
-      RoleCode.MEDICO,
+      RoleCode.N6_HR,
     ]);
   });
 
   it("denies forbidden combinations", () => {
     expect(canCreateRole(RoleCode.N3_SAFETY, RoleCode.N2_PLANT_MANAGER)).toBe(false);
     expect(canCreateRole(RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR)).toBe(false);
-    expect(canCreateRole(RoleCode.N5_OPERATOR, RoleCode.MEDICO)).toBe(false);
+    expect(canCreateRole(RoleCode.N5_OPERATOR, RoleCode.N6_HR)).toBe(false);
   });
 
   it("keeps N1 global and N3 plant-scoped for role assignments", () => {
@@ -87,7 +93,7 @@ describe("user management role policy", () => {
   });
 
   it("accepts valid non-N0 roles in createPlantUserInput", () => {
-    const validRoles = [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.MEDICO];
+    const validRoles = [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR];
     for (const role of validRoles) {
       const result = createPlantUserInput.safeParse({
         email: "test@example.com",
@@ -99,7 +105,7 @@ describe("user management role policy", () => {
   });
 
   it("accepts valid non-N0 roles in updatePlantUserInput", () => {
-    const validRoles = [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.MEDICO];
+    const validRoles = [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR];
     for (const role of validRoles) {
       const result = updatePlantUserInput.safeParse({
         email: "test@example.com",

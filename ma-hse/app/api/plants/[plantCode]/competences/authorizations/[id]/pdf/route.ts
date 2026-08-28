@@ -16,6 +16,7 @@ const VIEW_ROLES: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
+  RoleCode.N6_HR,
 ];
 
 /** §6.3: individual authorization PDF, for signature, via pdfkit-helper.ts (createPdfDocument). */

@@ -33,12 +33,12 @@ const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?:
   },
   { href: "environment-dashboard", label: "environmentDashboard", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
   { href: "validation", label: "validation", roles: [RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY] },
-  { href: "communications", label: "communications", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
-  { href: "actions", label: "actions", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
-  { href: "sewo", label: "S-EWO", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
+  { href: "communications", label: "communications", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR] },
+  { href: "actions", label: "actions", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR] },
+  { href: "sewo", label: "S-EWO", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N6_HR] },
   { href: "smat", label: "SMAT", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
-  { href: "occupational-health", label: "occupationalHealth", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY] },
-  { href: "competences", label: "competences", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
+  { href: "occupational-health", label: "occupationalHealth", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR] },
+  { href: "competences", label: "competences", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR] },
   { href: "fire-equipment", label: "fireEquipment", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR] },
   { href: "monthly-inputs", label: "monthlyInputs", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY] },
   { href: "contractors", label: "contractors", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
@@ -101,7 +101,8 @@ export default async function PlantLayout({
     || plantRole === RoleCode.N2_PLANT_MANAGER
     || plantRole === RoleCode.N3_SAFETY
     || plantRole === RoleCode.N4_SUPERVISOR
-    || plantRole === RoleCode.N5_OPERATOR;
+    || plantRole === RoleCode.N5_OPERATOR
+    || plantRole === RoleCode.N6_HR;
   // Must mirror notifications/fire-equipment/route.ts's VIEW_ROLES exactly —
   // same reasoning as hasCompetenceUrgentAlerts just above.
   const hasFireEquipmentUrgentAlerts = hasCompetenceUrgentAlerts;

@@ -230,16 +230,28 @@ describe("importable Excel compatibility", () => {
         }),
       }),
     );
-    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+    // Profile write + the migrated exam row + summary synchronization.
+    expect(prismaMock.$executeRaw.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
   it("imports the occupational health Excel export back into the importer", async () => {
-    prismaMock.$queryRaw.mockResolvedValueOnce([occupationalWorkerRow]).mockResolvedValueOnce([occupationalWorkerRow]);
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([occupationalWorkerRow])
+      .mockResolvedValueOnce([{
+        id: "exam-1",
+        occupationalHealthWorkerId: "worker-1",
+        examDate: occupationalWorkerRow.examDate,
+        validUntil: occupationalWorkerRow.validUntil,
+        status: "FIT",
+        createdAt: occupationalWorkerRow.createdAt,
+        updatedAt: occupationalWorkerRow.updatedAt,
+      }])
+      .mockResolvedValueOnce([]);
 
     const exported = await OccupationalHealthService.buildExport("plant-1", "pl01");
     const summary = await OccupationalHealthService.importFromExcel("plant-1", new Uint8Array(exported.xlsx));
 
     expect(summary).toEqual({ imported: 1, skipped: 0 });
-    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.$executeRaw.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 });

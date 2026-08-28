@@ -541,8 +541,13 @@ export function CompetenceMatrixManager({
           competenceWorkerId={activeCell.competenceWorkerId}
           competenceTypeId={activeCell.competenceTypeId}
           competenceTypeName={activeCell.competenceTypeName}
+          competenceType={
+            matrix.competenceTypes.find((type) => type.id === activeCell.competenceTypeId) ??
+            { requiresAssessment: true, requiresAuthorization: true }
+          }
           workerName={activeCell.workerName}
           owners={owners}
+          assessorOptions={owners.map((owner) => ({ id: owner.id, name: owner.name }))}
           onClose={() => setActiveCell(null)}
           onChanged={() => window.location.reload()}
         />

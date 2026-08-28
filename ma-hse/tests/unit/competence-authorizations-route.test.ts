@@ -10,6 +10,15 @@ const plantMock = vi.hoisted(() => ({
 }));
 
 const competenceServiceMock = vi.hoisted(() => ({
+  CompetenceValidationError: class CompetenceValidationError extends Error {
+    constructor(
+      public code: string,
+      message: string,
+      public status: number,
+    ) {
+      super(message);
+    }
+  },
   CompetenceService: {
     registerTraining: vi.fn(),
     registerAssessment: vi.fn(),
@@ -69,7 +78,7 @@ const REASON_BODY = JSON.stringify({ reason: "Because" });
 describe("competences/trainings and assessments routes — N3/N4 register, N2/N5 cannot (§2.3)", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it.each([RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR])("training: %s can register", async (role) => {
+  it.each([RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR])("training: %s can register", async (role) => {
     guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.registerTraining.mockResolvedValue({ id: "training-1" });
@@ -83,7 +92,7 @@ describe("competences/trainings and assessments routes — N3/N4 register, N2/N5
     // (menor) guards against silently widening REGISTER_ROLES in the route: if someone
     // added e.g. N2_PLANT_MANAGER there, this call's second argument would change and
     // this assertion would catch it even though requirePlantAccess itself is mocked.
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR]);
   });
 
   it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N5_OPERATOR])("training: %s is rejected", async (role) => {
@@ -96,13 +105,13 @@ describe("competences/trainings and assessments routes — N3/N4 register, N2/N5
 
     expect(response.status).toBe(403);
     expect(competenceServiceMock.CompetenceService.registerTraining).not.toHaveBeenCalled();
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR]);
     // role kept only to document intent under it.each
     void role;
   });
 
-  it("assessment: N4_SUPERVISOR can register", async () => {
-    guardsMock.requirePlantAccess.mockResolvedValue(allowed(RoleCode.N4_SUPERVISOR));
+  it.each([RoleCode.N4_SUPERVISOR, RoleCode.N6_HR])("assessment: %s can register", async (role) => {
+    guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.registerAssessment.mockResolvedValue({ id: "assessment-1" });
 
@@ -112,15 +121,15 @@ describe("competences/trainings and assessments routes — N3/N4 register, N2/N5
     )) as Response;
 
     expect(response.status).toBe(201);
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR]);
   });
 });
 
 describe("competences/authorizations route — only N3_SAFETY grants (§2.3)", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("N3_SAFETY can grant", async () => {
-    guardsMock.requirePlantAccess.mockResolvedValue(allowed(RoleCode.N3_SAFETY));
+  it.each([RoleCode.N3_SAFETY, RoleCode.N6_HR])("%s can grant", async (role) => {
+    guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.grantAuthorization.mockResolvedValue({ id: "auth-1" });
 
@@ -133,7 +142,7 @@ describe("competences/authorizations route — only N3_SAFETY grants (§2.3)", (
     // (menor) this is the exact regression §2.3 of the review flags: without asserting
     // the roles array, adding RoleCode.N2_PLANT_MANAGER to GRANT_ROLES would leave this
     // suite green.
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   });
 
   it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR])("%s cannot grant, despite being allowed to suspend", async () => {
@@ -146,14 +155,18 @@ describe("competences/authorizations route — only N3_SAFETY grants (§2.3)", (
 
     expect(response.status).toBe(403);
     expect(competenceServiceMock.CompetenceService.grantAuthorization).not.toHaveBeenCalled();
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   });
 
   it("turns a segregation-of-duties rejection from the service into a 422, not a 500", async () => {
     guardsMock.requirePlantAccess.mockResolvedValue(allowed(RoleCode.N3_SAFETY));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.grantAuthorization.mockRejectedValue(
-      new Error("Segregation of duties: the user who performed the practical assessment cannot grant this authorization"),
+      new competenceServiceMock.CompetenceValidationError(
+        "SEGREGATION_OF_DUTIES",
+        "Segregation of duties: the user who performed the practical assessment cannot grant this authorization",
+        422,
+      ),
     );
 
     const response = (await postAuthorization(
@@ -170,7 +183,7 @@ describe("competences/authorizations route — only N3_SAFETY grants (§2.3)", (
 describe("authorizations/[id]/suspend and /reactivate — N2, N3, N4 (§2.3)", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR])("%s can suspend", async (role) => {
+  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR])("%s can suspend", async (role) => {
     guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.suspendAuthorization.mockResolvedValue({ id: "auth-1" });
@@ -183,11 +196,11 @@ describe("authorizations/[id]/suspend and /reactivate — N2, N3, N4 (§2.3)", (
     expect(response.status).toBe(200);
     expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith(
       "maap",
-      [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR],
+      [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR],
     );
   });
 
-  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR])("%s can reactivate", async (role) => {
+  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR])("%s can reactivate", async (role) => {
     guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.reactivateAuthorization.mockResolvedValue({ id: "auth-1" });
@@ -200,7 +213,7 @@ describe("authorizations/[id]/suspend and /reactivate — N2, N3, N4 (§2.3)", (
     expect(response.status).toBe(200);
     expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith(
       "maap",
-      [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR],
+      [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR],
     );
   });
 });
@@ -208,8 +221,8 @@ describe("authorizations/[id]/suspend and /reactivate — N2, N3, N4 (§2.3)", (
 describe("authorizations/[id]/revoke — only N3_SAFETY (§2.3), N2/N4 rejected even though they can suspend", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("N3_SAFETY can revoke", async () => {
-    guardsMock.requirePlantAccess.mockResolvedValue(allowed(RoleCode.N3_SAFETY));
+  it.each([RoleCode.N3_SAFETY, RoleCode.N6_HR])("%s can revoke", async (role) => {
+    guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     competenceServiceMock.CompetenceService.revokeAuthorization.mockResolvedValue({ id: "auth-1" });
 
@@ -219,7 +232,7 @@ describe("authorizations/[id]/revoke — only N3_SAFETY (§2.3), N2/N4 rejected 
     )) as Response;
 
     expect(response.status).toBe(200);
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   });
 
   it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR])("%s cannot revoke", async () => {
@@ -232,6 +245,6 @@ describe("authorizations/[id]/revoke — only N3_SAFETY (§2.3), N2/N4 rejected 
 
     expect(response.status).toBe(403);
     expect(competenceServiceMock.CompetenceService.revokeAuthorization).not.toHaveBeenCalled();
-    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY]);
+    expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith("maap", [RoleCode.N3_SAFETY, RoleCode.N6_HR]);
   });
 });

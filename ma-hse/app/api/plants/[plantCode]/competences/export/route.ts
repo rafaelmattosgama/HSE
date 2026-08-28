@@ -7,7 +7,7 @@ import { competenceMatrixExportInput } from "@/lib/validation/dtos";
 
 export const runtime = "nodejs";
 
-const EXPORT_ROLES: RoleCode[] = [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR];
+const EXPORT_ROLES: RoleCode[] = [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR];
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;

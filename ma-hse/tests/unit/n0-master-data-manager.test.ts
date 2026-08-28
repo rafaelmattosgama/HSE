@@ -329,8 +329,10 @@ describe("N0MasterDataManager", () => {
       deleteAll: true,
     });
     expect(await within(form).findByText(labels.workerDeleteAllSuccess)).toBeTruthy();
-    expect(within(form).queryByText("1001")).toBeNull();
-    expect(within(form).queryByText("1002")).toBeNull();
+    expect(within(form).getByText("1001")).toBeTruthy();
+    expect(within(form).getByText("1002")).toBeTruthy();
+    expect(within(form).getByText(/Maria Silva.*inactive/)).toBeTruthy();
+    expect(within(form).getByText(/Joao Costa.*inactive/)).toBeTruthy();
   });
 
   it("shows the shared localized equipment subsection for the N3 configuration", () => {

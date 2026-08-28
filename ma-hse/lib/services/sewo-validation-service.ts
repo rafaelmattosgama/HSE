@@ -192,7 +192,7 @@ export async function getUserHighestRoleForSewoPlant(userId: string, plantId: st
   if (roleCodes.includes(RoleCode.N3_SAFETY)) return RoleCode.N3_SAFETY;
   if (roleCodes.includes(RoleCode.N4_SUPERVISOR)) return RoleCode.N4_SUPERVISOR;
   if (roleCodes.includes(RoleCode.N5_OPERATOR)) return RoleCode.N5_OPERATOR;
-  if (roleCodes.includes(RoleCode.MEDICO)) return RoleCode.MEDICO;
+  if (roleCodes.includes(RoleCode.N6_HR)) return RoleCode.N6_HR;
 
   return null;
 }

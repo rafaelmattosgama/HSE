@@ -1,5 +1,15 @@
 import type { ApiEnvelope } from "@/lib/api";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly errorCode?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 function isApiEnvelope<T>(value: unknown): value is ApiEnvelope<T> {
   return Boolean(value && typeof value === "object" && "ok" in value);
 }
@@ -20,11 +30,11 @@ export async function requireApiResponse<T>(response: Response, fallbackMessage:
   const json = await parseApiResponse<T>(response);
 
   if (!json) {
-    throw new Error(fallbackMessage);
+    throw new ApiError(fallbackMessage);
   }
 
   if (!response.ok || !json.ok) {
-    throw new Error(json.message ?? fallbackMessage);
+    throw new ApiError(json.message ?? fallbackMessage, json.errorCode);
   }
 
   return json;

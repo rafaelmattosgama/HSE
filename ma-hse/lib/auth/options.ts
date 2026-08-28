@@ -168,7 +168,7 @@ export const authOptions: NextAuthOptions = {
                 entry.role.code === RoleCode.N1_CORPORATE ||
                 entry.role.code === RoleCode.N2_PLANT_MANAGER ||
                 entry.role.code === RoleCode.N3_SAFETY ||
-                entry.role.code === RoleCode.MEDICO,
+                entry.role.code === RoleCode.N6_HR,
             }))
             .sort((left, right) => {
               if (left.plantCode && right.plantCode) return left.plantCode.localeCompare(right.plantCode);

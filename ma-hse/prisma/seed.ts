@@ -60,8 +60,9 @@ type PlantActors = {
   n3UserId: string;
   n4UserId: string;
   n5UserId: string;
-  medicoUserId: string;
 };
+
+const RETIRED_DEMO_USER_EMAILS = ["doctor.pl01@ma-hse.local", "doctor.pl02@ma-hse.local"] as const;
 
 function stableUuid(seed: string) {
   const hex = crypto.createHash("sha1").update(seed).digest("hex").slice(0, 32);
@@ -103,7 +104,7 @@ const roles: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
-  RoleCode.MEDICO,
+  RoleCode.N6_HR,
 ];
 
 const PL1_WORKSTATIONS = [
@@ -998,6 +999,21 @@ async function syncUserRoles(
   });
 }
 
+async function removeRetiredDemoUsers() {
+  await prisma.userPlantRole.deleteMany({
+    where: {
+      user: {
+        email: { in: [...RETIRED_DEMO_USER_EMAILS] },
+      },
+    },
+  });
+  await prisma.user.deleteMany({
+    where: {
+      email: { in: [...RETIRED_DEMO_USER_EMAILS] },
+    },
+  });
+}
+
 async function getPlantFixture(plantId: string): Promise<PlantFixture> {
   const [area, line, workstation, equipment, shift, riskTheme, unsafeActType, unsafeConditionType, nearMissType, bodyPart, injuryType] =
     await prisma.$transaction([
@@ -1638,6 +1654,8 @@ async function main() {
 
   const passwordHash = await hash(SEED_DEFAULT_PASSWORD, 12);
 
+  await removeRetiredDemoUsers();
+
   const seedUsers: SeedUserDefinition[] = [
     {
       email: SEED_N0_ADMIN_EMAIL,
@@ -1698,18 +1716,6 @@ async function main() {
       name: "Operator PL02 (N5)",
       language: "pt",
       roleBindings: [{ plantCode: "pl02", role: RoleCode.N5_OPERATOR }],
-    },
-    {
-      email: "doctor.pl01@ma-hse.local",
-      name: "Doctor PL01 (MEDICO)",
-      language: "it",
-      roleBindings: [{ plantCode: "pl01", role: RoleCode.MEDICO }],
-    },
-    {
-      email: "doctor.pl02@ma-hse.local",
-      name: "Doctor PL02 (MEDICO)",
-      language: "pt",
-      roleBindings: [{ plantCode: "pl02", role: RoleCode.MEDICO }],
     },
   ];
 
@@ -1981,7 +1987,6 @@ async function main() {
       n3UserId: safetyPl01.id,
       n4UserId: requireValue(usersByEmail.get("supervisor.pl01@ma-hse.local"), "Missing supervisor PL01 user").id,
       n5UserId: requireValue(usersByEmail.get("operator.pl01@ma-hse.local"), "Missing operator PL01 user").id,
-      medicoUserId: requireValue(usersByEmail.get("doctor.pl01@ma-hse.local"), "Missing doctor PL01 user").id,
     },
     employeePrimaryNo: "IT1001",
     employeeSecondaryNo: "IT1002",
@@ -1997,7 +2002,6 @@ async function main() {
       n3UserId: safetyPl02.id,
       n4UserId: requireValue(usersByEmail.get("supervisor.pl02@ma-hse.local"), "Missing supervisor PL02 user").id,
       n5UserId: requireValue(usersByEmail.get("operator.pl02@ma-hse.local"), "Missing operator PL02 user").id,
-      medicoUserId: requireValue(usersByEmail.get("doctor.pl02@ma-hse.local"), "Missing doctor PL02 user").id,
     },
     employeePrimaryNo: "BR2001",
     employeeSecondaryNo: "BR2002",
@@ -2068,8 +2072,6 @@ async function main() {
   console.log("- N3: safety.pl01@ma-hse.local, safety.pl02@ma-hse.local");
   console.log("- N4: supervisor.pl01@ma-hse.local, supervisor.pl02@ma-hse.local");
   console.log("- N5: operator.pl01@ma-hse.local, operator.pl02@ma-hse.local");
-  console.log("- MEDICO: doctor.pl01@ma-hse.local, doctor.pl02@ma-hse.local");
-  console.log("- N6: token-only flow (no email login). Use fixed QR token routes below.");
   console.log("Sample QR tokens:");
   console.log("- pl01 REPORT token: pl01-report-seed-token");
   console.log("- pl01 KIOSK token: pl01-kiosk-seed-token");

@@ -1,8 +1,9 @@
 import { ActionPriority } from "@prisma/client";
 import { ActionService } from "@/lib/services/action-service";
 import { prisma } from "@/lib/prisma";
+import { canCloseAction } from "@/lib/rbac/action-close";
 import {
-  AGENT_ACTION_ROLES,
+  AGENT_CLOSE_ACTION_ROLES,
   AGENT_CONTROLLED_OPERATION_ROLES,
   AgentToolUserError,
   type AgentToolContext,
@@ -29,13 +30,16 @@ export async function executeCloseActionConfirmation(ctx: AgentToolContext, payl
     ctx,
     toolName: "close_action_confirmed",
     toolInput: payload,
-    allowedRoles: AGENT_ACTION_ROLES,
+    allowedRoles: AGENT_CLOSE_ACTION_ROLES,
     run: async () => {
       const currentAction = await prisma.action.findFirst({
         where: { id: payload.actionId, plantId: ctx.plantId },
-        select: { id: true },
+        select: { id: true, ownerUserId: true },
       });
       if (!currentAction) throw new AgentToolUserError("Action not found for this plant.");
+      if (!canCloseAction({ actorRole: ctx.role, actorUserId: ctx.userId, ownerUserId: currentAction.ownerUserId })) {
+        throw new AgentToolUserError("You can only close actions assigned to you.");
+      }
 
       const updated = await ActionService.close({
         actionId: payload.actionId,

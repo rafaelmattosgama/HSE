@@ -7,7 +7,7 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
   N3_SAFETY: "Safety",
   N4_SUPERVISOR: "Supervisor",
   N5_OPERATOR: "Operator",
-  MEDICO: "Medico",
+  N6_HR: "HR",
 };
 
 export const CLINICAL_VIEW_ROLES: RoleCode[] = [
@@ -15,7 +15,7 @@ export const CLINICAL_VIEW_ROLES: RoleCode[] = [
   RoleCode.N1_CORPORATE,
   RoleCode.N2_PLANT_MANAGER,
   RoleCode.N3_SAFETY,
-  RoleCode.MEDICO,
+  RoleCode.N6_HR,
 ];
 
 export function isCorporate(role: RoleCode) {

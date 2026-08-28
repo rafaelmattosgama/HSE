@@ -5,12 +5,12 @@ import {
   CompetenceAssessmentMethod,
   CompetenceAssessmentResult,
   CompetenceCellState,
-  CompetenceRequirementScope,
   MasterDataEntityType,
   type Prisma,
   RoleCode,
   TrainingResult,
 } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { addMonths, differenceInCalendarDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
@@ -25,18 +25,17 @@ import { CompetenceAlertService } from "@/lib/services/competence-alert-service"
 import {
   COMPETENCE_TIMEZONE,
   computeCompetenceCellState,
-  resolveCompetenceRequirement,
   type ComputedCompetenceCellState,
-  type RequirementRuleForResolution,
 } from "@/lib/services/competence-state-service";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import type {
   EnrollCompetenceWorkersInput,
   GrantAuthorizationInput,
   RegisterAssessmentInput,
+  RegisterCompetenceEntryInput,
   RegisterTrainingInput,
+  SetCompetenceWorkerRequirementInput,
   UpdateCompetenceWorkerRoleInput,
-  UpsertCompetenceRequirementInput,
   UpsertCompetenceTypeInput,
 } from "@/lib/validation/dtos";
 
@@ -80,36 +79,14 @@ export type CompetenceMatrixTypeView = {
   code: string;
   name: string;
   category: string;
+  requiresAssessment: boolean;
+  requiresAuthorization: boolean;
   displayOrder: number;
 };
 
 export type CompetenceMatrixView = {
   competenceTypes: CompetenceMatrixTypeView[];
   workers: CompetenceMatrixWorkerView[];
-};
-
-export type CompetenceRequirementView = {
-  id: string;
-  competenceTypeId: string;
-  competenceTypeName: string;
-  scopeType: CompetenceRequirementScope;
-  scopeRoleName: string | null;
-  scopeAreaId: string | null;
-  scopeAreaName: string | null;
-  scopeWorkstationId: string | null;
-  scopeWorkstationName: string | null;
-  isMandatory: boolean;
-  notes: string | null;
-  isActive: boolean;
-  createdAt: Date;
-};
-
-export type CompetenceRequirementCoverage = {
-  totalRoles: number;
-  rolesWithRequirement: number;
-  roleNamesWithoutRequirement: string[];
-  workersWithoutRoleName: number;
-  totalWorkers: number;
 };
 
 export type CompetencePlantAuthorizationCoverage = {
@@ -125,6 +102,7 @@ export type CompetenceHistoryEvent =
       id: string;
       occurredAt: Date;
       competenceTypeId: string;
+      entryGroupId: string | null;
       result: TrainingResult;
       provider: string | null;
       trainerName: string | null;
@@ -135,6 +113,7 @@ export type CompetenceHistoryEvent =
       id: string;
       occurredAt: Date;
       competenceTypeId: string;
+      entryGroupId: string | null;
       result: CompetenceAssessmentResult;
       method: CompetenceAssessmentMethod;
       assessorName: string | null;
@@ -144,6 +123,7 @@ export type CompetenceHistoryEvent =
       id: string;
       occurredAt: Date;
       competenceTypeId: string;
+      entryGroupId: string | null;
       validFrom: Date;
       validUntil: Date;
       restrictions: string | null;
@@ -178,9 +158,12 @@ export type CompetenceWorkerCompetenceRow = {
   code: string;
   name: string;
   category: string;
+  requiresAssessment: boolean;
+  requiresAuthorization: boolean;
   state: CompetenceCellState;
   isRequired: boolean;
   requirementSource: string | null;
+  requirementSetAt: Date | null;
   validUntil: Date | null;
   daysToExpiry: number | null;
   blockedReason: string | null;
@@ -229,41 +212,11 @@ export type CompetenceLinkedActionView = {
   createdAt: Date;
 };
 
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
-    .toLowerCase()
-    .trim();
-}
-
 async function loadActiveCompetenceTypes(plantId: string) {
   return prisma.competenceType.findMany({
     where: { plantId, isActive: true },
     orderBy: { displayOrder: "asc" },
   });
-}
-
-async function loadActiveRequirements(plantId: string): Promise<RequirementRuleForResolution[]> {
-  return prisma.competenceRequirement.findMany({
-    where: { plantId, isActive: true },
-    select: {
-      competenceTypeId: true,
-      scopeType: true,
-      scopeRoleName: true,
-      scopeAreaId: true,
-      scopeWorkstationId: true,
-    },
-  });
-}
-
-async function loadWorkstationIdsByEmployeeNo(plantId: string, employeeNos: string[]): Promise<Map<string, string | null>> {
-  if (employeeNos.length === 0) return new Map();
-  const rows = await prisma.occupationalHealthWorker.findMany({
-    where: { plantId, employeeNo: { in: employeeNos } },
-    select: { employeeNo: true, workstationId: true },
-  });
-  return new Map(rows.map((row) => [row.employeeNo, row.workstationId]));
 }
 
 async function assertWorkerAndTypeInPlant(plantId: string, competenceWorkerId: string, competenceTypeId: string) {
@@ -280,6 +233,50 @@ async function assertWorkerAndTypeInPlant(plantId: string, competenceWorkerId: s
   }
 
   return { competenceWorker, competenceType };
+}
+
+/**
+ * §2.3/§4 (revised): compares the actor granting an authorization against the
+ * assessor of the SPECIFIC assessment backing it — not "did the actor ever
+ * assess this worker/type at all" (the old, over-broad rule this replaces).
+ * The supporting assessment is `assessmentId` when given, otherwise the most
+ * recent COMPETENT one — the same definition §5 step 7 of the state machine
+ * already uses for "the" assessment that matters.
+ */
+async function assertSegregationOfDuties(
+  tx: TransactionClient,
+  input: {
+    plantId: string;
+    competenceWorkerId: string;
+    competenceTypeId: string;
+    assessmentId: string | null;
+    actorUserId: string;
+  },
+) {
+  const assessment = input.assessmentId
+    ? await tx.competenceAssessment.findFirst({
+        where: { id: input.assessmentId, plantId: input.plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
+        select: { assessorUserId: true },
+      })
+    : await tx.competenceAssessment.findFirst({
+        where: { plantId: input.plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: CompetenceAssessmentResult.COMPETENT },
+        orderBy: { assessedAt: "desc" },
+        select: { assessorUserId: true },
+      });
+
+  if (input.assessmentId && !assessment) {
+    throw new CompetenceValidationError(
+      "ASSESSMENT_NOT_FOUND",
+      "The referenced assessment was not found for this worker and competence type in this plant.",
+    );
+  }
+
+  if (assessment?.assessorUserId && assessment.assessorUserId === input.actorUserId) {
+    throw new CompetenceValidationError(
+      "SEGREGATION_OF_DUTIES",
+      "Segregation of duties: the user who performed the competent practical assessment backing this authorization cannot grant it.",
+    );
+  }
 }
 
 function isBeforeInLisbon(target: Date, now: Date) {
@@ -302,7 +299,7 @@ async function recomputeAndSaveState(
     medicalFitnessBlocksAuthorization: boolean;
   },
 ) {
-  const [competenceType, competenceWorker, authorizations, trainingRecords, assessments, requirements] = await Promise.all([
+  const [competenceType, competenceWorker, authorizations, trainingRecords, assessments, workerRequirement] = await Promise.all([
     tx.competenceType.findUniqueOrThrow({ where: { id: input.competenceTypeId } }),
     tx.competenceWorker.findUniqueOrThrow({
       where: { id: input.competenceWorkerId },
@@ -328,31 +325,29 @@ async function recomputeAndSaveState(
       where: { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
       select: { id: true, result: true, assessedAt: true, trainingRecordId: true },
     }),
-    // Re-resolved on every recompute, never carried forward from the previous
-    // WorkerCompetenceState row — a rule can change (or the worker's role can
-    // change) between two recomputes, and a stale isRequired would defeat the
-    // whole point of the requirement matrix (§3.2, phase-3 brief).
-    loadActiveRequirements(input.plantId),
+    // §3.2 (revised): direct per-(worker,type) lookup, replacing the old
+    // role/area/workstation rule resolution — a rule set no longer exists,
+    // only this one row (or its absence, meaning not required).
+    tx.competenceWorkerRequirement.findUnique({
+      where: {
+        competenceWorkerId_competenceTypeId: {
+          competenceWorkerId: input.competenceWorkerId,
+          competenceTypeId: input.competenceTypeId,
+        },
+      },
+      include: { setBy: { select: { name: true } } },
+    }),
   ]);
 
-  // Read unconditionally: workstationId feeds WORKSTATION-scope resolution
-  // regardless of the medical-fitness parameter. validUntil is still the only
-  // occupational-health field ever read for medical fitness (never examDate
-  // or status, §2.1).
+  // Read unconditionally: validUntil is still the only occupational-health
+  // field ever read for medical fitness (never examDate or status, §2.1).
   const occupationalHealthWorker = await tx.occupationalHealthWorker.findUnique({
     where: { plantId_employeeNo: { plantId: input.plantId, employeeNo: competenceWorker.employee.employeeNo } },
-    select: { validUntil: true, workstationId: true },
+    select: { validUntil: true },
   });
 
-  const { isRequired, requirementSource } = resolveCompetenceRequirement(
-    {
-      areaId: competenceWorker.areaId,
-      roleName: competenceWorker.roleName,
-      workstationId: occupationalHealthWorker?.workstationId ?? null,
-    },
-    input.competenceTypeId,
-    requirements,
-  );
+  const isRequired = workerRequirement?.isRequired ?? false;
+  const requirementSource = workerRequirement?.setBy?.name ?? null;
 
   const medicalFitnessExpired = Boolean(
     input.medicalFitnessBlocksAuthorization
@@ -479,6 +474,8 @@ export const CompetenceService = {
         code: type.code,
         name: type.name,
         category: type.category,
+        requiresAssessment: type.requiresAssessment,
+        requiresAuthorization: type.requiresAuthorization,
         displayOrder: type.displayOrder,
       })),
       workers: visibleWorkers.map((worker) => {
@@ -510,16 +507,18 @@ export const CompetenceService = {
   },
 
   /**
-   * Enrolls one or more employees into the competence matrix and computes
-   * their initial WorkerCompetenceState rows. Phase 1 has no training,
-   * assessment or authorization records yet, so every state is either
-   * MISSING (the competence is required) or NOT_APPLICABLE.
+   * Enrolls one or more employees into the competence matrix. §3.2 (revised):
+   * nothing is required at enrollment time — CompetenceWorkerRequirement
+   * rows are set explicitly afterward, per worker, from the profile screen
+   * (Task 8). Every cell starts NOT_APPLICABLE, computed through the same
+   * recomputeAndSaveState path a later requirement-toggle uses, so enrollment
+   * never produces a state a normal recompute couldn't also produce.
    */
   async enroll(plantId: string, input: EnrollCompetenceWorkersInput, actorUserId: string | null) {
     const employeeIds = input.workers.map((worker) => worker.employeeDirectoryId);
     const areaIds = Array.from(new Set(input.workers.map((worker) => worker.areaId)));
 
-    const [employees, areas, competenceTypes, requirements] = await Promise.all([
+    const [employees, areas, competenceTypes, expiringThresholdDays, medicalFitnessBlocksAuthorization] = await Promise.all([
       prisma.employeeDirectory.findMany({
         where: { id: { in: employeeIds }, plantId },
         select: { id: true, employeeNo: true, name: true, dept: true },
@@ -529,15 +528,12 @@ export const CompetenceService = {
         select: { id: true },
       }),
       loadActiveCompetenceTypes(plantId),
-      loadActiveRequirements(plantId),
+      getCompetenceExpiringThresholdDays(plantId),
+      getMedicalFitnessBlocksAuthorization(plantId),
     ]);
 
     const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
     const validAreaIds = new Set(areas.map((area) => area.id));
-    const workstationIdByEmployeeNo = await loadWorkstationIdsByEmployeeNo(
-      plantId,
-      employees.map((employee) => employee.employeeNo),
-    );
 
     for (const worker of input.workers) {
       if (!employeeById.has(worker.employeeDirectoryId)) {
@@ -548,12 +544,12 @@ export const CompetenceService = {
       }
     }
 
+    const now = new Date();
     const enrolled = await prisma.$transaction(async (tx) => {
       const results = [];
 
       for (const workerInput of input.workers) {
         const employee = employeeById.get(workerInput.employeeDirectoryId)!;
-        const roleName = null as string | null;
 
         const competenceWorker = await tx.competenceWorker.upsert({
           where: {
@@ -570,43 +566,19 @@ export const CompetenceService = {
             plantId,
             employeeDirectoryId: workerInput.employeeDirectoryId,
             areaId: workerInput.areaId,
-            roleName,
+            roleName: null,
             addedById: actorUserId,
           },
         });
 
         for (const competenceType of competenceTypes) {
-          const { isRequired, requirementSource } = resolveCompetenceRequirement(
-            {
-              areaId: competenceWorker.areaId,
-              roleName: competenceWorker.roleName,
-              workstationId: workstationIdByEmployeeNo.get(employee.employeeNo) ?? null,
-            },
-            competenceType.id,
-            requirements,
-          );
-
-          await tx.workerCompetenceState.upsert({
-            where: {
-              competenceWorkerId_competenceTypeId: {
-                competenceWorkerId: competenceWorker.id,
-                competenceTypeId: competenceType.id,
-              },
-            },
-            update: {
-              isRequired,
-              requirementSource,
-              state: isRequired ? CompetenceCellState.MISSING : CompetenceCellState.NOT_APPLICABLE,
-              computedAt: new Date(),
-            },
-            create: {
-              plantId,
-              competenceWorkerId: competenceWorker.id,
-              competenceTypeId: competenceType.id,
-              isRequired,
-              requirementSource,
-              state: isRequired ? CompetenceCellState.MISSING : CompetenceCellState.NOT_APPLICABLE,
-            },
+          await recomputeAndSaveState(tx, {
+            plantId,
+            competenceWorkerId: competenceWorker.id,
+            competenceTypeId: competenceType.id,
+            now,
+            expiringThresholdDays,
+            medicalFitnessBlocksAuthorization,
           });
         }
 
@@ -770,6 +742,216 @@ export const CompetenceService = {
   },
 
   /**
+   * §3.2/§3.3 (revised): one submission across all three levels, sharing one
+   * entryGroupId and one prisma.$transaction() — replaces separately calling
+   * registerTraining / registerAssessment / grantAuthorization from the UI.
+   * `training` is required unless `entryGroupId` names an entry already
+   * started in a prior submission (the "complete later" flow), in which case
+   * this call only appends the assessment and/or authorization sections to
+   * that entry's existing training record.
+   *
+   * Intentionally does not reuse grantAuthorization's own transaction body —
+   * that method owns its single-purpose endpoint and its own tests; the
+   * validation that actually needed to change (segregation of duties) is
+   * factored into assertSegregationOfDuties above and shared by both.
+   */
+  async registerCompetenceEntry(plantId: string, input: RegisterCompetenceEntryInput, actorUserId: string) {
+    const now = new Date();
+    const { competenceType } = await assertWorkerAndTypeInPlant(plantId, input.competenceWorkerId, input.competenceTypeId);
+    const [expiringThresholdDays, medicalFitnessBlocksAuthorization, segregationOfDuties] = await Promise.all([
+      getCompetenceExpiringThresholdDays(plantId),
+      getMedicalFitnessBlocksAuthorization(plantId),
+      getAuthorizationSegregationOfDuties(plantId),
+    ]);
+
+    const result = await prisma.$transaction(async (tx) => {
+      let entryGroupId = input.entryGroupId ?? null;
+      let trainingRecordId: string | null = null;
+
+      if (entryGroupId) {
+        const existingTraining = await tx.trainingRecord.findFirst({
+          where: { entryGroupId, plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
+          select: { id: true },
+        });
+        if (!existingTraining) {
+          throw new CompetenceValidationError("ENTRY_NOT_FOUND", "The referenced entry was not found for this worker and competence type.");
+        }
+        trainingRecordId = existingTraining.id;
+      } else {
+        entryGroupId = randomUUID();
+        const trainingRecord = await tx.trainingRecord.create({
+          data: {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            entryGroupId,
+            provider: input.training!.provider ?? null,
+            trainerName: input.training!.trainerName ?? null,
+            completedAt: input.training!.completedAt,
+            durationHours: input.training!.durationHours ?? null,
+            certificateNumber: input.training!.certificateNumber ?? null,
+            certificateExpiresAt: input.training!.certificateExpiresAt ?? null,
+            result: input.training!.result,
+            notes: input.training!.notes ?? null,
+            createdById: actorUserId,
+          },
+        });
+        trainingRecordId = trainingRecord.id;
+
+        await writeAuditLog({
+          entityType: "TrainingRecord",
+          entityId: trainingRecord.id,
+          action: "REGISTERED",
+          actorUserId,
+          plantId,
+          diff: buildDiff(null, { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: input.training!.result, entryGroupId }),
+        }, tx);
+      }
+
+      let assessmentRecordId: string | null = null;
+
+      if (input.assessment) {
+        if (competenceType.requiresTraining && !trainingRecordId) {
+          throw new CompetenceValidationError(
+            "TRAINING_LINK_REQUIRED",
+            `Competence type "${competenceType.name}" requires training: link the passed training record when registering this assessment.`,
+          );
+        }
+
+        const assessmentRecord = await tx.competenceAssessment.create({
+          data: {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            entryGroupId,
+            trainingRecordId,
+            assessedAt: input.assessment.assessedAt,
+            assessorUserId: input.assessment.assessorUserId ?? null,
+            assessorName: input.assessment.assessorUserId ? null : (input.assessment.assessorName ?? null),
+            method: input.assessment.method,
+            result: input.assessment.result,
+            score: input.assessment.score ?? null,
+            observations: input.assessment.observations ?? null,
+            createdById: actorUserId,
+          },
+        });
+        assessmentRecordId = assessmentRecord.id;
+
+        await writeAuditLog({
+          entityType: "CompetenceAssessment",
+          entityId: assessmentRecord.id,
+          action: "REGISTERED",
+          actorUserId,
+          plantId,
+          diff: buildDiff(null, { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: input.assessment.result, entryGroupId }),
+        }, tx);
+      }
+
+      let authorizationId: string | null = null;
+
+      if (input.authorization) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`authorization:seq:${plantId}`}))`;
+
+        if (!competenceType.requiresAuthorization) {
+          throw new CompetenceValidationError("AUTHORIZATION_NOT_REQUIRED", `Competence type "${competenceType.name}" does not require a formal authorization.`);
+        }
+        if (competenceType.requiresTraining && !trainingRecordId) {
+          throw new CompetenceValidationError("TRAINING_REQUIRED", `Competence type "${competenceType.name}" requires a passed training record before an authorization can be granted.`);
+        }
+
+        let supportingAssessmentId = assessmentRecordId;
+        if (!supportingAssessmentId && competenceType.requiresAssessment) {
+          const existingAssessment = await tx.competenceAssessment.findFirst({
+            where: { plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, result: CompetenceAssessmentResult.COMPETENT },
+            orderBy: { assessedAt: "desc" },
+            select: { id: true },
+          });
+          if (!existingAssessment) {
+            throw new CompetenceValidationError("ASSESSMENT_REQUIRED", `Competence type "${competenceType.name}" requires a competent practical assessment before an authorization can be granted.`);
+          }
+          supportingAssessmentId = existingAssessment.id;
+        }
+
+        if (segregationOfDuties) {
+          await assertSegregationOfDuties(tx, {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            assessmentId: supportingAssessmentId,
+            actorUserId,
+          });
+        }
+
+        const previousCurrent = await tx.workerAuthorization.findFirst({
+          where: {
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            status: { in: [AuthorizationStatus.ACTIVE, AuthorizationStatus.SUSPENDED] },
+          },
+          orderBy: { grantedAt: "desc" },
+        });
+        if (previousCurrent?.status === AuthorizationStatus.SUSPENDED) {
+          throw new CompetenceValidationError(
+            "SUSPENDED_AUTHORIZATION_REQUIRES_REACTIVATION",
+            `This worker has a SUSPENDED authorization for this competence (reason: ${previousCurrent.suspensionReason ?? "not recorded"}). Reactivate it explicitly before granting a new one.`,
+          );
+        }
+
+        const latest = await tx.workerAuthorization.findFirst({
+          where: { plantId, sequenceNumber: { not: null } },
+          orderBy: { sequenceNumber: "desc" },
+          select: { sequenceNumber: true },
+        });
+
+        const validUntil = addMonths(input.authorization.validFrom, competenceType.validityMonths);
+        const authorization = await tx.workerAuthorization.create({
+          data: {
+            plantId,
+            competenceWorkerId: input.competenceWorkerId,
+            competenceTypeId: input.competenceTypeId,
+            entryGroupId,
+            trainingRecordId,
+            assessmentId: supportingAssessmentId,
+            sequenceNumber: (latest?.sequenceNumber ?? 0) + 1,
+            grantedByUserId: actorUserId,
+            validFrom: input.authorization.validFrom,
+            validUntil,
+            restrictions: input.authorization.restrictions ?? null,
+            status: AuthorizationStatus.ACTIVE,
+          },
+        });
+        authorizationId = authorization.id;
+
+        if (previousCurrent) {
+          await tx.workerAuthorization.update({ where: { id: previousCurrent.id }, data: { status: AuthorizationStatus.SUPERSEDED, supersededById: authorization.id } });
+        }
+
+        await writeAuditLog({
+          entityType: "WorkerAuthorization",
+          entityId: authorization.id,
+          action: "GRANTED",
+          actorUserId,
+          plantId,
+          diff: buildDiff(previousCurrent ? { supersededAuthorizationId: previousCurrent.id } : null, { competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId, validFrom: input.authorization.validFrom, validUntil, entryGroupId }),
+        }, tx);
+      }
+
+      await recomputeAndSaveState(tx, {
+        plantId,
+        competenceWorkerId: input.competenceWorkerId,
+        competenceTypeId: input.competenceTypeId,
+        now,
+        expiringThresholdDays,
+        medicalFitnessBlocksAuthorization,
+      });
+
+      return { entryGroupId, trainingRecordId, assessmentRecordId, authorizationId };
+    });
+
+    return result;
+  },
+
+  /**
    * Grants (or renews) a formal authorization. Renewal never extends an
    * existing row — it creates a new one and marks the previous ACTIVE/SUSPENDED
    * authorization SUPERSEDED (§2.5, rule 8). validUntil is computed once, from
@@ -837,52 +1019,27 @@ export const CompetenceService = {
         }
       }
 
-      // Resolved from data, not from input.assessmentId: the field is optional, so the
-      // same assessor who evaluated this worker could otherwise omit it and self-grant.
-      if (segregationOfDuties) {
-        const blocking = await tx.competenceAssessment.findFirst({
-          where: {
-            plantId,
-            competenceWorkerId: input.competenceWorkerId,
-            competenceTypeId: input.competenceTypeId,
-            result: CompetenceAssessmentResult.COMPETENT,
-            assessorUserId: actorUserId,
-          },
-          orderBy: { assessedAt: "desc" },
-        });
-        if (blocking) {
-          throw new CompetenceValidationError(
-            "SEGREGATION_OF_DUTIES",
-            "Segregation of duties: the user who performed a competent practical assessment for this worker and competence type cannot grant this authorization.",
-          );
-        }
-      }
-
-      // Additive, not a substitute for the data-driven check above: still validates
-      // that a client-supplied assessmentId is in scope and, if segregation applies,
-      // was not authored by this same actor.
       if (input.assessmentId) {
-        const assessmentRecord = await tx.competenceAssessment.findFirst({
-          where: {
-            id: input.assessmentId,
-            plantId,
-            competenceWorkerId: input.competenceWorkerId,
-            competenceTypeId: input.competenceTypeId,
-          },
-          select: { assessorUserId: true },
+        const assessmentExists = await tx.competenceAssessment.findFirst({
+          where: { id: input.assessmentId, plantId, competenceWorkerId: input.competenceWorkerId, competenceTypeId: input.competenceTypeId },
+          select: { id: true },
         });
-        if (!assessmentRecord) {
+        if (!assessmentExists) {
           throw new CompetenceValidationError(
             "ASSESSMENT_NOT_FOUND",
             "The referenced assessment was not found for this worker and competence type in this plant.",
           );
         }
-        if (segregationOfDuties && assessmentRecord.assessorUserId && assessmentRecord.assessorUserId === actorUserId) {
-          throw new CompetenceValidationError(
-            "SEGREGATION_OF_DUTIES",
-            "Segregation of duties: the user who performed the referenced practical assessment cannot grant this authorization.",
-          );
-        }
+      }
+
+      if (segregationOfDuties) {
+        await assertSegregationOfDuties(tx, {
+          plantId,
+          competenceWorkerId: input.competenceWorkerId,
+          competenceTypeId: input.competenceTypeId,
+          assessmentId: input.assessmentId ?? null,
+          actorUserId,
+        });
       }
 
       if (input.trainingRecordId) {
@@ -1184,7 +1341,7 @@ export const CompetenceService = {
       }
     }
 
-    const [competenceTypes, states, occupationalHealthWorker, trainingRecords, assessments, authorizations, workstations, actionLinkRows] =
+    const [competenceTypes, states, occupationalHealthWorker, trainingRecords, assessments, authorizations, workstations, actionLinkRows, workerRequirements] =
       await Promise.all([
         loadActiveCompetenceTypes(plantId),
         prisma.workerCompetenceState.findMany({ where: { competenceWorkerId } }),
@@ -1204,6 +1361,7 @@ export const CompetenceService = {
           include: { action: true },
           orderBy: { createdAt: "desc" },
         }),
+        prisma.competenceWorkerRequirement.findMany({ where: { competenceWorkerId }, select: { competenceTypeId: true, setAt: true } }),
       ]);
 
     const actionLinks: CompetenceLinkedActionView[] = actionLinkRows.map((link) => ({
@@ -1226,6 +1384,7 @@ export const CompetenceService = {
       : null;
 
     const stateByTypeId = new Map(states.map((state) => [state.competenceTypeId, state]));
+    const requirementSetAtByTypeId = new Map(workerRequirements.map((row) => [row.competenceTypeId, row.setAt]));
     const competences: CompetenceWorkerCompetenceRow[] = competenceTypes.map((type) => {
       const state = stateByTypeId.get(type.id);
       return {
@@ -1233,9 +1392,12 @@ export const CompetenceService = {
         code: type.code,
         name: type.name,
         category: type.category,
+        requiresAssessment: type.requiresAssessment,
+        requiresAuthorization: type.requiresAuthorization,
         state: state?.state ?? CompetenceCellState.NOT_APPLICABLE,
         isRequired: state?.isRequired ?? false,
         requirementSource: state?.requirementSource ?? null,
+        requirementSetAt: requirementSetAtByTypeId.get(type.id) ?? null,
         validUntil: state?.validUntil ?? null,
         daysToExpiry: state?.daysToExpiry ?? null,
         blockedReason: state?.blockedReason ?? null,
@@ -1250,6 +1412,7 @@ export const CompetenceService = {
         id: record.id,
         occurredAt: record.completedAt,
         competenceTypeId: record.competenceTypeId,
+        entryGroupId: record.entryGroupId,
         result: record.result,
         provider: record.provider,
         trainerName: record.trainerName,
@@ -1262,6 +1425,7 @@ export const CompetenceService = {
         id: record.id,
         occurredAt: record.assessedAt,
         competenceTypeId: record.competenceTypeId,
+        entryGroupId: record.entryGroupId,
         result: record.result,
         method: record.method,
         assessorName: record.assessorName,
@@ -1273,6 +1437,7 @@ export const CompetenceService = {
         id: record.id,
         occurredAt: record.grantedAt,
         competenceTypeId: record.competenceTypeId,
+        entryGroupId: record.entryGroupId,
         validFrom: record.validFrom,
         validUntil: record.validUntil,
         restrictions: record.restrictions,
@@ -1338,11 +1503,9 @@ export const CompetenceService = {
   },
 
   /**
-   * §3.7(b): bulk recompute triggered when a CompetenceRequirement rule for
-   * this competence type changes. Recomputes every active worker's cell for
-   * that one type — resolution is re-read fresh inside recomputeAndSaveState,
-   * so this is always correct even though it does not try to guess which
-   * workers the scope change actually touches.
+   * Recomputes every active worker's cell for one competence type. This is a
+   * maintenance utility for catalog-wide state refreshes; direct requirement
+   * changes recompute only their affected worker/type pair.
    */
   async recomputeCompetenceTypeStates(plantId: string, competenceTypeId: string) {
     const now = new Date();
@@ -1522,8 +1685,8 @@ export const CompetenceService = {
    * §2.7 item 5: a type with WorkerAuthorization, TrainingRecord or
    * CompetenceAssessment history stays blocked from deactivation — those
    * records would become orphaned in a matrix that no longer has the column
-   * to show them against. CompetenceRequirement rules are not part of this
-   * check; they deactivate independently.
+   * to show them against. Per-worker requirement rows are cascade-deleted
+   * with their competence type and do not affect this protection.
    */
   async deactivateCompetenceType(plantId: string, competenceTypeId: string, actorUserId: string) {
     const existing = await prisma.competenceType.findFirst({ where: { id: competenceTypeId, plantId } });
@@ -1559,78 +1722,22 @@ export const CompetenceService = {
     });
   },
 
-  /** §3.2 admin screen: every requirement rule, active or not, with localized area/workstation names. */
-  async listRequirements(plantId: string, locale: string): Promise<CompetenceRequirementView[]> {
-    const [requirements, areas, workstations] = await Promise.all([
-      prisma.competenceRequirement.findMany({
-        where: { plantId },
-        include: { competenceType: { select: { name: true } } },
-        orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-      }),
-      prisma.area.findMany({ where: { plantId }, select: { id: true, name: true, sourceLanguage: true } }),
-      prisma.workstation.findMany({ where: { plantId }, select: { id: true, name: true, sourceLanguage: true } }),
-    ]);
-
-    const [localizedAreas, localizedWorkstations] = await Promise.all([
-      localizeMasterDataRows(MasterDataEntityType.AREA, areas, locale),
-      localizeMasterDataRows(MasterDataEntityType.WORKSTATION, workstations, locale),
-    ]);
-    const areaNameById = new Map(localizedAreas.map((area) => [area.id, area.name]));
-    const workstationNameById = new Map(localizedWorkstations.map((workstation) => [workstation.id, workstation.name]));
-
-    return requirements.map((requirement) => ({
-      id: requirement.id,
-      competenceTypeId: requirement.competenceTypeId,
-      competenceTypeName: requirement.competenceType.name,
-      scopeType: requirement.scopeType,
-      scopeRoleName: requirement.scopeRoleName,
-      scopeAreaId: requirement.scopeAreaId,
-      scopeAreaName: requirement.scopeAreaId ? areaNameById.get(requirement.scopeAreaId) ?? null : null,
-      scopeWorkstationId: requirement.scopeWorkstationId,
-      scopeWorkstationName: requirement.scopeWorkstationId ? workstationNameById.get(requirement.scopeWorkstationId) ?? null : null,
-      isMandatory: requirement.isMandatory,
-      notes: requirement.notes,
-      isActive: requirement.isActive,
-      createdAt: requirement.createdAt,
-    }));
-  },
-
   /**
-   * Creates or updates a requirement rule and triggers the bulk recompute for
-   * its competence type in the same call (§3.7(b)). Only the scope value that
-   * matches scopeType is ever persisted — switching scopeType clears the
-   * other two, so a rule can never carry a stale AREA id after being edited
-   * into a ROLE rule.
+   * §2.4: sets or clears whether one competence is required for one enrolled
+   * worker — the entire replacement for the old role/area/workstation rule
+   * matrix. Always upserts a row (never deletes it) even when isRequired is
+   * false, so "who unmarked this and when" stays visible in the worker
+   * profile, matching the rest of the module's audit-trail convention.
    */
-  async upsertRequirement(plantId: string, input: UpsertCompetenceRequirementInput, actorUserId: string) {
-    const competenceType = await prisma.competenceType.findFirst({ where: { id: input.competenceTypeId, plantId } });
-    if (!competenceType) {
-      throw new Error(`Competence type not found for plant scope: ${input.competenceTypeId}`);
-    }
-    if (input.scopeType === CompetenceRequirementScope.AREA && input.scopeAreaId) {
-      const area = await prisma.area.findFirst({ where: { id: input.scopeAreaId, plantId } });
-      if (!area) throw new Error(`Area not found for plant scope: ${input.scopeAreaId}`);
-    }
-    if (input.scopeType === CompetenceRequirementScope.WORKSTATION && input.scopeWorkstationId) {
-      const workstation = await prisma.workstation.findFirst({ where: { id: input.scopeWorkstationId, plantId } });
-      if (!workstation) throw new Error(`Workstation not found for plant scope: ${input.scopeWorkstationId}`);
-    }
-
-    const existing = input.id ? await prisma.competenceRequirement.findFirst({ where: { id: input.id, plantId } }) : null;
-    if (input.id && !existing) {
-      throw new Error(`Competence requirement not found for plant scope: ${input.id}`);
-    }
-
-    const data = {
-      competenceTypeId: input.competenceTypeId,
-      scopeType: input.scopeType,
-      scopeRoleName: input.scopeType === CompetenceRequirementScope.ROLE ? input.scopeRoleName ?? null : null,
-      scopeAreaId: input.scopeType === CompetenceRequirementScope.AREA ? input.scopeAreaId ?? null : null,
-      scopeWorkstationId: input.scopeType === CompetenceRequirementScope.WORKSTATION ? input.scopeWorkstationId ?? null : null,
-      isMandatory: input.isMandatory,
-      notes: input.notes ?? null,
-      isActive: true,
-    };
+  async setWorkerCompetenceRequirement(
+    plantId: string,
+    competenceWorkerId: string,
+    competenceTypeId: string,
+    input: Omit<SetCompetenceWorkerRequirementInput, "competenceTypeId">,
+    actorUserId: string,
+  ) {
+    const { competenceWorker, competenceType } = await assertWorkerAndTypeInPlant(plantId, competenceWorkerId, competenceTypeId);
+    void competenceWorker;
 
     const now = new Date();
     const [expiringThresholdDays, medicalFitnessBlocksAuthorization] = await Promise.all([
@@ -1638,133 +1745,56 @@ export const CompetenceService = {
       getMedicalFitnessBlocksAuthorization(plantId),
     ]);
 
-    // item 17: write + audit + recompute used to be three independent
-    // statements — a failed recompute left the rule saved with every
-    // isRequired in the plant stale until the next daily job. One transaction now.
-    const { requirement, gaps } = await prisma.$transaction(async (tx) => {
-      const requirement = existing
-        ? await tx.competenceRequirement.update({ where: { id: existing.id }, data })
-        : await tx.competenceRequirement.create({ data: { plantId, ...data, createdById: actorUserId } });
+    const gaps: Array<{ competenceWorkerId: string; competenceTypeId: string }> = [];
+    const { requirement, computed } = await prisma.$transaction(async (tx) => {
+      const requirement = await tx.competenceWorkerRequirement.upsert({
+        where: { competenceWorkerId_competenceTypeId: { competenceWorkerId, competenceTypeId } },
+        update: { isRequired: input.isRequired, notes: input.notes ?? null, setById: actorUserId, setAt: now },
+        create: {
+          plantId,
+          competenceWorkerId,
+          competenceTypeId,
+          isRequired: input.isRequired,
+          notes: input.notes ?? null,
+          setById: actorUserId,
+        },
+      });
 
       await writeAuditLog({
-        entityType: "CompetenceRequirement",
+        entityType: "CompetenceWorkerRequirement",
         entityId: requirement.id,
-        action: existing ? "UPDATED" : "CREATED",
+        action: "UPDATED",
         actorUserId,
         plantId,
-        diff: buildDiff(existing ?? null, data),
+        diff: buildDiff(null, { competenceWorkerId, competenceTypeId, isRequired: input.isRequired }),
       }, tx);
 
-      const gaps = await recomputeCompetenceTypeStatesInTx(tx, {
+      const computed = await recomputeAndSaveState(tx, {
         plantId,
-        competenceTypeId: input.competenceTypeId,
+        competenceWorkerId,
+        competenceTypeId,
         now,
         expiringThresholdDays,
         medicalFitnessBlocksAuthorization,
       });
 
-      return { requirement, gaps };
+      return { requirement, computed };
     });
+
+    if (computed.isRequired && computed.state === CompetenceCellState.MISSING) {
+      gaps.push({ competenceWorkerId, competenceTypeId });
+    }
 
     if (gaps.length > 0) {
       try {
         await CompetenceAlertService.dispatchRoleWithoutCompetence(plantId, gaps, now);
       } catch (error) {
-        logger.error({ error, plantId, competenceTypeId: input.competenceTypeId }, "failed_to_dispatch_role_without_competence_alert");
+        logger.error({ error, plantId, competenceWorkerId, competenceTypeId }, "failed_to_dispatch_role_without_competence_alert");
       }
     }
 
+    void competenceType;
     return requirement;
-  },
-
-  /** Logical delete — kept for audit history, matching the CompetenceType catalog convention. */
-  async deactivateRequirement(plantId: string, requirementId: string, actorUserId: string) {
-    const existing = await prisma.competenceRequirement.findFirst({ where: { id: requirementId, plantId } });
-    if (!existing) {
-      throw new Error(`Competence requirement not found for plant scope: ${requirementId}`);
-    }
-
-    const now = new Date();
-    const [expiringThresholdDays, medicalFitnessBlocksAuthorization] = await Promise.all([
-      getCompetenceExpiringThresholdDays(plantId),
-      getMedicalFitnessBlocksAuthorization(plantId),
-    ]);
-
-    const { updated, gaps } = await prisma.$transaction(async (tx) => {
-      const updated = await tx.competenceRequirement.update({
-        where: { id: requirementId },
-        data: { isActive: false },
-      });
-
-      await writeAuditLog({
-        entityType: "CompetenceRequirement",
-        entityId: requirementId,
-        action: "DEACTIVATED",
-        actorUserId,
-        plantId,
-        diff: buildDiff({ isActive: true }, { isActive: false }),
-      }, tx);
-
-      const gaps = await recomputeCompetenceTypeStatesInTx(tx, {
-        plantId,
-        competenceTypeId: existing.competenceTypeId,
-        now,
-        expiringThresholdDays,
-        medicalFitnessBlocksAuthorization,
-      });
-
-      return { updated, gaps };
-    });
-
-    if (gaps.length > 0) {
-      try {
-        await CompetenceAlertService.dispatchRoleWithoutCompetence(plantId, gaps, now);
-      } catch (error) {
-        logger.error({ error, plantId, competenceTypeId: existing.competenceTypeId }, "failed_to_dispatch_role_without_competence_alert");
-      }
-    }
-
-    return updated;
-  },
-
-  /**
-   * §6.1-style KPI, but for the requirement matrix itself (§10 phase-3 ask):
-   * of the roleName values actually present among enrolled workers, how many
-   * already have at least one active ROLE-scope rule covering them.
-   */
-  async getRequirementCoverage(plantId: string): Promise<CompetenceRequirementCoverage> {
-    const [workers, roleRules] = await Promise.all([
-      prisma.competenceWorker.findMany({ where: { plantId, isActive: true }, select: { roleName: true } }),
-      prisma.competenceRequirement.findMany({
-        where: { plantId, isActive: true, scopeType: CompetenceRequirementScope.ROLE },
-        select: { scopeRoleName: true },
-      }),
-    ]);
-
-    const distinctRoleNames = Array.from(
-      new Set(
-        workers
-          .map((worker) => worker.roleName)
-          .filter((roleName): roleName is string => Boolean(roleName && roleName.trim())),
-      ),
-    );
-    const normalizedRuleRoleNames = new Set(
-      roleRules
-        .map((rule) => rule.scopeRoleName)
-        .filter((roleName): roleName is string => Boolean(roleName))
-        .map((roleName) => normalizeText(roleName)),
-    );
-    const roleNamesWithoutRequirement = distinctRoleNames.filter(
-      (roleName) => !normalizedRuleRoleNames.has(normalizeText(roleName)),
-    );
-
-    return {
-      totalRoles: distinctRoleNames.length,
-      rolesWithRequirement: distinctRoleNames.length - roleNamesWithoutRequirement.length,
-      roleNamesWithoutRequirement,
-      workersWithoutRoleName: workers.filter((worker) => !worker.roleName || !worker.roleName.trim()).length,
-      totalWorkers: workers.length,
-    };
   },
 
   /**

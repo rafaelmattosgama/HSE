@@ -304,7 +304,7 @@ describe("agent pending confirmations", () => {
     const confirmation = await createCloseActionConfirmation();
 
     const result = await executePendingConfirmation({
-      ctx: ctx({ role: RoleCode.MEDICO }),
+      ctx: ctx({ role: RoleCode.N6_HR }),
       confirmationId: confirmation.confirmationId,
     });
 

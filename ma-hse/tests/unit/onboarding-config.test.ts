@@ -18,13 +18,13 @@ function stepIds(role: RoleCode, permissions = allPermissions) {
 describe("onboarding role configuration", () => {
   it("defines a centralized configuration for every real role", () => {
     expect(Object.keys(ROLE_ONBOARDING_CONFIGS).sort()).toEqual([
-      "MEDICO",
       "N0_ADMIN",
       "N1_CORPORATE",
       "N2_PLANT_MANAGER",
       "N3_SAFETY",
       "N4_SUPERVISOR",
       "N5_OPERATOR",
+      "N6_HR",
     ]);
   });
 

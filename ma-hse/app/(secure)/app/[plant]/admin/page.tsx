@@ -15,7 +15,6 @@ import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
-import { CompetenceRequirementManager } from "@/components/feature/competence-requirement-manager";
 import { CompetenceTypeManager } from "@/components/feature/competence-type-manager";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
@@ -30,7 +29,6 @@ import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-servic
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
-import { CompetenceService } from "@/lib/services/competence-service";
 import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
 import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
@@ -69,7 +67,16 @@ export default async function AdminPage({
     : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role;
 
   const canManageUsers =
-    actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
+    actorRole === RoleCode.N0_ADMIN ||
+    actorRole === RoleCode.N1_CORPORATE ||
+    actorRole === RoleCode.N2_PLANT_MANAGER ||
+    actorRole === RoleCode.N3_SAFETY;
+  const manageableUserRoles =
+    actorRole === RoleCode.N2_PLANT_MANAGER
+      ? [RoleCode.N6_HR]
+      : actorRole === RoleCode.N3_SAFETY
+        ? [RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR]
+        : undefined;
   const canViewAgentAudit =
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const canManageSafetyCommunicationRecipients = canManageSafetyCommunicationAlertRecipients(actorRole);
@@ -99,8 +106,6 @@ export default async function AdminPage({
     repeatabilityConfig,
     safetyDaysConfig,
     competenceTypes,
-    competenceRequirements,
-    competenceRequirementCoverage,
   ] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
@@ -142,8 +147,11 @@ export default async function AdminPage({
       orderBy: { name: "asc" },
     }),
     prisma.employeeDirectory.findMany({
-      where: { plantId: plantRow.id, isActive: true },
-      orderBy: { name: "asc" },
+      // Admin is the source of truth for worker status. Keep inactive rows
+      // visible here so they can be audited/reactivated instead of appearing
+      // to have been deleted.
+      where: { plantId: plantRow.id },
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
     }),
     prisma.unsafeActType.findMany({
       where: { plantId: plantRow.id, isActive: true },
@@ -173,12 +181,6 @@ export default async function AdminPage({
     canViewCompetenceCatalog
       ? prisma.competenceType.findMany({ where: { plantId: plantRow.id }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] })
       : Promise.resolve([]),
-    canViewCompetenceCatalog
-      ? CompetenceService.listRequirements(plantRow.id, uiLocale)
-      : Promise.resolve([]),
-    canViewCompetenceCatalog
-      ? CompetenceService.getRequirementCoverage(plantRow.id)
-      : Promise.resolve({ totalRoles: 0, rolesWithRequirement: 0, roleNamesWithoutRequirement: [], workersWithoutRoleName: 0, totalWorkers: 0 }),
   ]);
   const [localizedAreas, localizedWorkstations, localizedEquipments] = await Promise.all([
     localizeMasterDataRows(MasterDataEntityType.AREA, areas, uiLocale),
@@ -283,7 +285,7 @@ export default async function AdminPage({
             originalName: item.originalName,
             isActive: item.isActive,
           }))}
-          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept, isActive: item.isActive }))}
           initialNearMissTypes={nearMissTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
           initialUnsafeActTypes={unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
           initialUnsafeConditionTypes={unsafeConditionTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
@@ -301,43 +303,31 @@ export default async function AdminPage({
           plantCode={plant}
           initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
           initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
-          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
+          initialWorkers={workers.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept, isActive: item.isActive }))}
           labels={masterDataUi}
         />
       )}
 
       {canViewCompetenceCatalog ? (
-        <>
-          <CompetenceTypeManager
-            plant={plant}
-            labels={ui.competences}
-            initialTypes={competenceTypes.map((type) => ({
-              id: type.id,
-              code: type.code,
-              name: type.name,
-              category: type.category,
-              requiresTraining: type.requiresTraining,
-              requiresAssessment: type.requiresAssessment,
-              requiresAuthorization: type.requiresAuthorization,
-              validityMonths: type.validityMonths,
-              refresherMonths: type.refresherMonths,
-              legalReference: type.legalReference,
-              displayOrder: type.displayOrder,
-              isActive: type.isActive,
-            }))}
-            readOnly={!canManageCompetenceCatalog}
-          />
-          <CompetenceRequirementManager
-            plant={plant}
-            labels={ui.competences}
-            competenceTypes={competenceTypes.filter((type) => type.isActive).map((type) => ({ id: type.id, name: type.name }))}
-            areas={localizedAreas.map((item) => ({ id: item.id, name: item.name }))}
-            workstations={localizedWorkstations.map((item) => ({ id: item.id, name: item.name }))}
-            initialRequirements={competenceRequirements}
-            initialCoverage={competenceRequirementCoverage}
-            readOnly={!canManageCompetenceCatalog}
-          />
-        </>
+        <CompetenceTypeManager
+          plant={plant}
+          labels={ui.competences}
+          initialTypes={competenceTypes.map((type) => ({
+            id: type.id,
+            code: type.code,
+            name: type.name,
+            category: type.category,
+            requiresTraining: type.requiresTraining,
+            requiresAssessment: type.requiresAssessment,
+            requiresAuthorization: type.requiresAuthorization,
+            validityMonths: type.validityMonths,
+            refresherMonths: type.refresherMonths,
+            legalReference: type.legalReference,
+            displayOrder: type.displayOrder,
+            isActive: type.isActive,
+          }))}
+          readOnly={!canManageCompetenceCatalog}
+        />
       ) : null}
 
       {actorRole === RoleCode.N0_ADMIN ? (
@@ -402,7 +392,12 @@ export default async function AdminPage({
       </section>
 
       {canManageUsers ? (
-        <UserManager users={users} allowedCreateRoles={allowedCreateRoles} labels={masterDataUi} />
+        <UserManager
+          users={users}
+          allowedCreateRoles={allowedCreateRoles}
+          manageableRoles={manageableUserRoles}
+          labels={masterDataUi}
+        />
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
           {ui.dashboard.userManagementUnavailable}

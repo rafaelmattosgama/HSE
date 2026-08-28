@@ -14,9 +14,10 @@ const VIEW_ROLES: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
+  RoleCode.N6_HR,
 ];
 
-const ENROLL_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR];
+const ENROLL_ROLES: RoleCode[] = [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR];
 
 export async function GET(_request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;

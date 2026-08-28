@@ -58,7 +58,7 @@ describe("staff storage upload route", () => {
     expect(call.body.toString()).toBe("photo-bytes");
     expect(guardsMock.requirePlantAccess).toHaveBeenCalledWith(
       "maap",
-      expect.arrayContaining([RoleCode.N0_ADMIN, RoleCode.MEDICO, RoleCode.N1_CORPORATE]),
+      expect.arrayContaining([RoleCode.N0_ADMIN, RoleCode.N6_HR, RoleCode.N1_CORPORATE]),
     );
   });
 

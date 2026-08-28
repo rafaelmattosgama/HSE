@@ -145,6 +145,13 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
         ? session.user.plantRoles.find((entry) => entry.plantCode)?.role ?? null
         : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role ?? null;
   const canDeleteActions = Boolean(actorRole && DELETE_ACTION_ROLES.includes(actorRole));
+  const canCloseAnyActions = Boolean(actorRole && [
+    RoleCode.N0_ADMIN,
+    RoleCode.N1_CORPORATE,
+    RoleCode.N2_PLANT_MANAGER,
+    RoleCode.N3_SAFETY,
+  ].includes(actorRole));
+  const canCloseOwnActions = actorRole === RoleCode.N4_SUPERVISOR || actorRole === RoleCode.N6_HR;
 
   const communicationUi = await getLocalizedCommunicationUi(uiLocale);
   const actionsUi = await getLocalizedActionsUi(uiLocale);
@@ -221,6 +228,9 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
       <ActionsTable
         plant={plant}
         canDelete={canDeleteActions}
+        canCloseAnyActions={canCloseAnyActions}
+        canCloseOwnActions={canCloseOwnActions}
+        viewerUserId={session.user.id}
         labels={actionsUi.table}
         statusLabels={actionsUi.statusLabels}
         priorityLabels={actionsUi.priorityLabels}
@@ -235,6 +245,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
           level: row.level,
           priority: row.priority,
           status: row.status,
+          ownerUserId: row.ownerUserId,
           ownerName: row.ownerUser.name,
           dueDate: row.dueDate.toISOString().slice(0, 10),
           closedDate: row.closedAt ? row.closedAt.toISOString().slice(0, 10) : null,

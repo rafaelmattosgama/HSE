@@ -121,6 +121,36 @@ export async function DELETE(request: Request, context: { params: Promise<{ plan
   if ("error" in parsed) return parsed.error;
 
   const plant = await getPlantByCode(plantCode);
+  if (parsed.data.hardDelete) {
+    const worker = await prisma.employeeDirectory.findFirst({
+      where: { id: parsed.data.id!, plantId: plant.id },
+      select: { id: true },
+    });
+    if (!worker) return fail("NOT_FOUND", "Worker not found for plant scope", 404);
+
+    // Permanent deletion is intentionally conservative. Worker records are
+    // referenced by clinical history, competences and safety records; those
+    // must be retained, so the Admin can only delete an unused directory row.
+    const [users, communications, involved, competenceWorkers, healthWorkers, sponsoredCompanies] = await Promise.all([
+      prisma.user.count({ where: { employeeDirectoryId: worker.id } }),
+      prisma.communication.count({ where: { targetEmployeeId: worker.id } }),
+      prisma.communicationInvolvedEmployee.count({ where: { employeeId: worker.id } }),
+      prisma.competenceWorker.count({ where: { employeeDirectoryId: worker.id } }),
+      prisma.occupationalHealthWorker.count({ where: { employeeDirectoryId: worker.id } }),
+      prisma.externalCompany.count({ where: { sponsorEmployeeId: worker.id } }),
+    ]);
+    if (users + communications + involved + competenceWorkers + healthWorkers + sponsoredCompanies > 0) {
+      return fail("WORKER_HAS_HISTORY", "Worker cannot be permanently deleted because linked history exists. Inactivate the worker instead.", 409);
+    }
+
+    try {
+      await prisma.employeeDirectory.delete({ where: { id: worker.id } });
+      return ok({ deletedWorkerId: worker.id, permanentlyDeleted: true });
+    } catch {
+      return fail("WORKER_HAS_HISTORY", "Worker cannot be permanently deleted because linked history exists. Inactivate the worker instead.", 409);
+    }
+  }
+
   const result = parsed.data.deleteAll
     ? await prisma.employeeDirectory.updateMany({
         where: { plantId: plant.id, isActive: true },

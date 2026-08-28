@@ -9,7 +9,7 @@ import { suspendAuthorizationInput } from "@/lib/validation/dtos";
 // §2.3: suspension is an immediate cautionary measure — N2_PLANT_MANAGER and
 // N4_SUPERVISOR can also take it, unlike granting or revoking. N0_ADMIN and
 // N1_CORPORATE pass through requirePlantAccess's global bypass.
-const SUSPEND_ROLES: RoleCode[] = [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR];
+const SUSPEND_ROLES: RoleCode[] = [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N6_HR];
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string; id: string }> }) {
   const { plantCode, id } = await context.params;

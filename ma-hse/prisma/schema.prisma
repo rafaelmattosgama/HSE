@@ -25,7 +25,7 @@ model Plant {
   communications                     Communication[]
   competenceAlertDeliveries          CompetenceAlertDelivery[]
   competenceAssessments              CompetenceAssessment[]
-  competenceRequirements             CompetenceRequirement[]
+  competenceWorkerRequirements       CompetenceWorkerRequirement[]
   competenceTypes                    CompetenceType[]
   competenceWorkers                  CompetenceWorker[]
   employees                          EmployeeDirectory[]
@@ -47,6 +47,7 @@ model Plant {
   nearMissTypes                      NearMissType[]
   notifications                      Notification[]
   occupationalHealthWorkers          OccupationalHealthWorker[]
+  occupationalHealthExams            OccupationalHealthExam[]
   accessTokens                       PlantAccessToken[]
   monthlyInputs                      PlantMonthlyInput[]
   recipientLists                     ReportRecipientList[]
@@ -101,6 +102,7 @@ model User {
   validatedCommunications                   Communication[]                     @relation("ValidatedByUser")
   communicationAtt                          CommunicationAttachment[]
   occupationalHealthWorkerAttachments        OccupationalHealthWorkerAttachment[]
+  occupationalHealthExamAttachments          OccupationalHealthExamAttachment[]
   contractorCompanies                       ExternalCompany[]                   @relation("ExternalContractorOwner")
   reviewedExternalCompanyDocuments          ExternalCompanyDocument[]           @relation("ExternalCompanyDocumentReviewer")
   contractorInvitationsSent                 ExternalCompanyInvitation[]         @relation("ExternalInvitationSponsor")
@@ -118,7 +120,7 @@ model User {
   smatAuditsCreated                         SmatAudit[]                         @relation("SMATAuditorUser")
   smatAttachment                            SmatAuditAttachment[]
   addedCompetenceWorkers                    CompetenceWorker[]                  @relation("CompetenceWorkerAddedBy")
-  createdCompetenceRequirements             CompetenceRequirement[]             @relation("CompetenceRequirementCreatedBy")
+  setCompetenceWorkerRequirements           CompetenceWorkerRequirement[]       @relation("CompetenceWorkerRequirementSetBy")
   createdFireEquipment                      FireEquipment[]                     @relation("FireEquipmentCreatedBy")
   performedFireChecklistExecutions          FireChecklistExecution[]            @relation("FireChecklistExecutionPerformedBy")
   assignedFireEquipmentTags                 FireEquipmentTagAssignment[]        @relation("FireEquipmentTagAssignedBy")
@@ -182,7 +184,6 @@ model Area {
   sourceLanguage                     String?
   plant                              Plant                               @relation(fields: [plantId], references: [id], onDelete: Cascade)
   communications                     Communication[]
-  competenceRequirements             CompetenceRequirement[]
   competenceWorkers                  CompetenceWorker[]
   fireEquipment                      FireEquipment[]
   mapFeatures                        MapFeature[]
@@ -214,7 +215,6 @@ model Workstation {
   isActive                  Boolean                    @default(true)
   sourceLanguage            String?
   communications            Communication[]
-  competenceRequirements    CompetenceRequirement[]
   fireEquipment             FireEquipment[]
   mapFeatures               MapFeature[]
   occupationalHealthWorkers OccupationalHealthWorker[]
@@ -224,30 +224,36 @@ model Workstation {
 }
 
 model OccupationalHealthWorker {
-  id            String       @id @default(uuid())
-  plantId       String
-  employeeNo    String
-  name          String
-  birthDate     DateTime
-  workstationId String?
-  gender        String
-  hireDate      DateTime
-  roleStartDate DateTime
-  roleName      String?
-  nationality   String?
-  examDate      DateTime
-  validUntil    DateTime?
-  status        String       @default("VALID")
-  observation   String?
-  isActive      Boolean      @default(true)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  plant         Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  workstation   Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
-  attachments   OccupationalHealthWorkerAttachment[]
+  id                  String       @id @default(uuid())
+  plantId             String
+  employeeDirectoryId String?      @unique
+  employeeNo          String
+  name                String
+  birthDate           DateTime
+  workstationId       String?
+  gender              String
+  hireDate            DateTime
+  roleStartDate       DateTime
+  roleName            String?
+  nationality         String?
+  /// Legacy summary fields are retained for backwards compatibility. New
+  /// reads use the most recent OccupationalHealthExam instead.
+  examDate            DateTime?
+  validUntil          DateTime?
+  status              String       @default("VALID")
+  observation         String?
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  plant               Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  employeeDirectory   EmployeeDirectory? @relation(fields: [employeeDirectoryId], references: [id], onDelete: SetNull)
+  workstation         Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  attachments         OccupationalHealthWorkerAttachment[]
+  exams               OccupationalHealthExam[]
 
   @@unique([plantId, employeeNo])
   @@index([plantId, isActive, examDate])
+  @@index([plantId, employeeDirectoryId])
 }
 
 /// PDF/image documents attached to a worker's occupational health record —
@@ -269,6 +275,44 @@ model OccupationalHealthWorkerAttachment {
   uploadedBy               User?                     @relation(fields: [uploadedById], references: [id])
 
   @@index([occupationalHealthWorkerId])
+}
+
+/// Each clinical examination belongs to the stable occupational-health worker
+/// record. This deliberately does not use employeeNo: Admin can change that
+/// number without breaking the medical history.
+model OccupationalHealthExam {
+  id                         String   @id @default(uuid())
+  plantId                    String
+  occupationalHealthWorkerId String
+  examDate                   DateTime
+  validUntil                 DateTime
+  status                     String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  plant       Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  worker      OccupationalHealthWorker @relation(fields: [occupationalHealthWorkerId], references: [id], onDelete: Cascade)
+  attachments OccupationalHealthExamAttachment[]
+
+  @@index([occupationalHealthWorkerId, examDate])
+  @@index([plantId, examDate])
+}
+
+/// New documents belong to an examination. The older worker-level table is
+/// intentionally retained so its rows can be copied safely during migration.
+model OccupationalHealthExamAttachment {
+  id                        String                 @id @default(uuid())
+  occupationalHealthExamId  String
+  fileKey                   String
+  fileName                  String
+  contentType               String
+  createdAt                 DateTime               @default(now())
+  uploadedById              String?
+
+  exam       OccupationalHealthExam @relation(fields: [occupationalHealthExamId], references: [id], onDelete: Cascade)
+  uploadedBy User?                  @relation(fields: [uploadedById], references: [id])
+
+  @@index([occupationalHealthExamId])
 }
 
 model Equipment {
@@ -415,6 +459,7 @@ model EmployeeDirectory {
   shift                        Shift?                          @relation(fields: [shiftId], references: [id])
   contractorCompanyAssignments ExternalCompany[]               @relation("ExternalContractorSponsor")
   competenceWorkers            CompetenceWorker[]
+  occupationalHealthWorker     OccupationalHealthWorker?
   linkedUser                   User?
 
   @@unique([plantId, employeeNo])
@@ -441,7 +486,7 @@ model CompetenceType {
   isActive              Boolean                   @default(true)
   sourceLanguage        String?
   plant                 Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  requirements          CompetenceRequirement[]
+  workerRequirements    CompetenceWorkerRequirement[]
   states                WorkerCompetenceState[]
   trainingRecords       TrainingRecord[]
   assessments           CompetenceAssessment[]
@@ -461,36 +506,6 @@ enum CompetenceCategory {
   OTHER
 }
 
-model CompetenceRequirement {
-  id                 String                     @id @default(uuid())
-  plantId            String
-  competenceTypeId   String
-  scopeType          CompetenceRequirementScope
-  scopeRoleName      String?
-  scopeAreaId        String?
-  scopeWorkstationId String?
-  isMandatory        Boolean                    @default(true)
-  notes              String?
-  isActive           Boolean                    @default(true)
-  createdAt          DateTime                   @default(now())
-  createdById        String?
-
-  plant          Plant          @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  competenceType CompetenceType @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
-  area           Area?          @relation(fields: [scopeAreaId], references: [id], onDelete: Cascade)
-  workstation    Workstation?   @relation(fields: [scopeWorkstationId], references: [id], onDelete: Cascade)
-  createdBy      User?          @relation("CompetenceRequirementCreatedBy", fields: [createdById], references: [id])
-
-  @@index([plantId, competenceTypeId, isActive])
-}
-
-enum CompetenceRequirementScope {
-  ROLE
-  AREA
-  WORKSTATION
-  ALL_WORKERS
-}
-
 model CompetenceWorker {
   id                  String   @id @default(uuid())
   plantId             String
@@ -507,6 +522,7 @@ model CompetenceWorker {
   area            Area?                     @relation(fields: [areaId], references: [id], onDelete: SetNull)
   addedBy         User?                     @relation("CompetenceWorkerAddedBy", fields: [addedById], references: [id])
   states          WorkerCompetenceState[]
+  requirements    CompetenceWorkerRequirement[]
   trainingRecords TrainingRecord[]
   assessments     CompetenceAssessment[]
   authorizations  WorkerAuthorization[]
@@ -540,6 +556,29 @@ model WorkerCompetenceState {
   @@index([plantId, validUntil])
 }
 
+/// §3.2 (revised): one row per (worker, competenceType), set explicitly by
+/// a supervisor who knows that worker's real duties, not inferred from a
+/// role-name string match that depended on data nobody kept filled in.
+model CompetenceWorkerRequirement {
+  id                 String   @id @default(uuid())
+  plantId            String
+  competenceWorkerId String
+  competenceTypeId   String
+  isRequired         Boolean  @default(true)
+  notes              String?
+  setById            String?
+  setAt              DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  plant            Plant            @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  competenceWorker CompetenceWorker @relation(fields: [competenceWorkerId], references: [id], onDelete: Cascade)
+  competenceType   CompetenceType   @relation(fields: [competenceTypeId], references: [id], onDelete: Cascade)
+  setBy            User?            @relation("CompetenceWorkerRequirementSetBy", fields: [setById], references: [id])
+
+  @@unique([competenceWorkerId, competenceTypeId])
+  @@index([plantId, isRequired])
+}
+
 enum CompetenceCellState {
   VALID
   EXPIRING
@@ -557,6 +596,7 @@ enum CompetenceCellState {
 model TrainingRecord {
   id                   String         @id @default(uuid())
   plantId              String
+  entryGroupId         String?
   competenceWorkerId   String
   competenceTypeId     String
   provider             String?
@@ -578,6 +618,7 @@ model TrainingRecord {
   authorizations   WorkerAuthorization[]
 
   @@index([competenceWorkerId, competenceTypeId, completedAt])
+  @@index([entryGroupId])
 }
 
 enum TrainingResult {
@@ -602,6 +643,7 @@ model TrainingRecordAttachment {
 model CompetenceAssessment {
   id                 String                     @id @default(uuid())
   plantId            String
+  entryGroupId       String?
   competenceWorkerId String
   competenceTypeId   String
   trainingRecordId   String?
@@ -624,6 +666,7 @@ model CompetenceAssessment {
   authorizations   WorkerAuthorization[]
 
   @@index([competenceWorkerId, competenceTypeId, assessedAt])
+  @@index([entryGroupId])
 }
 
 enum CompetenceAssessmentMethod {
@@ -657,6 +700,7 @@ model CompetenceAssessmentAttachment {
 model WorkerAuthorization {
   id                  String              @id @default(uuid())
   plantId             String
+  entryGroupId        String?
   competenceWorkerId  String
   competenceTypeId    String
   trainingRecordId    String?
@@ -698,6 +742,7 @@ model WorkerAuthorization {
   @@unique([plantId, sequenceNumber])
   @@index([plantId, status, validUntil])
   @@index([competenceWorkerId, competenceTypeId, status])
+  @@index([entryGroupId])
 }
 
 enum AuthorizationStatus {
@@ -826,8 +871,8 @@ enum FireEquipmentCategory {
   OTHER
 }
 
-/// Fase 0 item 3: Workstation is reused elsewhere (CompetenceRequirement scope,
-/// OccupationalHealthWorker) as "production post/role", not as a free spatial
+/// Fase 0 item 3: Workstation is reused by OccupationalHealthWorker as a
+/// "production post/role", not as a free spatial
 /// location — areaId/workstationId stay optional qualifiers, locationDescription
 /// is the field a caller should actually rely on for common-area equipment
 /// (corridors, stairwells) instead of inventing a fictitious Workstation row.
@@ -2091,7 +2136,7 @@ enum RoleCode {
   N3_SAFETY
   N4_SUPERVISOR
   N5_OPERATOR
-  MEDICO
+  N6_HR
 }
 
 enum OnboardingStatus {

@@ -80,6 +80,35 @@ describe("computeCompetenceCellState — step 1 (requirement)", () => {
     expect(result.state).toBe(CompetenceCellState.VALID);
     expect(result.currentAuthorizationId).toBe(auth.id);
   });
+
+  it("shows AWAITING_AUTHORIZATION, not NOT_APPLICABLE, when training passed and assessment is competent but nothing requires it and no authorization exists", () => {
+    const result = computeCompetenceCellState(
+      baseInput({
+        isRequired: false,
+        requirementSource: null,
+        trainingRecords: [training({ result: TrainingResult.PASSED })],
+        assessments: [assessment({ result: CompetenceAssessmentResult.COMPETENT })],
+      }),
+    );
+    expect(result.state).toBe(CompetenceCellState.AWAITING_AUTHORIZATION);
+  });
+
+  it("shows AWAITING_ASSESSMENT, not NOT_APPLICABLE, when training passed and the competence type requires an assessment that hasn't happened yet", () => {
+    const result = computeCompetenceCellState(
+      baseInput({
+        isRequired: false,
+        requirementSource: null,
+        requiresAssessment: true,
+        trainingRecords: [training({ result: TrainingResult.PASSED })],
+      }),
+    );
+    expect(result.state).toBe(CompetenceCellState.AWAITING_ASSESSMENT);
+  });
+
+  it("still returns NOT_APPLICABLE when not required and there is truly no record of any kind", () => {
+    const result = computeCompetenceCellState(baseInput({ isRequired: false, requirementSource: null }));
+    expect(result.state).toBe(CompetenceCellState.NOT_APPLICABLE);
+  });
 });
 
 describe("computeCompetenceCellState — step 3 (manual suspension)", () => {

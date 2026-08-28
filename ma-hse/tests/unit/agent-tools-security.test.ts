@@ -233,7 +233,7 @@ describe("agent tools security boundaries", () => {
   });
 
   it("blocks close_action for roles outside the agent action allowlist", async () => {
-    const context = ctx({ role: RoleCode.MEDICO, requestId: "request-tools-blocked" });
+    const context = ctx({ role: RoleCode.N6_HR, requestId: "request-tools-blocked" });
     const result = await toolByName("close_action", context).invoke(
       null,
       JSON.stringify({
@@ -260,7 +260,7 @@ describe("agent tools security boundaries", () => {
             requestId: "request-tools-blocked",
             eventType: "tool_blocked_rbac",
             result: "blocked",
-            role: RoleCode.MEDICO,
+            role: RoleCode.N6_HR,
             toolName: "close_action",
           }),
         }),

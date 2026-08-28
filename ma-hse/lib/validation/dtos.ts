@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, CompetenceRequirementScope, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
 import {
   SMAT_ATTACHMENT_LIMITS,
@@ -916,6 +916,54 @@ export const grantAuthorizationInput = z.object({
   }
 });
 
+export const registerCompetenceEntryInput = z.object({
+  competenceWorkerId: z.string().uuid(),
+  competenceTypeId: z.string().uuid(),
+  // Present when appending an assessment/authorization to an entry whose
+  // training was already registered in a previous submission — absent when
+  // starting a brand-new entry, in which case `training` is required.
+  entryGroupId: z.string().uuid().optional(),
+  training: z.object({
+    provider: z.string().trim().max(160).nullable().optional(),
+    trainerName: z.string().trim().max(160).nullable().optional(),
+    completedAt: z.coerce.date(),
+    durationHours: z.coerce.number().positive().max(999).nullable().optional(),
+    certificateNumber: z.string().trim().max(80).nullable().optional(),
+    certificateExpiresAt: z.coerce.date().nullable().optional(),
+    result: z.nativeEnum(TrainingResult).default(TrainingResult.PASSED),
+    notes: z.string().trim().max(2000).nullable().optional(),
+  }).optional(),
+  assessment: z.object({
+    assessedAt: z.coerce.date(),
+    assessorUserId: z.string().uuid().nullable().optional(),
+    assessorName: z.string().trim().max(160).nullable().optional(),
+    method: z.nativeEnum(CompetenceAssessmentMethod).default(CompetenceAssessmentMethod.PRACTICAL_TEST),
+    result: z.nativeEnum(CompetenceAssessmentResult),
+    score: z.coerce.number().int().min(0).max(100).nullable().optional(),
+    observations: z.string().trim().max(2000).nullable().optional(),
+  }).superRefine((value, ctx) => {
+    const hasInternal = Boolean(value.assessorUserId);
+    const hasExternal = Boolean(value.assessorName && value.assessorName.trim());
+    if (hasInternal === hasExternal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["assessorUserId"],
+        message: "Choose exactly one: an internal user (assessorUserId) or an external assessor name (assessorName)",
+      });
+    }
+  }).optional(),
+  authorization: z.object({
+    validFrom: z.coerce.date(),
+    restrictions: z.string().trim().max(500).nullable().optional(),
+  }).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.entryGroupId && !value.training) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["training"], message: "training is required when starting a new entry" });
+  }
+});
+
+export type RegisterCompetenceEntryInput = z.infer<typeof registerCompetenceEntryInput>;
+
 export const suspendAuthorizationInput = z.object({
   reason: z.string().trim().min(1).max(500),
 });
@@ -928,29 +976,10 @@ export const reactivateAuthorizationInput = z.object({
   note: z.string().trim().max(500).nullable().optional(),
 });
 
-export const upsertCompetenceRequirementInput = z.object({
-  id: z.string().uuid().optional(),
+export const setCompetenceWorkerRequirementInput = z.object({
   competenceTypeId: z.string().uuid(),
-  scopeType: z.nativeEnum(CompetenceRequirementScope),
-  scopeRoleName: z.string().trim().min(1).max(160).nullable().optional(),
-  scopeAreaId: optionalUuid,
-  scopeWorkstationId: optionalUuid,
-  isMandatory: z.boolean().default(true),
+  isRequired: z.boolean(),
   notes: z.string().trim().max(500).nullable().optional(),
-}).superRefine((value, ctx) => {
-  if (value.scopeType === CompetenceRequirementScope.ROLE && !value.scopeRoleName) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scopeRoleName"], message: "scopeRoleName is required for ROLE scope" });
-  }
-  if (value.scopeType === CompetenceRequirementScope.AREA && !value.scopeAreaId) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scopeAreaId"], message: "scopeAreaId is required for AREA scope" });
-  }
-  if (value.scopeType === CompetenceRequirementScope.WORKSTATION && !value.scopeWorkstationId) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scopeWorkstationId"], message: "scopeWorkstationId is required for WORKSTATION scope" });
-  }
-});
-
-export const deleteCompetenceRequirementInput = z.object({
-  id: z.string().uuid(),
 });
 
 export const updateCompetenceWorkerRoleInput = z.object({
@@ -967,12 +996,20 @@ export const createWorkerInput = z.object({
 export const deleteWorkerInput = z.object({
   id: z.string().uuid().optional(),
   deleteAll: z.boolean().default(false),
+  hardDelete: z.boolean().default(false),
 }).superRefine((value, ctx) => {
   if (!value.deleteAll && !value.id) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["id"],
       message: "Worker id is required when deleteAll is false",
+    });
+  }
+  if (value.deleteAll && value.hardDelete) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["hardDelete"],
+      message: "Bulk permanent deletion is not allowed",
     });
   }
 });
@@ -995,6 +1032,9 @@ const occupationalHealthAttachmentInput = z.object({
 });
 
 export const upsertOccupationalHealthWorkerInput = z.object({
+  // UI-created records select a worker from the Admin directory. Optional so
+  // legacy Excel imports remain supported when the directory has no match.
+  employeeDirectoryId: z.string().uuid().optional().nullable(),
   employeeNo: z.string().min(1),
   name: z.string().min(2),
   birthDate: z.coerce.date(),
@@ -1004,13 +1044,34 @@ export const upsertOccupationalHealthWorkerInput = z.object({
   roleStartDate: z.coerce.date(),
   roleName: z.string().optional(),
   nationality: z.string().optional(),
-  examDate: z.coerce.date(),
+  // Legacy profile/import compatibility. New examination records use the
+  // dedicated DTO below, while a worker may now have no examination yet.
+  examDate: z.coerce.date().optional(),
   validUntil: z.coerce.date().optional().nullable(),
   status: z.enum(["VALID", "EXPIRED", "DUE_SOON", "PENDING"]).default("VALID"),
   observation: z.string().optional(),
   isActive: z.boolean().default(true),
   newAttachments: z.array(occupationalHealthAttachmentInput).optional(),
 });
+
+export const occupationalHealthExamStatusInput = z.enum(["FIT", "FIT_CONDITIONAL", "UNFIT"]);
+
+export const createOccupationalHealthExamInput = z.object({
+  examDate: z.coerce.date(),
+  validUntil: z.coerce.date(),
+  status: occupationalHealthExamStatusInput,
+  newAttachments: z.array(occupationalHealthAttachmentInput).max(1).optional(),
+}).superRefine((value, ctx) => {
+  if (value.validUntil < value.examDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["validUntil"],
+      message: "Valid until cannot be before exam date",
+    });
+  }
+});
+
+export const updateOccupationalHealthExamInput = createOccupationalHealthExamInput;
 
 export const createCorporatePlantInput = z.object({
   code: z.string().min(2),
@@ -1212,11 +1273,11 @@ export type GrantAuthorizationInput = z.infer<typeof grantAuthorizationInput>;
 export type SuspendAuthorizationInput = z.infer<typeof suspendAuthorizationInput>;
 export type RevokeAuthorizationInput = z.infer<typeof revokeAuthorizationInput>;
 export type ReactivateAuthorizationInput = z.infer<typeof reactivateAuthorizationInput>;
-export type UpsertCompetenceRequirementInput = z.infer<typeof upsertCompetenceRequirementInput>;
-export type DeleteCompetenceRequirementInput = z.infer<typeof deleteCompetenceRequirementInput>;
+export type SetCompetenceWorkerRequirementInput = z.infer<typeof setCompetenceWorkerRequirementInput>;
 export type UpdateCompetenceWorkerRoleInput = z.infer<typeof updateCompetenceWorkerRoleInput>;
 export type CreateWorkerInput = z.infer<typeof createWorkerInput>;
 export type UpsertOccupationalHealthWorkerInput = z.infer<typeof upsertOccupationalHealthWorkerInput>;
+export type CreateOccupationalHealthExamInput = z.infer<typeof createOccupationalHealthExamInput>;
 export type CreateCorporatePlantInput = z.infer<typeof createCorporatePlantInput>;
 export type UpdateCorporatePlantLanguageInput = z.infer<typeof updateCorporatePlantLanguageInput>;
 export type UpdateCorporatePlantInput = z.infer<typeof updateCorporatePlantInput>;
