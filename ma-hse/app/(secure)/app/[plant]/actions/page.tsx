@@ -23,6 +23,13 @@ const DELETE_ACTION_ROLES: RoleCode[] = [
   RoleCode.N3_SAFETY,
 ];
 
+const CLOSE_ANY_ACTION_ROLES: RoleCode[] = [
+  RoleCode.N0_ADMIN,
+  RoleCode.N1_CORPORATE,
+  RoleCode.N2_PLANT_MANAGER,
+  RoleCode.N3_SAFETY,
+];
+
 const LINKABLE_COMMUNICATION_STATUSES: CommunicationStatus[] = [
   CommunicationStatus.VALID_OPEN,
   CommunicationStatus.ONGOING,
@@ -145,12 +152,7 @@ export default async function ActionsPage({ params }: { params: Promise<{ plant:
         ? session.user.plantRoles.find((entry) => entry.plantCode)?.role ?? null
         : session.user.plantRoles.find((entry) => entry.plantCode === plant)?.role ?? null;
   const canDeleteActions = Boolean(actorRole && DELETE_ACTION_ROLES.includes(actorRole));
-  const canCloseAnyActions = Boolean(actorRole && [
-    RoleCode.N0_ADMIN,
-    RoleCode.N1_CORPORATE,
-    RoleCode.N2_PLANT_MANAGER,
-    RoleCode.N3_SAFETY,
-  ].includes(actorRole));
+  const canCloseAnyActions = Boolean(actorRole && CLOSE_ANY_ACTION_ROLES.includes(actorRole));
   const canCloseOwnActions = actorRole === RoleCode.N4_SUPERVISOR || actorRole === RoleCode.N6_HR;
 
   const communicationUi = await getLocalizedCommunicationUi(uiLocale);
