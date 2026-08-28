@@ -204,11 +204,13 @@ Na tela `Plant Admin`, o bloco `QR Token Manager` agora:
   - Cria e vincula usuarios N1/N2/N3 por planta.
 - N2 Plant Manager:
   - Le/Cria comunicacoes e acoes na planta.
+  - Fecha qualquer acao da planta.
   - Le/Cria S-EWO e aprova S-EWO (`/sewo/[id]/approval`).
   - Reabre comunicacao/acao.
   - Nao altera parametros admin (SLA, alert rules, QR, recipients, master data).
 - N3 Safety:
   - Le/Cria comunicacoes e acoes na planta.
+  - Fecha qualquer acao da planta.
   - Valida comunicacao (`/communications/[id]/validate`).
   - Fecha comunicacao manualmente (`/communications/[id]/manual-close`).
   - Reabre comunicacao/acao.
@@ -216,16 +218,16 @@ Na tela `Plant Admin`, o bloco `QR Token Manager` agora:
   - Cria e vincula usuarios N4/N5/N6_HR na propria planta.
   - Le/Cria S-EWO (sem aprovacao final N2).
 - N4 Supervisor:
-  - Le/Cria comunicacoes e acoes; fecha acao com evidencia.
+  - Le/Cria comunicacoes e acoes; fecha apenas acoes atribuidas a si, com evidencia.
   - Le lista de S-EWO.
   - Nao valida comunicacao, nao aprova S-EWO, nao reabre acao/comunicacao.
 - N5 Operator:
-  - Le/Cria comunicacoes e acoes; fecha acao com evidencia.
+  - Le/Cria comunicacoes e acoes; nao pode fechar acoes.
   - Nao acessa S-EWO API, nem validacao/admin.
 - N6 HR:
   - Acesso completo a Competências, igual ao N3 Safety.
   - Acesso completo a Comunicações e Medicina do Trabalho.
-  - Consulta Ações e S-EWO, sem permissões de criação, alteração ou aprovação.
+  - Consulta Ações e S-EWO; pode fechar apenas as Ações atribuídas a si.
 
 Observacao importante:
 - As paginas server-rendered em `/app/[plant]/*` hoje validam autenticacao + escopo de planta no layout.

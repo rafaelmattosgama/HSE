@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { parseApiResponse, requireApiResponse, uploadAttachment } from "@/lib/client-api";
+import { parseApiResponse, uploadAttachment } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
 import {
   BASE_ACTIONS_UI,
@@ -29,6 +29,7 @@ type ActionRow = {
   level?: string | null;
   priority: string;
   status: string;
+  ownerUserId: string;
   ownerName: string;
   dueDate: string;
   closedDate: string | null;
@@ -67,6 +68,9 @@ export function ActionsTable({
   plant,
   actions,
   canDelete = false,
+  canCloseAnyActions = false,
+  canCloseOwnActions = false,
+  viewerUserId,
   labels,
   statusLabels,
   priorityLabels,
@@ -75,6 +79,9 @@ export function ActionsTable({
   plant: string;
   actions: ActionRow[];
   canDelete?: boolean;
+  canCloseAnyActions?: boolean;
+  canCloseOwnActions?: boolean;
+  viewerUserId?: string;
   showPlant?: boolean;
   labels?: ActionsUi["table"];
   statusLabels?: ActionsUi["statusLabels"];
@@ -140,6 +147,9 @@ export function ActionsTable({
     () => filteredActions.filter((action) => action.status === "OPEN" || action.status === "ONGOING"),
     [filteredActions],
   );
+  const canCloseRow = (action: ActionRow) =>
+    canCloseAnyActions || (canCloseOwnActions && Boolean(viewerUserId) && action.ownerUserId === viewerUserId);
+  const canCloseAnyVisibleAction = canCloseAnyActions || (canCloseOwnActions && Boolean(viewerUserId));
 
   useEffect(() => {
     const visibleActionIds = new Set(filteredActions.map((action) => action.id));
@@ -336,7 +346,7 @@ export function ActionsTable({
 
   return (
     <div className="space-y-4">
-      {!showPlant ? (
+      {!showPlant && canCloseAnyVisibleAction ? (
         <>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -456,7 +466,7 @@ export function ActionsTable({
                 <Fragment key={row.id}>
                   <tr key={row.id} className="border-t border-slate-200">
                     <td className="px-4 py-3">
-                      {isOpen && !showPlant ? (
+                      {isOpen && !showPlant && canCloseRow(row) ? (
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(row.id)}
@@ -530,7 +540,7 @@ export function ActionsTable({
                               </div>
                             </div>
                           </div>
-                          {isOpen ? (
+                          {isOpen && canCloseRow(row) ? (
                             <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
                               <h3 className="text-sm font-semibold text-slate-900">{text.closeAction}</h3>
                               <label className="space-y-1 text-sm">
@@ -560,11 +570,11 @@ export function ActionsTable({
                                 {busyId === row.id ? text.closing : text.closeAction}
                               </Button>
                             </div>
-                          ) : (
+                          ) : !isOpen ? (
                             <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
                               {text.alreadyClosed}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       </td>
                     </tr>

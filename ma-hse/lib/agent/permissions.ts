@@ -68,6 +68,13 @@ export const AGENT_ACTION_ROLES = [
   RoleCode.N5_OPERATOR,
 ] as const;
 
+export const AGENT_CLOSE_ACTION_ROLES = [
+  RoleCode.N1_CORPORATE,
+  RoleCode.N2_PLANT_MANAGER,
+  RoleCode.N3_SAFETY,
+  RoleCode.N4_SUPERVISOR,
+] as const;
+
 export const AGENT_CONTROLLED_OPERATION_ROLES = [
   RoleCode.N1_CORPORATE,
   RoleCode.N3_SAFETY,

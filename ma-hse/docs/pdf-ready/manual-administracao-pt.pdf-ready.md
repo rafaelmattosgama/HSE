@@ -72,6 +72,7 @@ Pode:
 
 - consultar dashboards da planta;
 - criar e consultar comunicacoes e acoes;
+- fechar qualquer acao da planta;
 - criar e aprovar S-EWO;
 - reabrir comunicacoes e acoes;
 - aceder a inputs mensais;
@@ -86,6 +87,7 @@ Responsavel de seguranca da planta.
 Pode:
 
 - criar e consultar comunicacoes e acoes;
+- fechar qualquer acao da planta;
 - validar comunicacoes;
 - fechar comunicacoes manualmente;
 - reabrir comunicacoes e acoes;
@@ -102,7 +104,7 @@ Pode:
 
 - consultar e criar comunicacoes;
 - consultar e criar acoes;
-- fechar acoes com evidencia;
+- fechar apenas acoes atribuidas a si, com evidencia;
 - consultar lista S-EWO;
 - aceder a SMAT quando o modulo estiver ativo.
 
@@ -116,7 +118,7 @@ Pode:
 
 - consultar e criar comunicacoes;
 - consultar e criar acoes;
-- fechar acoes com evidencia;
+- nao pode fechar acoes;
 - consultar dashboards permitidos.
 
 Nao acede a S-EWO API, validacao ou administracao.
@@ -136,7 +138,7 @@ As submissoes publicas sao controladas por tokens de planta e registadas como or
 
 ### N6_HR
 
-Perfil de Recursos Humanos da planta. Tem acesso total a Competências, igual ao N3_SAFETY; acesso total a Comunicações e Medicina do Trabalho; e consulta de Ações e S-EWO.
+Perfil de Recursos Humanos da planta. Tem acesso total a Competências, igual ao N3_SAFETY; acesso total a Comunicações e Medicina do Trabalho; pode fechar apenas Ações atribuídas a si; e consulta S-EWO.
 
 ## 3. Arranque Local
 

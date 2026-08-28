@@ -72,6 +72,7 @@ Can:
 
 - view plant dashboards;
 - create and view communications and actions;
+- close any action in the plant;
 - create and approve S-EWO;
 - reopen communications and actions;
 - access monthly inputs;
@@ -86,6 +87,7 @@ Plant safety role.
 Can:
 
 - create and view communications and actions;
+- close any action in the plant;
 - validate communications;
 - manually close communications;
 - reopen communications and actions;
@@ -102,7 +104,7 @@ Can:
 
 - view and create communications;
 - view and create actions;
-- close actions with evidence;
+- close only actions assigned to them, with evidence;
 - view the S-EWO list;
 - access SMAT when enabled.
 
@@ -116,7 +118,7 @@ Can:
 
 - view and create communications;
 - view and create actions;
-- close actions with evidence;
+- cannot close actions;
 - view permitted dashboards.
 
 Cannot access S-EWO API, validation or administration.
@@ -136,7 +138,7 @@ Public submissions are controlled by plant tokens and recorded as a public sourc
 
 ### N6_HR
 
-Plant HR role. Has full Competences access, equal to N3_SAFETY; full Communications and Occupational Health access; and read-only Actions and S-EWO access.
+Plant HR role. Has full Competences access, equal to N3_SAFETY; full Communications and Occupational Health access; can close only actions assigned to them; and has read-only S-EWO access.
 
 ## 3. Local Startup
 

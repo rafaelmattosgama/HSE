@@ -5,17 +5,17 @@ import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
+import { canCloseAction } from "@/lib/rbac/action-close";
 import { ActionService } from "@/lib/services/action-service";
 import { bulkCloseActionInput } from "@/lib/validation/dtos";
 
 export async function POST(request: Request, context: { params: Promise<{ plantCode: string }> }) {
   const { plantCode } = await context.params;
   const auth = await requirePlantAccess(plantCode, [
-    RoleCode.N1_CORPORATE,
     RoleCode.N2_PLANT_MANAGER,
     RoleCode.N3_SAFETY,
     RoleCode.N4_SUPERVISOR,
-    RoleCode.N5_OPERATOR,
+    RoleCode.N6_HR,
   ]);
   if ("error" in auth) return auth.error;
 
@@ -24,16 +24,21 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
 
   try {
     const plant = await getPlantByCode(plantCode);
-    const count = await prisma.action.count({
+    const actions = await prisma.action.findMany({
       where: {
         plantId: plant.id,
         id: {
           in: parsed.data.actionIds,
         },
       },
+      select: { id: true, ownerUserId: true },
     });
-    if (count !== parsed.data.actionIds.length) {
+    if (actions.length !== parsed.data.actionIds.length) {
       return fail("NOT_FOUND", "One or more actions were not found in this plant", 404);
+    }
+    const actorRole = "role" in auth ? auth.role : null;
+    if (actions.some((action) => !canCloseAction({ actorRole, actorUserId: auth.session.user.id, ownerUserId: action.ownerUserId }))) {
+      return fail("FORBIDDEN", "You can only close actions assigned to you", 403);
     }
 
     const updated = await ActionService.closeMany({
