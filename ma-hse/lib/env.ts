@@ -42,6 +42,8 @@ const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().default("EHS <noreply@ehs.local>"),
+    SMTP_GATEWAY_BASE_URL: z.string().url().default("https://148.69.182.60:8444"),
+    SMTP_GATEWAY_API_KEY: optionalTrimmedString,
     AGENT_ENABLED: z
       .string()
       .optional()

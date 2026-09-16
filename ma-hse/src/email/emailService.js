@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import { hashSensitiveValue } from "../../lib/security";
+import { sendViaSmtpGateway } from "../../lib/services/smtp-gateway-client";
 import { DEFAULT_EMAIL_LANGUAGE, getEmailTemplate, SYSTEM_EMAIL_TYPES } from "./emailTemplates.js";
 import { renderTemplate } from "./emailRenderer.js";
 
@@ -19,6 +20,17 @@ const transporter = nodemailer.createTransport({
   socketTimeout: 20_000,
 });
 
+/**
+ * Staged rollout of the HTTP SMTP gateway: only these types are routed through
+ * it for now, while delivery is verified end-to-end from production. Every
+ * other type, and any email carrying attachments, keeps using direct SMTP.
+ * Expand this set once a pilot type has been confirmed delivering in prod.
+ */
+const GATEWAY_ENABLED_TYPES = new Set([
+  SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION,
+  SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP,
+]);
+
 function normalizeRecipients(to) {
   return Array.isArray(to) ? to : [to];
 }
@@ -32,6 +44,14 @@ function cleanRecipients(to) {
 function hashRecipients(to) {
   return cleanRecipients(to)
     .map((recipient) => hashSensitiveValue(String(recipient).trim().toLowerCase()));
+}
+
+async function deliverEmail({ type, to, subject, html, text, attachments }) {
+  if (!attachments?.length && GATEWAY_ENABLED_TYPES.has(type)) {
+    await sendViaSmtpGateway({ to, subject, text, html });
+    return;
+  }
+  await transporter.sendMail({ from: env.SMTP_FROM, to, subject, html, text, attachments });
 }
 
 export async function sendSystemEmail({ type, to, language = DEFAULT_EMAIL_LANGUAGE, data = {}, attachments }) {
@@ -56,8 +76,8 @@ export async function sendSystemEmail({ type, to, language = DEFAULT_EMAIL_LANGU
     const html = renderTemplate(template.htmlTemplate, data);
     const text = renderTemplate(template.textTemplate, data);
 
-    await transporter.sendMail({
-      from: env.SMTP_FROM,
+    await deliverEmail({
+      type,
       to: recipients,
       subject,
       html,
