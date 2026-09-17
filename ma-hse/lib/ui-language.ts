@@ -1,3 +1,4 @@
+import { GROUP_SAFETY_LABELS } from "@/lib/group-safety-ui";
 import type { AppLocale } from "@/lib/i18n/routing";
 
 export const DASHBOARD_LANGUAGES = [
@@ -12,6 +13,7 @@ export const DASHBOARD_LANGUAGES = [
 
 const UI_DICTIONARY = {
   en: {
+    groupSafety: GROUP_SAFETY_LABELS.en,
     modules: {
       safetyDashboard: "Safety Dashboard",
       environmentDashboard: "Environment Dashboard",
@@ -798,6 +800,7 @@ const UI_DICTIONARY = {
     },
   },
   pt: {
+    groupSafety: GROUP_SAFETY_LABELS.pt,
     modules: {
       safetyDashboard: "Dashboard de Segurança",
       environmentDashboard: "Dashboard de Ambiente",
@@ -1488,6 +1491,7 @@ const UI_DICTIONARY = {
     },
   },
   it: {
+    groupSafety: GROUP_SAFETY_LABELS.it,
     modules: {
       safetyDashboard: "Dashboard Sicurezza",
       environmentDashboard: "Dashboard Ambiente",
@@ -2082,6 +2086,7 @@ const UI_DICTIONARY = {
     },
   },
   pl: {
+    groupSafety: GROUP_SAFETY_LABELS.pl,
     modules: {
       safetyDashboard: "Panel Bezpieczeństwa",
       environmentDashboard: "Panel Środowiskowy",
@@ -2676,6 +2681,7 @@ const UI_DICTIONARY = {
     },
   },
   de: {
+    groupSafety: GROUP_SAFETY_LABELS.de,
     modules: {
       safetyDashboard: "Sicherheits-Dashboard",
       environmentDashboard: "Umwelt-Dashboard",
@@ -3270,6 +3276,7 @@ const UI_DICTIONARY = {
     },
   },
   ro: {
+    groupSafety: GROUP_SAFETY_LABELS.ro,
     modules: {
       safetyDashboard: "Tablou de siguranță",
       environmentDashboard: "Tablou de mediu",
@@ -3864,6 +3871,7 @@ const UI_DICTIONARY = {
     },
   },
   fr: {
+    groupSafety: GROUP_SAFETY_LABELS.fr,
     modules: {
       safetyDashboard: "Tableau de sécurité",
       environmentDashboard: "Tableau environnement",

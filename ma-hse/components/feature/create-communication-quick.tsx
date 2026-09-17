@@ -166,7 +166,7 @@ export function CreateCommunicationQuick({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           type,
-          eventDatetime,
+          eventDatetime: eventDatetime ? new Date(eventDatetime).toISOString() : eventDatetime,
           reporterName: reporterEmployee?.name ?? "",
           reporterEmployeeNo: reporterEmployee?.employeeNo || undefined,
           areaId: areaId || undefined,
