@@ -101,4 +101,30 @@ describe("CreateCommunicationQuick", () => {
     fireEvent.change(typeSelect!, { target: { value: "UNSAFE_ACT" } });
     expect(selectContainingOption("unsafe-act-1")?.value).toBe("");
   });
+
+  it("sends eventDatetime as an unambiguous instant instead of the raw wall-clock string", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(createElement(CreateCommunicationQuick, baseProps));
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+
+    fireEvent.change(selectContainingOption("area-1")!, { target: { value: "area-1" } });
+    fireEvent.change(selectContainingOption("workstation-1")!, { target: { value: "workstation-1" } });
+    fireEvent.change(screen.getByLabelText("Date and time"), { target: { value: "2026-09-15T11:24" } });
+    fireEvent.change(selectContainingOption("employee-1")!, { target: { value: "employee-1" } });
+    fireEvent.change(screen.getByPlaceholderText("Description"), {
+      target: { value: "Observed guard missing on conveyor." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const [, options] = fetchMock.mock.calls[0];
+    const body = JSON.parse(options.body as string);
+    expect(body.eventDatetime).toBe(new Date("2026-09-15T11:24").toISOString());
+
+    vi.unstubAllGlobals();
+  });
 });
