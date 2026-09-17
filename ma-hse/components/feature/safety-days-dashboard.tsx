@@ -40,9 +40,9 @@ export function SafetyDaysSpotlight({
     : labels.historicalRecord;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-teal-100 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <div className="relative min-h-[280px] bg-[radial-gradient(circle_at_20%_20%,rgba(45,212,191,0.36),transparent_34%),radial-gradient(circle_at_84%_18%,rgba(251,191,36,0.34),transparent_26%),linear-gradient(135deg,#082f49_0%,#0f172a_48%,#3f1d49_100%)] p-6 sm:p-8">
+    <section className="@container overflow-hidden rounded-2xl border border-teal-100 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
+      <div className="grid gap-0 @md:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div className="relative @md:min-h-[280px] bg-[radial-gradient(circle_at_20%_20%,rgba(45,212,191,0.36),transparent_34%),radial-gradient(circle_at_84%_18%,rgba(251,191,36,0.34),transparent_26%),linear-gradient(135deg,#082f49_0%,#0f172a_48%,#3f1d49_100%)] p-6 @md:p-8">
           <div className="relative z-10 flex h-full flex-col justify-between gap-8">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -59,7 +59,7 @@ export function SafetyDaysSpotlight({
 
             <div>
               <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-                <p className="text-7xl font-black leading-none text-white sm:text-8xl">
+                <p className="text-6xl font-black leading-none text-white @md:text-8xl">
                   {summary.currentDays.toLocaleString()}
                 </p>
                 <div className="pb-2">

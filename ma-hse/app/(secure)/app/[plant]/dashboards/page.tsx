@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import Link from "next/link";
 import { CommunicationType, MasterDataEntityType, SEWOStatus } from "@prisma/client";
 import { getServerSession } from "next-auth";
@@ -1026,6 +1027,58 @@ export default async function DashboardsPage({
     { value: "12", label: getMonthLabel(uiLocale, 11) },
   ];
 
+  // Partilhado pelas duas instâncias do componente: a coluna principal renderiza todos os
+  // grupos menos a exposição, a coluna de contexto renderiza só a exposição.
+  const kpiGroupProps: ComponentProps<typeof SafetyDashboardKpiGroups> = {
+    locale: uiLocale,
+    periodLabel: period.label,
+    labels: ui.dashboard,
+    detailed: showDetailedKpis,
+    showPendingValidationKpi,
+    canViewOpenCommunications,
+    metrics: {
+      validatedEvents: validCommunicationsCount,
+      injuries: injuryCount,
+      daysLost: lostDays,
+      firstAids: firstAidCount,
+      frequencyRate: totalHoursWorked > 0 ? frequencyIndex : null,
+      gravityRate: totalHoursWorked > 0 ? severityIndex : null,
+      firstAidRate,
+      nearMisses: nearMissCount,
+      unsafeActs: unsafeActCount,
+      unsafeConditions: unsafeConditionCount,
+      rootCauses: rootCauseCount,
+      openActions: backlogActions.length,
+      overdueActions: overdue,
+      closedOnTimePercent,
+      unsafeActsClosedPercent,
+      unsafeConditionsClosedPercent,
+      pendingValidation,
+      openCommunications,
+      myOpenActions,
+      hoursWorked: hoursWorkedRows.length > 0 ? totalHoursWorked : null,
+      comparisons: homologousComparisons,
+      backlog: {
+        total: backlogActions.length,
+        trend: actionBacklogTrend,
+        ageing: actionAgeing,
+      },
+      sifPsif: {
+        plantName: plantRow.name,
+        current: sifPsifIndicators,
+        comparisons: sifPsifComparisons,
+      },
+      competences: competenceCoverage ? {
+        coveragePercent: competenceCoverage.coveragePercent,
+        expiredCount: competenceCoverage.expiredCount,
+      } : undefined,
+      fireEquipment: fireEquipmentCoverage ? {
+        coveragePercent: fireEquipmentCoverage.coveragePercent,
+        problemCount: fireEquipmentCoverage.problemCount,
+      } : undefined,
+    },
+  };
+
   return (
     <>
       <div data-onboarding="dashboard-overview">
@@ -1099,80 +1152,52 @@ export default async function DashboardsPage({
         </form>
       </section>
 
-      <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} />
+      {/* A coluna de contexto vem primeiro no DOM: abaixo de xl empilha por cima (ordem
+          pretendida nessas larguras) e a partir de xl a colocação explícita põe-na à direita. */}
+      <div className="flex flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(440px,30vw,560px)] xl:items-start">
+        <div className="flex flex-col gap-5 xl:col-start-2 xl:row-start-1 xl:sticky xl:top-6">
+          <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} />
 
-      <SafetyCommunicationPyramid
-        title={ui.dashboard.safetyCommunicationPyramid}
-        counts={pyramidCounts}
-        previousCounts={homologousPyramidCounts}
-        locale={uiLocale}
-        scopeLabel={plantRow.name}
-        periodLabel={period.label}
-        classificationRule={ui.dashboard.pyramidClassificationRule}
-        hierarchyLabel={ui.dashboard.pyramidHierarchyNote}
-        emptyLabel={ui.dashboard.pyramidEmptyState}
-        previousPeriodLabel={ui.dashboard.samePeriodLastYearShort}
-        helpLabel={ui.dashboard.help}
-        labels={{
-          fatal: ui.dashboard.pyramidFatal,
-          seriousInjury: ui.dashboard.pyramidSeriousInjury,
-          minorInjury: ui.dashboard.pyramidMinorInjury,
-          firstAid: ui.dashboard.pyramidFirstAid,
-          nearMiss: ui.dashboard.pyramidNearMiss,
-          unsafeCondition: ui.dashboard.pyramidUnsafeCondition,
-          unsafeAct: ui.dashboard.pyramidUnsafeAct,
-        }}
-      />
+          <SafetyCommunicationPyramid
+            title={ui.dashboard.safetyCommunicationPyramid}
+            counts={pyramidCounts}
+            previousCounts={homologousPyramidCounts}
+            locale={uiLocale}
+            scopeLabel={plantRow.name}
+            periodLabel={period.label}
+            classificationRule={ui.dashboard.pyramidClassificationRule}
+            hierarchyLabel={ui.dashboard.pyramidHierarchyNote}
+            emptyLabel={ui.dashboard.pyramidEmptyState}
+            previousPeriodLabel={ui.dashboard.samePeriodLastYearShort}
+            helpLabel={ui.dashboard.help}
+            labels={{
+              fatal: ui.dashboard.pyramidFatal,
+              seriousInjury: ui.dashboard.pyramidSeriousInjury,
+              minorInjury: ui.dashboard.pyramidMinorInjury,
+              firstAid: ui.dashboard.pyramidFirstAid,
+              nearMiss: ui.dashboard.pyramidNearMiss,
+              unsafeCondition: ui.dashboard.pyramidUnsafeCondition,
+              unsafeAct: ui.dashboard.pyramidUnsafeAct,
+            }}
+          />
 
-      <SafetyDashboardKpiGroups
-        locale={uiLocale}
-        periodLabel={period.label}
-        labels={ui.dashboard}
-        detailed={showDetailedKpis}
-        showPendingValidationKpi={showPendingValidationKpi}
-        canViewOpenCommunications={canViewOpenCommunications}
-        metrics={{
-          validatedEvents: validCommunicationsCount,
-          injuries: injuryCount,
-          daysLost: lostDays,
-          firstAids: firstAidCount,
-          frequencyRate: totalHoursWorked > 0 ? frequencyIndex : null,
-          gravityRate: totalHoursWorked > 0 ? severityIndex : null,
-          firstAidRate,
-          nearMisses: nearMissCount,
-          unsafeActs: unsafeActCount,
-          unsafeConditions: unsafeConditionCount,
-          rootCauses: rootCauseCount,
-          openActions: backlogActions.length,
-          overdueActions: overdue,
-          closedOnTimePercent,
-          unsafeActsClosedPercent,
-          unsafeConditionsClosedPercent,
-          pendingValidation,
-          openCommunications,
-          myOpenActions,
-          hoursWorked: hoursWorkedRows.length > 0 ? totalHoursWorked : null,
-          comparisons: homologousComparisons,
-          backlog: {
-            total: backlogActions.length,
-            trend: actionBacklogTrend,
-            ageing: actionAgeing,
-          },
-          sifPsif: {
-            plantName: plantRow.name,
-            current: sifPsifIndicators,
-            comparisons: sifPsifComparisons,
-          },
-          competences: competenceCoverage ? {
-            coveragePercent: competenceCoverage.coveragePercent,
-            expiredCount: competenceCoverage.expiredCount,
-          } : undefined,
-          fireEquipment: fireEquipmentCoverage ? {
-            coveragePercent: fireEquipmentCoverage.coveragePercent,
-            problemCount: fireEquipmentCoverage.problemCount,
-          } : undefined,
-        }}
-      />
+        </div>
+
+        <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+          <SafetyDashboardKpiGroups
+            {...kpiGroupProps}
+            groups={["outcomes", "sifPsif", "leading", "actions"]}
+          />
+        </div>
+      </div>
+
+      {/* Grupos de stock atual: dois ou três cartões cada. Partilham uma linha à largura
+          toda em vez de ocuparem três linhas quase vazias. */}
+      <div className="grid items-start gap-5 xl:grid-cols-3">
+        <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["exposure"]} testId="safety-kpi-exposure" />
+        <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["competences"]} testId="safety-kpi-competences" />
+        <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["fireEquipment"]} testId="safety-kpi-fire" />
+      </div>
 
       {showDetailedKpis ? <section className="grid gap-4 xl:grid-cols-4">
         <RootCauseTopFiveCard
