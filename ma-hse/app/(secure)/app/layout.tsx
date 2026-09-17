@@ -10,6 +10,7 @@ import { ProfileAlertsButton } from "@/components/layout/profile-alerts-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
 import { UserMenu } from "@/components/layout/user-menu";
+import { DashboardWidth } from "@/components/layout/dashboard-width";
 import { ONBOARDING_PERMISSIONS } from "@/components/onboarding/onboarding-config";
 import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
 import { canUseAgent } from "@/lib/agent/permissions";
@@ -84,7 +85,7 @@ export default async function SecureAppLayout({
     <div className="app-shell">
       <UiLanguageRuntime locale={uiLocale} />
       <header className="app-topbar" data-onboarding="topbar">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
+        <DashboardWidth className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
           <Link href={homeHref} className="flex items-center gap-3 text-[var(--brand-700)]">
             <div className="app-panel flex h-14 w-20 items-center justify-center rounded-2xl px-2 py-1">
               <MaSymbol className="h-auto w-full text-[var(--brand-700)]" title="MA" />
@@ -109,7 +110,7 @@ export default async function SecureAppLayout({
             ) : null}
             <UserMenu userName={session.user.name ?? "User"} />
           </div>
-        </div>
+        </DashboardWidth>
       </header>
       <ActionFloatingAlert enabled={true} />
       <SewoApprovalFloatingAlert enabled={hasN1Validation} />
