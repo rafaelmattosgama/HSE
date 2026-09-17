@@ -12,6 +12,7 @@ import {
 import { AGGREGATE_PLANT_MODULES, ALL_PLANTS_SCOPE, isAllPlantsScope } from "@/lib/plant-scope";
 import { PlantNav } from "@/components/layout/plant-nav";
 import { PlantSwitcher } from "@/components/layout/plant-switcher";
+import { DashboardWidth } from "@/components/layout/dashboard-width";
 import { InternalAgentChat } from "@/components/feature/internal-agent-chat";
 import { RepeatabilityAlertModal } from "@/components/feature/repeatability-alert-modal";
 import { SafetyCommunicationFloatingAlert } from "@/components/feature/safety-communication-floating-alert";
@@ -244,7 +245,7 @@ export default async function PlantLayout({
 
   return (
     <>
-      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[240px_1fr]">
+      <DashboardWidth className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[240px_minmax(0,1fr)]">
         <aside data-onboarding="sidebar" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:sticky md:top-6 md:max-h-[calc(100vh-48px)] md:self-start md:overflow-y-auto">
           <PlantSwitcher
             currentPlant={isAllPlants ? ALL_PLANTS_SCOPE : plant}
@@ -254,7 +255,7 @@ export default async function PlantLayout({
           <PlantNav items={visibleItems} utilityItems={utilityItems} />
         </aside>
 
-        <section className="space-y-5">
+        <section className="min-w-0 space-y-5">
           {plantRole === RoleCode.N1_CORPORATE || plantRole === RoleCode.N0_ADMIN ? (
             <Link
               href="/app/corporate"
@@ -266,7 +267,7 @@ export default async function PlantLayout({
           ) : null}
           {children}
         </section>
-      </div>
+      </DashboardWidth>
 
       {!isAllPlants ? (
         <RepeatabilityAlertModal

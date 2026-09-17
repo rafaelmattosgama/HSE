@@ -56,7 +56,7 @@ export default async function CorporatePage({ searchParams }: { searchParams: Pr
     </>;
   }
 
-  return <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
+  return <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:max-w-none">
     <header className="app-hero mb-6 rounded-2xl p-5 sm:p-6" data-onboarding="corporate-overview">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div><h1 className="text-2xl font-bold text-slate-900">{ui.dashboard.corporateTitle}</h1><p className="mt-2 text-sm text-slate-600">{area === "safety" ? ui.modules.safetyDashboard : ui.modules.environmentDashboard}</p></div>
