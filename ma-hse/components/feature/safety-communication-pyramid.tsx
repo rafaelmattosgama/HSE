@@ -73,8 +73,8 @@ export function SafetyCommunicationPyramid({
   const helpBody = `${classificationRule}\n\n${hierarchyLabel}\n\nPercentages are calculated from ${formatCount(total, locale)} communications displayed in this pyramid.`;
 
   return (
-    <AppCard className="overflow-hidden">
-      <header className="flex flex-col gap-2 border-b border-slate-200/80 pb-2.5 md:flex-row md:items-center md:justify-between">
+    <AppCard className="@container overflow-hidden">
+      <header className="flex flex-col gap-2 border-b border-slate-200/80 pb-2.5 @lg:flex-row @lg:items-center @lg:justify-between">
         <p className="app-section-eyebrow text-slate-700">{title}</p>
         <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600" aria-label={`${scopeLabel}, ${periodLabel}`}>
           <span className="app-chip h-7 px-2.5">{scopeLabel}</span>
@@ -107,13 +107,13 @@ export function SafetyCommunicationPyramid({
               } as CSSProperties}
             >
               <article
-                className="grid min-w-0 grid-cols-1 gap-1.5 md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)] md:items-stretch md:gap-3"
+                className="grid min-w-0 grid-cols-1 gap-1.5 @sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)] @sm:items-stretch @sm:gap-3"
                 aria-label={`${label}: ${formatCount(value, locale)}${percentage === null ? ", percentage unavailable" : `, ${percentage.toFixed(1)} percent`}`}
               >
-                <div className="flex min-w-0 justify-center px-[var(--pyramid-mobile-inset)] md:px-0">
+                <div className="flex min-w-0 justify-center px-[var(--pyramid-mobile-inset)] @sm:px-0">
                   <div
                     data-testid={`pyramid-band-${layer.key}`}
-                    className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-l-4 px-3 py-1.5 shadow-[0_6px_16px_rgba(15,23,42,0.08)] [clip-path:polygon(3%_0%,97%_0%,100%_100%,0%_100%)] md:w-[var(--pyramid-layer-width)] md:px-4"
+                    className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-l-4 px-3 py-1.5 shadow-[0_6px_16px_rgba(15,23,42,0.08)] [clip-path:polygon(3%_0%,97%_0%,100%_100%,0%_100%)] @sm:w-[var(--pyramid-layer-width)] @sm:px-4"
                     style={{
                       ...style,
                       borderColor: `color-mix(in srgb, ${layer.accent} 68%, var(--border))`,
@@ -153,7 +153,7 @@ export function SafetyCommunicationPyramid({
         })}
       </ol>
 
-      <div className="mt-2 grid gap-1 text-[10px] leading-4 text-slate-600 sm:grid-cols-2 sm:gap-4">
+      <div className="mt-2 grid gap-1 text-[10px] leading-4 text-slate-600 @sm:grid-cols-2 @sm:gap-4">
         <p>{classificationRule}</p>
         <p>{hierarchyLabel}</p>
       </div>

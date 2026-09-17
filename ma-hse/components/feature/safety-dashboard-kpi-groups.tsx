@@ -26,6 +26,19 @@ type Metric = {
   emptyValueLabel?: string;
 };
 
+export type KpiGroupKey =
+  | "outcomes"
+  | "sifPsif"
+  | "leading"
+  | "exposure"
+  | "actions"
+  | "competences"
+  | "fireEquipment";
+
+const ALL_KPI_GROUPS: KpiGroupKey[] = [
+  "outcomes", "sifPsif", "leading", "exposure", "actions", "competences", "fireEquipment",
+];
+
 function formatMetricValue(value: Metric["value"], locale: string, digits = 0, noDataLabel = "No data") {
   if (value === null) return noDataLabel;
   if (typeof value === "string") return value;
@@ -83,13 +96,15 @@ function KpiGroup({
   helpLabel: string;
 }) {
   return (
-    <AppPanel aria-labelledby={id}>
+    <AppPanel aria-labelledby={id} className="@container">
       <AppSectionHeader
         eyebrow={title}
         title={<span id={id}>{title}</span>}
         actions={<HelpPopover title={title} body={description} buttonLabel={helpLabel} />}
       />
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
+      {/* O mínimo por cartão acompanha a largura do painel, não a do ecrã: em painéis
+          estreitos (grupos lado a lado) empacota a 200px, em painéis largos a 240px. */}
+      <div className="mt-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))] @2xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]">{children}</div>
     </AppPanel>
   );
 }
@@ -163,6 +178,8 @@ export function SafetyDashboardKpiGroups({
   showPendingValidationKpi,
   canViewOpenCommunications,
   metrics,
+  groups,
+  testId,
 }: {
   locale: string;
   periodLabel: string;
@@ -170,6 +187,8 @@ export function SafetyDashboardKpiGroups({
   detailed: boolean;
   showPendingValidationKpi: boolean;
   canViewOpenCommunications: boolean;
+  groups?: KpiGroupKey[];
+  testId?: string;
   metrics: {
     validatedEvents: number;
     injuries: number;
@@ -233,10 +252,12 @@ export function SafetyDashboardKpiGroups({
     { key: "NEAR_MISS", title: labels.pyramidNearMiss },
     { key: "ACCIDENT", title: labels.injuries },
   ];
+  const visibleGroups = new Set<KpiGroupKey>(groups ?? ALL_KPI_GROUPS);
+  const shows = (key: KpiGroupKey) => visibleGroups.has(key);
 
   return (
-    <div className="space-y-5" data-testid="safety-kpi-groups">
-      <section aria-labelledby="safety-outcomes-heading" className="space-y-4">
+    <div className="space-y-5" data-testid={testId ?? "safety-kpi-groups"}>
+      {shows("outcomes") ? <section aria-labelledby="safety-outcomes-heading" className="space-y-4">
         <div className="flex items-center justify-between gap-3 px-1">
           <div>
             <p className="app-section-eyebrow">{labels.kpiSafetyOutcomes}</p>
@@ -244,7 +265,7 @@ export function SafetyDashboardKpiGroups({
           </div>
           <HelpPopover title={labels.kpiSafetyOutcomes} body={labels.kpiSafetyOutcomesDescription} buttonLabel={labels.help} />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(240px,1fr))]">
           <KpiCard metric={{
             title: labels.validatedEvents,
             value: metrics.validatedEvents,
@@ -322,9 +343,9 @@ export function SafetyDashboardKpiGroups({
             emptyValueLabel: labels.kpiNotApplicable,
           }} locale={locale} noDataLabel={noData} /> : null}
         </div>
-      </section>
+      </section> : null}
 
-      {metrics.sifPsif ? <KpiGroup
+      {shows("sifPsif") && metrics.sifPsif ? <KpiGroup
         id="sif-psif-indicators-heading"
         title={labels.kpiSifPsifIndicators}
         description={labels.kpiSifPsifIndicatorsDescription}
@@ -371,20 +392,20 @@ export function SafetyDashboardKpiGroups({
         })}
       </KpiGroup> : null}
 
-      {detailed ? <KpiGroup id="leading-indicators-heading" title={labels.kpiLeadingIndicators} description={labels.kpiLeadingIndicatorsDescription} helpLabel={labels.help}>
+      {shows("leading") && detailed ? <KpiGroup id="leading-indicators-heading" title={labels.kpiLeadingIndicators} description={labels.kpiLeadingIndicatorsDescription} helpLabel={labels.help}>
         <KpiCard metric={{ title: labels.nearMisses, value: metrics.nearMisses, unit: labels.kpiUnitEvents, period: selectedPeriod, definition: labels.kpiNearMissesDefinition, state: informationState, icon: <Eye className="h-5 w-5" />, comparison: metrics.comparisons?.nearMisses }} locale={locale} noDataLabel={noData} />
         <KpiCard metric={{ title: labels.pyramidUnsafeAct, value: metrics.unsafeActs, unit: labels.kpiUnitEvents, period: selectedPeriod, definition: labels.kpiUnsafeActDefinition, state: informationState, icon: <ShieldCheck className="h-5 w-5" />, comparison: metrics.comparisons?.unsafeActs }} locale={locale} noDataLabel={noData} />
         <KpiCard metric={{ title: labels.pyramidUnsafeCondition, value: metrics.unsafeConditions, unit: labels.kpiUnitEvents, period: selectedPeriod, definition: labels.kpiUnsafeConditionDefinition, state: informationState, icon: <AlertTriangle className="h-5 w-5" />, comparison: metrics.comparisons?.unsafeConditions }} locale={locale} noDataLabel={noData} />
         <KpiCard metric={{ title: labels.sewoRootCauses, value: metrics.rootCauses, unit: labels.kpiUnitCauses, period: selectedPeriod, definition: labels.kpiRootCausesDefinition, state: informationState, icon: <Target className="h-5 w-5" />, comparison: metrics.comparisons?.rootCauses }} locale={locale} noDataLabel={noData} />
       </KpiGroup> : null}
 
-      <KpiGroup id="exposure-scope-heading" title={labels.kpiExposureScope} description={labels.kpiExposureScopeDescription} helpLabel={labels.help}>
+      {shows("exposure") ? <KpiGroup id="exposure-scope-heading" title={labels.kpiExposureScope} description={labels.kpiExposureScopeDescription} helpLabel={labels.help}>
         <KpiCard metric={{ title: labels.hoursWorked, value: metrics.hoursWorked, unit: labels.kpiUnitHours, period: selectedPeriod, definition: labels.kpiHoursWorkedDefinition, state: metrics.hoursWorked === null ? noDataState : informationState, icon: <Clock3 className="h-5 w-5" />, digits: 2, comparison: metrics.comparisons?.hoursWorked }} locale={locale} noDataLabel={noData} />
         <KpiCard metric={{ title: labels.plants, value: 1, unit: labels.kpiUnitPlants, period: currentStock, definition: labels.kpiPlantsDefinition, state: informationState, icon: <Users className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} />
         <KpiCard metric={{ title: labels.kpiEffectivePeriod, value: periodLabel, period: labels.kpiAppliedFilter, definition: labels.kpiEffectivePeriodDefinition, state: informationState, icon: <Clock3 className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} />
-      </KpiGroup>
+      </KpiGroup> : null}
 
-      <KpiGroup id="actions-compliance-heading" title={labels.kpiActionsCompliance} description={labels.kpiActionsComplianceDescription} helpLabel={labels.help}>
+      {shows("actions") ? <KpiGroup id="actions-compliance-heading" title={labels.kpiActionsCompliance} description={labels.kpiActionsComplianceDescription} helpLabel={labels.help}>
         <KpiCard metric={{ title: labels.myOpenActions, value: metrics.myOpenActions, unit: labels.kpiUnitActions, period: selectedPeriod, definition: labels.kpiMyOpenActionsDefinition, state: metrics.myOpenActions === 0 ? safeState : attentionState, icon: <ClipboardCheck className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} />
         <KpiCard metric={{ title: labels.overdueActions, value: metrics.overdueActions, unit: labels.kpiUnitActions, period: currentStock, definition: labels.kpiOverdueActionsDefinition, state: metrics.overdueActions === 0 ? safeState : criticalState, icon: <AlertTriangle className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} />
         {detailed ? <KpiCard metric={{ title: labels.openActions, value: metrics.openActions, unit: labels.kpiUnitActions, period: selectedPeriod, definition: labels.kpiOpenActionsDefinition, state: metrics.openActions === 0 ? safeState : attentionState, icon: <ClipboardCheck className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
@@ -394,9 +415,9 @@ export function SafetyDashboardKpiGroups({
         {showPendingValidationKpi ? <KpiCard metric={{ title: labels.pendingValidation, value: metrics.pendingValidation, unit: labels.kpiUnitEvents, period: currentStock, definition: labels.kpiPendingValidationDefinition, state: metrics.pendingValidation === 0 ? safeState : attentionState, icon: <ClipboardCheck className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
         {canViewOpenCommunications ? <KpiCard metric={{ title: labels.openCommunications, value: metrics.openCommunications, unit: labels.kpiUnitEvents, period: currentStock, definition: labels.kpiOpenCommunicationsDefinition, state: metrics.openCommunications === 0 ? safeState : informationState, icon: <Inbox className="h-5 w-5" /> }} locale={locale} noDataLabel={noData} /> : null}
         {detailed && metrics.backlog ? <BacklogInsight {...metrics.backlog} labels={labels} /> : null}
-      </KpiGroup>
+      </KpiGroup> : null}
 
-      {metrics.competences ? <KpiGroup
+      {shows("competences") && metrics.competences ? <KpiGroup
         id="competence-authorizations-heading"
         title={labels.kpiCompetenceAuthorizations}
         description={labels.kpiCompetenceAuthorizationsDescription}
@@ -426,7 +447,7 @@ export function SafetyDashboardKpiGroups({
         }} locale={locale} noDataLabel={noData} />
       </KpiGroup> : null}
 
-      {metrics.fireEquipment ? <KpiGroup
+      {shows("fireEquipment") && metrics.fireEquipment ? <KpiGroup
         id="fire-equipment-heading"
         title={labels.kpiFireEquipment}
         description={labels.kpiFireEquipmentDescription}

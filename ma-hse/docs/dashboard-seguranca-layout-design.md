@@ -30,7 +30,8 @@ IF de primeiros socorros, % SIF/PSIF) **antes da dobra**, sem scroll.
 
 - A 1920px, pelo menos três secções completas de indicadores ficam acima da dobra
   (hoje: nenhuma).
-- A 1920px, as grelhas de KPIs mostram 5 cartões por linha (hoje: 4).
+- A 1920px, as grelhas de KPIs mostram mais cartões por linha, cada um com largura de
+  leitura (~250px) em vez dos ~390px esticados de hoje.
 - Nenhum indicador hoje visível deixa de existir ou passa a exigir interação para ser visto.
 - Abaixo de 1024px o comportamento é idêntico ao atual.
 
@@ -41,7 +42,7 @@ IF de primeiros socorros, % SIF/PSIF) **antes da dobra**, sem scroll.
 | Prioridade da primeira vista | Indicadores de resultado | Dashboard de reporte e acompanhamento mensal, não de alerta operacional |
 | Conteúdo | Nada sai, só reorganiza | Os ~25 cartões atuais mantêm-se todos visíveis |
 | Layout | Duas colunas: resultados à esquerda, contexto à direita | |
-| Coluna de contexto | Contador + pirâmide + exposição | Os três blocos de menor densidade |
+| Coluna de contexto | Contador + pirâmide | Exposição saiu daqui na revisão de 2026-09-17 |
 | Limiar das duas colunas | 1280px (`xl`) | Ver "Compromisso aceite" |
 
 ### Compromisso aceite
@@ -51,10 +52,12 @@ lateral da planta já consome 240px:
 
 | Ecrã | Hoje | Depois |
 |---|---|---|
-| 1280 | 4 cartões de 233px | 2 cartões de 306px |
-| 1366 | 4 de 254px | 2 de 349px |
-| 1440 | 4 de 273px | 3 de 253px |
-| 1920 | 4 de 390px | 5 de 245px |
+| 1280 | 4 cartões de 233px | 2 cartões |
+| 1440 | 4 de 273px | 2 cartões |
+| 1920 | 4 de 390px | 4 de 248px |
+
+Os valores da coluna "depois" são os medidos no browser a 2026-09-17, já com a coluna de
+contexto alargada para a pirâmide ser legível.
 
 Isto foi apresentado com os números acima e aceite: em portátil, ter o contador e a pirâmide
 sempre à vista vale mais do que ter quatro cartões por linha. O ganho principal do redesenho
@@ -70,21 +73,22 @@ Largura de conteúdo = `largura do ecrã − 48 (margens) − 240 (menu da plant
 ┌──────┬────────────────────────────────────┬──────────────┐
 │ menu │ Filtros (largura total)            │              │
 │ 240  ├────────────────────────────────────┼──────────────┤
-│      │ Resultados        (5 por linha)    │  442 dias    │
-│      │ Leading           (5 por linha)    │  Pirâmide    │
-│      │ Ações             (5 por linha)    │  Exposição   │
-│      │ Competências · Incêndio            │  ↑ sticky    │
+│      │ Resultados        (4 por linha)    │  442 dias    │
+│      │ SIF/PSIF · Leading · Ações         │  Pirâmide    │
+│      │                                    │  ↑ sticky    │
 ├──────┴────────────────────────────────────┴──────────────┤
+│ Exposição │ Competências │ Incêndio   (três numa linha)  │
 │ Top 5 causas · atos · condições · quase acidentes        │
 └──────────────────────────────────────────────────────────┘
 ```
 
-Coluna de contexto: 320px, `sticky` no topo. Filtros e a zona de análise (Top 5,
+Coluna de contexto: `clamp(440px,30vw,560px)`, `sticky` no topo. A largura mínima de 440px é
+o que a pirâmide precisa para recuperar a forma triangular (ver "Container queries"). Filtros e a zona de análise (Top 5,
 `CorporatePlantManager`) atravessam as duas colunas.
 
 ### 1024–1280px — coluna única
 
-Contador como faixa fina no topo, depois pirâmide, exposição e os grupos de KPIs. As grelhas
+Contador no topo, depois pirâmide e os grupos de KPIs. As grelhas
 continuam fluidas: a 1200px dá 3 cartões por linha, contra os 4 mais estreitos de hoje.
 
 ### < 1024px — inalterado
@@ -115,10 +119,14 @@ testId?: string;          // omissão: "safety-kpi-groups"
 hoje. É isso que permite ao teste existente passar sem edição, incluindo a asserção de que
 "Exposição" precede "Ações" no DOM.
 
-A página compõe renderizando o componente duas vezes: na coluna principal com
-`groups={["outcomes","sifPsif","leading","actions","competences","fireEquipment"]}`, na
-coluna de contexto com `groups={["exposure"]}` e um `testId` próprio para não duplicar o
-identificador.
+A página compõe renderizando o componente quatro vezes, cada uma com o seu `testId`:
+
+- coluna principal — `groups={["outcomes","sifPsif","leading","actions"]}`
+- linha de stock atual, à largura toda, em `xl:grid-cols-3` — um render por grupo para
+  `exposure`, `competences` e `fireEquipment`
+
+Os três grupos de stock atual têm dois ou três cartões cada; empilhados ocupavam três linhas
+quase vazias, lado a lado ocupam uma.
 
 ### Ordem no DOM
 
@@ -126,7 +134,8 @@ A coluna de contexto é escrita **primeiro** no HTML, a principal a seguir.
 
 - Abaixo de 1280px o contentor é `flex-col`: o contexto aparece em cima, os grupos por baixo —
   aproximadamente a ordem atual.
-- A partir de 1280px, `xl:grid xl:grid-cols-[minmax(0,1fr)_320px]` com colocação explícita:
+- A partir de 1280px, `xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(440px,30vw,560px)]` com
+  colocação explícita:
   contexto em `xl:col-start-2 xl:row-start-1`, principal em `xl:col-start-1 xl:row-start-1`.
 
 Um só render, sem JavaScript e sem markup duplicado.
@@ -134,11 +143,13 @@ Um só render, sem JavaScript e sem markup duplicado.
 ### Container queries
 
 `SafetyDaysSpotlight` e `SafetyCommunicationPyramid` têm layouts internos presos a
-breakpoints de *viewport* (`lg:grid-cols-[...]`). Dentro de uma coluna de 320px num ecrã de
+breakpoints de *viewport* (`lg:`, `md:`). Dentro de uma coluna estreita num ecrã de
 1920px, `lg:` continua ativo e parte-os.
 
 Correção: a coluna de contexto é marcada `@container` e os breakpoints internos destes dois
-componentes passam de `lg:` para `@md:`. Passam a adaptar-se ao espaço que têm, não ao
+componentes passam a variantes de contentor: `@md:` no contador, `@sm:` na pirâmide (é o
+limiar a que as bandas voltam a ter larguras diferentes e a formar a pirâmide). Passam a
+adaptar-se ao espaço que têm, não ao
 tamanho do ecrã. O Tailwind v4 suporta isto de origem, sem plugin.
 
 ### Grelhas fluidas
@@ -147,11 +158,13 @@ Em `KpiGroup` e nas secções equivalentes:
 
 ```
 - sm:grid-cols-2 xl:grid-cols-4
-+ grid-cols-[repeat(auto-fill,minmax(240px,1fr))]
++ grid-cols-[repeat(auto-fill,minmax(200px,1fr))] @2xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]
 ```
 
-Dá 5 por linha a 1920px e degrada sozinho para 2–3 em portátil, sem breakpoints a manter.
-O mínimo de 240px é a largura a que os cartões já são legíveis hoje a 1280px (233px).
+O painel de cada grupo é ele próprio um `@container`, por isso o mínimo por cartão acompanha
+a largura do painel e não a do ecrã: painéis largos (coluna principal) usam 240px, painéis
+estreitos (os três grupos lado a lado) empacotam a 200px em vez de caírem para um cartão por
+linha. Sem breakpoints de viewport a manter.
 
 ## Ficheiros
 
@@ -163,6 +176,7 @@ O mínimo de 240px é a largura a que os cartões já são legíveis hoje a 1280
 | `components/feature/safety-communication-pyramid.tsx` | layout interno por container query |
 | `components/layout/dashboard-width.tsx` | sem alteração — já fornece o `lg:max-w-none` |
 | `tests/unit/safety-dashboard-kpi-groups.test.ts` | **sem alteração** (é a rede de segurança) |
+| `tests/unit/safety-communication-pyramid.test.ts` | dois tokens de breakpoint atualizados de `md:` para `@sm:` |
 | `tests/unit/safety-dashboard-kpi-composition.test.ts` | novo |
 
 ## Testes
@@ -187,7 +201,7 @@ verifica-se a olho.
 - 1920px — três secções de indicadores acima da dobra, 5 cartões por linha, coluna de
   contexto fixa no scroll
 - 1440px — 3 cartões por linha, duas colunas, sem sobreposição
-- 1280px — 2 cartões por linha, duas colunas, contador e pirâmide legíveis a 320px
+- 1280px — 2 cartões por linha, duas colunas, contador e pirâmide legíveis a 440px
 - 1024px — coluna única, contador em faixa, ordem correta
 - < 768px — idêntico ao atual
 
@@ -203,6 +217,6 @@ verifica-se a olho.
 | Risco | Mitigação |
 |---|---|
 | `sticky` aninhado: o menu da planta já é `md:sticky` e a coluna de contexto passa a ser outro | Verificar na app; qualquer `overflow:hidden` num ascendente quebra o `sticky` |
-| Pirâmide ilegível a 320px | Container query com fallback para versão vertical compacta; validar a 1280px |
+| Pirâmide ilegível em coluna estreita | Confirmado a 320px: perdia a forma triangular. Resolvido com coluna ≥440px e limiar `@sm` |
 | Coluna de contexto mais alta que a principal em plantas com poucos dados | `self-start` e conteúdo de altura natural; verificar com planta sem dados |
 | Regressão de densidade a 1280px | Aceite explicitamente (ver "Compromisso aceite") |

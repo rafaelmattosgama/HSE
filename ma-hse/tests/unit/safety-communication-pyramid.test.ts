@@ -63,8 +63,8 @@ describe("SafetyCommunicationPyramid", () => {
     expect(screen.getByRole("dialog", { name: "Safety Communication Pyramid" })).toBeTruthy();
 
     const firstLayer = screen.getByLabelText(/Fatal: 0/i);
-    expect(firstLayer.className).toContain("md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
-    expect(screen.getByTestId("pyramid-band-fatal").className).toContain("md:w-[var(--pyramid-layer-width)]");
+    expect(firstLayer.className).toContain("@sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
+    expect(screen.getByTestId("pyramid-band-fatal").className).toContain("@sm:w-[var(--pyramid-layer-width)]");
     expect(screen.getByTestId("pyramid-band-fatal").querySelector('[data-testid^="pyramid-metrics-"]')).toBeNull();
     expect(screen.getByTestId("pyramid-events-fatal").textContent).toBe("0");
   });
@@ -104,7 +104,7 @@ describe("SafetyCommunicationPyramid", () => {
 
     for (const row of Array.from(document.querySelectorAll("ol > li > article"))) {
       expect(row.className).toContain("grid-cols-1");
-      expect(row.className).toContain("md:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
+      expect(row.className).toContain("@sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
       expect(row.className).not.toContain("absolute");
       expect(row.className).not.toContain("overflow-x");
     }
