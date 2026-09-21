@@ -29,19 +29,30 @@ export function SafetyDaysSpotlight({
   plantName,
   summary,
   labels = getUiDictionary("en").dashboard,
+  compact = false,
+  locale = "en",
 }: {
   plantName: string;
   summary: SafetyDaysSummary;
   labels?: DashboardUiDictionary;
+  compact?: boolean;
+  locale?: string;
 }) {
   const recordGap = Math.max(0, summary.recordDays - summary.currentDays);
   const historicalRecordLabel = summary.historicalRecordStartDate
     ? formatLabel(labels.historicalRecordSince, { date: summary.historicalRecordStartDate })
     : labels.historicalRecord;
 
+  if (compact) {
+    return <section aria-label={`${plantName}: ${labels.daysWithoutAccidents}`} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-1 py-3 text-sm text-slate-600">
+      <div className="flex flex-wrap items-center gap-2"><strong className="text-2xl font-bold tabular-nums text-[var(--brand-700)]">{summary.currentDays.toLocaleString(locale)}</strong><span>{labels.daysWithoutAccidents}</span><HelpPopover title={labels.daysWithoutAccidents} body={labels.safetyDaysHelp} buttonLabel={labels.help} /></div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs"><span>{formatLabel(labels.recordDays, { days: summary.recordDays.toLocaleString(locale) })}</span><span>{labels.since} {formatDate(summary.lastAccidentDate, labels)}</span>{summary.recordSource === "historical" ? <span>{historicalRecordLabel}</span> : null}</div>
+    </section>;
+  }
+
   return (
     <section className="@container overflow-hidden rounded-2xl border border-teal-100 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-      <div className="grid gap-0 @md:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      <div className="grid gap-0 @3xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="relative @md:min-h-[280px] bg-[radial-gradient(circle_at_20%_20%,rgba(45,212,191,0.36),transparent_34%),radial-gradient(circle_at_84%_18%,rgba(251,191,36,0.34),transparent_26%),linear-gradient(135deg,#082f49_0%,#0f172a_48%,#3f1d49_100%)] p-6 @md:p-8">
           <div className="relative z-10 flex h-full flex-col justify-between gap-8">
             <div>

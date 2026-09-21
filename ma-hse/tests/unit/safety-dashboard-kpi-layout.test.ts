@@ -48,7 +48,7 @@ describe("layout fluido das grelhas de KPIs", () => {
   it("mantém o mínimo de 240px por cartão", () => {
     const { container } = renderGroups();
     const grid = container.querySelector('[class*="auto-fill"]');
-    expect(grid?.className).toContain("minmax(240px,1fr)");
+    expect(grid?.className).toContain("minmax(min(100%,240px),1fr)");
   });
 
   it("continua a mostrar todos os indicadores de resultado", () => {

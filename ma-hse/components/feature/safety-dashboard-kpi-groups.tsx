@@ -53,10 +53,10 @@ function KpiCard({ metric, locale, noDataLabel }: { metric: Metric; locale: stri
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-start gap-1.5">
-            <p className="app-kpi-card__label">{metric.title}</p>
+            <p className="app-kpi-card__label min-w-0 break-words">{metric.title}</p>
             <HelpPopover title={metric.title} body={metric.definition} buttonLabel={`Definition: ${metric.title}`} />
           </div>
-          <p className="app-kpi-card__value tabular-nums">
+          <p className="app-kpi-card__value break-words tabular-nums">
             {valueLabel}
             {metric.value !== null && metric.unit ? <span className="ml-1 text-sm font-bold text-slate-600">{metric.unit}</span> : null}
           </p>
@@ -102,9 +102,8 @@ function KpiGroup({
         title={<span id={id}>{title}</span>}
         actions={<HelpPopover title={title} body={description} buttonLabel={helpLabel} />}
       />
-      {/* O mínimo por cartão acompanha a largura do painel, não a do ecrã: em painéis
-          estreitos (grupos lado a lado) empacota a 200px, em painéis largos a 240px. */}
-      <div className="mt-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))] @2xl:grid-cols-[repeat(auto-fill,minmax(240px,1fr))]">{children}</div>
+      {/* Keep cards readable, while allowing a single column below 240px. */}
+      <div className="mt-4 grid gap-3 grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))]">{children}</div>
     </AppPanel>
   );
 }
@@ -128,7 +127,7 @@ function BacklogInsight({
   ];
 
   return (
-    <article className="app-card-muted space-y-4 p-4 sm:col-span-2 xl:col-span-4" aria-labelledby="backlog-insight-heading">
+    <article className="app-card-muted col-span-full min-w-0 space-y-4 p-4" aria-labelledby="backlog-insight-heading">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="app-section-eyebrow">{labels.kpiBacklogEvolutionAgeing}</p>
@@ -137,7 +136,7 @@ function BacklogInsight({
         <HelpPopover title={labels.kpiBacklogEvolutionAgeing} body={labels.kpiBacklogEvolutionAgeingDefinition} buttonLabel={labels.help} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,0.8fr)]">
+      <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)]">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.kpiBacklogTrend}</p>
           {trend.length > 0 ? <ol className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4" aria-label={labels.kpiBacklogTrend}>
@@ -265,7 +264,7 @@ export function SafetyDashboardKpiGroups({
           </div>
           <HelpPopover title={labels.kpiSafetyOutcomes} body={labels.kpiSafetyOutcomesDescription} buttonLabel={labels.help} />
         </div>
-        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(240px,1fr))]">
+        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))]">
           <KpiCard metric={{
             title: labels.validatedEvents,
             value: metrics.validatedEvents,

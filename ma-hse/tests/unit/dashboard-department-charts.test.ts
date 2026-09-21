@@ -46,7 +46,12 @@ it("shows the selected department and forwards its scope to the plant indicator 
     totalFrequencyIndex: 0, totalSeverityIndex: 0, totalCommunicationPyramid: plant.communicationPyramid,
     rankings: [], initialActivePlantCode: "pl01", hidePlantList: true, hideFavoriteMetrics: true,
     hidePyramid: true, departmentScope: true, scopeLabelOverride: "Plant / Production", labels,
+    compactPlantRankings: true,
   }));
   expect(screen.getByText(`${labels.scope}: Plant / Production`)).toBeTruthy();
+  const charts = screen.getByText("Explore charts").closest("details")!;
+  expect(charts.open).toBe(false);
+  charts.open = true;
+  expect(screen.getByRole("option", { name: labels.nearMisses })).toBeTruthy();
   expect(screen.queryByRole("option", { name: labels.openActions })).toBeNull();
 });

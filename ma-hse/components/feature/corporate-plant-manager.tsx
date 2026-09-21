@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { CommunicationPyramid } from "@/components/feature/communication-pyramid";
 import { DashboardVisualizationStudio } from "@/components/feature/dashboard-visualization-studio";
+import { PlantSafetyRankings } from "@/components/feature/plant-safety-rankings";
+import { getSafetyDashboardLayoutCopy } from "@/lib/safety-dashboard-layout";
 import type { PlantSummary, RankingEntry, RankingGroup, RankingSeriesSnapshot } from "@/lib/dashboard-visualization";
 import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 import { AppCard, AppKpiCard, AppSectionHeader } from "@/components/ui/app-surface";
@@ -46,6 +48,8 @@ type CorporatePlantManagerProps = {
   title?: string;
   scopeLabelOverride?: string;
   departmentScope?: boolean;
+  compactPlantRankings?: boolean;
+  locale?: string;
   description?: string;
   plantListTitle?: string;
   plantListDescription?: string;
@@ -214,6 +218,8 @@ export function CorporatePlantManager({
   rankingMonthlySeries = {},
   title,
   scopeLabelOverride,
+  compactPlantRankings = false,
+  locale = "en",
   departmentScope = false,
   plantListTitle,
   pyramidDescription,
@@ -497,6 +503,27 @@ export function CorporatePlantManager({
       return [...current, rankingId];
     });
   };
+
+  if (compactPlantRankings) {
+    return <>
+      <PlantSafetyRankings rankings={rankings} scopeLabel={scopeLabel} locale={locale} labels={text} />
+      <details className="app-panel col-span-full min-w-0 rounded-2xl p-5">
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--brand-700)]">{getSafetyDashboardLayoutCopy(locale).charts} <span className="ml-2 text-xs font-normal text-slate-600">{scopeLabel}</span></summary>
+        <div className="mt-4 min-w-0">
+      <DashboardVisualizationStudio
+        departmentScope={departmentScope}
+        plants={initialPlants}
+        rankings={rankings}
+        rankingMonthlySeries={rankingMonthlySeries}
+        activePlantCode={activePlantCode}
+        storageKeyBase={storageKeyBase}
+        rootCauseMetricLabel={rootCauseLabel}
+        labels={text}
+      />
+        </div>
+      </details>
+    </>;
+  }
 
   return (
     <div className="space-y-6">

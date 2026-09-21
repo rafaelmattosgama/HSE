@@ -1,115 +1,54 @@
 // @vitest-environment jsdom
-
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
-import { SafetyCommunicationPyramid } from "@/components/feature/safety-communication-pyramid";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { SafetyCommunicationPyramid, type PyramidRecord } from "@/components/feature/safety-communication-pyramid";
+import { getUiDictionary } from "@/lib/ui-language";
 
-const zeroCounts = {
-  fatal: 0,
-  seriousInjury: 0,
-  minorInjury: 0,
-  firstAid: 0,
-  nearMiss: 0,
-  unsafeCondition: 0,
-  unsafeAct: 0,
-};
+const zeroCounts = { fatal: 0, seriousInjury: 0, minorInjury: 0, firstAid: 0, nearMiss: 0, unsafeCondition: 0, unsafeAct: 0 };
+const props = { title: "Safety Communication Pyramid", counts: zeroCounts, scopeLabel: "Plant / Production", periodLabel: "2026-01-01 - 2026-12-31" };
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("SafetyCommunicationPyramid", () => {
-  afterEach(cleanup);
-
-  it("keeps all seven severity levels visible with an explicit zero-data state", () => {
-    render(createElement(SafetyCommunicationPyramid, {
-      title: "Safety Communication Pyramid",
-      counts: zeroCounts,
-      scopeLabel: "Plant A",
-      periodLabel: "2026-01-01 - 2026-01-31",
-    }));
-
+  it("keeps all severity levels and unavailable percentages when empty", () => {
+    render(createElement(SafetyCommunicationPyramid, props));
     expect(screen.getByRole("status").textContent).toContain("All levels remain visible");
-    expect(screen.getByText("Fatal")).toBeTruthy();
-    expect(screen.getByText("Serious injury")).toBeTruthy();
-    expect(screen.getByText("Minor injury")).toBeTruthy();
-    expect(screen.getByText("First aid")).toBeTruthy();
-    expect(screen.getByText("Near miss")).toBeTruthy();
-    expect(screen.getByText("Unsafe condition")).toBeTruthy();
-    expect(screen.getByText("Unsafe act")).toBeTruthy();
-    expect(screen.queryByText("01 Fatal")).toBeNull();
+    expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(7);
+    expect(screen.getAllByText(getUiDictionary("en").dashboard.kpiNotApplicable)).toHaveLength(7);
+    expect(screen.getByText("0 communications")).toBeTruthy();
+  });
+
+  it("shows the total once, localized percentages and accessible classification help", () => {
+    render(createElement(SafetyCommunicationPyramid, { ...props, locale: "pt", counts: { ...zeroCounts, nearMiss: 6, unsafeAct: 4 }, helpLabel: "Ajuda da pirâmide" }));
+    expect(screen.getByText("10 comunicações")).toBeTruthy();
+    expect(screen.getByText("60,0%")).toBeTruthy();
+    expect(screen.getAllByText("% do total")).toHaveLength(1);
+    expect(screen.queryByText("% of total")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ajuda da pirâmide" }));
+    expect(screen.getByRole("dialog", { name: props.title })).toBeTruthy();
+    expect(screen.getByTestId("pyramid-events-nearMiss").textContent).toBe("6");
     expect(screen.getByTestId("pyramid-band-fatal").getAttribute("style")).toContain("--safety-pyramid-fatal");
-    expect(screen.getByTestId("pyramid-band-unsafeAct").getAttribute("style")).toContain("--safety-pyramid-unsafe-act");
-    expect(screen.getAllByText("Not applicable")).toHaveLength(7);
   });
 
-  it("explains hierarchy, exposes the count denominator and remains keyboard-accessible", () => {
-    render(createElement(SafetyCommunicationPyramid, {
-      title: "Safety Communication Pyramid",
-      counts: { ...zeroCounts, nearMiss: 6, unsafeAct: 4 },
-      previousCounts: { ...zeroCounts, nearMiss: 2, unsafeAct: 4 },
-      scopeLabel: "Plant A",
-      periodLabel: "2026-01-01 - 2026-01-31",
-      helpLabel: "Pyramid help",
-    }));
-
-    expect(screen.getAllByText("of 10")).toHaveLength(7);
-    expect(screen.getAllByText("% of total")).toHaveLength(7);
-    expect(screen.queryByText("Events")).toBeNull();
-    expect(screen.getByText(/width communicates severity hierarchy/i)).toBeTruthy();
-    expect(screen.getByLabelText(/Near miss: 6, 60.0 percent/i)).toBeTruthy();
-
-    const help = screen.getByRole("button", { name: "Pyramid help" });
-    help.focus();
-    fireEvent.keyDown(help, { key: "Enter" });
-    fireEvent.click(help);
-    expect(screen.getByRole("dialog", { name: "Safety Communication Pyramid" })).toBeTruthy();
-
-    const firstLayer = screen.getByLabelText(/Fatal: 0/i);
-    expect(firstLayer.className).toContain("@sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
-    expect(screen.getByTestId("pyramid-band-fatal").className).toContain("@sm:w-[var(--pyramid-layer-width)]");
-    expect(screen.getByTestId("pyramid-band-fatal").querySelector('[data-testid^="pyramid-metrics-"]')).toBeNull();
-    expect(screen.getByTestId("pyramid-events-fatal").textContent).toBe("0");
-  });
-
-  it("keeps the current first-aid scenario and 100.0 percent visible in the band", () => {
-    render(createElement(SafetyCommunicationPyramid, {
-      title: "Safety Communication Pyramid",
-      counts: { ...zeroCounts, firstAid: 1 },
-      scopeLabel: "Valença - MAAP",
-      periodLabel: "2026-01-01 - 2026-12-31",
-    }));
-
-    expect(screen.getByText("Valença - MAAP")).toBeTruthy();
-    expect(screen.getByText("2026-01-01 - 2026-12-31")).toBeTruthy();
-    expect(screen.getByLabelText(/First aid: 1, 100.0 percent/i)).toBeTruthy();
+  it("retains homologous values in the expandable comparison", () => {
+    render(createElement(SafetyCommunicationPyramid, { ...props, counts: { ...zeroCounts, firstAid: 1 }, previousCounts: { ...zeroCounts, firstAid: 3 } }));
     expect(screen.getByText("100.0%")).toBeTruthy();
-    expect(screen.getAllByText("of 1")).toHaveLength(7);
-    expect(screen.getByTestId("pyramid-events-firstAid").textContent).toBe("1");
+    expect(screen.getByText("3 → 1 (-2)")).toBeTruthy();
+    expect(screen.getByText(/Trend ·/).closest("details")?.open).toBe(false);
   });
 
-  it("keeps double-digit values and full titles legible within the responsive bands", () => {
-    render(createElement(SafetyCommunicationPyramid, {
-      title: "Safety Communication Pyramid",
-      counts: { ...zeroCounts, nearMiss: 12, unsafeAct: 100 },
-      scopeLabel: "Valença - MAAP",
-      periodLabel: "2026-01-01 - 2026-12-31",
-    }));
-
-    expect(screen.getByText("12")).toBeTruthy();
-    expect(screen.getByText("100")).toBeTruthy();
-    expect(screen.getAllByText("of 112")).toHaveLength(7);
-
-    for (const name of ["Fatal", "Serious injury", "Minor injury", "First aid", "Near miss", "Unsafe condition", "Unsafe act"]) {
-      expect(screen.getByText(name).className).toContain("break-words");
-      expect(screen.getByText(name).className).not.toContain("truncate");
-    }
-
-    for (const row of Array.from(document.querySelectorAll("ol > li > article"))) {
-      expect(row.className).toContain("grid-cols-1");
-      expect(row.className).toContain("@sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)]");
-      expect(row.className).not.toContain("absolute");
-      expect(row.className).not.toContain("overflow-x");
-    }
-
-    expect(screen.getByTestId("pyramid-metrics-unsafeAct")).toBeTruthy();
-    expect(screen.getByTestId("pyramid-events-unsafeAct").textContent).toBe("100");
+  it("opens only the selected severity records and uses real communication links", () => {
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } });
+    Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value: function (this: HTMLDialogElement) { this.open = false; } });
+    const records: PyramidRecord[] = [{ id: "a", code: "CS-1", level: "nearMiss", pending: false }, { id: "b", code: "CS-2", level: "unsafeAct", pending: true }];
+    render(createElement(SafetyCommunicationPyramid, { ...props, counts: { ...zeroCounts, nearMiss: 1, unsafeAct: 1 }, records, plantCode: "maap" }));
+    expect(screen.getByText("1 validated · 1 pending validation")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Near Miss: 1/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("link", { name: "CS-1" }).getAttribute("href")).toBe("/app/maap/communications/a");
+    expect(within(dialog).queryByRole("link", { name: "CS-2" })).toBeNull();
+    expect(within(dialog).getByText(/Plant \/ Production/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
