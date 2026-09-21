@@ -1,5 +1,6 @@
 import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
+import { requiresUserDepartment } from "@/lib/rbac/user-management";
 import {
   SMAT_ATTACHMENT_LIMITS,
   validateSmatAttachmentCollection,
@@ -504,6 +505,7 @@ export const createPlantUserInput = z.object({
   name: z.string().min(2),
   language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).default("en"),
   role: z.nativeEnum(RoleCode),
+  departmentId: optionalUuid,
   password: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().min(8, "Password must be at least 8 characters").optional(),
@@ -512,6 +514,9 @@ export const createPlantUserInput = z.object({
 }).refine((data) => data.role !== RoleCode.N0_ADMIN, {
   message: "N0_ADMIN role cannot be assigned through the application. N0 users can only be created via script.",
   path: ["role"],
+}).refine((data) => !requiresUserDepartment(data.role) || Boolean(data.departmentId), {
+  message: "Select a department for N2 and N4 users.",
+  path: ["departmentId"],
 });
 
 export const updatePlantUserInput = z.object({
@@ -519,6 +524,7 @@ export const updatePlantUserInput = z.object({
   name: z.string().min(2),
   language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).default("en"),
   role: z.nativeEnum(RoleCode),
+  departmentId: optionalUuid,
   password: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().min(8, "Password must be at least 8 characters").optional(),
@@ -527,6 +533,9 @@ export const updatePlantUserInput = z.object({
 }).refine((data) => data.role !== RoleCode.N0_ADMIN, {
   message: "N0_ADMIN role cannot be assigned through the application. N0 users can only be created via script.",
   path: ["role"],
+}).refine((data) => !requiresUserDepartment(data.role) || Boolean(data.departmentId), {
+  message: "Select a department for N2 and N4 users.",
+  path: ["departmentId"],
 });
 
 export const contractorRegisterInput = z.object({
@@ -1086,8 +1095,9 @@ export const createCorporatePlantInput = z.object({
   n2: z.object({
     email: z.string().email(),
     name: z.string().min(2),
+    departmentId: z.string().uuid(),
     language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).optional(),
-  }),
+  }).optional(),
   n3: z.object({
     email: z.string().email(),
     name: z.string().min(2),

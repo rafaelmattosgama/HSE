@@ -318,6 +318,7 @@ export default async function SettingsPage({
 
           <div data-onboarding="settings-users">
             <UserManager
+              key={selectedPlant.code}
               plantCode={selectedPlant.code}
               users={selectedPlantUsers.map((entry) => ({
                 id: entry.user.id,
@@ -326,6 +327,7 @@ export default async function SettingsPage({
                 language: entry.user.language,
                 isActive: entry.user.isActive,
                 role: entry.role.code,
+                departmentId: entry.departmentId,
                 createdAt: entry.user.createdAt,
                 updatedAt: entry.user.updatedAt,
               }))}

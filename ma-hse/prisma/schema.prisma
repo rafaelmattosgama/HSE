@@ -150,6 +150,8 @@ model UserPlantRole {
   userId    String
   plantId   String?
   roleId    String
+  departmentId String?
+  department Area? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now())
   plant     Plant?   @relation(fields: [plantId], references: [id], onDelete: Cascade)
   role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -158,6 +160,7 @@ model UserPlantRole {
   @@unique([userId, plantId, roleId])
   @@index([plantId])
   @@index([roleId])
+  @@index([departmentId])
 }
 
 model PlantAccessToken {
@@ -188,6 +191,7 @@ model Area {
   fireEquipment                      FireEquipment[]
   mapFeatures                        MapFeature[]
   sewoRecords                        SEWO[]
+  userPlantRoles                     UserPlantRole[]
   safetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientDepartment")
   safetyCommunicationNotifications   SafetyCommunicationNotification[]   @relation("SafetyCommunicationNotificationDepartment")
 

@@ -1,5 +1,9 @@
 import { RoleCode } from "@prisma/client";
 
+export function requiresUserDepartment(role: RoleCode) {
+  return role === RoleCode.N2_PLANT_MANAGER || role === RoleCode.N4_SUPERVISOR;
+}
+
 const CREATABLE_ROLES_BY_ACTOR: Record<RoleCode, RoleCode[]> = {
   [RoleCode.N0_ADMIN]: [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR],
   [RoleCode.N1_CORPORATE]: [RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N6_HR],

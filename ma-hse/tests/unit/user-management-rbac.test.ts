@@ -7,9 +7,15 @@ import {
   isPlantScopedUserRole,
   isValidUserPlantRoleScope,
 } from "@/lib/rbac/user-management";
-import { createPlantUserInput, updatePlantUserInput } from "@/lib/validation/dtos";
+import { createCorporatePlantInput, createPlantUserInput, updatePlantUserInput } from "@/lib/validation/dtos";
 
 describe("user management role policy", () => {
+  it("allows plant setup before assigning N2 but prevents N2 creation without a department", () => {
+    const plant = { code: "pl03", name: "Plant 3", timezone: "Europe/Lisbon", defaultLanguage: "pt", n1: { email: "n1@example.com", name: "Corporate" }, n3: { email: "n3@example.com", name: "Safety" } };
+    expect(createCorporatePlantInput.safeParse(plant).success).toBe(true);
+    expect(createCorporatePlantInput.safeParse({ ...plant, n2: { email: "n2@example.com", name: "Manager" } }).success).toBe(false);
+    expect(createCorporatePlantInput.safeParse({ ...plant, n2: { email: "n2@example.com", name: "Manager", departmentId: "11111111-1111-4111-8111-111111111111" } }).success).toBe(true);
+  });
   it("does not expose N0 creation from user management", () => {
     expect(getCreatableRoles(RoleCode.N0_ADMIN)).toEqual([
       RoleCode.N1_CORPORATE,
@@ -99,6 +105,7 @@ describe("user management role policy", () => {
         email: "test@example.com",
         name: "Test User",
         role,
+        departmentId: "11111111-1111-4111-8111-111111111111",
       });
       expect(result.success).toBe(true);
     }
@@ -111,8 +118,21 @@ describe("user management role policy", () => {
         email: "test@example.com",
         name: "Test User",
         role,
+        departmentId: "11111111-1111-4111-8111-111111111111",
       });
       expect(result.success).toBe(true);
     }
+  });
+
+  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR])("requires a department for %s on create and update", (role) => {
+    for (const schema of [createPlantUserInput, updatePlantUserInput]) {
+      for (const departmentId of [undefined, null, "", "not-an-id"]) {
+        expect(schema.safeParse({ email: "user@example.com", name: "Test User", role, departmentId }).success).toBe(false);
+      }
+    }
+  });
+
+  it.each([RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N5_OPERATOR, RoleCode.N6_HR])("does not require a department for %s", (role) => {
+    expect(createPlantUserInput.safeParse({ email: "user@example.com", name: "Test User", role }).success).toBe(true);
   });
 });
