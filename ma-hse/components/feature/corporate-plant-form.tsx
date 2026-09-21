@@ -33,8 +33,6 @@ function emptyCreateState() {
     defaultLanguage: "en" as (typeof LANGUAGE_OPTIONS)[number],
     n1Email: "",
     n1Name: "",
-    n2Email: "",
-    n2Name: "",
     n3Email: "",
     n3Name: "",
   };
@@ -104,7 +102,6 @@ export function CorporatePlantForm({
           timezone: createForm.timezone,
           defaultLanguage: createForm.defaultLanguage,
           n1: { email: createForm.n1Email, name: createForm.n1Name },
-          n2: { email: createForm.n2Email, name: createForm.n2Name, language: createForm.defaultLanguage },
           n3: { email: createForm.n3Email, name: createForm.n3Name, language: createForm.defaultLanguage },
         }),
       });
@@ -277,8 +274,7 @@ export function CorporatePlantForm({
 
           <input value={createForm.n1Email} onChange={(event) => setCreateForm((current) => ({ ...current, n1Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n1Email} required />
           <input value={createForm.n1Name} onChange={(event) => setCreateForm((current) => ({ ...current, n1Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n1Name} required />
-          <input value={createForm.n2Email} onChange={(event) => setCreateForm((current) => ({ ...current, n2Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n2Email} required />
-          <input value={createForm.n2Name} onChange={(event) => setCreateForm((current) => ({ ...current, n2Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n2Name} required />
+          <p className="text-sm text-slate-600 md:col-span-2">{labels.users.newPlantN2Help}</p>
           <input value={createForm.n3Email} onChange={(event) => setCreateForm((current) => ({ ...current, n3Email: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n3Email} required />
           <input value={createForm.n3Name} onChange={(event) => setCreateForm((current) => ({ ...current, n3Name: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.n3Name} required />
 

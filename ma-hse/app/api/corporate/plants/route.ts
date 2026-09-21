@@ -204,6 +204,7 @@ async function ensureUserWithRole(input: {
   language: string;
   plantId: string;
   roleCode: RoleCode;
+  departmentId?: string;
 }) {
   const email = normalizeEmail(input.email);
   const role = await ensureRole(input.roleCode);
@@ -247,7 +248,13 @@ async function ensureUserWithRole(input: {
         userId: user.id,
         plantId: rolePlantId,
         roleId: role.id,
+        departmentId: input.departmentId ?? null,
       },
+    });
+  } else if (input.departmentId) {
+    await prisma.userPlantRole.update({
+      where: { id: existingRole.id },
+      data: { departmentId: input.departmentId },
     });
   }
 
@@ -275,6 +282,12 @@ export async function POST(request: Request) {
   if ("error" in parsed) return parsed.error;
 
   const code = parsed.data.code.trim().toLowerCase();
+  if (parsed.data.n2 && !await prisma.area.findFirst({
+    where: { id: parsed.data.n2.departmentId, plant: { code }, isActive: true },
+    select: { id: true },
+  })) {
+    return fail("INVALID_DEPARTMENT", "Create the plant and configure its departments before assigning an N2 user.", 422);
+  }
   const plant = await prisma.plant.upsert({
     where: { code },
     update: {
@@ -301,13 +314,14 @@ export async function POST(request: Request) {
     plantId: plant.id,
     roleCode: RoleCode.N1_CORPORATE,
   });
-  const n2 = await ensureUserWithRole({
+  const n2 = parsed.data.n2 ? await ensureUserWithRole({
     email: parsed.data.n2.email,
     name: parsed.data.n2.name,
     language: parsed.data.n2.language ?? parsed.data.defaultLanguage,
     plantId: plant.id,
     roleCode: RoleCode.N2_PLANT_MANAGER,
-  });
+    departmentId: parsed.data.n2.departmentId,
+  }) : null;
   const n3 = await ensureUserWithRole({
     email: parsed.data.n3.email,
     name: parsed.data.n3.name,
@@ -319,8 +333,8 @@ export async function POST(request: Request) {
   return ok(
     {
       plant,
-      users: [n1, n2, n3],
-      generatedPasswords: [n1, n2, n3]
+      users: [n1, ...(n2 ? [n2] : []), n3],
+      generatedPasswords: [n1, ...(n2 ? [n2] : []), n3]
         .filter((entry) => entry.generatedPassword)
         .map((entry) => ({
           role: entry.role,

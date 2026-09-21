@@ -6,7 +6,7 @@ import { parseBody } from "@/lib/http";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { canCreateRole, getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
+import { canCreateRole, getRoleAssignmentPlantId, requiresUserDepartment } from "@/lib/rbac/user-management";
 import { updatePlantUserInput } from "@/lib/validation/dtos";
 
 function normalizeEmail(email: string) {
@@ -85,6 +85,10 @@ export async function PATCH(
     }
   }
 
+  const departmentId = requiresUserDepartment(parsed.data.role) ? parsed.data.departmentId! : null;
+  if (departmentId && !await prisma.area.findFirst({ where: { id: departmentId, plantId: plant.id, isActive: true }, select: { id: true } })) {
+    return fail("INVALID_DEPARTMENT", "Select an active department from this plant's Master Data.", 422);
+  }
   const normalizedEmail = normalizeEmail(parsed.data.email);
   const duplicateEmailOwner = await prisma.user.findFirst({
     where: {
@@ -114,6 +118,7 @@ export async function PATCH(
     isActive: plantRoleRow.user.isActive,
     forcePasswordChange: plantRoleRow.user.forcePasswordChange,
     role: plantRoleRow.role.code,
+    departmentId: plantRoleRow.departmentId,
   };
 
   const passwordHash = parsed.data.password ? await hash(parsed.data.password, 12) : null;
@@ -160,6 +165,7 @@ export async function PATCH(
           userId,
           plantId: rolePlantId,
           roleId: role.id,
+          departmentId,
         },
         include: {
           role: true,
@@ -183,6 +189,7 @@ export async function PATCH(
       isActive: updated.user.isActive,
       forcePasswordChange: updated.user.forcePasswordChange,
       role: updated.plantRole.role.code,
+      departmentId: updated.plantRole.departmentId,
     }),
   });
 
@@ -194,6 +201,7 @@ export async function PATCH(
       language: updated.user.language,
       isActive: updated.user.isActive,
       role: updated.plantRole.role.code,
+      departmentId: updated.plantRole.departmentId,
       createdAt: updated.user.createdAt,
       updatedAt: updated.user.updatedAt,
     },
@@ -282,6 +290,7 @@ export async function DELETE(
         language: plantRoleRow.user.language,
         isActive: plantRoleRow.user.isActive,
         role: plantRoleRow.role.code,
+        departmentId: plantRoleRow.departmentId,
       },
       null,
     ),

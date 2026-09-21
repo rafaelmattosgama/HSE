@@ -9,7 +9,7 @@ import { logger } from "@/lib/logger";
 import { getPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { canCreateRole, getCreatableRoles, getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
+import { canCreateRole, getCreatableRoles, getRoleAssignmentPlantId, requiresUserDepartment } from "@/lib/rbac/user-management";
 import { EmailService } from "@/lib/services/email-service";
 import { hashSensitiveValue } from "@/lib/security";
 import { createPlantUserInput } from "@/lib/validation/dtos";
@@ -35,6 +35,7 @@ function toUserRow(input: {
   createdAt: Date;
   updatedAt: Date;
   role: RoleCode;
+  departmentId: string | null;
 }) {
   return {
     id: input.id,
@@ -43,6 +44,7 @@ function toUserRow(input: {
     language: input.language,
     isActive: input.isActive,
     role: input.role,
+    departmentId: input.departmentId,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
   };
@@ -78,6 +80,7 @@ export async function GET(_request: Request, context: { params: Promise<{ plantC
         language: row.user.language,
         isActive: row.user.isActive,
         role: row.role.code,
+        departmentId: row.departmentId,
         createdAt: row.user.createdAt,
         updatedAt: row.user.updatedAt,
       }),
@@ -112,6 +115,10 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     }
 
     const plant = await getPlantByCode(plantCode);
+    const departmentId = requiresUserDepartment(targetRole) ? parsed.data.departmentId! : null;
+    if (departmentId && !await prisma.area.findFirst({ where: { id: departmentId, plantId: plant.id, isActive: true }, select: { id: true } })) {
+      return fail("INVALID_DEPARTMENT", "Select an active department from this plant's Master Data.", 422);
+    }
     const normalizedEmail = normalizeEmail(parsed.data.email);
 
     const existingUser = await prisma.user.findUnique({
@@ -239,6 +246,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
             userId: user.id,
             plantId: rolePlantId,
             roleId: role.id,
+            departmentId,
           },
           include: {
             role: true,
@@ -321,6 +329,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
               plantId: result.beforePlantRole.plantId,
               roleId: result.beforePlantRole.roleId,
               role: result.beforePlantRole.role.code,
+              departmentId: result.beforePlantRole.departmentId,
             }
           : null,
         {
@@ -328,6 +337,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
           plantId: result.plantRole.plantId,
           roleId: result.plantRole.roleId,
           role: result.plantRole.role.code,
+          departmentId: result.plantRole.departmentId,
         },
       ),
     });
@@ -340,6 +350,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         language: result.user.language,
         isActive: result.user.isActive,
         role: result.plantRole.role.code,
+        departmentId: result.plantRole.departmentId,
         createdAt: result.user.createdAt,
         updatedAt: result.user.updatedAt,
       }),

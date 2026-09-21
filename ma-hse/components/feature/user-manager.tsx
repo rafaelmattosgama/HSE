@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RoleCode } from "@prisma/client";
 import { usePathname } from "next/navigation";
 import { ROLE_LABELS } from "@/lib/rbac/permissions";
+import { requiresUserDepartment } from "@/lib/rbac/user-management";
 import { Button } from "@/components/ui/button";
 import { formatMasterDataMessage, getStaticN0MasterDataUi, type N0MasterDataUi } from "@/lib/master-data-ui";
 
@@ -14,6 +15,7 @@ type ManagedUser = {
   language: string;
   isActive: boolean;
   role: RoleCode;
+  departmentId?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -83,6 +85,10 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   const [language, setLanguage] = useState<(typeof LANGUAGE_OPTIONS)[number]>("en");
   const [role, setRole] = useState<RoleCode | "">(allowedCreateRoles.length ? allowedCreateRoles[0] : "");
   const [password, setPassword] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [departments, setDepartments] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+  const [departmentsError, setDepartmentsError] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("ALL");
@@ -91,6 +97,28 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   const [popup, setPopup] = useState<FeedbackPopup | null>(null);
   const [loading, setLoading] = useState(false);
   const [rowActionId, setRowActionId] = useState<string | null>(null);
+  const needsDepartment = Boolean(role && requiresUserDepartment(role));
+
+  const loadDepartments = useCallback(async (signal?: AbortSignal) => {
+    setDepartmentsLoading(true);
+    setDepartmentsError(false);
+    try {
+      const response = await fetch(`/api/plants/${plant}/admin/users/departments`, { signal });
+      const json = await response.json();
+      if (!response.ok || !json.ok) throw new Error("Failed to load departments");
+      if (!signal?.aborted) setDepartments(json.data.departments);
+    } catch {
+      if (!signal?.aborted) setDepartmentsError(true);
+    } finally {
+      if (!signal?.aborted) setDepartmentsLoading(false);
+    }
+  }, [plant]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadDepartments(controller.signal);
+    return () => controller.abort();
+  }, [loadDepartments]);
 
   const canCreate = useMemo(() => allowedCreateRoles.length > 0, [allowedCreateRoles.length]);
   const roleFilterOptions = useMemo(() => [...new Set(rows.map((entry) => entry.role))].sort((a, b) => a.localeCompare(b)), [rows]);
@@ -115,6 +143,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     setLanguage("en");
     setRole(allowedCreateRoles[0] ?? "");
     setPassword("");
+    setDepartmentId("");
     setIsActive(true);
   }
 
@@ -140,6 +169,8 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     setName(entry.name);
     setLanguage(entry.language as (typeof LANGUAGE_OPTIONS)[number]);
     setRole(entry.role);
+    setDepartmentId(entry.departmentId ?? "");
+    void loadDepartments();
     setPassword("");
     setIsActive(entry.isActive);
     setPopup(null);
@@ -199,6 +230,11 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     event.preventDefault();
     if (!canCreate || !role) return;
 
+    if (needsDepartment && (departmentsLoading || departmentsError || !departments.some((entry) => entry.id === departmentId))) {
+      showPopup("error", labels.users.validationError, labels.users.departmentRequired);
+      return;
+    }
+
     if (password.trim().length > 0 && password.trim().length < 8) {
       showPopup("error", labels.users.validationError, labels.users.passwordMinLength);
       return;
@@ -219,6 +255,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
             name,
             language,
             role,
+            departmentId: needsDepartment ? departmentId : null,
             password: password.trim() ? password : undefined,
             isActive,
           }),
@@ -277,13 +314,28 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
             ))}
           </select>
 
-          <select value={role} onChange={(event) => setRole(event.target.value as RoleCode)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+          <select aria-label={labels.users.role} value={role} onChange={(event) => { setRole(event.target.value as RoleCode); setDepartmentId(""); }} className="rounded-md border border-slate-300 px-3 py-2 text-sm" required>
             {allowedCreateRoles.map((entry) => (
               <option key={entry} value={entry}>
                 {ROLE_LABELS[entry]}
               </option>
             ))}
           </select>
+
+          {needsDepartment ? (
+            <div className="space-y-1 md:col-span-2">
+              <label className="block text-sm text-slate-700">
+                {labels.department} *
+                <select value={departmentId} onFocus={() => void loadDepartments()} onChange={(event) => setDepartmentId(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+                  <option value="">{labels.users.selectDepartment}</option>
+                  {departments.map((entry) => <option key={entry.id} value={entry.id}>{entry.code} — {entry.name}</option>)}
+                </select>
+              </label>
+              {departmentsLoading ? <p className="text-xs text-slate-500">{labels.users.loadingDepartments}</p> : null}
+              {departmentsError ? <p role="alert" className="text-xs text-red-700">{labels.users.departmentsLoadError}</p> : null}
+              {!departmentsLoading && !departmentsError && departments.length === 0 ? <p role="alert" className="text-xs text-amber-700">{labels.users.noDepartments}</p> : null}
+            </div>
+          ) : null}
 
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder={editingUserId ? labels.users.newPasswordPlaceholder : labels.users.passwordPlaceholder} />
           <p className="text-xs text-slate-500 md:col-span-2">
@@ -298,7 +350,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
           </label>
 
           <div className="flex flex-wrap gap-2 md:col-span-2">
-            <Button type="submit" size="sm" disabled={loading}>
+            <Button type="submit" size="sm" disabled={loading || (needsDepartment && (departmentsLoading || departmentsError || departments.length === 0))}>
               {loading ? labels.saving : editingUserId ? labels.users.updateUser : labels.users.createUser}
             </Button>
             {editingUserId ? (

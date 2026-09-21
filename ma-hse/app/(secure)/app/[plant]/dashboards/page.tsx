@@ -4,6 +4,8 @@ import { CommunicationType, MasterDataEntityType, SEWOStatus } from "@prisma/cli
 import { getServerSession } from "next-auth";
 import { notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
+import { ALL_DASHBOARD_DEPARTMENTS, filterDashboardDepartment, resolveDashboardDepartment } from "@/lib/dashboard-departments";
+import { requiresUserDepartment } from "@/lib/rbac/user-management";
 import { resolveDashboardPeriod, type DashboardSearchParams } from "@/lib/dashboard-period";
 import {
   buildMonthBuckets,
@@ -271,6 +273,29 @@ export default async function DashboardsPage({
   });
   const ui = getUiDictionary(uiLocale);
   const actorRole = getSafetyDashboardRole(plant, session.user.plantRoles);
+  const [departmentRows, userDepartment] = await Promise.all([
+    prisma.area.findMany({
+      where: { plantId: plantRow.id },
+      select: { id: true, code: true, name: true, sourceLanguage: true },
+      orderBy: { name: "asc" },
+    }),
+    actorRole && requiresUserDepartment(actorRole)
+      ? prisma.userPlantRole.findFirst({
+          where: { userId: session.user.id, plantId: plantRow.id, role: { code: actorRole } },
+          select: { departmentId: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  const departments = await localizeMasterDataRows(MasterDataEntityType.AREA, departmentRows, uiLocale);
+  const departmentId = resolveDashboardDepartment({
+    requested: currentSearchParams.departmentId,
+    role: actorRole,
+    assignedDepartmentId: userDepartment?.departmentId,
+    departments,
+  });
+  const selectedDepartment = departments.find((entry) => entry.id === departmentId);
+  const indicatorScopeLabel = selectedDepartment ? `${plantRow.name} / ${selectedDepartment.name}` : plantRow.name;
+  const dateResetHref = `/app/${plant}/dashboards?departmentId=${encodeURIComponent(departmentId ?? ALL_DASHBOARD_DEPARTMENTS)}`;
   const canViewCompetenceKpis = hasSafetyDashboardDetailedReadAccess(actorRole);
   // Fase 6: same detailed-read gate as competences — one flag, two modules.
   const canViewDetailedModuleKpis = canViewCompetenceKpis;
@@ -332,6 +357,7 @@ export default async function DashboardsPage({
         },
       },
       select: {
+        areaId: true,
         type: true,
         status: true,
         lostDays: true,
@@ -378,6 +404,7 @@ export default async function DashboardsPage({
     prisma.communication.findMany({
       where: buildPyramidCommunicationWhere(plantRow.id, period),
       select: {
+        areaId: true,
         type: true,
         status: true,
         classification: true,
@@ -392,6 +419,7 @@ export default async function DashboardsPage({
     prisma.communication.findMany({
       where: buildPyramidCommunicationWhere(plantRow.id, homologousPeriod),
       select: {
+        areaId: true,
         type: true,
         status: true,
         classification: true,
@@ -429,6 +457,8 @@ export default async function DashboardsPage({
         },
       },
       select: {
+        areaId: true,
+        communication: { select: { areaId: true } },
         analysisDate: true,
         templateData: true,
         causeSelections: {
@@ -592,9 +622,13 @@ export default async function DashboardsPage({
   const validCommunications = communicationRows.filter((entry) => ["VALID_OPEN", "ONGOING", "CLOSED"].includes(entry.status));
   const pyramidCommunications = pyramidCommunicationRows.filter((entry) => isDashboardPyramidCommunicationStatus(entry.status));
   const homologousPyramidCommunications = homologousPyramidCommunicationRows.filter((entry) => isDashboardPyramidCommunicationStatus(entry.status));
-  const pyramidCounts = buildPyramidCounts(pyramidCommunications);
-  const homologousPyramidCounts = homologousPyramidCommunications.length > 0
-    ? buildPyramidCounts(homologousPyramidCommunications)
+  const indicatorCommunications = filterDashboardDepartment(validCommunications, departmentId);
+  const indicatorSewoRows = filterDashboardDepartment(sewoRows, departmentId);
+  const indicatorRootCauseCount = indicatorSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
+  const scopedHomologousPyramid = filterDashboardDepartment(homologousPyramidCommunications, departmentId);
+  const pyramidCounts = buildPyramidCounts(filterDashboardDepartment(pyramidCommunications, departmentId));
+  const homologousPyramidCounts = scopedHomologousPyramid.length > 0
+    ? buildPyramidCounts(scopedHomologousPyramid)
     : undefined;
   const homologousValidCommunications = homologousPyramidCommunications.filter((entry) => ["VALID_OPEN", "ONGOING", "CLOSED"].includes(entry.status));
   const pendingValidation = communicationRows.filter((entry) => ["SUBMITTED", "PENDING_VALIDATION"].includes(entry.status)).length;
@@ -620,14 +654,14 @@ export default async function DashboardsPage({
   const firstAidCount = validCommunications.filter((entry) => entry.type === "FIRST_AID").length;
   const rootCauseCount = sewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const homologousRootCauseCount = homologousSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
-  const rootCauseTopEntries = buildSewoRootCauseTopEntries(sewoRows);
-  const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries, rootCauseCount);
-  const unsafeActTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_ACT);
-  const unsafeConditionTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.UNSAFE_CONDITION);
-  const nearMissTypeTopEntries = buildCommunicationTypeTopEntries(validCommunications, CommunicationType.NEAR_MISS);
-  const unsafeActTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.UNSAFE_ACT);
-  const unsafeConditionTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.UNSAFE_CONDITION);
-  const nearMissTypeTotal = getCommunicationTypeTotal(validCommunications, CommunicationType.NEAR_MISS);
+  const rootCauseTopEntries = buildSewoRootCauseTopEntries(indicatorSewoRows);
+  const rootCauseRankingEntries = toRootCauseRankingEntries(rootCauseTopEntries, indicatorRootCauseCount);
+  const unsafeActTypeTopEntries = buildCommunicationTypeTopEntries(indicatorCommunications, CommunicationType.UNSAFE_ACT);
+  const unsafeConditionTypeTopEntries = buildCommunicationTypeTopEntries(indicatorCommunications, CommunicationType.UNSAFE_CONDITION);
+  const nearMissTypeTopEntries = buildCommunicationTypeTopEntries(indicatorCommunications, CommunicationType.NEAR_MISS);
+  const unsafeActTypeTotal = getCommunicationTypeTotal(indicatorCommunications, CommunicationType.UNSAFE_ACT);
+  const unsafeConditionTypeTotal = getCommunicationTypeTotal(indicatorCommunications, CommunicationType.UNSAFE_CONDITION);
+  const nearMissTypeTotal = getCommunicationTypeTotal(indicatorCommunications, CommunicationType.NEAR_MISS);
   const sifPsifIndicators = buildSifPsifIndicatorBreakdown(sifPsifIncidentRows);
   const homologousSifPsifIndicators = buildSifPsifIndicatorBreakdown(homologousSifPsifIncidentRows);
   const lostDays = validCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
@@ -770,7 +804,7 @@ export default async function DashboardsPage({
   const reportingDepartments = new Map<string, number>();
   const involvedLocations = new Map<string, number>();
 
-  for (const row of validCommunications) {
+  for (const row of indicatorCommunications) {
     increment(involvedWorkers, row.targetEmployee?.name ?? row.targetText);
     if (row.reporterEmployeeNo) {
       const reporterEmployee = employeeByNo.get(row.reporterEmployeeNo);
@@ -853,7 +887,7 @@ export default async function DashboardsPage({
     monthBuckets.map((bucket) => [bucket.key, createEmptyMonthlyMetricSnapshot(bucket.key, bucket.label)]),
   );
 
-  for (const row of validCommunications) {
+  for (const row of indicatorCommunications) {
     const key = getMonthKey(row.eventDatetime.getUTCFullYear(), row.eventDatetime.getUTCMonth() + 1);
     const snapshot = monthlyMetricsMap.get(key);
     if (!snapshot) continue;
@@ -872,7 +906,7 @@ export default async function DashboardsPage({
     if (row.status === "OPEN" || row.status === "ONGOING") snapshot.actionsToClose += 1;
   }
 
-  for (const row of sewoRows) {
+  for (const row of indicatorSewoRows) {
     const key = getMonthKey(row.analysisDate.getUTCFullYear(), row.analysisDate.getUTCMonth() + 1);
     const snapshot = monthlyMetricsMap.get(key);
     if (!snapshot) continue;
@@ -902,7 +936,7 @@ export default async function DashboardsPage({
       group.id,
       monthBuckets.map((bucket) => {
         if (group.id === "root-causes-top") {
-          const monthSewoRows = sewoRows.filter(
+          const monthSewoRows = indicatorSewoRows.filter(
             (row) => getMonthKey(row.analysisDate.getUTCFullYear(), row.analysisDate.getUTCMonth() + 1) === bucket.key,
           );
 
@@ -916,7 +950,7 @@ export default async function DashboardsPage({
           };
         }
 
-        const monthRows = validCommunications.filter(
+        const monthRows = indicatorCommunications.filter(
           (row) => getMonthKey(row.eventDatetime.getUTCFullYear(), row.eventDatetime.getUTCMonth() + 1) === bucket.key,
         );
 
@@ -986,18 +1020,18 @@ export default async function DashboardsPage({
   const plantBenchmarkSummary = {
     id: plantRow.id,
     code: plantRow.code,
-    name: plantRow.name,
+    name: indicatorScopeLabel,
     timezone: plantRow.timezone,
     defaultLanguage: plantRow.defaultLanguage,
-    validatedEvents: validCommunicationsCount,
+    validatedEvents: indicatorCommunications.length,
     openActions: openActionsCount,
     closedActions,
     actionsToClose,
     closedActionsPercent,
     actionsToClosePercent,
-    nearMissCount,
-    injuryCount,
-    rootCauseCount,
+    nearMissCount: indicatorCommunications.filter((row) => row.type === "NEAR_MISS").length,
+    injuryCount: indicatorCommunications.filter((row) => row.type === "ACCIDENT").length,
+    rootCauseCount: indicatorRootCauseCount,
     frequencyIndex,
     severityIndex,
     safetyDays,
@@ -1091,7 +1125,14 @@ export default async function DashboardsPage({
       </div>
 
       <section className="app-panel rounded-2xl p-5">
-        <form className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <form key={`${period.label}-${departmentId ?? "all"}`} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <label className="space-y-1.5 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{ui.competences.departmentFilterLabel}</span>
+            <select name="departmentId" defaultValue={departmentId ?? ALL_DASHBOARD_DEPARTMENTS} className="app-field h-11 w-full">
+              <option value={ALL_DASHBOARD_DEPARTMENTS}>{ui.competences.departmentFilterAll}</option>
+              {departments.map((department) => <option key={department.id} value={department.id}>{department.code} - {department.name}</option>)}
+            </select>
+          </label>
           <label className="space-y-1.5 text-sm">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{ui.dashboard.year}</span>
             <select
@@ -1135,21 +1176,22 @@ export default async function DashboardsPage({
               className="h-11 w-full rounded-[10px] border border-slate-300 bg-white px-3 py-2 text-[15px] text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition focus:border-slate-400"
             />
           </label>
-          <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-5 xl:justify-end">
             <button
               type="submit"
               className="inline-flex h-11 min-w-[108px] items-center justify-center whitespace-nowrap rounded-[10px] bg-slate-900 px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(6,26,82,0.14)] transition hover:opacity-95"
             >
               {ui.dashboard.apply}
             </button>
-            <Link href={`/app/${plant}/dashboards`} className="app-toolbar h-11 min-w-[118px] whitespace-nowrap px-4">
+            <Link href={dateResetHref} className="app-toolbar h-11 min-w-[118px] whitespace-nowrap px-4">
               {ui.dashboard.clearDates}
             </Link>
-            <Link href={`/app/${plant}/dashboards`} className="app-toolbar h-11 min-w-[108px] whitespace-nowrap px-4">
+            <Link href={dateResetHref} className="app-toolbar h-11 min-w-[108px] whitespace-nowrap px-4">
               {ui.dashboard.currentYear}
             </Link>
           </div>
         </form>
+        <p className="mt-3 text-xs text-slate-600">{ui.dashboard.departmentScopeHelp}</p>
       </section>
 
       {/* A coluna de contexto vem primeiro no DOM: abaixo de xl empilha por cima (ordem
@@ -1163,7 +1205,7 @@ export default async function DashboardsPage({
             counts={pyramidCounts}
             previousCounts={homologousPyramidCounts}
             locale={uiLocale}
-            scopeLabel={plantRow.name}
+            scopeLabel={indicatorScopeLabel}
             periodLabel={period.label}
             classificationRule={ui.dashboard.pyramidClassificationRule}
             hierarchyLabel={ui.dashboard.pyramidHierarchyNote}
@@ -1203,7 +1245,7 @@ export default async function DashboardsPage({
         <RootCauseTopFiveCard
           title={ui.dashboard.rootCauseTopFive}
           entries={rootCauseTopEntries}
-          total={rootCauseCount}
+          total={indicatorRootCauseCount}
           noDataLabel={ui.dashboard.noRootCauses}
           totalLabel={ui.dashboard.rootCauseTotal}
         />
@@ -1249,6 +1291,8 @@ export default async function DashboardsPage({
           rankings={rankings}
           rankingMonthlySeries={rankingMonthlySeries}
           title={ui.dashboard.plantIndicators}
+          scopeLabelOverride={indicatorScopeLabel}
+          departmentScope={Boolean(departmentId)}
           pyramidDescription={ui.dashboard.plantPyramidDescription}
           storageKeyBase={`ma-hse-plant-${plantRow.code}`}
           initialActivePlantCode={plantRow.code}

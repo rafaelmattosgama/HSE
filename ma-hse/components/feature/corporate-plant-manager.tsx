@@ -44,6 +44,8 @@ type CorporatePlantManagerProps = {
   rankings: RankingGroup[];
   rankingMonthlySeries?: Record<string, RankingSeriesSnapshot[]>;
   title?: string;
+  scopeLabelOverride?: string;
+  departmentScope?: boolean;
   description?: string;
   plantListTitle?: string;
   plantListDescription?: string;
@@ -211,6 +213,8 @@ export function CorporatePlantManager({
   rankings,
   rankingMonthlySeries = {},
   title,
+  scopeLabelOverride,
+  departmentScope = false,
   plantListTitle,
   pyramidDescription,
   storageKeyBase = "ma-hse-corporate",
@@ -276,7 +280,7 @@ export function CorporatePlantManager({
     window.localStorage.setItem(favoriteRankingsStorageKey, JSON.stringify(favoriteRankingIds));
   }, [favoriteRankingIds, favoriteRankingsStorageKey]);
 
-  const scopeLabel = activePlant ? `${activePlant.name} (${activePlant.code.toUpperCase()})` : text.globalScope;
+  const scopeLabel = scopeLabelOverride ?? (activePlant ? `${activePlant.name} (${activePlant.code.toUpperCase()})` : text.globalScope);
   const allMetrics = useMemo<MetricDefinition[]>(
     () => [
       {
@@ -686,6 +690,7 @@ export function CorporatePlantManager({
             )}
 
             <DashboardVisualizationStudio
+              departmentScope={departmentScope}
               plants={initialPlants}
               rankings={rankings}
               rankingMonthlySeries={rankingMonthlySeries}

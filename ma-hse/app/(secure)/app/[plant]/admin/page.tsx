@@ -220,6 +220,7 @@ export default async function AdminPage({
       language: entry.user.language,
       isActive: entry.user.isActive,
       role: entry.role.code,
+      departmentId: entry.departmentId,
       createdAt: entry.user.createdAt,
       updatedAt: entry.user.updatedAt,
     }))
@@ -393,6 +394,7 @@ export default async function AdminPage({
 
       {canManageUsers ? (
         <UserManager
+          key={plantRow.code}
           users={users}
           allowedCreateRoles={allowedCreateRoles}
           manageableRoles={manageableUserRoles}

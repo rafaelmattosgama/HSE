@@ -33,6 +33,7 @@ type Props = {
   activePlantCode: string | null;
   storageKeyBase: string;
   rootCauseMetricLabel?: string;
+  departmentScope?: boolean;
   labels?: DashboardUiDictionary;
 };
 
@@ -512,6 +513,7 @@ export function DashboardVisualizationStudio({
   activePlantCode,
   storageKeyBase,
   rootCauseMetricLabel,
+  departmentScope = false,
   labels = getUiDictionary("en").dashboard,
 }: Props) {
   const text = labels;
@@ -519,10 +521,10 @@ export function DashboardVisualizationStudio({
   const monthAxis = useMemo(() => getMonthAxis(plants), [plants]);
   const metricOptions = useMemo(
     () =>
-      METRIC_OPTIONS.map((metric) =>
+      METRIC_OPTIONS.filter((metric) => !departmentScope || ["validatedEvents", "nearMisses", "injuries", "rootCauses"].includes(metric.id)).map((metric) =>
         metric.id === "rootCauses" ? { ...metric, label: rootCauseLabel } : { ...metric, label: text[metric.labelKey] },
       ),
-    [rootCauseLabel, text],
+    [departmentScope, rootCauseLabel, text],
   );
   const trendChartsEnabled = monthAxis.length > 1;
   const chartStorageKey = `${storageKeyBase}-chart-type`;
@@ -559,13 +561,14 @@ export function DashboardVisualizationStudio({
   }, [chartStorageKey, trendChartsEnabled]);
 
   const selectedMetric = metricOptions.find((metric) => metric.id === selectedMetricId) ?? metricOptions[0];
+  const effectiveMetricId = selectedMetric.id;
   const indicatorTrend = useMemo(
-    () => buildIndicatorTrendSeries(plants, selectedMetricId, selectedPlantCodes, activePlantCode),
-    [activePlantCode, plants, selectedMetricId, selectedPlantCodes],
+    () => buildIndicatorTrendSeries(plants, effectiveMetricId, selectedPlantCodes, activePlantCode),
+    [activePlantCode, plants, effectiveMetricId, selectedPlantCodes],
   );
   const indicatorDistribution = useMemo(
-    () => buildIndicatorDistribution(plants, selectedMetricId, selectedPlantCodes, activePlantCode),
-    [activePlantCode, plants, selectedMetricId, selectedPlantCodes],
+    () => buildIndicatorDistribution(plants, effectiveMetricId, selectedPlantCodes, activePlantCode),
+    [activePlantCode, plants, effectiveMetricId, selectedPlantCodes],
   );
 
   const selectedRankingPanel = rankingPanels.find((panel) => panel.id === selectedRankingId) ?? rankingPanels[0];
@@ -654,7 +657,7 @@ export function DashboardVisualizationStudio({
               <label className="space-y-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.indicator}</span>
                 <select
-                  value={selectedMetricId}
+                  value={effectiveMetricId}
                   onChange={(event) => setSelectedMetricId(event.target.value as MetricId)}
                   className="h-10 rounded-[10px] border border-slate-300 bg-white px-3 text-sm text-slate-900"
                 >
