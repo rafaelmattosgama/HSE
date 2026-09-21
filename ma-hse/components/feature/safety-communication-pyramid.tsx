@@ -1,63 +1,38 @@
-import type { CSSProperties } from "react";
-import { AlertOctagon, Bandage, CircleDot, Eye, ShieldAlert, TriangleAlert, UserRoundX } from "lucide-react";
+"use client";
+
+import { useId, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { AppCard } from "@/components/ui/app-surface";
 import { HelpPopover } from "@/components/ui/help-popover";
+import { getUiDictionary } from "@/lib/ui-language";
+import { getSafetyDashboardLayoutCopy } from "@/lib/safety-dashboard-layout";
 
 export type SafetyCommunicationPyramidCounts = {
-  unsafeAct: number;
-  unsafeCondition: number;
-  nearMiss: number;
-  firstAid: number;
-  minorInjury: number;
-  seriousInjury: number;
-  fatal: number;
+  unsafeAct: number; unsafeCondition: number; nearMiss: number; firstAid: number;
+  minorInjury: number; seriousInjury: number; fatal: number;
 };
+type Level = keyof SafetyCommunicationPyramidCounts;
+export type PyramidRecord = { id: string; code: string; level: Level; pending: boolean };
 
 const PYRAMID_LAYERS = [
-  { key: "fatal", fallbackLabel: "Fatal", accent: "var(--safety-pyramid-fatal)", icon: AlertOctagon, width: 40 },
-  { key: "seriousInjury", fallbackLabel: "Serious injury", accent: "var(--safety-pyramid-serious-injury)", icon: TriangleAlert, width: 50 },
-  { key: "minorInjury", fallbackLabel: "Minor injury", accent: "var(--safety-pyramid-minor-injury)", icon: Bandage, width: 60 },
-  { key: "firstAid", fallbackLabel: "First aid", accent: "var(--safety-pyramid-first-aid)", icon: CircleDot, width: 70 },
-  { key: "nearMiss", fallbackLabel: "Near miss", accent: "var(--safety-pyramid-near-miss)", icon: Eye, width: 80 },
-  { key: "unsafeCondition", fallbackLabel: "Unsafe condition", accent: "var(--safety-pyramid-unsafe-condition)", icon: ShieldAlert, width: 90 },
-  { key: "unsafeAct", fallbackLabel: "Unsafe act", accent: "var(--safety-pyramid-unsafe-act)", icon: UserRoundX, width: 100 },
-] as const satisfies Array<{
-  key: keyof SafetyCommunicationPyramidCounts;
-  fallbackLabel: string;
-  accent: string;
-  icon: typeof AlertOctagon;
-  width: number;
-}>;
-
-function formatCount(value: number, locale: string) {
-  return new Intl.NumberFormat(locale).format(value);
-}
-
-function getTrendLabel(current: number, previous: number, previousPeriodLabel: string, locale: string) {
-  const difference = current - previous;
-  const formattedDifference = new Intl.NumberFormat(locale, { signDisplay: "always" }).format(difference);
-
-  if (difference === 0) return `${previousPeriodLabel}: ${formatCount(previous, locale)}`;
-  return `${formattedDifference} ${previousPeriodLabel.toLocaleLowerCase(locale)}`;
-}
+  { key: "fatal", accent: "var(--safety-pyramid-fatal)", inset: 25 },
+  { key: "seriousInjury", accent: "var(--safety-pyramid-serious-injury)", inset: 21 },
+  { key: "minorInjury", accent: "var(--safety-pyramid-minor-injury)", inset: 17 },
+  { key: "firstAid", accent: "var(--safety-pyramid-first-aid)", inset: 13 },
+  { key: "nearMiss", accent: "var(--safety-pyramid-near-miss)", inset: 9 },
+  { key: "unsafeCondition", accent: "var(--safety-pyramid-unsafe-condition)", inset: 5 },
+  { key: "unsafeAct", accent: "var(--safety-pyramid-unsafe-act)", inset: 1 },
+] as const;
 
 export function SafetyCommunicationPyramid({
-  title,
-  counts,
-  labels = {},
-  locale = "en",
-  scopeLabel,
-  periodLabel,
-  previousCounts,
-  previousPeriodLabel = "vs same period last year",
-  classificationRule = "Each communication is counted once in exactly one level. Submitted and pending-validation records are included provisionally.",
-  hierarchyLabel = "Layer width communicates severity hierarchy only; it does not represent volume.",
-  emptyLabel = "No communications match the selected period. All levels remain visible.",
-  helpLabel = "Help",
+  title, counts, labels = {}, locale = "en", scopeLabel, periodLabel,
+  previousCounts, previousPeriodLabel,
+  classificationRule, hierarchyLabel, emptyLabel, helpLabel,
+  records, plantCode,
 }: {
   title: string;
   counts: SafetyCommunicationPyramidCounts;
-  labels?: Partial<Record<keyof SafetyCommunicationPyramidCounts, string>>;
+  labels?: Partial<Record<Level, string>>;
   locale?: string;
   scopeLabel: string;
   periodLabel: string;
@@ -67,96 +42,76 @@ export function SafetyCommunicationPyramid({
   hierarchyLabel?: string;
   emptyLabel?: string;
   helpLabel?: string;
+  records?: PyramidRecord[];
+  plantCode?: string;
 }) {
+  const text = getUiDictionary(locale).dashboard;
+  const copy = getSafetyDashboardLayoutCopy(locale);
+  const layerLabels: Record<Level, string> = {
+    fatal: text.pyramidFatal, seriousInjury: text.pyramidSeriousInjury,
+    minorInjury: text.pyramidMinorInjury, firstAid: text.pyramidFirstAid,
+    nearMiss: text.pyramidNearMiss, unsafeCondition: text.pyramidUnsafeCondition,
+    unsafeAct: text.pyramidUnsafeAct, ...labels,
+  };
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
-  const hasPreviousComparison = previousCounts !== undefined;
-  const helpBody = `${classificationRule}\n\n${hierarchyLabel}\n\nPercentages are calculated from ${formatCount(total, locale)} communications displayed in this pyramid.`;
+  const number = (value: number) => new Intl.NumberFormat(locale).format(value);
+  const percentage = (value: number) => total ? `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value / total * 100)}%` : text.kpiNotApplicable;
+  const pending = records?.filter(record => record.pending).length ?? 0;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [selected, setSelected] = useState<Level | null>(null);
+  const [limit, setLimit] = useState(20);
+  const id = useId();
+  const selectedRecords = records?.filter(record => record.level === selected) ?? [];
+  const showRecords = (level: Level) => {
+    setSelected(level);
+    setLimit(20);
+    dialog.current?.showModal();
+  };
 
-  return (
-    <AppCard className="@container overflow-hidden">
-      <header className="flex flex-col gap-2 border-b border-slate-200/80 pb-2.5 @lg:flex-row @lg:items-center @lg:justify-between">
-        <p className="app-section-eyebrow text-slate-700">{title}</p>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600" aria-label={`${scopeLabel}, ${periodLabel}`}>
-          <span className="app-chip h-7 px-2.5">{scopeLabel}</span>
-          <span className="app-chip h-7 px-2.5">{periodLabel}</span>
-          <HelpPopover title={title} body={helpBody} buttonLabel={helpLabel} />
-        </div>
-      </header>
-
-      {total === 0 ? <p className="app-empty mt-3" role="status">{emptyLabel}</p> : null}
-
-      <ol className="mt-3 space-y-1.5" aria-label={title}>
-        {PYRAMID_LAYERS.map((layer) => {
-          const value = counts[layer.key];
-          const previousValue = previousCounts?.[layer.key];
-          const label = labels[layer.key] ?? layer.fallbackLabel;
-          const Icon = layer.icon;
-          const percentage = total > 0 ? (value / total) * 100 : null;
-          const style = {
-            "--pyramid-layer-width": `${layer.width}%`,
-            "--pyramid-accent": layer.accent,
-          } as CSSProperties;
-
-          return (
-            <li
-              key={layer.key}
-              className="min-w-0"
-              style={{
-                ...style,
-                "--pyramid-mobile-inset": `${Math.round((100 - layer.width) * 0.12)}%`,
-              } as CSSProperties}
-            >
-              <article
-                className="grid min-w-0 grid-cols-1 gap-1.5 @sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.22fr)] @sm:items-stretch @sm:gap-3"
-                aria-label={`${label}: ${formatCount(value, locale)}${percentage === null ? ", percentage unavailable" : `, ${percentage.toFixed(1)} percent`}`}
-              >
-                <div className="flex min-w-0 justify-center px-[var(--pyramid-mobile-inset)] @sm:px-0">
-                  <div
-                    data-testid={`pyramid-band-${layer.key}`}
-                    className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-l-4 px-3 py-1.5 shadow-[0_6px_16px_rgba(15,23,42,0.08)] [clip-path:polygon(3%_0%,97%_0%,100%_100%,0%_100%)] @sm:w-[var(--pyramid-layer-width)] @sm:px-4"
-                    style={{
-                      ...style,
-                      borderColor: `color-mix(in srgb, ${layer.accent} 68%, var(--border))`,
-                      borderLeftColor: layer.accent,
-                      background: `linear-gradient(100deg, color-mix(in srgb, ${layer.accent} 62%, var(--surface)) 0%, color-mix(in srgb, ${layer.accent} 35%, var(--surface)) 100%)`,
-                    }}
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-white/75 shadow-sm" style={{ borderColor: `color-mix(in srgb, ${layer.accent} 72%, var(--border))`, color: `color-mix(in srgb, ${layer.accent} 72%, var(--text-strong))` }} aria-hidden="true">
-                        <Icon className="h-3.5 w-3.5" strokeWidth={2.4} />
-                      </span>
-                      <p className="min-w-0 break-words text-xs font-black uppercase leading-4 tracking-[0.08em] text-slate-950">{label}</p>
-                    </div>
-                    <p data-testid={`pyramid-events-${layer.key}`} className="shrink-0 text-base font-black leading-none tabular-nums text-slate-950 sm:text-lg">{formatCount(value, locale)}</p>
-                  </div>
-                </div>
-
-                <section
-                  data-testid={`pyramid-metrics-${layer.key}`}
-                  className="grid min-w-0 grid-cols-1 overflow-hidden rounded-md border border-slate-200/80 bg-slate-50/80 text-right shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
-                >
-                  <div className="min-w-0 px-2.5 py-1.5">
-                    <p className="text-xs font-black leading-none text-slate-950 sm:text-sm">{percentage === null ? "Not applicable" : `${percentage.toFixed(1)}%`}</p>
-                    <p className="mt-1 text-[8px] font-bold uppercase tracking-wide text-slate-600">% of total</p>
-                    <p className="text-[8px] font-semibold tabular-nums text-slate-600">of {formatCount(total, locale)}</p>
-                  </div>
-                  {hasPreviousComparison && previousValue !== undefined ? (
-                    <div className="flex min-w-0 items-center justify-between gap-2 border-t border-slate-900/10 px-2.5 py-1 text-right">
-                      <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">Trend</p>
-                      <p className="min-w-0 break-words text-[9px] font-bold leading-3 tabular-nums text-slate-800">{getTrendLabel(value, previousValue, previousPeriodLabel, locale)}</p>
-                    </div>
-                  ) : null}
-                </section>
-              </article>
-            </li>
-          );
-        })}
-      </ol>
-
-      <div className="mt-2 grid gap-1 text-[10px] leading-4 text-slate-600 @sm:grid-cols-2 @sm:gap-4">
-        <p>{classificationRule}</p>
-        <p>{hierarchyLabel}</p>
-      </div>
-    </AppCard>
-  );
+  return <AppCard className="@container min-w-0">
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0"><h2 className="text-base font-bold text-slate-950">{title}</h2><p className="mt-1 break-words text-xs text-slate-600">{scopeLabel}</p><p className="mt-1 text-xs text-slate-500">{periodLabel}</p></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700">{number(total)} {copy.total}</span><HelpPopover title={title} body={`${classificationRule ?? text.pyramidClassificationRule}\n\n${hierarchyLabel ?? text.pyramidHierarchyNote}`} buttonLabel={helpLabel ?? text.help} /></div>
+    </header>
+    {total === 0 ? <p className="app-empty mt-3" role="status">{emptyLabel ?? text.pyramidEmptyState}</p> : null}
+    <ol className="mt-4 space-y-1.5" aria-label={title}>
+      {PYRAMID_LAYERS.map(layer => {
+        const value = counts[layer.key];
+        const label = layerLabels[layer.key];
+        const style = { "--pyramid-accent": layer.accent, "--pyramid-inset": `${layer.inset}%` } as CSSProperties;
+        const band = <>
+          <span data-testid={`pyramid-band-${layer.key}`} className="relative isolate flex min-h-12 min-w-0 items-center justify-center px-2 py-2 text-center" style={style}>
+            <span aria-hidden="true" className="absolute inset-0 -z-10" style={{ clipPath: `polygon(${layer.inset}% 0,${100-layer.inset}% 0,${102-layer.inset}% 100%,${layer.inset-2}% 100%)`, background: `color-mix(in srgb, ${layer.accent} 48%, var(--surface))` }} />
+            <span className="min-w-0 break-words text-xs font-bold leading-4 text-slate-950">{label}</span>
+          </span>
+          <span data-testid={`pyramid-metrics-${layer.key}`} className="flex min-w-0 flex-col items-end justify-center gap-1 text-right @sm:flex-row @sm:items-center @sm:gap-3">
+            <span data-testid={`pyramid-events-${layer.key}`} className="text-sm font-bold tabular-nums text-slate-950">{number(value)}</span>
+            <span className="min-w-0 break-words text-xs tabular-nums text-slate-600">{percentage(value)}</span>
+          </span>
+        </>;
+        const rowClass = "grid w-full min-w-0 grid-cols-[minmax(0,1fr)_minmax(4.5rem,auto)] gap-2 rounded-md text-left @sm:grid-cols-[minmax(0,1fr)_minmax(6rem,auto)]";
+        const accessibleLabel = `${label}: ${number(value)}, ${percentage(value)}`;
+        return <li key={layer.key}>
+          {records && plantCode ? <button type="button" className={`${rowClass} cursor-pointer hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-700)]`} aria-label={`${accessibleLabel}. ${copy.view}`} onClick={() => showRecords(layer.key)}>{band}</button> : <div className={rowClass} aria-label={accessibleLabel}>{band}</div>}
+        </li>;
+      })}
+    </ol>
+    <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-slate-200 pt-3 text-xs text-slate-600">
+      {records ? <span>{number(total - pending)} {copy.validated} · {number(pending)} {copy.pending}</span> : null}
+      <span>{copy.percentage}</span>
+    </div>
+    <p className="mt-2 text-xs leading-5 text-slate-500">{hierarchyLabel ?? text.pyramidHierarchyNote}</p>
+    {previousCounts ? <details className="mt-3 border-t border-slate-200 pt-3">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-600">{copy.trend} · {previousPeriodLabel ?? text.samePeriodLastYearShort}</summary>
+      <dl className="mt-2 space-y-2 text-xs">{PYRAMID_LAYERS.map(layer => {
+        const delta = counts[layer.key] - previousCounts[layer.key];
+        return <div key={layer.key} className="flex justify-between gap-3"><dt>{layerLabels[layer.key]}</dt><dd className="tabular-nums">{number(previousCounts[layer.key])} → {number(counts[layer.key])} ({delta > 0 ? "+" : ""}{number(delta)})</dd></div>;
+      })}</dl>
+    </details> : null}
+    {records && plantCode ? <dialog ref={dialog} aria-labelledby={`${id}-title`} className="m-auto max-h-[80vh] w-[min(38rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 text-[var(--text-strong)] shadow-xl backdrop:bg-black/40">
+      <div className="flex items-start justify-between gap-4"><div><h3 id={`${id}-title`} className="text-base font-bold">{selected ? layerLabels[selected] : title} · {selectedRecords.length}</h3><p className="mt-1 text-xs text-slate-600">{scopeLabel} · {periodLabel}</p></div><button type="button" className="app-toolbar px-3" onClick={() => dialog.current?.close()}>{copy.close}</button></div>
+      {selectedRecords.length ? <ul className="mt-4 divide-y divide-slate-200">{selectedRecords.slice(0, limit).map(record => <li key={record.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><Link className="font-semibold text-[var(--brand-700)] underline" href={`/app/${encodeURIComponent(plantCode)}/communications/${encodeURIComponent(record.id)}`}>{record.code}</Link><span className="text-xs text-slate-600">{record.pending ? copy.pending : copy.validated}</span></li>)}</ul> : <p className="app-empty mt-4">{copy.empty}</p>}
+      {selectedRecords.length > limit ? <button type="button" className="app-toolbar mt-3 px-3" onClick={() => setLimit(value => value + 20)}>{text.showMore}</button> : null}
+    </dialog> : null}
+  </AppCard>;
 }

@@ -30,8 +30,11 @@ import {
   type CommunicationTypeTopEntry,
 } from "@/lib/communication-type-top";
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
-import { RootCauseTopFiveCard } from "@/components/feature/root-cause-top-five-card";
 import { SafetyCommunicationPyramid } from "@/components/feature/safety-communication-pyramid";
+import { DashboardDepartmentFilter } from "@/components/feature/dashboard-department-filter";
+import { SafetyDashboardOverview } from "@/components/feature/safety-dashboard-overview";
+import { getSafetyDashboardLayoutCopy } from "@/lib/safety-dashboard-layout";
+import { getDashboardPyramidLevel } from "@/lib/dashboard-pyramid";
 import { SafetyDashboardKpiGroups } from "@/components/feature/safety-dashboard-kpi-groups";
 import { SafetyDaysSpotlight } from "@/components/feature/safety-days-dashboard";
 import { getUiDictionary } from "@/lib/ui-language";
@@ -48,6 +51,7 @@ import {
 import {
   COMMUNICATION_IN_VALIDATION_STATUSES,
   isDashboardPyramidCommunicationStatus,
+  isCommunicationInValidationStatus,
 } from "@/lib/communication-status";
 import {
   buildSifPsifIndicatorBreakdown,
@@ -404,6 +408,8 @@ export default async function DashboardsPage({
     prisma.communication.findMany({
       where: buildPyramidCommunicationWhere(plantRow.id, period),
       select: {
+        id: true,
+        codigoCompleto: true,
         areaId: true,
         type: true,
         status: true,
@@ -626,7 +632,12 @@ export default async function DashboardsPage({
   const indicatorSewoRows = filterDashboardDepartment(sewoRows, departmentId);
   const indicatorRootCauseCount = indicatorSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const scopedHomologousPyramid = filterDashboardDepartment(homologousPyramidCommunications, departmentId);
-  const pyramidCounts = buildPyramidCounts(filterDashboardDepartment(pyramidCommunications, departmentId));
+  const scopedPyramidCommunications = filterDashboardDepartment(pyramidCommunications, departmentId);
+  const pyramidCounts = buildPyramidCounts(scopedPyramidCommunications);
+  const pyramidRecords = scopedPyramidCommunications.flatMap(row => {
+    const level = getDashboardPyramidLevel(row);
+    return level ? [{ id: row.id, code: row.codigoCompleto ?? row.id, level, pending: isCommunicationInValidationStatus(row.status) }] : [];
+  });
   const homologousPyramidCounts = scopedHomologousPyramid.length > 0
     ? buildPyramidCounts(scopedHomologousPyramid)
     : undefined;
@@ -1061,8 +1072,7 @@ export default async function DashboardsPage({
     { value: "12", label: getMonthLabel(uiLocale, 11) },
   ];
 
-  // Partilhado pelas duas instâncias do componente: a coluna principal renderiza todos os
-  // grupos menos a exposição, a coluna de contexto renderiza só a exposição.
+  // Plant-wide metrics are shared by the overview and expandable detail.
   const kpiGroupProps: ComponentProps<typeof SafetyDashboardKpiGroups> = {
     locale: uiLocale,
     periodLabel: period.label,
@@ -1113,6 +1123,8 @@ export default async function DashboardsPage({
     },
   };
 
+  const layoutCopy = getSafetyDashboardLayoutCopy(uiLocale);
+
   return (
     <>
       <div data-onboarding="dashboard-overview">
@@ -1121,18 +1133,14 @@ export default async function DashboardsPage({
           title={ui.dashboard.plantTitle}
           description={ui.dashboard.plantDescription}
           helpLabel={ui.dashboard.help}
+          actions={<span className="app-chip h-auto max-w-full whitespace-normal break-words py-2">{plantRow.name} · {period.label}</span>}
         />
       </div>
 
-      <section className="app-panel rounded-2xl p-5">
-        <form key={`${period.label}-${departmentId ?? "all"}`} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <label className="space-y-1.5 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{ui.competences.departmentFilterLabel}</span>
-            <select name="departmentId" defaultValue={departmentId ?? ALL_DASHBOARD_DEPARTMENTS} className="app-field h-11 w-full">
-              <option value={ALL_DASHBOARD_DEPARTMENTS}>{ui.competences.departmentFilterAll}</option>
-              {departments.map((department) => <option key={department.id} value={department.id}>{department.code} - {department.name}</option>)}
-            </select>
-          </label>
+      <details className="app-panel rounded-2xl p-5">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700">{ui.dashboard.period}: {period.label}</summary>
+        <form key={`${period.label}-${departmentId ?? "all"}`} className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <input type="hidden" name="departmentId" value={departmentId ?? ALL_DASHBOARD_DEPARTMENTS} />
           <label className="space-y-1.5 text-sm">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{ui.dashboard.year}</span>
             <select
@@ -1176,7 +1184,7 @@ export default async function DashboardsPage({
               className="h-11 w-full rounded-[10px] border border-slate-300 bg-white px-3 py-2 text-[15px] text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] transition focus:border-slate-400"
             />
           </label>
-          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-5 xl:justify-end">
+          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 xl:col-span-4 xl:justify-end">
             <button
               type="submit"
               className="inline-flex h-11 min-w-[108px] items-center justify-center whitespace-nowrap rounded-[10px] bg-slate-900 px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(6,26,82,0.14)] transition hover:opacity-95"
@@ -1191,18 +1199,31 @@ export default async function DashboardsPage({
             </Link>
           </div>
         </form>
-        <p className="mt-3 text-xs text-slate-600">{ui.dashboard.departmentScopeHelp}</p>
+      </details>
+
+      <section className="space-y-2" aria-label={layoutCopy.wholePlant}>
+        <SafetyDashboardOverview {...kpiGroupProps} sifPrevious={homologousSifPsifIndicators.overall.total ? homologousSifPsifIndicators.overall : undefined} />
+        <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} locale={uiLocale} compact />
       </section>
 
-      {/* A coluna de contexto vem primeiro no DOM: abaixo de xl empilha por cima (ordem
-          pretendida nessas larguras) e a partir de xl a colocação explícita põe-na à direita. */}
-      <div className="flex flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(440px,30vw,560px)] xl:items-start">
-        <div className="flex flex-col gap-5 xl:col-start-2 xl:row-start-1 xl:sticky xl:top-6">
-          <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} />
-
+      <section className="space-y-4" aria-labelledby="department-communications-heading">
+        <div className="flex flex-col gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0"><h2 id="department-communications-heading" className="text-lg font-bold text-slate-950">{layoutCopy.communications}</h2><p className="mt-1 text-xs leading-5 text-slate-600">{ui.dashboard.departmentScopeHelp}</p></div>
+          <DashboardDepartmentFilter
+            key={departmentId ?? "all"}
+            departmentId={departmentId ?? ALL_DASHBOARD_DEPARTMENTS}
+            departments={departments}
+            label={ui.competences.departmentFilterLabel}
+            allLabel={ui.competences.departmentFilterAll}
+            dates={period.mode === "range" ? { from: period.from.toISOString().slice(0, 10), to: period.to.toISOString().slice(0, 10) } : { year: String(period.year), month: period.month ? String(period.month) : "" }}
+          />
+        </div>
+        <div className={`grid min-w-0 items-start gap-5 ${showDetailedKpis ? "xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]" : ""}`}>
           <SafetyCommunicationPyramid
             title={ui.dashboard.safetyCommunicationPyramid}
             counts={pyramidCounts}
+            records={pyramidRecords}
+            plantCode={plantRow.code}
             previousCounts={homologousPyramidCounts}
             locale={uiLocale}
             scopeLabel={indicatorScopeLabel}
@@ -1222,58 +1243,10 @@ export default async function DashboardsPage({
               unsafeAct: ui.dashboard.pyramidUnsafeAct,
             }}
           />
-
-        </div>
-
-        <div className="min-w-0 xl:col-start-1 xl:row-start-1">
-          <SafetyDashboardKpiGroups
-            {...kpiGroupProps}
-            groups={["outcomes", "sifPsif", "leading", "actions"]}
-          />
-        </div>
-      </div>
-
-      {/* Grupos de stock atual: dois ou três cartões cada. Partilham uma linha à largura
-          toda em vez de ocuparem três linhas quase vazias. */}
-      <div className="grid items-start gap-5 xl:grid-cols-3">
-        <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["exposure"]} testId="safety-kpi-exposure" />
-        <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["competences"]} testId="safety-kpi-competences" />
-        <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["fireEquipment"]} testId="safety-kpi-fire" />
-      </div>
-
-      {showDetailedKpis ? <section className="grid gap-4 xl:grid-cols-4">
-        <RootCauseTopFiveCard
-          title={ui.dashboard.rootCauseTopFive}
-          entries={rootCauseTopEntries}
-          total={indicatorRootCauseCount}
-          noDataLabel={ui.dashboard.noRootCauses}
-          totalLabel={ui.dashboard.rootCauseTotal}
-        />
-        <RootCauseTopFiveCard
-          title={ui.dashboard.unsafeActTypeTopFive}
-          entries={unsafeActTypeTopEntries}
-          total={unsafeActTypeTotal}
-          noDataLabel={ui.dashboard.noUnsafeActTypes}
-          totalLabel={ui.dashboard.rootCauseTotal}
-        />
-        <RootCauseTopFiveCard
-          title={ui.dashboard.unsafeConditionTypeTopFive}
-          entries={unsafeConditionTypeTopEntries}
-          total={unsafeConditionTypeTotal}
-          noDataLabel={ui.dashboard.noUnsafeConditionTypes}
-          totalLabel={ui.dashboard.rootCauseTotal}
-        />
-        <RootCauseTopFiveCard
-          title={ui.dashboard.nearMissTypeTopFive}
-          entries={nearMissTypeTopEntries}
-          total={nearMissTypeTotal}
-          noDataLabel={ui.dashboard.noNearMissTypes}
-          totalLabel={ui.dashboard.rootCauseTotal}
-        />
-      </section> : null}
-
       {showDetailedKpis ? (
         <CorporatePlantManager
+          compactPlantRankings
+          locale={uiLocale}
           initialPlants={[plantBenchmarkSummary]}
           totalPlants={1}
           totalValidatedEvents={plantBenchmarkSummary.validatedEvents}
@@ -1304,6 +1277,20 @@ export default async function DashboardsPage({
           labels={ui.dashboard}
         />
       ) : null}
+        </div>
+      </section>
+
+      <details className="app-panel min-w-0 rounded-2xl p-5">
+        <summary className="cursor-pointer text-base font-bold text-slate-950">{layoutCopy.details} <span className="ml-2 text-xs font-normal text-slate-600">{layoutCopy.wholePlant}</span></summary>
+        <div className="mt-5 space-y-5">
+          <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["outcomes", "sifPsif", "leading", "actions"]} />
+          <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-3">
+            <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["exposure"]} testId="safety-kpi-exposure" />
+            <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["competences"]} testId="safety-kpi-competences" />
+            <SafetyDashboardKpiGroups {...kpiGroupProps} groups={["fireEquipment"]} testId="safety-kpi-fire" />
+          </div>
+        </div>
+      </details>
     </>
   );
 }

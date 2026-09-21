@@ -39,7 +39,7 @@ function setRole(role: RoleCode) {
 }
 
 function communication(areaId: string | null, name: string, status = "VALID_OPEN") {
-  return { areaId, type: "UNSAFE_ACT", status, lostDays: 0, classification: null, eventDatetime: new Date("2026-01-05"), reporterName: name, reporterEmployeeNo: name, targetText: null, targetEmployee: { name, dept: areaId }, workstation: { id: name, name, sourceLanguage: "pt" }, unsafeActType: { name }, unsafeConditionType: null, nearMissType: null, actions: [] };
+  return { id: name, codigoCompleto: `CS-${name}`, areaId, type: "UNSAFE_ACT", status, lostDays: 0, classification: null, eventDatetime: new Date("2026-01-05"), reporterName: name, reporterEmployeeNo: name, targetText: null, targetEmployee: { name, dept: areaId }, workstation: { id: name, name, sourceLanguage: "pt" }, unsafeActType: { name }, unsafeConditionType: null, nearMissType: null, actions: [] };
 }
 
 beforeEach(() => {
@@ -77,6 +77,10 @@ describe("department-filtered safety dashboard", () => {
     expect(pyramid.counts.unsafeAct).toBe(2);
     expect(pyramid.previousCounts?.unsafeAct).toBe(1);
     expect(pyramid.scopeLabel).toBe("Plant / Production");
+    expect(pyramid.records).toEqual([
+      { id: "Worker A", code: "CS-Worker A", level: "unsafeAct", pending: false },
+      { id: "Pending", code: "CS-Pending", level: "unsafeAct", pending: true },
+    ]);
     const manager = mocks.manager.mock.calls[0][0];
     const serialized = JSON.stringify(manager.rankings);
     expect(serialized).toContain("Worker A");
@@ -86,6 +90,7 @@ describe("department-filtered safety dashboard", () => {
     expect(JSON.stringify(manager.rankingMonthlySeries)).not.toContain("Worker B");
     expect(manager.initialPlants[0].monthlyMetrics[0].validatedEvents).toBe(1);
     expect(manager.departmentScope).toBe(true);
+    expect(manager.compactPlantRankings).toBe(true);
     // Only the requested sections change, not the plant-wide KPI cards.
     expect(mocks.kpis.mock.calls[0][0].metrics.validatedEvents).toBe(3);
     expect(html).toContain("dashboards?departmentId=a");

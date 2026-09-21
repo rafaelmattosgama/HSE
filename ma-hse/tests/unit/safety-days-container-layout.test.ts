@@ -29,7 +29,7 @@ describe("SafetyDaysSpotlight em coluna estreita", () => {
 
   it("divide-se pelo contentor, não pelo viewport", () => {
     const { container } = renderSpotlight();
-    expect(container.querySelector('[class*="@md:grid-cols"]')).toBeTruthy();
+    expect(container.querySelector('[class*="@3xl:grid-cols"]')).toBeTruthy();
     expect(container.querySelector('[class*="lg:grid-cols"]')).toBeNull();
   });
 
