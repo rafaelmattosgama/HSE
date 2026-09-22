@@ -215,8 +215,8 @@ export function CommunicationsTable({
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <section className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="grid max-w-[90rem] gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 [&>label]:min-w-0">
         <label className="space-y-1">
           <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.type}</span>
           <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
@@ -329,21 +329,20 @@ export function CommunicationsTable({
 
       {message ? <p className="text-sm text-slate-700">{message}</p> : null}
 
-      <div className="overflow-x-auto">
+      <div className="relative isolate overflow-x-auto">
         <table className="w-full min-w-[1050px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">{text.event}</th>
+              <th className="w-32 px-4 py-3">{text.event}</th>
               {showPlant ? <th className="px-4 py-3">Plant</th> : null}
-              <th className="px-4 py-3">Code</th>
-              <th className="px-4 py-3">{text.type}</th>
-              <th className="px-4 py-3">{text.status}</th>
+              <th className="w-44 px-4 py-3">Code</th>
+              <th className="w-40 px-4 py-3">{text.type}</th>
+              <th className="w-32 px-4 py-3">{text.status}</th>
               <th className="px-4 py-3">{text.reporter}</th>
               <th className="px-4 py-3">{text.department}</th>
               <th className="px-4 py-3">{text.location}</th>
               <th className="px-4 py-3">{text.involvedWorker}</th>
-              <th className="px-4 py-3">{text.detail}</th>
-              {canDelete ? <th className="px-4 py-3">{text.delete}</th> : null}
+              <th className="sticky right-0 z-10 w-36 min-w-36 bg-slate-50 px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">{text.detail}</th>
             </tr>
           </thead>
           <tbody>
@@ -354,37 +353,37 @@ export function CommunicationsTable({
                 <td className="px-4 py-3 font-semibold text-slate-900">{row.codigoCompleto ?? row.codigoAbreviado ?? "Requires code update"}</td>
                 <td className="px-4 py-3">{communicationTypeLabels[row.type as keyof typeof communicationTypeLabels] ?? row.type}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getCommunicationStatusClasses(row.status)}`}>
+                  <span className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-center text-xs font-semibold ${getCommunicationStatusClasses(row.status)}`}>
                     {communicationStatusLabels[row.status as keyof typeof communicationStatusLabels] ?? row.status}
                   </span>
                 </td>
-                <td className="px-4 py-3">{row.reporterName}</td>
+                <td className="px-4 py-3"><div className="max-w-xs break-words">{row.reporterName}</div></td>
                 <td className="px-4 py-3">{row.department}</td>
                 <td className="px-4 py-3">{row.location}</td>
-                <td className="px-4 py-3">{row.involvedWorker}</td>
-                <td className="px-4 py-3">
-                  <Link href={`/app/${row.plantCode ?? plant}/communications/${row.id}`} className="font-semibold text-teal-700 hover:underline">
-                    {text.openEdit}
-                  </Link>
+                <td className="px-4 py-3"><div className="max-w-xs break-words">{row.involvedWorker}</div></td>
+                <td className="sticky right-0 z-10 bg-[var(--surface)] px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">
+                  <div className="flex flex-col items-start gap-2">
+                    <Link href={`/app/${row.plantCode ?? plant}/communications/${row.id}`} className="inline-flex min-h-9 items-center whitespace-nowrap font-semibold text-teal-700 hover:underline">
+                      {text.openEdit}
+                    </Link>
+                    {canDelete ? (
+                      <button
+                        type="button"
+                        onClick={() => void deleteCommunication(row)}
+                        disabled={deletingId === row.id}
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {deletingId === row.id ? text.deleting : text.delete}
+                      </button>
+                    ) : null}
+                  </div>
                 </td>
-                {canDelete ? (
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => void deleteCommunication(row)}
-                      disabled={deletingId === row.id}
-                      className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {deletingId === row.id ? text.deleting : text.delete}
-                    </button>
-                  </td>
-                ) : null}
               </tr>
             ))}
             {filteredRows.length === 0 ? (
               <tr className="border-t border-slate-200">
-                <td colSpan={(canDelete ? 10 : 9) + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">{text.noRows}</td>
+                <td colSpan={9 + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">{text.noRows}</td>
               </tr>
             ) : null}
           </tbody>
