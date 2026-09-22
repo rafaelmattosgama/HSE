@@ -32,6 +32,10 @@ function selectContainingOption(value: string) {
     .find((element) => element.querySelector(`option[value="${value}"]`)) as HTMLSelectElement | undefined;
 }
 
+function disclosure() {
+  return screen.getByText("Quick communication").closest("summary")!;
+}
+
 describe("CreateCommunicationQuick", () => {
   beforeEach(() => {
     navigationMock.usePathname.mockReturnValue("/app/pl1/communications");
@@ -46,33 +50,30 @@ describe("CreateCommunicationQuick", () => {
     render(createElement(CreateCommunicationQuick, baseProps));
 
     expect(screen.getByText("Quick communication")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Create" })).toBeNull();
-
-    const expandButton = screen.getByRole("button", { name: "Show" });
-    expect(expandButton.getAttribute("aria-expanded")).toBe("false");
+    const expandButton = disclosure();
+    const details = expandButton.closest("details")!;
+    expect(details.open).toBe(false);
 
     fireEvent.click(expandButton);
 
-    const collapseButton = screen.getByRole("button", { name: "Hide" });
-    expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
+    expect(details.open).toBe(true);
     expect(screen.getByRole("button", { name: "Create" })).toBeTruthy();
 
-    fireEvent.click(collapseButton);
+    fireEvent.click(expandButton);
 
-    expect(screen.getByRole("button", { name: "Show" }).getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByRole("button", { name: "Create" })).toBeNull();
+    expect(details.open).toBe(false);
   });
 
   it("keeps entered data when collapsed and expanded again", () => {
     render(createElement(CreateCommunicationQuick, baseProps));
 
-    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    fireEvent.click(disclosure());
 
     const descriptionInput = screen.getByPlaceholderText("Description") as HTMLTextAreaElement;
     fireEvent.change(descriptionInput, { target: { value: "Observed guard missing on conveyor." } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide" }));
-    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    fireEvent.click(disclosure());
+    fireEvent.click(disclosure());
 
     expect((screen.getByPlaceholderText("Description") as HTMLTextAreaElement).value).toBe("Observed guard missing on conveyor.");
   });
@@ -84,7 +85,7 @@ describe("CreateCommunicationQuick", () => {
       unsafeActTypes: [{ id: "unsafe-act-1", name: "Procedure bypass", code: "UA-01", category: "Behavior" }],
     }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    fireEvent.click(disclosure());
 
     const typeSelect = selectContainingOption("FIRST_AID");
     expect(typeSelect).toBeTruthy();
@@ -107,7 +108,7 @@ describe("CreateCommunicationQuick", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(createElement(CreateCommunicationQuick, baseProps));
-    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    fireEvent.click(disclosure());
 
     fireEvent.change(selectContainingOption("area-1")!, { target: { value: "area-1" } });
     fireEvent.change(selectContainingOption("workstation-1")!, { target: { value: "workstation-1" } });

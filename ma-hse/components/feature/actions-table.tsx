@@ -345,11 +345,11 @@ export function ActionsTable({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       {!showPlant && canCloseAnyVisibleAction ? (
         <>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid max-w-[90rem] gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 [&>label]:min-w-0">
               <label className="space-y-1">
                 <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.local}</span>
                 <select value={localFilter} onChange={(event) => setLocalFilter(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
@@ -396,20 +396,20 @@ export function ActionsTable({
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end">
-              <div className="flex-1">
+            <div className="grid max-w-6xl items-end gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_10rem_minmax(0,1.5fr)_auto]">
+              <div className="min-w-0">
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.bulkClosureComment}</label>
                 <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={text.bulkClosurePlaceholder} />
               </div>
-              <div>
+              <div className="min-w-0 md:max-w-48">
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</label>
                 <input type="date" value={bulkClosedAt} onChange={(event) => setBulkClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.photosDocuments}</label>
                 <input type="file" multiple onChange={(event) => setBulkFiles(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
               </div>
-              <Button type="button" size="sm" onClick={closeSelected} disabled={busyId === "bulk"}>
+              <Button type="button" size="sm" className="justify-self-start" onClick={closeSelected} disabled={busyId === "bulk"}>
                 {busyId === "bulk" ? text.closing : text.closeSelected}
               </Button>
             </div>
@@ -418,7 +418,7 @@ export function ActionsTable({
         </>
       ) : null}
 
-      <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <p className="text-sm text-slate-600">{formatLabel(text.shownCount, { count: String(filteredActions.length), openCount: String(openActions.length) })}</p>
           <div className="flex flex-wrap gap-2">
@@ -442,155 +442,166 @@ export function ActionsTable({
             </button>
           </div>
         </div>
-        <table className="w-full min-w-[1040px] text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">{text.select}</th>
-              {showPlant ? <th className="px-4 py-3">Plant</th> : null}
-              <th className="px-4 py-3">{text.action}</th>
-              <th className="px-4 py-3">{text.local}</th>
-              <th className="px-4 py-3">{text.source}</th>
-              <th className="px-4 py-3">{text.priority}</th>
-              <th className="px-4 py-3">{text.status}</th>
-              <th className="px-4 py-3">{text.owner}</th>
-              <th className="px-4 py-3">{text.due}</th>
-              <th className="px-4 py-3">{text.open}</th>
-              {canDelete ? <th className="px-4 py-3">{text.delete}</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredActions.map((row) => {
-              const isOpen = row.status === "OPEN" || row.status === "ONGOING";
-              const isExpanded = expandedId === row.id;
-              return (
-                <Fragment key={row.id}>
-                  <tr key={row.id} className="border-t border-slate-200">
-                    <td className="px-4 py-3">
-                      {isOpen && !showPlant && canCloseRow(row) ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(row.id)}
-                          onChange={(event) => toggleSelection(row.id, event.target.checked)}
-                        />
-                      ) : null}
-                    </td>
-                    {showPlant ? <td className="px-4 py-3 font-semibold text-slate-700">{row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</td> : null}
-                    <td className="px-4 py-3">
-                      <div className="font-mono text-xs text-slate-500">{formatActionCode(row.plantCode ?? plant, row.sequenceNumber)}</div>
-                      <Link href={`/app/${row.plantCode ?? plant}/actions/${row.id}`} className="font-semibold text-slate-900 hover:text-teal-700 hover:underline">
-                        {row.title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">{row.local}</td>
-                    <td className="px-4 py-3">
-                      {row.sourceHref ? (
-                        <Link href={row.sourceHref} className="font-medium text-teal-700 hover:underline">
-                          {row.sourceLabel}
-                        </Link>
-                      ) : (
-                        row.sourceLabel
-                      )}
-                    </td>
-                    <td className="px-4 py-3">{formatLocalizedActionPriority(row.priority, { priorityLabels: localizedPriorityLabels })}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getActionStatusClasses(row.status)}`}>
-                        {formatLocalizedActionStatus(row.status, { statusLabels: localizedStatusLabels })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{row.ownerName}</td>
-                    <td className="px-4 py-3">{row.dueDate}</td>
-                    <td className="px-4 py-3">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setExpandedId(isExpanded ? null : row.id)}>
-                        {isExpanded ? text.hide : isOpen ? text.openClose : text.openOnly}
-                      </Button>
-                    </td>
-                    {canDelete ? (
+        <div className="relative isolate overflow-x-auto rounded-b-xl">
+          <table className="w-full min-w-[1040px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="w-16 px-4 py-3">{text.select}</th>
+                {showPlant ? <th className="px-4 py-3">Plant</th> : null}
+                <th className="px-4 py-3">{text.action}</th>
+                <th className="px-4 py-3">{text.local}</th>
+                <th className="px-4 py-3">{text.source}</th>
+                <th className="w-28 px-4 py-3">{text.priority}</th>
+                <th className="w-32 px-4 py-3">{text.status}</th>
+                <th className="px-4 py-3">{text.owner}</th>
+                <th className="w-32 px-4 py-3">{text.due}</th>
+                <th className="sticky right-0 z-10 w-40 min-w-40 bg-slate-50 px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">{text.open}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredActions.map((row) => {
+                const isOpen = row.status === "OPEN" || row.status === "ONGOING";
+                const isExpanded = expandedId === row.id;
+                return (
+                  <Fragment key={row.id}>
+                    <tr key={row.id} className="border-t border-slate-200">
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => void deleteAction(row.id)}
-                          disabled={deletingId === row.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {deletingId === row.id ? text.deleting : text.delete}
-                        </button>
+                        {isOpen && !showPlant && canCloseRow(row) ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(row.id)}
+                            onChange={(event) => toggleSelection(row.id, event.target.checked)}
+                          />
+                        ) : null}
                       </td>
-                    ) : null}
-                  </tr>
-                  {isExpanded ? (
-                    <tr className="border-t border-slate-100 bg-slate-50">
-                      <td colSpan={(canDelete ? 10 : 9) + (showPlant ? 1 : 0)} className="px-4 py-4">
-                        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.linkedRecords}</p>
-                              <p className="mt-2 text-sm text-slate-700">
-                                {text.manualOrigin}: {row.manualOrigin} | {text.communication}: {row.communicationCode ?? "-"} | {text.sewo}: {row.sewoCode ?? "-"} | {text.smat}: {row.smatCode ?? "-"}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</p>
-                              <p className="mt-2 text-sm text-slate-700">{row.closedDate ?? "-"}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.evidenceAttached}</p>
-                              <div className="mt-2 space-y-1 text-sm text-slate-700">
-                                {row.evidence.length ? row.evidence.map((item) => <p key={item.id}>{item.fileName}</p>) : <p>-</p>}
-                              </div>
-                            </div>
-                          </div>
-                          {isOpen && canCloseRow(row) ? (
-                            <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                              <h3 className="text-sm font-semibold text-slate-900">{text.closeAction}</h3>
-                              <label className="space-y-1 text-sm">
-                                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</span>
-                                <input
-                                  type="date"
-                                  value={rowClosedDates[row.id] ?? todayDateInputValue()}
-                                  onChange={(event) => setRowClosedDates((current) => ({ ...current, [row.id]: event.target.value }))}
-                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                                  required
-                                />
-                              </label>
-                              <textarea
-                                value={rowComments[row.id] ?? ""}
-                                onChange={(event) => setRowComments((current) => ({ ...current, [row.id]: event.target.value }))}
-                                rows={3}
-                                placeholder={text.describeClosure}
-                                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                              />
-                              <input
-                                type="file"
-                                multiple
-                                onChange={(event) => setRowFiles((current) => ({ ...current, [row.id]: Array.from(event.target.files ?? []) }))}
-                                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                              />
-                              <Button type="button" size="sm" onClick={() => closeAction(row.id)} disabled={busyId === row.id}>
-                                {busyId === row.id ? text.closing : text.closeAction}
-                              </Button>
-                            </div>
-                          ) : !isOpen ? (
-                            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                              {text.alreadyClosed}
-                            </div>
+                      {showPlant ? <td className="px-4 py-3 font-semibold text-slate-700">{row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</td> : null}
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs text-slate-500">{formatActionCode(row.plantCode ?? plant, row.sequenceNumber)}</div>
+                        <Link href={`/app/${row.plantCode ?? plant}/actions/${row.id}`} className="block min-w-48 max-w-sm break-words font-semibold text-slate-900 hover:text-teal-700 hover:underline">
+                          {row.title}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">{row.local}</td>
+                      <td className="px-4 py-3">
+                        {row.sourceHref ? (
+                          <Link href={row.sourceHref} className="font-medium text-teal-700 hover:underline">
+                            {row.sourceLabel}
+                          </Link>
+                        ) : (
+                          row.sourceLabel
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{formatLocalizedActionPriority(row.priority, { priorityLabels: localizedPriorityLabels })}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-center text-xs font-semibold ${getActionStatusClasses(row.status)}`}>
+                          {formatLocalizedActionStatus(row.status, { statusLabels: localizedStatusLabels })}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3"><div className="max-w-56 break-words">{row.ownerName}</div></td>
+                      <td className="whitespace-nowrap px-4 py-3">{row.dueDate}</td>
+                      <td className="sticky right-0 z-10 bg-[var(--surface)] px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">
+                        <div className="flex flex-col items-start gap-2">
+                          <Button type="button" size="sm" variant="ghost" className="whitespace-nowrap" aria-expanded={isExpanded} onClick={() => setExpandedId(isExpanded ? null : row.id)}>
+                            {isExpanded ? text.hide : isOpen ? text.openClose : text.openOnly}
+                          </Button>
+                          {canDelete ? (
+                            <button
+                              type="button"
+                              onClick={() => void deleteAction(row.id)}
+                              disabled={deletingId === row.id}
+                              className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {deletingId === row.id ? text.deleting : text.delete}
+                            </button>
                           ) : null}
                         </div>
                       </td>
                     </tr>
-                  ) : null}
-                </Fragment>
-              );
-            })}
-            {filteredActions.length === 0 ? (
-              <tr className="border-t border-slate-200">
-                <td colSpan={(canDelete ? 10 : 9) + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">
-                  {text.noRows}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+                    {isExpanded ? (
+                      <tr className="border-t border-slate-100 bg-slate-50">
+                        <td colSpan={9 + (showPlant ? 1 : 0)} className="px-4 py-4">
+                          <div className="grid max-w-6xl items-start gap-4 lg:grid-cols-2">
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.linkedRecords}</p>
+                                <dl className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
+                                  {[
+                                    [text.manualOrigin, row.manualOrigin],
+                                    [text.communication, row.communicationCode],
+                                    [text.sewo, row.sewoCode],
+                                    [text.smat, row.smatCode],
+                                  ].map(([label, value]) => (
+                                    <div key={label} className="min-w-0">
+                                      <dt className="text-xs text-slate-500">{label}</dt>
+                                      <dd className="mt-1 break-words text-slate-700">{value ?? "-"}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</p>
+                                <p className="mt-2 text-sm text-slate-700">{row.closedDate ?? "-"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.evidenceAttached}</p>
+                                <div className="mt-2 space-y-1 text-sm text-slate-700">
+                                  {row.evidence.length ? row.evidence.map((item) => <p key={item.id}>{item.fileName}</p>) : <p>-</p>}
+                                </div>
+                              </div>
+                            </div>
+                            {isOpen && canCloseRow(row) ? (
+                              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                                <h3 className="text-sm font-semibold text-slate-900">{text.closeAction}</h3>
+                                <label className="space-y-1 text-sm">
+                                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</span>
+                                  <input
+                                    type="date"
+                                    value={rowClosedDates[row.id] ?? todayDateInputValue()}
+                                    onChange={(event) => setRowClosedDates((current) => ({ ...current, [row.id]: event.target.value }))}
+                                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                    required
+                                  />
+                                </label>
+                                <textarea
+                                  value={rowComments[row.id] ?? ""}
+                                  onChange={(event) => setRowComments((current) => ({ ...current, [row.id]: event.target.value }))}
+                                  rows={3}
+                                  placeholder={text.describeClosure}
+                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                />
+                                <input
+                                  type="file"
+                                  multiple
+                                  onChange={(event) => setRowFiles((current) => ({ ...current, [row.id]: Array.from(event.target.files ?? []) }))}
+                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                                />
+                                <Button type="button" size="sm" onClick={() => closeAction(row.id)} disabled={busyId === row.id}>
+                                  {busyId === row.id ? text.closing : text.closeAction}
+                                </Button>
+                              </div>
+                            ) : !isOpen ? (
+                              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                                {text.alreadyClosed}
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+              {filteredActions.length === 0 ? (
+                <tr className="border-t border-slate-200">
+                  <td colSpan={9 + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">
+                    {text.noRows}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div className="text-sm text-slate-600">

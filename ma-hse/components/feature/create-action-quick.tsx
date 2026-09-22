@@ -133,107 +133,113 @@ export function CreateActionQuick({
       <h3 className="text-sm font-semibold text-slate-900">
         {lockedCommunicationId ? text.newLinkedAction : text.newAction}
       </h3>
-      {!lockedCommunicationId ? (
-        <select
-          value={sourceType}
-          onChange={(event) => changeSourceType(event.target.value as ActionSourceType)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          disabled={submitting || isRefreshing}
-        >
-          <option value={ActionSourceType.MANUAL}>{text.manualAction}</option>
-          <option value={ActionSourceType.COMMUNICATION}>{text.linkedToCommunication}</option>
-          <option value={ActionSourceType.SEWO}>{text.linkedToSewo}</option>
-          <option value={ActionSourceType.SMAT}>{text.linkedToSmat}</option>
-        </select>
-      ) : null}
-      {lockedCommunicationId ? (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          {text.linkedCommunication}: {lockedCommunicationLabel ?? lockedCommunicationId}
+      <div className="grid max-w-6xl items-start gap-5 xl:grid-cols-2">
+        <div className="min-w-0 space-y-3">
+          {!lockedCommunicationId ? (
+            <select
+              value={sourceType}
+              onChange={(event) => changeSourceType(event.target.value as ActionSourceType)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={submitting || isRefreshing}
+            >
+              <option value={ActionSourceType.MANUAL}>{text.manualAction}</option>
+              <option value={ActionSourceType.COMMUNICATION}>{text.linkedToCommunication}</option>
+              <option value={ActionSourceType.SEWO}>{text.linkedToSewo}</option>
+              <option value={ActionSourceType.SMAT}>{text.linkedToSmat}</option>
+            </select>
+          ) : null}
+          {lockedCommunicationId ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {text.linkedCommunication}: {lockedCommunicationLabel ?? lockedCommunicationId}
+            </div>
+          ) : sourceType === ActionSourceType.MANUAL ? (
+            <select
+              value={manualOrigin}
+              onChange={(event) => setManualOrigin(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={submitting || isRefreshing}
+              required
+            >
+              <option value="">{text.selectManualOrigin}</option>
+              <option value={ActionManualOrigin.AUDITS}>{text.manualOriginLabels.AUDITS}</option>
+              <option value={ActionManualOrigin.EXTERNAL_VERIFICATIONS}>{text.manualOriginLabels.EXTERNAL_VERIFICATIONS}</option>
+              <option value={ActionManualOrigin.OTHER}>{text.manualOriginLabels.OTHER}</option>
+            </select>
+          ) : sourceType === ActionSourceType.COMMUNICATION ? (
+            <select
+              value={communicationId}
+              onChange={(event) => setCommunicationId(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={submitting || isRefreshing}
+              required
+            >
+              <option value="">{text.selectCommunication}</option>
+              {communicationOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          ) : sourceType === ActionSourceType.SEWO ? (
+            <select
+              value={sewoId}
+              onChange={(event) => setSewoId(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={submitting || isRefreshing}
+              required
+            >
+              <option value="">{text.selectSewo}</option>
+              {sewoOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          ) : sourceType === ActionSourceType.SMAT ? (
+            <select
+              value={smatAuditId}
+              onChange={(event) => setSmatAuditId(event.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={submitting || isRefreshing}
+              required
+            >
+              <option value="">{text.selectSmat}</option>
+              {smatOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          ) : (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              {text.noLinkMessage}
+            </div>
+          )}
+          <div className="grid gap-3 md:grid-cols-2">
+            <select value={category} onChange={(event) => setCategory(event.target.value as ActionCategory)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing}>
+              <option value={ActionCategory.CORRECTIVE}>{text.categoryLabels.CORRECTIVE}</option>
+              <option value={ActionCategory.PREVENTIVE}>{text.categoryLabels.PREVENTIVE}</option>
+              <option value={ActionCategory.IMPROVEMENT}>{text.categoryLabels.IMPROVEMENT}</option>
+            </select>
+            <select value={priority} onChange={(event) => setPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing}>
+              <option value={ActionPriority.LOW}>{text.priorityLabels.LOW}</option>
+              <option value={ActionPriority.MEDIUM}>{text.priorityLabels.MEDIUM}</option>
+              <option value={ActionPriority.HIGH}>{text.priorityLabels.HIGH}</option>
+            </select>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <select value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} required>
+              <option value="">{text.owner}</option>
+              {owners.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+            <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} />
+          </div>
         </div>
-      ) : sourceType === ActionSourceType.MANUAL ? (
-        <select
-          value={manualOrigin}
-          onChange={(event) => setManualOrigin(event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          disabled={submitting || isRefreshing}
-          required
-        >
-          <option value="">{text.selectManualOrigin}</option>
-          <option value={ActionManualOrigin.AUDITS}>{text.manualOriginLabels.AUDITS}</option>
-          <option value={ActionManualOrigin.EXTERNAL_VERIFICATIONS}>{text.manualOriginLabels.EXTERNAL_VERIFICATIONS}</option>
-          <option value={ActionManualOrigin.OTHER}>{text.manualOriginLabels.OTHER}</option>
-        </select>
-      ) : sourceType === ActionSourceType.COMMUNICATION ? (
-        <select
-          value={communicationId}
-          onChange={(event) => setCommunicationId(event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          disabled={submitting || isRefreshing}
-          required
-        >
-          <option value="">{text.selectCommunication}</option>
-          {communicationOptions.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </select>
-      ) : sourceType === ActionSourceType.SEWO ? (
-        <select
-          value={sewoId}
-          onChange={(event) => setSewoId(event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          disabled={submitting || isRefreshing}
-          required
-        >
-          <option value="">{text.selectSewo}</option>
-          {sewoOptions.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </select>
-      ) : sourceType === ActionSourceType.SMAT ? (
-        <select
-          value={smatAuditId}
-          onChange={(event) => setSmatAuditId(event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          disabled={submitting || isRefreshing}
-          required
-        >
-          <option value="">{text.selectSmat}</option>
-          {smatOptions.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </select>
-      ) : (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          {text.noLinkMessage}
+        <div className="min-w-0 space-y-3">
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={text.title} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} required />
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={text.description} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} required />
+          <Button size="sm" type="submit" disabled={submitting || isRefreshing}>
+            {submitting ? text.creatingAction : text.createAction}
+          </Button>
+          {message ? <p className={`text-xs ${messageIsError ? "text-red-700" : "text-emerald-700"}`}>{message}</p> : null}
         </div>
-      )}
-      <div className="grid gap-3 md:grid-cols-2">
-        <select value={category} onChange={(event) => setCategory(event.target.value as ActionCategory)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing}>
-          <option value={ActionCategory.CORRECTIVE}>{text.categoryLabels.CORRECTIVE}</option>
-          <option value={ActionCategory.PREVENTIVE}>{text.categoryLabels.PREVENTIVE}</option>
-          <option value={ActionCategory.IMPROVEMENT}>{text.categoryLabels.IMPROVEMENT}</option>
-        </select>
-        <select value={priority} onChange={(event) => setPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing}>
-          <option value={ActionPriority.LOW}>{text.priorityLabels.LOW}</option>
-          <option value={ActionPriority.MEDIUM}>{text.priorityLabels.MEDIUM}</option>
-          <option value={ActionPriority.HIGH}>{text.priorityLabels.HIGH}</option>
-        </select>
       </div>
-      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={text.title} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} required />
-      <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={text.description} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} required />
-      <div className="grid gap-3 md:grid-cols-2">
-        <select value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} required>
-          <option value="">{text.owner}</option>
-          {owners.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </select>
-        <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={submitting || isRefreshing} />
-      </div>
-      <Button size="sm" type="submit" disabled={submitting || isRefreshing}>
-        {submitting ? text.creatingAction : text.createAction}
-      </Button>
-      {message ? <p className={`text-xs ${messageIsError ? "text-red-700" : "text-emerald-700"}`}>{message}</p> : null}
     </form>
   );
 }

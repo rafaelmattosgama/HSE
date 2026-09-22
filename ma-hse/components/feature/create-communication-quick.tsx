@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ActionPriority, CommunicationImprovementSubtype, CommunicationType } from "@prisma/client";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePathname } from "next/navigation";
@@ -8,7 +8,7 @@ import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-select";
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { uploadAttachment } from "@/lib/client-api";
 import { supportsUnsafeActType } from "@/lib/communication-classification";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
@@ -79,7 +79,7 @@ export function CreateCommunicationQuick({
   const improvementSubtypeLabels = BASE_COMMUNICATION_UI.communicationImprovementSubtypeLabels;
   const pathname = usePathname();
   const contentId = useId();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [type, setType] = useState<CommunicationType>("UNSAFE_CONDITION");
   const [eventDatetime, setEventDatetime] = useState("");
   const [reporterEmployeeId, setReporterEmployeeId] = useState("");
@@ -106,6 +106,11 @@ export function CreateCommunicationQuick({
   const [suggestedAction, setSuggestedAction] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // The native disclosure works before hydration; submission needs its React handler.
+    setIsReady(true);
+  }, []);
 
   const needsInvolvedWorker = type === "UNSAFE_ACT" || type === "NEAR_MISS";
   const needsRestrictedProfessionalRisk = type === "NEAR_MISS" || type === "FIRST_AID";
@@ -236,183 +241,188 @@ export function CreateCommunicationQuick({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
+    <details className="group/quick-communication rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <summary
+        aria-label={text.title}
+        aria-controls={contentId}
+        className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 [&::-webkit-details-marker]:hidden"
+      >
         <h3 className="text-sm font-semibold text-slate-900">{text.title}</h3>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => setIsExpanded((current) => !current)}
-          aria-expanded={isExpanded}
-          aria-controls={contentId}
-          title={isExpanded ? text.collapseSection : text.expandSection}
-          className="shrink-0 gap-2"
-        >
-          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          <span>{isExpanded ? text.collapseSection : text.expandSection}</span>
-        </Button>
-      </div>
+        <span aria-hidden="true" className={buttonVariants({ size: "sm", variant: "secondary", className: "shrink-0" })}>
+          <span className="inline-flex items-center gap-2 group-open/quick-communication:hidden">
+            <ChevronDown className="h-4 w-4" />
+            {text.expandSection}
+          </span>
+          <span className="hidden items-center gap-2 group-open/quick-communication:inline-flex">
+            <ChevronUp className="h-4 w-4" />
+            {text.collapseSection}
+          </span>
+        </span>
+      </summary>
 
-      <div id={contentId} className="space-y-3" hidden={!isExpanded}>
-        <select value={type} onChange={(event) => {
-          const nextType = event.target.value as CommunicationType;
-          setType(nextType);
-          setImprovementSubtype("");
-          if (nextType === CommunicationType.FIRST_AID) {
-            setUnsafeActTypeId("");
-          }
-          if (nextType === "FIVE_S_IMPROVEMENT" || nextType === "IMPROVEMENT_SUGGESTION") {
-            setTargetEmployeeId("");
-          }
-        }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-          {COMMUNICATION_TYPES.map((option) => (
-            <option key={option} value={option}>
-              {communicationTypeLabels[option] ?? option}
-            </option>
-          ))}
-        </select>
-        <div className="grid gap-3 md:grid-cols-2">
-          <select value={areaId} onChange={(event) => setAreaId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-            <option value="">{text.department}</option>
-            {areas.map((area) => (
-              <option key={area.id} value={area.id}>{area.name}</option>
+      <form id={contentId} onSubmit={submit} className="mt-4 grid max-w-6xl items-start gap-5 xl:grid-cols-2">
+        <div className="min-w-0 space-y-3">
+          <select value={type} onChange={(event) => {
+            const nextType = event.target.value as CommunicationType;
+            setType(nextType);
+            setImprovementSubtype("");
+            if (nextType === CommunicationType.FIRST_AID) {
+              setUnsafeActTypeId("");
+            }
+            if (nextType === "FIVE_S_IMPROVEMENT" || nextType === "IMPROVEMENT_SUGGESTION") {
+              setTargetEmployeeId("");
+            }
+          }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+            {COMMUNICATION_TYPES.map((option) => (
+              <option key={option} value={option}>
+                {communicationTypeLabels[option] ?? option}
+              </option>
             ))}
           </select>
-          <select value={workstationId} onChange={(event) => setWorkstationId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-            <option value="">{text.location}</option>
-            {workstations.map((workstation) => (
-              <option key={workstation.id} value={workstation.id}>{workstation.name}</option>
-            ))}
-          </select>
-        </div>
-        <input type="datetime-local" aria-label={text.eventDatetime} value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
-        {needsProfessionalRisk ? (
-          <ProfessionalRiskSelect
-            value={riskThemeId}
-            onChange={setRiskThemeId}
-            risks={riskThemes}
-            placeholder={text.professionalRisk}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            required
-          />
-        ) : null}
-        {needsUnsafeActType ? (
-          <UnsafeActTypeSelect
-            value={unsafeActTypeId}
-            onChange={setUnsafeActTypeId}
-            types={unsafeActTypes}
-            placeholder={text.unsafeActType}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            required
-          />
-        ) : null}
-        {needsUnsafeConditionType ? (
-          <UnsafeConditionTypeSelect
-            value={unsafeConditionTypeId}
-            onChange={setUnsafeConditionTypeId}
-            types={unsafeConditionTypes}
-            placeholder={text.unsafeConditionType}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            required
-          />
-        ) : null}
-        {needsNearMissType ? (
-          <select value={nearMissTypeId} onChange={(event) => setNearMissTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-            <option value="">{text.nearMissType}</option>
-            {nearMissTypes.map((entry) => (
-              <option key={entry.id} value={entry.id}>{entry.name}</option>
-            ))}
-          </select>
-        ) : null}
-        <div className="grid gap-3 md:grid-cols-2">
-          <select value={reporterEmployeeId} onChange={(event) => setReporterEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-            <option value="">{text.reporterFromPlantWorkers}</option>
-            {employees.map((employee) => (
-              <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-            ))}
-          </select>
-          <input value={reporterEmployee?.employeeNo ?? ""} placeholder={text.reporterNumber} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-slate-50" readOnly />
-        </div>
-        {needsInvolvedWorker ? (
-          <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-            <option value="">{text.involvedWorkerFromPlantWorkers}</option>
-            {employees.map((employee) => (
-              <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-            ))}
-          </select>
-        ) : null}
-        {needsImprovementSubtype ? (
-          <select value={improvementSubtype} onChange={(event) => setImprovementSubtype(event.target.value as CommunicationImprovementSubtype)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-            <option value="">{text.improvementSubtype}</option>
-            {improvementSubtypeOptions.map((option) => (
-              <option key={option} value={option}>{improvementSubtypeLabels[option] ?? option}</option>
-            ))}
-          </select>
-        ) : null}
-        {needsClinicalFields ? (
-          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-sm font-semibold text-slate-900">{text.clinicalDetails}</p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-                <option value="">{text.involvedWorker}</option>
-                {employees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-                ))}
-              </select>
-              <select value={injuryTypeId} onChange={(event) => setInjuryTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-                <option value="">{text.injuryType}</option>
-                {injuryTypes.map((injuryType) => (
-                  <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>
-                ))}
-              </select>
-            </div>
-            <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} />
-            {type === "ACCIDENT" ? (
-              <div className="space-y-3">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder={text.lostDays} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                  <input type="date" value={returnDate} onChange={(event) => setReturnDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                </div>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={isFatal} onChange={(event) => setIsFatal(event.target.checked)} />
-                  {text.fatalInjury}
-                </label>
-              </div>
-            ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <select value={areaId} onChange={(event) => setAreaId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+              <option value="">{text.department}</option>
+              {areas.map((area) => (
+                <option key={area.id} value={area.id}>{area.name}</option>
+              ))}
+            </select>
+            <select value={workstationId} onChange={(event) => setWorkstationId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+              <option value="">{text.location}</option>
+              {workstations.map((workstation) => (
+                <option key={workstation.id} value={workstation.id}>{workstation.name}</option>
+              ))}
+            </select>
           </div>
-        ) : null}
-        <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-        <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={text.description} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
-        <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} placeholder={text.suggestedAction} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-        {canLinkAction ? (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <h4 className="text-sm font-semibold text-slate-900">{text.linkedAction}</h4>
-            <div className="mt-3 space-y-3">
-              <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} placeholder={text.actionTitle} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-              <textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} placeholder={text.actionDescription} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-              <div className="grid gap-3 md:grid-cols-3">
-                <select value={actionOwnerUserId} onChange={(event) => setActionOwnerUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required={shouldCreateAction}>
-                  <option value="">{text.actionOwner}</option>
-                  {actionOwners.map((owner) => (
-                    <option key={owner.id} value={owner.id}>{owner.name}</option>
+          <input type="datetime-local" aria-label={text.eventDatetime} value={eventDatetime} onChange={(event) => setEventDatetime(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+          {needsProfessionalRisk ? (
+            <ProfessionalRiskSelect
+              value={riskThemeId}
+              onChange={setRiskThemeId}
+              risks={riskThemes}
+              placeholder={text.professionalRisk}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              required
+            />
+          ) : null}
+          {needsUnsafeActType ? (
+            <UnsafeActTypeSelect
+              value={unsafeActTypeId}
+              onChange={setUnsafeActTypeId}
+              types={unsafeActTypes}
+              placeholder={text.unsafeActType}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              required
+            />
+          ) : null}
+          {needsUnsafeConditionType ? (
+            <UnsafeConditionTypeSelect
+              value={unsafeConditionTypeId}
+              onChange={setUnsafeConditionTypeId}
+              types={unsafeConditionTypes}
+              placeholder={text.unsafeConditionType}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              required
+            />
+          ) : null}
+          {needsNearMissType ? (
+            <select value={nearMissTypeId} onChange={(event) => setNearMissTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+              <option value="">{text.nearMissType}</option>
+              {nearMissTypes.map((entry) => (
+                <option key={entry.id} value={entry.id}>{entry.name}</option>
+              ))}
+            </select>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <select value={reporterEmployeeId} onChange={(event) => setReporterEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+              <option value="">{text.reporterFromPlantWorkers}</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
+              ))}
+            </select>
+            <input value={reporterEmployee?.employeeNo ?? ""} placeholder={text.reporterNumber} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-slate-50" readOnly />
+          </div>
+          {needsInvolvedWorker ? (
+            <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+              <option value="">{text.involvedWorkerFromPlantWorkers}</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
+              ))}
+            </select>
+          ) : null}
+          {needsImprovementSubtype ? (
+            <select value={improvementSubtype} onChange={(event) => setImprovementSubtype(event.target.value as CommunicationImprovementSubtype)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+              <option value="">{text.improvementSubtype}</option>
+              {improvementSubtypeOptions.map((option) => (
+                <option key={option} value={option}>{improvementSubtypeLabels[option] ?? option}</option>
+              ))}
+            </select>
+          ) : null}
+          {needsClinicalFields ? (
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-sm font-semibold text-slate-900">{text.clinicalDetails}</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+                  <option value="">{text.involvedWorker}</option>
+                  {employees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
                   ))}
                 </select>
-                <select value={actionPriority} onChange={(event) => setActionPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                  <option value="LOW">{text.priorityLabels.LOW}</option>
-                  <option value="MEDIUM">{text.priorityLabels.MEDIUM}</option>
-                  <option value="HIGH">{text.priorityLabels.HIGH}</option>
+                <select value={injuryTypeId} onChange={(event) => setInjuryTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
+                  <option value="">{text.injuryType}</option>
+                  {injuryTypes.map((injuryType) => (
+                    <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>
+                  ))}
                 </select>
-                <input type="date" value={actionDueDate} onChange={(event) => setActionDueDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} />
+              {type === "ACCIDENT" ? (
+                <div className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input type="number" min="0" value={initialLostDays} onChange={(event) => setInitialLostDays(event.target.value)} placeholder={text.lostDays} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                    <input type="date" value={returnDate} onChange={(event) => setReturnDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" checked={isFatal} onChange={(event) => setIsFatal(event.target.checked)} />
+                    {text.fatalInjury}
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="min-w-0 space-y-3">
+          <input type="file" accept="image/*" multiple onChange={(event) => setPhotos(Array.from(event.target.files ?? []))} className="w-full min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={text.description} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required />
+          <textarea value={suggestedAction} onChange={(event) => setSuggestedAction(event.target.value)} placeholder={text.suggestedAction} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+          {canLinkAction ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <h4 className="text-sm font-semibold text-slate-900">{text.linkedAction}</h4>
+              <div className="mt-3 space-y-3">
+                <input value={actionTitle} onChange={(event) => setActionTitle(event.target.value)} placeholder={text.actionTitle} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} placeholder={text.actionDescription} rows={3} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <div className="grid gap-3 md:grid-cols-3">
+                  <select value={actionOwnerUserId} onChange={(event) => setActionOwnerUserId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required={shouldCreateAction}>
+                    <option value="">{text.actionOwner}</option>
+                    {actionOwners.map((owner) => (
+                      <option key={owner.id} value={owner.id}>{owner.name}</option>
+                    ))}
+                  </select>
+                  <select value={actionPriority} onChange={(event) => setActionPriority(event.target.value as ActionPriority)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                    <option value="LOW">{text.priorityLabels.LOW}</option>
+                    <option value="MEDIUM">{text.priorityLabels.MEDIUM}</option>
+                    <option value="HIGH">{text.priorityLabels.HIGH}</option>
+                  </select>
+                  <input type="date" value={actionDueDate} onChange={(event) => setActionDueDate(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
-        <Button type="submit" size="sm" disabled={loading}>
-          {loading ? text.saving : text.create}
-        </Button>
-        {message ? <p className="text-xs text-slate-600">{message}</p> : null}
-      </div>
-    </form>
+          ) : null}
+          <Button type="submit" size="sm" disabled={loading || !isReady}>
+            {loading ? text.saving : text.create}
+          </Button>
+          {message ? <p className="text-xs text-slate-600">{message}</p> : null}
+        </div>
+      </form>
+    </details>
   );
 }
