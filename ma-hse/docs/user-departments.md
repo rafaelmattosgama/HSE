@@ -20,7 +20,7 @@ Reiniciar a aplicação e os workers para carregarem o Prisma Client atualizado.
 
 ## Filtro no Dashboard de Segurança
 
-- O seletor **Departamento** usa o mesmo catálogo da planta, incluindo departamentos inativos para consulta de históricos.
+- O seletor **Departamento** usa apenas os departamentos ativos do **Plant Master Data**, com os respetivos códigos e traduções. Departamentos antigos inativados não aparecem como opções duplicadas; os registos associados continuam incluídos em **Todos os departamentos**.
 - N2/N4 entram com o departamento da sua associação à planta selecionado. A associação é consultada na base de dados em cada acesso, sem exigir novo login quando é alterada.
 - É possível selecionar outro departamento ou **Todos os departamentos**. Outros perfis e utilizadores antigos sem departamento começam com a planta completa.
 - O filtro aplica-se à pirâmide (incluindo a comparação homóloga), aos rankings dos Indicadores da Planta e às respetivas séries mensais. Os cartões gerais de KPI e dias sem acidentes continuam a representar a planta.

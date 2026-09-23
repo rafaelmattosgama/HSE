@@ -1,5 +1,6 @@
 import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
+import { moduleTogglesInputSchema } from "@/lib/modules";
 import { requiresUserDepartment } from "@/lib/rbac/user-management";
 import {
   SMAT_ATTACHMENT_LIMITS,
@@ -8,6 +9,13 @@ import {
 } from "@/lib/smat-attachments";
 
 const optionalUuid = z.string().uuid().optional().nullable();
+export const roleModuleTogglesInput = z.object({
+  roles: z.object({
+    N4_SUPERVISOR: moduleTogglesInputSchema.shape.modules.optional(),
+    N5_OPERATOR: moduleTogglesInputSchema.shape.modules.optional(),
+    N6_HR: moduleTogglesInputSchema.shape.modules.optional(),
+  }).strict(),
+}).strict();
 const recordLevelInput = z.enum(["N1", "N2", "N3", "N4"]);
 const noDigits = /\d/;
 const futureCommunicationDatetimeMessage = "A data e hora da comunicação não podem ser posteriores ao momento atual.";
@@ -995,11 +1003,25 @@ export const updateCompetenceWorkerRoleInput = z.object({
   roleName: z.string().trim().min(1).max(160).nullable(),
 });
 
+export const reportRecipientListInput = z.object({
+  listId: z.string().uuid().optional(),
+  listName: z.string().trim().min(2),
+  scope: z.literal("PLANT"),
+  recipients: z.array(z.object({
+    email: z.string().trim().email().transform((email) => email.toLowerCase()),
+    name: z.string().trim().optional(),
+    language: z.enum(["pt", "it", "en", "pl", "de", "ro", "fr"]).default("en"),
+  })).refine((recipients) => new Set(recipients.map((recipient) => recipient.email)).size === recipients.length, {
+    message: "Duplicate recipient email.",
+  }),
+});
+
 export const createWorkerInput = z.object({
   id: z.string().uuid().optional(),
   employeeNo: z.string().min(1),
   name: z.string().min(2),
   dept: z.string().optional(),
+  isActive: z.boolean().default(true),
 });
 
 export const deleteWorkerInput = z.object({

@@ -24,6 +24,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { getServerUiDictionary } from "@/lib/server-ui-language";
 import { SAFETY_DASHBOARD_VIEW_ROLES } from "@/lib/rbac/dashboard";
+import { getUserRoleModules } from "@/lib/services/role-module-service";
 
 const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?: boolean }> = [
   {
@@ -200,6 +201,8 @@ export default async function PlantLayout({
     globalModuleParameter?.valueJson,
     plantRecord?.systemParameters[0]?.valueJson,
   );
+  const roleModules = await getUserRoleModules(plant, session.user.plantRoles);
+  if (roleModules) Object.assign(moduleToggles, roleModules);
   const ui = await getServerUiDictionary({
     userLanguage: session.user.language,
     plantLanguage: plantRecord?.defaultLanguage,

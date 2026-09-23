@@ -11,6 +11,8 @@ import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-ale
 import { SafetyCommunicationRecipientManager } from "@/components/feature/safety-communication-recipient-manager";
 import { SafetyDaysAdminEditor } from "@/components/feature/safety-days-admin-editor";
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
+import { RoleModuleManager } from "@/components/feature/role-module-manager";
+import { getPlantRoleModuleSettings } from "@/lib/services/role-module-service";
 import { SlaEditor } from "@/components/feature/sla-editor";
 import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
@@ -80,6 +82,7 @@ export default async function AdminPage({
   const canViewAgentAudit =
     actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const canManageSafetyCommunicationRecipients = canManageSafetyCommunicationAlertRecipients(actorRole);
+  const roleModuleConfig = actorRole === RoleCode.N3_SAFETY ? await getPlantRoleModuleSettings(plantRow.id) : null;
   const allowedCreateRoles = actorRole ? getCreatableRoles(actorRole) : [];
   // §2.7: the competence catalog and requirement matrix belong to the plant's
   // N3_SAFETY, with N1_CORPORATE able to intervene. N0_ADMIN keeps read
@@ -90,7 +93,6 @@ export default async function AdminPage({
 
   const [
     sla,
-    recipients,
     rules,
     areas,
     workstations,
@@ -113,14 +115,6 @@ export default async function AdminPage({
           plantId: plantRow.id,
           key: "SLA_CONFIG",
         },
-      },
-    }),
-    prisma.reportRecipientList.findMany({
-      where: {
-        OR: [{ plantId: plantRow.id }, { scope: "CORPORATE" }],
-      },
-      include: {
-        recipients: true,
       },
     }),
     prisma.alertRule.findMany({
@@ -175,7 +169,7 @@ export default async function AdminPage({
     canManageSafetyCommunicationRecipients
       ? SafetyCommunicationAlertService.listRecipientOptions(plantRow.id)
       : Promise.resolve({ users: [], departments: [] }),
-    listSewoReportRecipients(plantRow.id),
+    actorRole === RoleCode.N0_ADMIN ? listSewoReportRecipients(plantRow.id) : Promise.resolve([]),
     getPlantRepeatabilityAlertConfig(plantRow.id),
     getPlantSafetyDaysConfig(plantRow.id),
     canViewCompetenceCatalog
@@ -247,6 +241,20 @@ export default async function AdminPage({
         </div>
       </section>
 
+      {roleModuleConfig ? <RoleModuleManager
+        key={`role-modules:${plant}`}
+        plantCode={plant}
+        authorized={roleModuleConfig.authorized}
+        initialRoles={roleModuleConfig.roles}
+        labels={masterDataUi}
+        moduleLabels={{
+          MAPA: ui.modules.mapa, ACTIONS: ui.modules.actions, SEWO: ui.modules.sewo,
+          SMAT: ui.modules.smat, CONTRACTORS: ui.modules.contractors, COMMUNICATIONS: ui.modules.communications,
+          OCCUPATIONAL_HEALTH: ui.modules.occupationalHealth, COMPETENCE_AUTHORIZATIONS: ui.modules.competences,
+          FIRE_SAFETY_EQUIPMENT: ui.modules.fireEquipment,
+        }}
+      /> : null}
+
       <section className="grid gap-4 md:grid-cols-2">
         <SlaEditor
           initial={{
@@ -275,7 +283,7 @@ export default async function AdminPage({
 
       {actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N3_SAFETY ? (
         <N0MasterDataManager
-          key={plant}
+          key={`n0-master-data:${plant}`}
           plantCode={plant}
           initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
           initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
@@ -300,7 +308,7 @@ export default async function AdminPage({
         />
       ) : (
         <MasterDataManager
-          key={plant}
+          key={`master-data:${plant}`}
           plantCode={plant}
           initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
           initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
@@ -333,29 +341,12 @@ export default async function AdminPage({
 
       {actorRole === RoleCode.N0_ADMIN ? (
         <SewoRecipientListManager
+          key={`sewo-recipients:${plant}`}
           plantCode={plant}
           initialRecipients={sewoRecipients}
           labels={masterDataUi}
         />
-      ) : (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.recipientLists}</h2>
-            <HelpPopover title={ui.dashboard.recipientLists} body={masterDataUi.recipientListsHelp} buttonLabel={masterDataUi.helpButton} />
-          </div>
-          <div className="mt-3 space-y-3">
-            {recipients.map((list) => (
-              <article key={list.id} className="rounded-md border border-slate-200 p-3">
-                <p className="text-sm font-semibold text-slate-900">{list.name} ({list.scope})</p>
-                <p className="text-xs text-slate-600">
-                  {list.recipients.length} {ui.dashboard.recipients}
-                </p>
-              </article>
-            ))}
-            {recipients.length === 0 ? <p className="text-sm text-slate-600">{masterDataUi.noRecipientLists}</p> : null}
-          </div>
-        </section>
-      )}
+      ) : null}
 
       {canManageSafetyCommunicationRecipients ? (
         <SafetyCommunicationRecipientManager
@@ -394,7 +385,7 @@ export default async function AdminPage({
 
       {canManageUsers ? (
         <UserManager
-          key={plantRow.code}
+          key={`users:${plantRow.code}`}
           users={users}
           allowedCreateRoles={allowedCreateRoles}
           manageableRoles={manageableUserRoles}

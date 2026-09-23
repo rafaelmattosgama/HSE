@@ -264,7 +264,7 @@ export default async function SettingsPage({
               />
 
               <ModuleToggleManager
-                key={selectedPlant.code}
+                key={`plant-modules:${selectedPlant.code}`}
                 endpoint={`/api/plants/${selectedPlant.code}/admin/modules`}
                 title={formatMasterDataMessage(masterDataUi.plantModulesTitle, { plant: selectedPlant.name })}
                 description={masterDataUi.plantModulesHelp}
@@ -283,7 +283,7 @@ export default async function SettingsPage({
           </section>
 
           <N0MasterDataManager
-            key={selectedPlant.code}
+            key={`n0-master-data:${selectedPlant.code}`}
             plantCode={selectedPlant.code}
             initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
             initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
@@ -297,6 +297,7 @@ export default async function SettingsPage({
           />
 
           <SewoRecipientListManager
+            key={`sewo-recipients:${selectedPlant.code}`}
             plantCode={selectedPlant.code}
             initialRecipients={sewoRecipients}
             labels={masterDataUi}
@@ -318,7 +319,7 @@ export default async function SettingsPage({
 
           <div data-onboarding="settings-users">
             <UserManager
-              key={selectedPlant.code}
+              key={`users:${selectedPlant.code}`}
               plantCode={selectedPlant.code}
               users={selectedPlantUsers.map((entry) => ({
                 id: entry.user.id,

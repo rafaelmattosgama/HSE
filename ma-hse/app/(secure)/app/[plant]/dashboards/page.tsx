@@ -279,7 +279,7 @@ export default async function DashboardsPage({
   const actorRole = getSafetyDashboardRole(plant, session.user.plantRoles);
   const [departmentRows, userDepartment] = await Promise.all([
     prisma.area.findMany({
-      where: { plantId: plantRow.id },
+      where: { plantId: plantRow.id, isActive: true },
       select: { id: true, code: true, name: true, sourceLanguage: true },
       orderBy: { name: "asc" },
     }),

@@ -71,7 +71,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
         employeeNo,
         name,
         dept,
-        isActive: true,
+        isActive: parsed.data.isActive,
       },
     });
 
@@ -96,7 +96,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
           employeeNo,
           name,
           dept,
-          isActive: true,
+          isActive: parsed.data.isActive,
         },
       })
     : await prisma.employeeDirectory.create({
@@ -105,7 +105,7 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
           employeeNo,
           name,
           dept,
-          isActive: true,
+          isActive: parsed.data.isActive,
         },
       });
 

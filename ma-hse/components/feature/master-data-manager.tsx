@@ -70,6 +70,7 @@ export function MasterDataManager({
   const [employeeNo, setEmployeeNo] = useState("");
   const [workerName, setWorkerName] = useState("");
   const [workerDept, setWorkerDept] = useState("");
+  const [workerActive, setWorkerActive] = useState(true);
   const [editing, setEditing] = useState<EditingState>({
     areaId: null,
     workstationId: null,
@@ -92,6 +93,7 @@ export function MasterDataManager({
     setEmployeeNo("");
     setWorkerName("");
     setWorkerDept("");
+    setWorkerActive(true);
     setEditing({
       areaId: null,
       workstationId: null,
@@ -117,9 +119,11 @@ export function MasterDataManager({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        id: workers.find((worker) => worker.employeeNo === editing.employeeNo)?.id,
         employeeNo,
         name: workerName,
         dept: workerDept || undefined,
+        isActive: workerActive,
       }),
     });
     const json = await response.json();
@@ -333,6 +337,7 @@ export function MasterDataManager({
       setEmployeeNo("");
       setWorkerName("");
       setWorkerDept("");
+      setWorkerActive(true);
       setEditing((current) => ({ ...current, employeeNo: null }));
       setMessage(updated);
     } catch (error) {
@@ -358,6 +363,7 @@ export function MasterDataManager({
     setEmployeeNo(item.employeeNo);
     setWorkerName(item.name);
     setWorkerDept(item.dept ?? "");
+    setWorkerActive(item.isActive !== false);
     setEditing((current) => ({ ...current, employeeNo: item.employeeNo }));
     setMessage(formatMasterDataMessage(labels.workerEditMessage, { code: item.employeeNo }));
   }
@@ -378,6 +384,7 @@ export function MasterDataManager({
     setEmployeeNo("");
     setWorkerName("");
     setWorkerDept("");
+    setWorkerActive(true);
     setEditing((current) => ({ ...current, employeeNo: null }));
   }
 
@@ -673,6 +680,12 @@ export function MasterDataManager({
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             placeholder={labels.department}
           />
+          {editing.employeeNo ? (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={workerActive} onChange={(event) => setWorkerActive(event.target.checked)} />
+              {labels.users.active}
+            </label>
+          ) : null}
           <Button type="submit" size="sm">{editing.employeeNo ? labels.saveChanges : labels.saveWorker}</Button>
           <div className="max-h-52 space-y-2 overflow-y-auto text-xs text-slate-600">
             {workers.length === 0 ? <p>{labels.noWorkers}</p> : null}
