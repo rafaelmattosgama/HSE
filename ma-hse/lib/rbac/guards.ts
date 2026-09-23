@@ -1,8 +1,11 @@
 import { RoleCode } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { getServerAuthSession } from "@/lib/auth/session";
 import { fail } from "@/lib/api";
 import { hasPlantAccess } from "@/lib/rbac/evaluator";
+import { isManagedModuleRole, MODULE_REQUEST_PATH_HEADER } from "@/lib/role-modules";
+import { isRoleModuleRequestAllowed } from "@/lib/services/role-module-service";
 
 export async function requireAuth() {
   const session = await getServerAuthSession();
@@ -48,6 +51,13 @@ export async function requirePlantAccess(plantCode: string, allowedRoles: RoleCo
     return {
       error: fail("FORBIDDEN", "Insufficient role for plant scope", 403) as NextResponse,
     };
+  }
+
+  if (isManagedModuleRole(roleEntry.role)) {
+    const pathname = (await headers()).get(MODULE_REQUEST_PATH_HEADER) ?? "";
+    if (!await isRoleModuleRequestAllowed(pathname, userRoles)) {
+      return { error: fail("MODULE_DISABLED", "This module is disabled for your profile in this plant.", 403) as NextResponse };
+    }
   }
 
   return {

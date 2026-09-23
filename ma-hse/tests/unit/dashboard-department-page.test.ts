@@ -68,6 +68,31 @@ async function renderPage(departmentId?: string) {
 }
 
 describe("department-filtered safety dashboard", () => {
+  it("offers only active master-data departments and preserves inactive department history in the all view", async () => {
+    const departments = [
+      { id: "a", code: "A03", name: "Logística", isActive: true },
+      { id: "legacy", code: "A3", name: "Logística", isActive: false },
+      { id: "invalid", code: "\\", name: "1efe", isActive: false },
+    ];
+    mocks.db.area.findMany.mockImplementation(async ({ where }) => departments.filter(row => !where.isActive || row.isActive));
+    mocks.db.communication.findMany.mockReset().mockResolvedValue([
+      communication("a", "Current"), communication("legacy", "Historical"),
+    ]);
+
+    const html = await renderPage("all");
+
+    expect(mocks.db.area.findMany).toHaveBeenCalledWith({
+      where: { plantId: "plant-1", isActive: true },
+      select: { id: true, code: true, name: true, sourceLanguage: true },
+      orderBy: { name: "asc" },
+    });
+    expect(html).toContain("A03 - Logística");
+    expect(html).not.toContain("A3 - Logística");
+    expect(html).not.toContain("1efe");
+    expect(mocks.pyramid.mock.calls[0][0].counts.unsafeAct).toBe(2);
+    expect(JSON.stringify(mocks.manager.mock.calls[0][0].rankings)).toContain("Historical");
+  });
+
   it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR])("opens %s with its department and filters the pyramid, rankings and monthly series", async role => {
     setRole(role);
     const html = await renderPage();

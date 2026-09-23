@@ -48,6 +48,7 @@ type WorkerForm = {
   employeeNo: string;
   name: string;
   dept: string;
+  isActive: boolean;
 };
 
 type CatalogsState = Record<MasterDataType, CatalogItem[]>;
@@ -70,6 +71,7 @@ const EMPTY_WORKER_FORM: WorkerForm = {
   employeeNo: "",
   name: "",
   dept: "",
+  isActive: true,
 };
 
 const EMPTY_CATALOG_MESSAGES: CatalogMessagesState = {
@@ -287,6 +289,7 @@ export function N0MasterDataManager({
       employeeNo: worker.employeeNo,
       name: worker.name,
       dept: worker.dept ?? "",
+      isActive: worker.isActive !== false,
     });
     setWorkerMessage(formatMasterDataMessage(labels.workerEditMessage, { code: worker.employeeNo }));
   }
@@ -535,6 +538,7 @@ export function N0MasterDataManager({
           employeeNo,
           name,
           dept: dept || undefined,
+          isActive: workerForm.isActive,
         }),
       });
       const json = await parseApiResponse<{ worker: Worker }>(response);
@@ -938,6 +942,12 @@ export function N0MasterDataManager({
             placeholder={labels.department}
           />
 
+          {workerForm.id ? (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={workerForm.isActive} onChange={(event) => updateWorkerForm({ isActive: event.target.checked })} />
+              {labels.users.active}
+            </label>
+          ) : null}
           <Button type="submit" size="sm" disabled={savingKey === "worker"}>
             {savingKey === "worker" ? labels.saving : workerForm.id ? labels.saveChanges : labels.saveWorker}
           </Button>
