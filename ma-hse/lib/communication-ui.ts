@@ -36,6 +36,8 @@ export const BASE_COMMUNICATION_UI = {
     },
   },
   communicationsTable: {
+    search: "Free-text search",
+    searchPlaceholder: "Search by code, description, name, department or location...",
     type: "Type",
     allTypes: "All types",
     status: "Status",

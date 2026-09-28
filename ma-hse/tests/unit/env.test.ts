@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("environment configuration", () => {
+  it.each([undefined, "", "false", "TRUE", "1", "true"])(
+    "enables report QR regeneration only for explicit true (%j)",
+    async (value) => {
+      vi.stubEnv("REPORT_QR_REGENERATION_ENABLED", value);
+      vi.resetModules();
+      const { env } = await import("@/lib/env");
+      expect(env.REPORT_QR_REGENERATION_ENABLED).toBe(value === "true");
+    },
+  );
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();

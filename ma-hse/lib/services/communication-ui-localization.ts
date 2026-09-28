@@ -44,6 +44,8 @@ const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
     },
   },
   communicationsTable: {
+    search: "Pesquisa livre",
+    searchPlaceholder: "Pesquisar por código, descrição, nome, departamento ou local...",
     type: "Tipo",
     allTypes: "Todos os tipos",
     status: "Estado",

@@ -21,8 +21,10 @@ function storageKey(plant: string, type: PlantAccessTokenType) {
 
 export function QrTokenManager({
   labels = getStaticN0MasterDataUi("en"),
+  reportRegenerationEnabled = false,
 }: {
   labels?: N0MasterDataUi;
+  reportRegenerationEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const plant = pathname.split("/")[2];
@@ -30,8 +32,11 @@ export function QrTokenManager({
   const [generated, setGenerated] = useState<GeneratedQr | null>(null);
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const regenerationDisabled = tokenType === PlantAccessTokenType.REPORT && !reportRegenerationEnabled;
 
   useEffect(() => {
+    setGenerated(null);
+    setMessage("");
     const saved = localStorage.getItem(storageKey(plant, tokenType));
     if (saved) {
       try {
@@ -47,6 +52,9 @@ export function QrTokenManager({
   }, [labels.qr.kioskToken, labels.qr.reportToken, tokenType]);
 
   async function regenerate() {
+    if (loading || regenerationDisabled) return;
+    if (!window.confirm(formatMasterDataMessage(labels.qr.confirmRegenerate, { token: title }))) return;
+
     setLoading(true);
     setMessage("");
 
@@ -180,6 +188,7 @@ export function QrTokenManager({
 
       <select
         value={tokenType}
+        disabled={loading}
         onChange={(event) => setTokenType(event.target.value as PlantAccessTokenType)}
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
       >
@@ -187,9 +196,11 @@ export function QrTokenManager({
         <option value={PlantAccessTokenType.KIOSK}>{labels.qr.kioskToken}</option>
       </select>
 
-      <Button size="sm" onClick={regenerate} disabled={loading}>
+      <Button type="button" size="sm" onClick={regenerate} disabled={loading || regenerationDisabled}>
         {loading ? labels.qr.regenerating : formatMasterDataMessage(labels.qr.regenerate, { token: title })}
       </Button>
+
+      {regenerationDisabled ? <p className="text-xs text-slate-700">{labels.qr.reportRegenerationDisabled}</p> : null}
 
       {message ? <p className="text-xs text-slate-700">{message}</p> : null}
 

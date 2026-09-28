@@ -1847,6 +1847,13 @@ async function main() {
 
   for (const plant of plants) {
     for (const type of [PlantAccessTokenType.REPORT, PlantAccessTokenType.KIOSK]) {
+      // Never create or reactivate report fixtures in production or while rotation is locked.
+      if (type === PlantAccessTokenType.REPORT && (
+        process.env.REPORT_QR_REGENERATION_ENABLED !== "true"
+        || process.env.NODE_ENV === "production"
+        || process.env.APP_ENV === "production"
+      )) continue;
+
       const tokenPlain = `${plant.code}-${type.toLowerCase()}-seed-token`;
       const tokenHash = hashAccessToken(tokenPlain);
 
