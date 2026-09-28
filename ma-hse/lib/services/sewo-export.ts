@@ -110,16 +110,18 @@ function getDateSortTime(value: unknown) {
 /**
  * A SEWO's actions can be linked either through the direct `Action.sewoId`
  * foreign key (`sewo.actions`) or through the `SEWOActionLink` join table
- * (`sewo.actionLinks`), see `collectLinkedActionStatuses` in sewo-service.ts.
- * Both must be combined and deduplicated by action id to get the full set.
+ * (`sewo.actionLinks`) or belong to its source communication. Match the linked
+ * actions shown in the SEWO workspace, deduplicating all three sources by id.
  */
 function mergeSewoActions<T extends { id: string }>(sewo: {
   actions: T[];
   actionLinks: Array<{ action: T }>;
+  communication?: { actions?: T[] } | null;
 }): T[] {
   const byId = new Map<string, T>();
   sewo.actions.forEach((action) => byId.set(action.id, action));
   sewo.actionLinks.forEach((entry) => byId.set(entry.action.id, entry.action));
+  sewo.communication?.actions?.forEach((action) => byId.set(action.id, action));
   return Array.from(byId.values());
 }
 
@@ -135,6 +137,11 @@ function inferImageExtension(input: ExportAttachment) {
   return null;
 }
 
+function isImageAttachment(input: ExportAttachment) {
+  return input.contentType.toLowerCase().startsWith("image/")
+    || /\.(png|jpe?g|webp|gif|tiff?|avif|heic|heif|bmp|svg)$/i.test(input.fileName);
+}
+
 function formatAttachmentTitle(attachment: ExportAttachment) {
   return attachment.caption?.trim()
     ? `${attachment.fileName} - ${attachment.caption.trim()}`
@@ -142,25 +149,21 @@ function formatAttachmentTitle(attachment: ExportAttachment) {
 }
 
 async function loadAttachmentBuffers(attachments: ExportAttachment[]) {
-  const imageAttachments = attachments
-    .map((attachment) => ({
-      ...attachment,
-      extension: inferImageExtension(attachment),
-    }))
-    .filter((attachment): attachment is ExportAttachment & { extension: "png" | "jpeg" } => attachment.extension !== null);
-
-  const results = await Promise.allSettled(
-    imageAttachments.map(async (attachment) => ({
-      ...attachment,
-      buffer: await StorageService.getObjectBuffer({ key: attachment.fileKey }),
-    })),
-  );
-
-  return results.flatMap((result) => {
-    if (result.status !== "fulfilled") return [];
-    if (result.value.buffer.length === 0) return [];
-    return [result.value];
-  });
+  return Promise.all(attachments.filter(isImageAttachment).map(async (attachment) => {
+    try {
+      let buffer: Buffer = await StorageService.getObjectBuffer({ key: attachment.fileKey });
+      if (!buffer.length) throw new Error("Empty image");
+      if (!inferImageExtension(attachment)) {
+        // PDFKit embeds JPEG/PNG; convert other uploaded image formats first.
+        const { default: sharp } = await import("sharp");
+        buffer = await sharp(buffer).rotate().png().toBuffer();
+      }
+      return { ...attachment, buffer };
+    } catch {
+      // Preserve the attachment's place and caption instead of silently omitting it.
+      return { ...attachment, buffer: null };
+    }
+  }));
 }
 
 function drawSectionTitle(doc: PdfDocument, title: string) {
@@ -1062,11 +1065,12 @@ export const SewoExportService = {
             workstation: true,
             bodyPart: true,
             injuryType: true,
+            actions: { include: { ownerUser: true } },
           },
         },
         performedBy: true,
         approvedBy: true,
-        attachments: true,
+        attachments: { orderBy: { createdAt: "asc" } },
         causeSelections: {
           include: {
             causeItem: true,
@@ -1143,7 +1147,7 @@ export const SewoExportService = {
     const sifPsifLabel = sifPsifDecision ? getSifPsifResultLabel(sifPsifResult, ui) : ui.pendingResult;
     const occurrenceLocation = getSummaryLocation(sewo, ui.summaryReportNotApplicable);
     const photoAttachments = await loadAttachmentBuffers(sewo.attachments);
-    const nonImageAttachments = sewo.attachments.filter((attachment) => inferImageExtension(attachment) === null);
+    const nonImageAttachments = sewo.attachments.filter((attachment) => !isImageAttachment(attachment));
     const orderedActions = [...mergedActions].sort(
       (left, right) => getDateSortTime(left.dueDate) - getDateSortTime(right.dueDate),
     );
@@ -1159,10 +1163,6 @@ export const SewoExportService = {
       getReadableText([sewo.communication?.injuryType?.name, sewo.whatText], ""),
       ui.summaryReportNotApplicable,
     );
-    const occurrenceDescription = display(getReadableText(
-      [sewo.communication?.description, sewo.howText],
-      ui.summaryReportNotApplicable,
-    ));
     const lostDays = typeof templateData.lostDays === "number"
       ? templateData.lostDays
       : sewo.communication?.lostDays ?? null;
@@ -1278,10 +1278,7 @@ export const SewoExportService = {
       ];
       const analysisStackHeight = analysisBoxes.reduce((sum, box) => sum + measureTextBox(doc, { ...box, width: 224 }).height, 0) + (analysisBoxes.length - 1) * 6;
       const immediateActionMeasured = measureTextBox(doc, { label: "Immediate action description", value: display(sewo.immediateCorrectiveActionText), width: 106, minHeight: 126 });
-      const rootCausePreviewRows = rootCauseDetails.slice(0, 2).map((entry) => [display(entry.label), display(entry.comment), yesNo(entry.isRootCause)]);
-      const rootCausePreviewHeight = measureTableHeight(doc, rootCausePreviewRows, [70, 112, 46], 18);
-      const panelDContentHeight = immediateActionMeasured.height + 8 + rootCausePreviewHeight;
-      const analysisRowHeight = Math.max(228, 30 + analysisStackHeight + 10, 30 + panelDContentHeight + 10);
+      const analysisRowHeight = Math.max(228, 30 + analysisStackHeight + 10, 30 + immediateActionMeasured.height + 10);
       if (cursorY + analysisRowHeight > PORTRAIT_BOTTOM) {
         cursorY = flow.newPage(pageOneTitle);
         cursorPage = flow.currentPageIndex();
@@ -1306,14 +1303,6 @@ export const SewoExportService = {
         required: anatomyRequired,
       });
       drawTextBox(doc, { label: "Immediate action description", value: display(sewo.immediateCorrectiveActionText), x: 432, y: cursorY + 30, width: 106, minHeight: 126 });
-      drawLandscapeTable(doc, {
-        x: 312,
-        y: cursorY + 30 + immediateActionMeasured.height + 8,
-        widths: [70, 112, 46],
-        minRowHeight: 18,
-        headers: ["Category", "Check possible causes", "Root cause"],
-        rows: rootCausePreviewRows,
-      });
       cursorY += analysisRowHeight + 10;
 
       const previousDetectedText = normalizeMultilineText(display(templateData.previousDetectedDescription));
@@ -1337,9 +1326,8 @@ export const SewoExportService = {
       flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
 
       const occurrenceBoxes = [
-        { label: "Description", value: occurrenceDescription, x: 56, width: 156, minHeight: 96 },
-        { label: "How did the accident happen?", value: display(sewo.howText), x: 220, width: 156, minHeight: 96 },
-        { label: "Immediate corrective action plan", value: display(sewo.immediateCorrectiveActionText), x: 384, width: 154, minHeight: 96 },
+        { label: "How did the accident happen?", value: display(sewo.howText), x: 56, width: 238, minHeight: 96 },
+        { label: "Immediate corrective action plan", value: display(sewo.immediateCorrectiveActionText), x: 302, width: 236, minHeight: 96 },
       ];
       const occurrenceRowHeight = Math.max(...occurrenceBoxes.map((box) => measureTextBox(doc, box).height));
       const occurrencePanelHeight = Math.max(154, 30 + occurrenceRowHeight + 10);
@@ -1513,34 +1501,52 @@ export const SewoExportService = {
       flow.recordBand(extensionPlanStartPage, extensionPlanY, extensionPlanHeight, "ACT", YELLOW);
       cursorY += extensionPlanHeight + 8;
 
-      const photoEvidenceHeight = 84;
-      if (cursorY + photoEvidenceHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageThreeTitle);
-        cursorPage = flow.currentPageIndex();
+      const evidenceWidth = PORTRAIT_WIDTH - 24;
+      const imageHeight = 240;
+      const evidenceItems = [
+        ...photoAttachments.map((attachment) => ({ title: formatAttachmentTitle(attachment), buffer: attachment.buffer, isImage: true })),
+        ...nonImageAttachments.map((attachment) => ({ title: formatAttachmentTitle(attachment), buffer: null, isImage: false })),
+      ];
+      if (!evidenceItems.length) {
+        evidenceItems.push({ title: ui.summaryReportNotApplicable, buffer: null, isImage: false });
       }
-      const photoEvidenceY = cursorY;
-      drawPortraitPanel(doc, { x: PORTRAIT_X, y: photoEvidenceY, width: PORTRAIT_WIDTH, height: photoEvidenceHeight, title: "Photo evidence", color: BRAND });
-      if (!photoAttachments.length && !nonImageAttachments.length) {
-        doc.fillColor(INK).fontSize(8).text(ui.summaryReportNotApplicable, 58, photoEvidenceY + 34, { width: 468 });
-      } else {
-        photoAttachments.slice(0, 3).forEach((attachment, index) => {
-          const x = 58 + index * 115;
-          doc.rect(x, photoEvidenceY + 32, 104, 38).fillAndStroke(SOFT, "#c5ceda");
-          try {
-            doc.image(attachment.buffer, x + 4, photoEvidenceY + 36, { fit: [96, 28], align: "center", valign: "center" });
-          } catch {
-            doc.fillColor(INK).fontSize(7).text(ui.summaryReportNotApplicable, x + 6, photoEvidenceY + 45, { width: 92, align: "center" });
-          }
-          doc.fillColor(MUTED).fontSize(6.5).text(fitText(formatAttachmentTitle(attachment), 34), x, photoEvidenceY + 74, { width: 104, align: "center" });
-        });
-        if (nonImageAttachments.length) {
-          doc.fillColor(INK).fontSize(7).text(nonImageAttachments.map(formatAttachmentTitle).join("\n"), 410, photoEvidenceY + 34, {
-            width: 120,
-            height: 40,
-          });
+      const evidenceCards = evidenceItems.map((item) => ({
+        ...item,
+        height: (item.isImage ? imageHeight + 8 : 0)
+          + doc.font("Helvetica").fontSize(8).heightOfString(normalizeMultilineText(item.title), { width: evidenceWidth - 12 })
+          + 12,
+      }));
+      let evidenceIndex = 0;
+      while (evidenceIndex < evidenceCards.length) {
+        if (cursorY + 40 + evidenceCards[evidenceIndex].height > PORTRAIT_BOTTOM) {
+          cursorY = flow.newPage("SAFETY EWO - PHOTO EVIDENCE");
         }
+        const sectionY = cursorY;
+        const pageCards = [];
+        let sectionHeight = 40;
+        while (evidenceIndex < evidenceCards.length
+          && (pageCards.length === 0 || sectionY + sectionHeight + evidenceCards[evidenceIndex].height <= PORTRAIT_BOTTOM)) {
+          const card = evidenceCards[evidenceIndex++];
+          pageCards.push(card);
+          sectionHeight += card.height;
+        }
+        drawPortraitPanel(doc, { x: PORTRAIT_X, y: sectionY, width: PORTRAIT_WIDTH, height: sectionHeight, title: "Photo evidence", color: BRAND });
+        let cardY = sectionY + 30;
+        for (const card of pageCards) {
+          if (card.isImage) {
+            doc.rect(58, cardY, evidenceWidth, imageHeight).fillAndStroke(SOFT, "#c5ceda");
+            try {
+              if (!card.buffer) throw new Error("Image unavailable");
+              doc.image(card.buffer, 64, cardY + 6, { fit: [evidenceWidth - 12, imageHeight - 12], align: "center", valign: "center" });
+            } catch {
+              doc.fillColor(MUTED).font("Helvetica").fontSize(9).text("Image unavailable", 64, cardY + imageHeight / 2, { width: evidenceWidth - 12, align: "center" });
+            }
+          }
+          doc.fillColor(MUTED).font("Helvetica").fontSize(8).text(normalizeMultilineText(card.title), 64, cardY + (card.isImage ? imageHeight + 8 : 0), { width: evidenceWidth - 12, align: "center" });
+          cardY += card.height;
+        }
+        cursorY = sectionY + sectionHeight + 10;
       }
-      cursorY = photoEvidenceY + photoEvidenceHeight + 10;
 
       const signatureHeight = 38;
       if (cursorY + signatureHeight > PORTRAIT_BOTTOM) {
@@ -1707,9 +1713,10 @@ export const SewoExportService = {
             area: true,
             workstation: true,
             injuryType: true,
+            actions: { include: { ownerUser: true } },
           },
         },
-        attachments: true,
+        attachments: { orderBy: { createdAt: "asc" } },
         causeSelections: {
           include: {
             causeItem: true,
@@ -1869,12 +1876,13 @@ export const SewoExportService = {
       } else {
         photoAttachments.forEach((attachment) => {
           try {
+            if (!attachment.buffer) throw new Error("Image unavailable");
             drawPhotoCard(doc, {
               title: formatAttachmentTitle(attachment),
               imageBuffer: attachment.buffer,
             });
           } catch {
-            drawParagraphCard(doc, formatAttachmentTitle(attachment), ui.summaryReportNotApplicable);
+            drawParagraphCard(doc, formatAttachmentTitle(attachment), "Image unavailable");
           }
         });
       }
