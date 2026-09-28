@@ -6,12 +6,14 @@ import { parseBody } from "@/lib/http";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
 import { requirePlantAccess } from "@/lib/rbac/guards";
-import { regeneratePlantToken } from "@/lib/auth/plant-token";
+import { regeneratePlantToken, ReportQrRegenerationDisabledError } from "@/lib/auth/plant-token";
 
 const qrTokenSchema = z.object({
   type: z.nativeEnum(PlantAccessTokenType),
   regenerate: z.boolean().default(false),
   revoke: z.boolean().default(false),
+}).refine((value) => value.regenerate !== value.revoke, {
+  message: "Choose exactly one action: regenerate or revoke.",
 });
 
 function isMissingDatabaseObjectError(error: unknown) {
@@ -71,6 +73,10 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
   const parsed = await parseBody(request, qrTokenSchema);
   if ("error" in parsed) return parsed.error;
 
+  if (parsed.data.regenerate && parsed.data.type === PlantAccessTokenType.REPORT && !env.REPORT_QR_REGENERATION_ENABLED) {
+    return fail("REPORT_QR_REGENERATION_DISABLED", "Report QR token regeneration is disabled.", 403);
+  }
+
   const plant = await findPlantByCode(plantCode);
   if (!plant) {
     return fail("PLANT_NOT_FOUND", "Plant not found", 404);
@@ -100,22 +106,21 @@ export async function POST(request: Request, context: { params: Promise<{ plantC
     return ok({ revoked: true, type: parsed.data.type });
   }
 
-  const token = await (async () => {
-    try {
-      return await regeneratePlantToken({
-        plantId: plant.id,
-        type: parsed.data.type,
-        actorUserId: auth.session.user.id,
-      });
-    } catch (error) {
-      if (isMissingDatabaseObjectError(error)) {
-        return null;
-      }
-      throw error;
+  let token: string;
+  try {
+    token = await regeneratePlantToken({
+      plantId: plant.id,
+      type: parsed.data.type,
+      actorUserId: auth.session.user.id,
+    });
+  } catch (error) {
+    if (error instanceof ReportQrRegenerationDisabledError) {
+      return fail("REPORT_QR_REGENERATION_DISABLED", error.message, 403);
     }
-  })();
-  if (!token) {
-    return fail("DATABASE_MIGRATION_REQUIRED", "QR token storage is not available.", 503);
+    if (isMissingDatabaseObjectError(error)) {
+      return fail("DATABASE_MIGRATION_REQUIRED", "QR token storage is not available.", 503);
+    }
+    throw error;
   }
 
   const path =

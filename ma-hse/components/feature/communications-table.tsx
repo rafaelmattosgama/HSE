@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Download, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getCommunicationStatusClasses, normalizeCommunicationStatus } from "@/lib/helpers";
 import { formatRecordLevel } from "@/lib/record-level";
@@ -27,6 +27,13 @@ type CommunicationRow = {
   unsafeConditionType?: string;
   nearMissType?: string;
 };
+
+type SortColumn = "event" | "code";
+type SortDirection = "ascending" | "descending";
+
+function normalizeSearchText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
 
 async function readExportError(response: Response, fallback: string) {
   const contentType = response.headers.get("content-type") ?? "";
@@ -66,6 +73,8 @@ export function CommunicationsTable({
     statusLabels ?? BASE_COMMUNICATION_UI.communicationStatusLabels;
   const router = useRouter();
   const [tableRows, setTableRows] = useState(rows);
+  const [sort, setSort] = useState<{ column: SortColumn; direction: SortDirection } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [reporterFilter, setReporterFilter] = useState("");
@@ -105,6 +114,8 @@ export function CommunicationsTable({
     [tableRows],
   );
 
+  const searchTerms = useMemo(() => normalizeSearchText(searchQuery).split(/\s+/).filter(Boolean), [searchQuery]);
+
   const filteredRows = useMemo(
     () =>
       tableRows.filter((row) => {
@@ -119,10 +130,64 @@ export function CommunicationsTable({
         if (canViewClassification && unsafeActTypeFilter !== "all" && row.unsafeActType !== unsafeActTypeFilter) return false;
         if (canViewClassification && unsafeConditionTypeFilter !== "all" && row.unsafeConditionType !== unsafeConditionTypeFilter) return false;
         if (canViewClassification && nearMissTypeFilter !== "all" && row.nearMissType !== nearMissTypeFilter) return false;
+        if (searchTerms.length > 0) {
+          const searchText = normalizeSearchText([
+            row.codigoCompleto,
+            row.codigoAbreviado,
+            row.eventDatetime.replace("T", " ").slice(0, 16),
+            row.description,
+            row.reporterName,
+            row.involvedWorker,
+            row.department,
+            row.location,
+            communicationTypeLabels[row.type as keyof typeof communicationTypeLabels] ?? row.type,
+            communicationStatusLabels[row.status as keyof typeof communicationStatusLabels] ?? row.status,
+            ...(showPlant ? [row.plantCode, row.plantName] : []),
+            ...(canViewClassification ? [row.unsafeActType, row.unsafeConditionType, row.nearMissType] : []),
+          ].filter(Boolean).join(" "));
+          if (!searchTerms.every((term) => searchText.includes(term))) return false;
+        }
         return true;
       }),
-    [canViewClassification, dateFromFilter, dateToFilter, departmentFilter, locationFilter, nearMissTypeFilter, reporterFilter, tableRows, statusFilter, typeFilter, unsafeActTypeFilter, unsafeConditionTypeFilter],
+    [canViewClassification, communicationStatusLabels, communicationTypeLabels, dateFromFilter, dateToFilter, departmentFilter, locationFilter, nearMissTypeFilter, reporterFilter, searchTerms, showPlant, tableRows, statusFilter, typeFilter, unsafeActTypeFilter, unsafeConditionTypeFilter],
   );
+
+  const sortedRows = useMemo(() => {
+    if (!sort) return filteredRows;
+
+    const direction = sort.direction === "ascending" ? 1 : -1;
+    return [...filteredRows].sort((a, b) => {
+      const comparison = sort.column === "event"
+        ? new Date(a.eventDatetime).getTime() - new Date(b.eventDatetime).getTime()
+        : (a.codigoCompleto ?? a.codigoAbreviado ?? "Requires code update").localeCompare(
+            b.codigoCompleto ?? b.codigoAbreviado ?? "Requires code update",
+            undefined,
+            { numeric: true, sensitivity: "base" },
+          );
+      return comparison * direction;
+    });
+  }, [filteredRows, sort]);
+
+  function toggleSort(column: SortColumn) {
+    setSort((current) => ({
+      column,
+      direction: current?.column === column && current.direction === "ascending" ? "descending" : "ascending",
+    }));
+  }
+
+  function renderSortButton(column: SortColumn, label: string) {
+    const Icon = sort?.column !== column ? ArrowUpDown : sort.direction === "ascending" ? ArrowUp : ArrowDown;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(column)}
+        className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-left uppercase tracking-wide hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+      >
+        {label}
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      </button>
+    );
+  }
 
   function formatLabel(template: string, replacements: Record<string, string>) {
     return Object.entries(replacements).reduce(
@@ -144,7 +209,7 @@ export function CommunicationsTable({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          rows: filteredRows.map((row) => ({
+          rows: sortedRows.map((row) => ({
             code: row.codigoCompleto ?? row.codigoAbreviado ?? "Requires code update",
             event: row.eventDatetime.replace("T", " ").slice(0, 16),
             level: formatRecordLevel(row.level),
@@ -216,6 +281,16 @@ export function CommunicationsTable({
 
   return (
     <section className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <label className="block max-w-[90rem] space-y-1">
+        <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.search}</span>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={text.searchPlaceholder}
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </label>
       <div className="grid max-w-[90rem] gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5 [&>label]:min-w-0">
         <label className="space-y-1">
           <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.type}</span>
@@ -333,9 +408,13 @@ export function CommunicationsTable({
         <table className="w-full min-w-[1050px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="w-32 px-4 py-3">{text.event}</th>
+              <th scope="col" aria-sort={sort?.column === "event" ? sort.direction : "none"} className="w-32 px-4 py-3">
+                {renderSortButton("event", text.event)}
+              </th>
               {showPlant ? <th className="px-4 py-3">Plant</th> : null}
-              <th className="w-44 px-4 py-3">Code</th>
+              <th scope="col" aria-sort={sort?.column === "code" ? sort.direction : "none"} className="w-44 px-4 py-3">
+                {renderSortButton("code", "Code")}
+              </th>
               <th className="w-40 px-4 py-3">{text.type}</th>
               <th className="w-32 px-4 py-3">{text.status}</th>
               <th className="px-4 py-3">{text.reporter}</th>
@@ -346,7 +425,7 @@ export function CommunicationsTable({
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row) => (
+            {sortedRows.map((row) => (
               <tr key={row.id} className="border-t border-slate-200">
                 <td className="px-4 py-3">{row.eventDatetime.replace("T", " ").slice(0, 16)}</td>
                 {showPlant ? <td className="px-4 py-3 font-semibold text-slate-700">{row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</td> : null}

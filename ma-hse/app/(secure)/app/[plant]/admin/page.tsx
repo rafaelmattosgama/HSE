@@ -21,6 +21,7 @@ import { CompetenceTypeManager } from "@/components/feature/competence-type-mana
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/env";
 import { isAllPlantsScope } from "@/lib/plant-scope";
 import { canManageSafetyCommunicationAlertRecipients } from "@/lib/rbac/safety-communication-alerts";
 import { canManagePlantEquipment } from "@/lib/rbac/master-data";
@@ -270,7 +271,7 @@ export default async function AdminPage({
           initialHistoricalRecordStartDate={safetyDaysConfig.historicalRecordStartDate}
           labels={masterDataUi}
         />
-        <QrTokenManager labels={masterDataUi} />
+        <QrTokenManager labels={masterDataUi} reportRegenerationEnabled={env.REPORT_QR_REGENERATION_ENABLED} />
       </section>
 
       <RepeatabilityAlertEditor
