@@ -50,6 +50,9 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
   private payload = {
     texts: [] as string[],
     imageCount: 0,
+    panels: [] as Array<{ x: number; y: number; width: number; height: number; page: number }>,
+    images: [] as Array<{ x: number; y: number; fit: number[]; page: number }>,
+    textPositions: [] as Array<{ text: string; x: number | undefined; y: number | undefined; page: number }>,
   };
 
   on(event: string, handler: (value?: Buffer) => void) {
@@ -59,7 +62,8 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
     return this;
   }
 
-  roundedRect() {
+  roundedRect(x: number, y: number, width: number, height: number) {
+    this.payload.panels.push({ x, y, width, height, page: this.pageCount });
     return this;
   }
 
@@ -160,6 +164,7 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
 
   text(value: string, _x?: number, y?: number) {
     this.payload.texts.push(String(value));
+    this.payload.textPositions.push({ text: String(value), x: _x, y, page: this.pageCount });
     if (typeof y === "number") {
       this.y = y + 18;
     } else {
@@ -169,8 +174,9 @@ const FakePdfDocument = vi.hoisted(() => class FakePdfDocument {
     return this;
   }
 
-  image() {
+  image(_buffer: Buffer, x: number, y: number, options: { fit: number[] }) {
     this.payload.imageCount += 1;
+    this.payload.images.push({ x, y, fit: options.fit, page: this.pageCount });
     return this;
   }
 
@@ -570,7 +576,21 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("sewo-1");
     expect(rendered.texts).toContain("Exported by: Ana Silva");
     expect(rendered.texts).toContain("Valenca (PL1)");
-    expect(rendered.texts).toContain("Readable occurrence description from the linked communication.");
+    expect(rendered.texts).not.toContain("Readable occurrence description from the linked communication.");
+    const occurrenceStart = rendered.texts.indexOf("Occurrence description");
+    const analysisStart = rendered.texts.indexOf("Analysis", occurrenceStart);
+    const occurrenceSection = rendered.texts.slice(occurrenceStart, analysisStart);
+    expect(occurrenceSection).not.toContain("DESCRIPTION");
+    expect(occurrenceSection).toContain("HOW DID THE ACCIDENT HAPPEN?");
+    expect(occurrenceSection).toContain("Operator slipped near the conveyor.");
+    const immediateSection = rendered.texts.slice(
+      rendered.texts.indexOf("Immediate action and classification"),
+      rendered.texts.indexOf("UC / UA related to the event"),
+    );
+    expect(immediateSection).toContain("Area isolated and cleaned.");
+    expect(immediateSection).not.toContain("CHECK POSSIBLE CAUSES");
+    expect(immediateSection).not.toContain("Leak not fixed in time");
+    expect(rendered.texts.filter((text) => text === "Leak not fixed in time")).toHaveLength(1);
     expect(rendered.texts).not.toContain("11111111-1111-4111-8111-111111111111");
     expect(rendered.texts).toContain("Operator slipped near the conveyor.");
     expect(rendered.texts).toContain("Floor contamination identified.");
@@ -723,6 +743,66 @@ describe("SewoExportService.buildExport", () => {
     };
   }
 
+  it.each([1, 3, 7])("includes all %i photos at readable size with complete captions inside each section", async (count) => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    storageMock.StorageService.getObjectBuffer.mockResolvedValue(Buffer.from("image"));
+    const attachments = Array.from({ length: count }, (_, index) => ({
+      fileName: `Image 2026-09-24T170425.696-long-file-name-${index}.jpg`,
+      caption: `Legenda completa da fotografia ${index}: verificar as condições do equipamento antes e após a intervenção.`,
+      contentType: "image/jpeg", fileKey: `photo-${index}`,
+    }));
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({ attachments }));
+    const result = await SewoExportService.buildExport("photos", { includeXlsx: false });
+    const rendered = JSON.parse(result.pdf.toString()) as {
+      imageCount: number;
+      panels: Array<{ x: number; y: number; width: number; height: number; page: number }>;
+      images: Array<{ x: number; y: number; fit: number[]; page: number }>;
+      textPositions: Array<{ text: string; x: number; y: number; page: number }>;
+    };
+    expect(rendered.imageCount).toBe(count);
+    for (const [index, image] of rendered.images.entries()) {
+      expect(image.fit[0]).toBeGreaterThan(400);
+      expect(image.fit[1]).toBeGreaterThan(200);
+      const caption = rendered.textPositions.find((entry) => entry.text === `${attachments[index].fileName} - ${attachments[index].caption}`)!;
+      expect(caption).toBeDefined();
+      expect(caption.page).toBe(image.page);
+      const panel = rendered.panels.find((entry) => entry.page === image.page && entry.x === 46 && entry.width === 503
+        && entry.y <= image.y && entry.y + entry.height >= caption.y + 16);
+      expect(panel).toBeDefined();
+      expect(panel!.y + panel!.height).toBeLessThanOrEqual(795);
+    }
+  });
+
+  it("converts WebP attachments to embeddable images instead of omitting them", async () => {
+    const { default: sharp } = await import("sharp");
+    const webp = await sharp({ create: { width: 40, height: 60, channels: 3, background: "#123456" } }).webp().toBuffer();
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    storageMock.StorageService.getObjectBuffer.mockResolvedValue(webp);
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
+      attachments: [{ fileName: "evidence.webp", contentType: "image/webp", fileKey: "webp-1" }],
+    }));
+    const result = await SewoExportService.buildExport("webp", { includeXlsx: false });
+    const rendered = JSON.parse(result.pdf.toString());
+    expect(rendered.imageCount).toBe(1);
+    expect(rendered.texts).toContain("evidence.webp");
+    expect(rendered.texts).not.toContain("Image unavailable");
+  });
+
+  it("retains the filename and caption with an explicit placeholder when an image cannot be loaded", async () => {
+    localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
+    translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
+    storageMock.StorageService.getObjectBuffer.mockRejectedValue(new Error("Unavailable object"));
+    prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
+      attachments: [{ fileName: "missing.jpg", caption: "Evidence to recover", contentType: "image/jpeg", fileKey: "missing" }],
+    }));
+    const result = await SewoExportService.buildExport("missing", { includeXlsx: false });
+    const rendered = JSON.parse(result.pdf.toString());
+    expect(rendered.texts).toContain("missing.jpg - Evidence to recover");
+    expect(rendered.texts).toContain("Image unavailable");
+  });
+
   it("keeps every paragraph of a long, accented analysis text without truncating it", async () => {
     localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
     translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
@@ -769,7 +849,7 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts.some((entry) => entry.endsWith("..."))).toBe(false);
   });
 
-  it("lists every action linked to the SEWO via either relation, deduplicated, with translated status and full description", async () => {
+  it("lists all workspace actions, including source communication actions, deduplicated with full descriptions", async () => {
     localizationMock.getLocalizedSewoUi.mockResolvedValue({ ui });
     translationMock.translateForViewer.mockImplementation(async (_locale: string, texts: string[]) => texts);
     const longDescription =
@@ -784,6 +864,18 @@ describe("SewoExportService.buildExport", () => {
     };
     prismaMock.sEWO.findUniqueOrThrow.mockResolvedValue(baseSewoFixture({
       id: "sewo-multiple-actions",
+      communication: {
+        id: "comm-1",
+        type: "NEAR_MISS",
+        actions: [sharedAction, {
+          id: "communication-action",
+          title: "Inspeção de Paredes Stralis",
+          description: "Realizar Flash Informativo para qualidade.",
+          dueDate: new Date("2026-09-30T00:00:00.000Z"),
+          status: "OPEN",
+          ownerUser: { name: "Luis Santos" },
+        }],
+      },
       actions: [
         sharedAction,
         {
@@ -813,6 +905,18 @@ describe("SewoExportService.buildExport", () => {
     const exported = await SewoExportService.buildExport("sewo-multiple-actions", { locale: "en", exportedBy: "Ana Silva" });
     const rendered = JSON.parse(exported.pdf.toString()) as { texts: string[] };
 
+    expect(prismaMock.sEWO.findUniqueOrThrow).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        communication: expect.objectContaining({ include: expect.objectContaining({ actions: { include: { ownerUser: true } } }) }),
+      }),
+    }));
+    const correctionPlan = rendered.texts.slice(
+      rendered.texts.indexOf("Correction plan"),
+      rendered.texts.indexOf("Check of suitability for the planned activity"),
+    );
+    expect(correctionPlan).toContain("Inspeção de Paredes Stralis - Realizar Flash Informativo para qualidade.");
+    expect(correctionPlan).toContain("Luis Santos");
+    expect(correctionPlan).toContain("2026-09-30");
     expect(rendered.texts.filter((entry) => entry.includes("Repair conveyor guard")).length).toBe(1);
     expect(rendered.texts.some((entry) => entry.includes(longDescription))).toBe(true);
     expect(rendered.texts).toContain("Open");
@@ -825,9 +929,9 @@ describe("SewoExportService.buildExport", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(exported.xlsx as unknown as ArrayBuffer);
     const actionsSheet = workbook.getWorksheet(ui.actionPlan)!;
-    expect(actionsSheet.rowCount).toBe(4);
-    const titles = [2, 3, 4].map((row) => actionsSheet.getRow(row).getCell(1).value);
-    expect(titles).toEqual(expect.arrayContaining(["Repair conveyor guard", "Replace worn belt", "Retrain shift on lockout procedure"]));
+    expect(actionsSheet.rowCount).toBe(5);
+    const titles = [2, 3, 4, 5].map((row) => actionsSheet.getRow(row).getCell(1).value);
+    expect(titles).toEqual(expect.arrayContaining(["Repair conveyor guard", "Replace worn belt", "Retrain shift on lockout procedure", "Inspeção de Paredes Stralis"]));
   });
 
   it("shows the placeholder row only when the SEWO truly has no linked actions", async () => {
