@@ -13,6 +13,7 @@ import {
   resetCredentialsLoginLimit,
 } from "@/lib/auth/hardening";
 import { env } from "@/lib/env";
+import { sendVerificationEmailViaGateway } from "@/lib/auth/verification-email";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
@@ -103,17 +104,11 @@ export const authOptions: NextAuthOptions = {
       },
     }),
     EmailProvider({
-      server: {
-        host: env.SMTP_HOST,
-        port: env.SMTP_PORT,
-        auth: env.SMTP_USER
-          ? {
-              user: env.SMTP_USER,
-              pass: env.SMTP_PASS,
-            }
-          : undefined,
-      },
+      server: {},
       from: env.SMTP_FROM,
+      async sendVerificationRequest({ identifier, url }) {
+        await sendVerificationEmailViaGateway({ identifier, url });
+      },
     }),
   ],
   callbacks: {

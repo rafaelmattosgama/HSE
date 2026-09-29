@@ -3,15 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const helperMock = vi.hoisted(() => ({
   sendCredentialsEmail: vi.fn(),
 }));
+const gatewayMock = vi.hoisted(() => ({
+  sendViaSmtpGateway: vi.fn(),
+}));
 
 vi.mock("@/src/email/systemEmailHelpers.js", () => helperMock);
-vi.mock("@/lib/env", () => ({
-  env: {
-    SMTP_HOST: "localhost",
-    SMTP_PORT: 1025,
-    SMTP_FROM: "MA HSE <noreply@example.test>",
-  },
-}));
+vi.mock("@/lib/services/smtp-gateway-client", () => gatewayMock);
 
 import { EmailService } from "@/lib/services/email-service";
 
@@ -41,5 +38,17 @@ describe("EmailService credentials delivery", () => {
         }),
       }),
     );
+  });
+
+  it("routes generic messages and attachments through the gateway", async () => {
+    const attachments = [{ filename: "report.pdf", content: Buffer.from("pdf"), contentType: "application/pdf" }];
+    await EmailService.sendMail({
+      to: "user@example.com",
+      subject: "Report",
+      html: "<p>Report</p>",
+      attachments,
+    });
+
+    expect(gatewayMock.sendViaSmtpGateway).toHaveBeenCalledWith(expect.objectContaining({ attachments }));
   });
 });

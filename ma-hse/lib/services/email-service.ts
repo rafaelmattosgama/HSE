@@ -1,20 +1,5 @@
-import nodemailer from "nodemailer";
-import { env } from "@/lib/env";
+import { sendViaSmtpGateway } from "@/lib/services/smtp-gateway-client";
 import { sendCredentialsEmail } from "@/src/email/systemEmailHelpers.js";
-
-const transporter = nodemailer.createTransport({
-  host: env.SMTP_HOST,
-  port: env.SMTP_PORT,
-  auth: env.SMTP_USER
-    ? {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASS,
-      }
-    : undefined,
-  connectionTimeout: 15_000,
-  greetingTimeout: 10_000,
-  socketTimeout: 20_000,
-});
 
 export const EmailService = {
   async sendMail(input: {
@@ -28,17 +13,12 @@ export const EmailService = {
       contentType: string;
     }>;
   }) {
-    await transporter.sendMail({
-      from: env.SMTP_FROM,
+    await sendViaSmtpGateway({
       to: input.to,
       subject: input.subject,
       html: input.html,
       text: input.text,
-      attachments: input.attachments?.map((attachment) => ({
-        filename: attachment.filename,
-        content: attachment.content,
-        contentType: attachment.contentType,
-      })),
+      attachments: input.attachments,
     });
   },
 
