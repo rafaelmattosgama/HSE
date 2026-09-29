@@ -70,6 +70,7 @@ type GatewayAttachmentPayload = {
 };
 
 type GatewaySendPayload = {
+  from: string;
   to: string | string[];
   subject: string;
   text?: string;
@@ -195,6 +196,7 @@ export async function sendViaSmtpGateway(input: SmtpGatewaySendInput): Promise<{
   }
 
   const payload: GatewaySendPayload = {
+    from: env.SMTP_FROM,
     to: input.to,
     subject: input.subject,
     text: input.text,

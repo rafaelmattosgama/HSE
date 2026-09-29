@@ -25,6 +25,7 @@ vi.mock("@/lib/env", () => ({
   env: {
     SMTP_GATEWAY_BASE_URL: "https://148.69.182.60:8444",
     SMTP_GATEWAY_API_KEY: "test-api-key",
+    SMTP_FROM: "Safety Report <safetyreport@pt.ma.gruppocln.com>",
   },
 }));
 
@@ -116,7 +117,7 @@ describe("smtp-gateway-client", () => {
     });
 
     it("throws a non-retryable error on 400 without retrying", async () => {
-      const { sendViaSmtpGateway, SmtpGatewayError } = await import("@/lib/services/smtp-gateway-client");
+      const { sendViaSmtpGateway } = await import("@/lib/services/smtp-gateway-client");
       respondWith(400, { error: "Invalid recipient address" });
 
       await expect(sendViaSmtpGateway({ to: "bad", subject: "Hello", text: "Body" })).rejects.toMatchObject({
@@ -201,6 +202,7 @@ describe("smtp-gateway-client", () => {
 
       const requestCall = httpsMock.request.mock.results[0].value as FakeClientRequest;
       const sentBody = JSON.parse(requestCall.written.join(""));
+      expect(sentBody.from).toBe("Safety Report <safetyreport@pt.ma.gruppocln.com>");
       expect(sentBody.attachments).toEqual([
         { filename: "report.pdf", content: content.toString("base64"), contentType: "application/pdf" },
       ]);
