@@ -26,6 +26,7 @@ const prismaMock = vi.hoisted(() => ({
   actionAlertDelivery: {
     create: vi.fn(),
     findMany: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -74,7 +75,8 @@ describe("ActionAlertService", () => {
   beforeEach(() => {
     txMock.notification.create.mockResolvedValue({ id: "44444444-4444-4444-4444-444444444444" });
     txMock.actionAlertDelivery.create.mockResolvedValue({});
-    prismaMock.actionAlertDelivery.create.mockResolvedValue({});
+    prismaMock.actionAlertDelivery.create.mockResolvedValue({ id: "email-delivery-1" });
+    prismaMock.actionAlertDelivery.delete.mockResolvedValue({});
     emailMock.sendNotificationEmail.mockResolvedValue({});
   });
 
@@ -124,6 +126,38 @@ describe("ActionAlertService", () => {
         mensagem: expect.stringContaining("Data limite:"),
       }),
     );
+  });
+
+  it("releases a failed email attempt so it can be retried without repeating the software alert", async () => {
+    const action = actionFixture();
+    prismaMock.action.findUnique.mockResolvedValue(action);
+    let reserved = false;
+    prismaMock.actionAlertDelivery.create.mockImplementation(async () => {
+      if (reserved) throw uniqueError();
+      reserved = true;
+      return { id: "email-delivery-1" };
+    });
+    prismaMock.actionAlertDelivery.delete.mockImplementation(async () => {
+      reserved = false;
+      return {};
+    });
+    emailMock.sendNotificationEmail.mockRejectedValueOnce(new Error("SMTP authentication failed"));
+
+    await expect(ActionAlertService.sendNewActionAlerts(action.id)).resolves.toBe(1);
+    expect(prismaMock.actionAlertDelivery.delete).toHaveBeenCalledWith({ where: { id: "email-delivery-1" } });
+
+    txMock.actionAlertDelivery.create.mockRejectedValue(uniqueError());
+    await expect(ActionAlertService.sendNewActionAlerts(action.id)).resolves.toBe(1);
+    await expect(ActionAlertService.sendNewActionAlerts(action.id)).resolves.toBe(0);
+    expect(emailMock.sendNotificationEmail).toHaveBeenCalledTimes(2);
+    expect(prismaMock.actionAlertDelivery.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the delivery record after a successful email", async () => {
+    const action = actionFixture();
+    prismaMock.action.findUnique.mockResolvedValue(action);
+    await expect(ActionAlertService.sendNewActionAlerts(action.id)).resolves.toBe(2);
+    expect(prismaMock.actionAlertDelivery.delete).not.toHaveBeenCalled();
   });
 
   it("sends the three-day alert only for open actions due exactly three Lisbon calendar days later", async () => {

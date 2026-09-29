@@ -242,8 +242,9 @@ async function sendEmailAlert(input: {
 }) {
   if (!input.user.email) return false;
 
+  let deliveryId: string;
   try {
-    await prisma.actionAlertDelivery.create({
+    const delivery = await prisma.actionAlertDelivery.create({
       data: {
         actionId: input.action.id,
         userId: input.user.id,
@@ -251,20 +252,28 @@ async function sendEmailAlert(input: {
         channel: ActionAlertChannel.EMAIL,
       },
     });
+    deliveryId = delivery.id;
   } catch (error) {
     if (isUniqueConstraintError(error)) return false;
     throw error;
   }
 
   const { content } = input;
-  await sendNotificationEmail({
-    user: input.user,
-    tituloNotificacao: content.title,
-    mensagem: content.body,
-    dataHora: new Date(),
-    plantName: input.action.plant.name,
-    actionUrl: new URL(content.actionUrl, env.APP_URL).toString(),
-  });
+  try {
+    await sendNotificationEmail({
+      user: input.user,
+      tituloNotificacao: content.title,
+      mensagem: content.body,
+      dataHora: new Date(),
+      plantName: input.action.plant.name,
+      actionUrl: new URL(content.actionUrl, env.APP_URL).toString(),
+    });
+  } catch (error) {
+    // Reserve before sending to prevent concurrent duplicates, but release a
+    // failed attempt so a later dispatch can retry the email.
+    await prisma.actionAlertDelivery.delete({ where: { id: deliveryId } });
+    throw error;
+  }
 
   return true;
 }

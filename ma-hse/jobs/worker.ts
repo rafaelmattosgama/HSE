@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Worker } from "bullmq";
 import { logger } from "@/lib/logger";
 import { getQueueConnection, QUEUE_NAMES } from "@/jobs/queues";

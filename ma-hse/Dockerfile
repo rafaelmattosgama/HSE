@@ -37,6 +37,7 @@ COPY --from=builder --chown=node:node /app/lib ./lib
 COPY --from=builder --chown=node:node /app/messages ./messages
 COPY --from=builder --chown=node:node /app/scripts ./scripts
 COPY --from=builder --chown=node:node /app/src ./src
+COPY --from=builder --chown=node:node /app/certs ./certs
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 USER node
 EXPOSE 3000
