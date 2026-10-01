@@ -51,9 +51,11 @@ async function readApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | 
 export function SewoRecipientListManager({
   plantCode,
   initialRecipients,
+  endpoint,
   labels = getStaticN0MasterDataUi("en"),
 }: {
-  plantCode: string;
+  plantCode?: string;
+  endpoint?: string;
   initialRecipients: SewoReportRecipient[];
   labels?: N0MasterDataUi;
 }) {
@@ -91,7 +93,7 @@ export function SewoRecipientListManager({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plantCode}/admin/sewo-report-recipients`, {
+      const response = await fetch(endpoint ?? `/api/plants/${plantCode}/admin/sewo-report-recipients`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -126,7 +128,7 @@ export function SewoRecipientListManager({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plantCode}/admin/sewo-report-recipients`, {
+      const response = await fetch(endpoint ?? `/api/plants/${plantCode}/admin/sewo-report-recipients`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

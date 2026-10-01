@@ -66,6 +66,8 @@ export async function ensureSewoReportRecipientList(plantId: string) {
 }
 
 export async function listSewoReportRecipients(plantId: string) {
+  const common = await prisma.systemParameter.findFirst({ where: { plantId: null, key: "GENERAL_SEWO_RECIPIENTS" } });
+  if (common) return (common.valueJson as unknown as SewoReportRecipient[]).map(mapRecipient);
   const list = await findSewoReportRecipientList(plantId);
   if (!list) {
     return [] as SewoReportRecipient[];

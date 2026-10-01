@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac/guards";
 import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 import { getRoleAssignmentPlantId } from "@/lib/rbac/user-management";
+import { applyGeneralCatalogsToNewPlant } from "@/lib/services/general-settings-service";
 import { createCorporatePlantInput, updateCorporatePlantLanguageInput } from "@/lib/validation/dtos";
 
 const DEFAULT_MASTER_DATA = {
@@ -182,7 +183,8 @@ async function ensurePlantDefaults(plantId: string) {
         create: { plantId, ...row },
       });
     }
-  });
+    await applyGeneralCatalogsToNewPlant(tx, plantId);
+  }, { timeout: 60000 });
 
   const [areas, workstations, equipments, riskThemes] = await prisma.$transaction([
     prisma.area.findMany({ where: { plantId }, select: { id: true } }),

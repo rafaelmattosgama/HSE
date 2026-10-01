@@ -5,10 +5,10 @@ import { authOptions } from "@/lib/auth/options";
 import { CorporatePlantForm } from "@/components/feature/corporate-plant-form";
 import { ModuleToggleManager } from "@/components/feature/module-toggle-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
-import { PlantLanguageSettings } from "@/components/feature/plant-language-settings";
 import { ProfessionalRisksManager } from "@/components/feature/professional-risks-manager";
 import { ReportLayoutManager } from "@/components/feature/report-layout-manager";
 import { SafetyCommunicationRecipientManager } from "@/components/feature/safety-communication-recipient-manager";
+import { SettingsScopeNavigation } from "@/components/feature/settings-scope-navigation";
 import { SettingsPlantSelector } from "@/components/feature/settings-plant-selector";
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { UserManager } from "@/components/feature/user-manager";
@@ -19,23 +19,20 @@ import {
 } from "@/lib/modules";
 import { formatMasterDataMessage } from "@/lib/master-data-ui";
 import { prisma } from "@/lib/prisma";
-import { getCreatableRoles } from "@/lib/rbac/user-management";
+import { readGeneralCatalog } from "@/lib/services/general-settings-service";
+import { readGeneralSewoRecipients } from "@/lib/services/general-sewo-recipients";
+import { listGeneralUsers, GENERAL_USER_ROLES } from "@/lib/services/general-user-service";
 import { getServerUiDictionary, getServerUiLocale } from "@/lib/server-ui-language";
-import { ensureDefaultProfessionalRisks } from "@/lib/services/professional-risk-service";
-import { ensureDefaultNearMissTypes } from "@/lib/services/near-miss-type-service";
 import { getLocalizedN0MasterDataUi } from "@/lib/services/master-data-ui-localization";
 import { localizeMasterDataRows } from "@/lib/services/master-data-translation-service";
 import { SafetyCommunicationAlertService } from "@/lib/services/safety-communication-alert-service";
-import { listSewoReportRecipients } from "@/lib/services/sewo-recipient-service";
-import { ensureDefaultUnsafeActTypes } from "@/lib/services/unsafe-act-type-service";
-import { ensureDefaultUnsafeConditionTypes } from "@/lib/services/unsafe-condition-type-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plant?: string }>;
+  searchParams: Promise<{ plant?: string; scope?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -68,17 +65,10 @@ export default async function SettingsPage({
   });
 
   const currentSearchParams = await searchParams;
-  const selectedPlantCode = currentSearchParams.plant ?? allPlants[0]?.code;
-  const selectedPlantId = allPlants.find((plant) => plant.code === selectedPlantCode)?.id;
-  if (selectedPlantId) {
-    await Promise.all([
-      ensureDefaultProfessionalRisks(selectedPlantId),
-      ensureDefaultNearMissTypes(selectedPlantId),
-      ensureDefaultUnsafeActTypes(selectedPlantId),
-      ensureDefaultUnsafeConditionTypes(selectedPlantId),
-    ]);
-  }
-  const selectedPlant = selectedPlantCode
+  const scope = currentSearchParams.scope === "plant" || (!currentSearchParams.scope && currentSearchParams.plant) ? "plant" : "general";
+  const plantUserRoles: RoleCode[] = [RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N6_HR];
+  const selectedPlantCode = allPlants.find((plant) => plant.code === currentSearchParams.plant)?.code ?? allPlants[0]?.code;
+  const selectedPlant = scope === "plant" && selectedPlantCode
     ? await prisma.plant.findUnique({
         where: { code: selectedPlantCode },
         include: {
@@ -98,26 +88,6 @@ export default async function SettingsPage({
             where: { isActive: true },
             orderBy: { name: "asc" },
           },
-          riskThemes: {
-            where: { isActive: true },
-            orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
-          },
-          unsafeActTypes: {
-            where: { isActive: true },
-            orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
-          },
-          unsafeCondTypes: {
-            where: { isActive: true },
-            orderBy: [{ category: "asc" }, { name: "asc" }, { code: "asc" }],
-          },
-          nearMissTypes: {
-            where: { isActive: true },
-            orderBy: [{ code: "asc" }, { name: "asc" }],
-          },
-          injuryTypes: {
-            where: { isActive: true },
-            orderBy: [{ code: "asc" }, { name: "asc" }],
-          },
           users: {
             include: {
               role: true,
@@ -131,29 +101,7 @@ export default async function SettingsPage({
 
   const moduleParameter = selectedPlant?.systemParameters.find((entry) => entry.key === MODULE_TOGGLES_PARAMETER_KEY);
   const reportLayoutParameter = selectedPlant?.systemParameters.find((entry) => entry.key === "REPORT_LAYOUT");
-  const globalN1Users = selectedPlant
-    ? await prisma.userPlantRole.findMany({
-        where: {
-          plantId: null,
-          role: {
-            code: RoleCode.N1_CORPORATE,
-          },
-        },
-        include: {
-          role: true,
-          user: true,
-        },
-      })
-    : [];
-  const selectedPlantUsers = selectedPlant
-    ? [
-        ...selectedPlant.users,
-        ...globalN1Users.filter(
-          (globalRole) => !selectedPlant.users.some((plantRole) => plantRole.userId === globalRole.userId && plantRole.roleId === globalRole.roleId),
-        ),
-      ]
-    : [];
-  const sewoRecipients = selectedPlant ? await listSewoReportRecipients(selectedPlant.id) : [];
+  const selectedPlantUsers = selectedPlant?.users.filter(entry => plantUserRoles.includes(entry.role.code)) ?? [];
   const safetyCommunicationRecipients = selectedPlant
     ? await SafetyCommunicationAlertService.listRecipients(selectedPlant.id)
     : [];
@@ -169,15 +117,19 @@ export default async function SettingsPage({
     plantLanguage: selectedPlant?.defaultLanguage,
   });
   const masterDataUi = await getLocalizedN0MasterDataUi(uiLocale);
-  const [localizedAreas, localizedWorkstations, localizedEquipments, localizedRiskThemes] = selectedPlant
+  const [localizedAreas, localizedWorkstations, localizedEquipments] = selectedPlant
     ? await Promise.all([
         localizeMasterDataRows(MasterDataEntityType.AREA, selectedPlant.areas, uiLocale),
         localizeMasterDataRows(MasterDataEntityType.WORKSTATION, selectedPlant.workstations, uiLocale),
         localizeMasterDataRows(MasterDataEntityType.EQUIPMENT, selectedPlant.equipments, uiLocale),
-        localizeMasterDataRows(MasterDataEntityType.RISK_THEME, selectedPlant.riskThemes, uiLocale),
       ])
-    : [[], [], [], []];
+    : [[], [], []];
   const localizedAreaById = new Map(localizedAreas.map((area) => [area.id, area.name]));
+  const generalData = scope === "general" ? await Promise.all([
+    readGeneralCatalog("unsafeActType"), readGeneralCatalog("unsafeConditionType"),
+    readGeneralCatalog("nearMissType"), readGeneralCatalog("injuryType"), readGeneralCatalog("riskTheme"),
+    readGeneralSewoRecipients(), listGeneralUsers(),
+  ]) : null;
   const moduleLabels = {
     MAPA: ui.modules.mapa,
     VALIDATIONS: ui.modules.validation,
@@ -193,13 +145,13 @@ export default async function SettingsPage({
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-6 py-6">
-      <section className="rounded-2xl bg-white p-6 shadow-sm" data-onboarding="system-settings">
+      <section className="sticky top-3 z-20 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-onboarding="system-settings">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{masterDataUi.n0Admin}</p>
             <h1 className="mt-2 text-3xl font-bold text-slate-900">{ui.modules.settings}</h1>
           </div>
-          <SettingsPlantSelector
+          {scope === "plant" ? <SettingsPlantSelector
             plants={allPlants.map((plant) => ({
               code: plant.code,
               name: plant.name,
@@ -207,36 +159,49 @@ export default async function SettingsPage({
             }))}
             selectedPlantCode={selectedPlant?.code ?? selectedPlantCode}
             labels={masterDataUi}
-          />
+          /> : <p className="text-sm text-slate-600">{masterDataUi.generalSettingsHelp}</p>}
         </div>
+        <SettingsScopeNavigation scope={scope} labels={masterDataUi} />
       </section>
 
-      <div data-onboarding="settings-plants">
-        <CorporatePlantForm
-          plants={allPlants.map((plant) => ({
-            id: plant.id,
-            code: plant.code,
-            name: plant.name,
-            timezone: plant.timezone,
-            defaultLanguage: plant.defaultLanguage as "pt" | "it" | "en" | "pl" | "de" | "ro" | "fr",
-            isActive: plant.isActive,
-          }))}
-          selectedPlantId={selectedPlant?.id ?? null}
-          labels={masterDataUi}
-          showPlantSelector={false}
-        />
-      </div>
-
-      {selectedPlant ? (
-        <>
-          <PlantLanguageSettings
-            plantId={selectedPlant.id}
-            plantName={selectedPlant.name}
-            plantCode={selectedPlant.code}
-            timezone={selectedPlant.timezone}
-            defaultLanguage={selectedPlant.defaultLanguage}
-            labels={masterDataUi}
+      {generalData ? (
+        <div className="space-y-6" key="general">
+          <div data-onboarding="settings-plants"><CorporatePlantForm mode="create" labels={masterDataUi} /></div>
+          <N0MasterDataManager
+            scope="general" catalogEndpoint="/api/admin/master-data" showWorkers={false}
+            visibleCatalogTypes={["unsafeActType", "unsafeConditionType", "nearMissType", "injuryType"]}
+            initialAreas={[]} initialWorkstations={[]} initialEquipments={[]} initialWorkers={[]}
+            initialUnsafeActTypes={generalData[0].filter(row => row.isActive)}
+            initialUnsafeConditionTypes={generalData[1].filter(row => row.isActive)}
+            initialNearMissTypes={generalData[2].filter(row => row.isActive)}
+            initialInjuryTypes={generalData[3].filter(row => row.isActive)}
+            labels={{ ...masterDataUi, title: masterDataUi.generalMasterDataTitle }}
           />
+          <ProfessionalRisksManager endpoint="/api/admin/professional-risks" initialRisks={generalData[4]} labels={masterDataUi} />
+          <SewoRecipientListManager endpoint="/api/admin/sewo-report-recipients" initialRecipients={generalData[5]} labels={masterDataUi} />
+          <div data-onboarding="settings-users"><UserManager
+            endpoint="/api/admin/users" users={generalData[6]} allowedCreateRoles={[...GENERAL_USER_ROLES]}
+            assignmentPlants={allPlants.map(plant => ({ id: plant.id, name: plant.name }))}
+            labels={masterDataUi}
+          /></div>
+        </div>
+      ) : selectedPlant ? (
+        <div key={selectedPlant.code} className="space-y-6">
+          <div data-onboarding="settings-plants">
+            <CorporatePlantForm
+              mode="manage"
+              plants={allPlants.map((plant) => ({
+                id: plant.id,
+                code: plant.code,
+                name: plant.name,
+                timezone: plant.timezone,
+                defaultLanguage: plant.defaultLanguage as "pt" | "it" | "en" | "pl" | "de" | "ro" | "fr",
+                isActive: plant.isActive,
+              }))}
+              selectedPlantId={selectedPlant?.id ?? null}
+              labels={masterDataUi}
+            />
+          </div>
 
           <section className="space-y-4" data-onboarding="settings-modules">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
@@ -249,26 +214,18 @@ export default async function SettingsPage({
               </span>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <ModuleToggleManager
-                endpoint="/api/admin/modules"
-                title={masterDataUi.globalModulesTitle}
-                description={masterDataUi.globalModulesHelp}
-                saveLabel={masterDataUi.saveGlobalModules}
-                savingLabel={masterDataUi.saving}
-                successMessage={masterDataUi.moduleSettingsSaved}
-                errorMessage={masterDataUi.moduleSettingsError}
-                helpButtonLabel={masterDataUi.helpButton}
-                moduleLabels={moduleLabels}
-                initialModules={resolveModuleToggles(globalModuleParameter?.valueJson)}
-              />
-
+            <div>
               <ModuleToggleManager
                 key={`plant-modules:${selectedPlant.code}`}
                 endpoint={`/api/plants/${selectedPlant.code}/admin/modules`}
                 title={formatMasterDataMessage(masterDataUi.plantModulesTitle, { plant: selectedPlant.name })}
                 description={masterDataUi.plantModulesHelp}
                 saveLabel={masterDataUi.savePlantModules}
+                applyToAll={{
+                  endpoint: "/api/admin/modules/apply-all",
+                  label: masterDataUi.applyModulesToAllPlants,
+                  successMessage: masterDataUi.modulesAppliedToAllPlants,
+                }}
                 savingLabel={masterDataUi.saving}
                 successMessage={masterDataUi.moduleSettingsSaved}
                 errorMessage={masterDataUi.moduleSettingsError}
@@ -285,35 +242,15 @@ export default async function SettingsPage({
           <N0MasterDataManager
             key={`n0-master-data:${selectedPlant.code}`}
             plantCode={selectedPlant.code}
+            visibleCatalogTypes={["area", "workstation", "equipment"]}
             initialAreas={localizedAreas.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
             initialWorkstations={localizedWorkstations.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
             initialEquipments={localizedEquipments.map((item) => ({ id: item.id, code: item.code, name: item.name, originalName: item.originalName }))}
             initialWorkers={selectedPlant.employees.map((item) => ({ id: item.id, employeeNo: item.employeeNo, name: item.name, dept: item.dept }))}
-            initialNearMissTypes={selectedPlant.nearMissTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-            initialUnsafeActTypes={selectedPlant.unsafeActTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
-            initialUnsafeConditionTypes={selectedPlant.unsafeCondTypes.map((item) => ({ id: item.id, code: item.code, name: item.name, category: item.category }))}
-            initialInjuryTypes={selectedPlant.injuryTypes.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
-            labels={masterDataUi}
-          />
-
-          <SewoRecipientListManager
-            key={`sewo-recipients:${selectedPlant.code}`}
-            plantCode={selectedPlant.code}
-            initialRecipients={sewoRecipients}
-            labels={masterDataUi}
-          />
-
-          <ProfessionalRisksManager
-            plantCode={selectedPlant.code}
-            initialRisks={localizedRiskThemes.map((risk) => ({
-              id: risk.id,
-              code: risk.code,
-              category: risk.category,
-              name: risk.name,
-              originalName: risk.originalName,
-              originalCategory: risk.originalCategory,
-              isActive: risk.isActive,
-            }))}
+            initialNearMissTypes={[]}
+            initialUnsafeActTypes={[]}
+            initialUnsafeConditionTypes={[]}
+            initialInjuryTypes={[]}
             labels={masterDataUi}
           />
 
@@ -332,7 +269,9 @@ export default async function SettingsPage({
                 createdAt: entry.user.createdAt,
                 updatedAt: entry.user.updatedAt,
               }))}
-              allowedCreateRoles={getCreatableRoles(RoleCode.N0_ADMIN)}
+              allowedCreateRoles={plantUserRoles}
+              manageableRoles={plantUserRoles}
+              visibleRoles={plantUserRoles}
               labels={masterDataUi}
             />
           </div>
@@ -356,7 +295,7 @@ export default async function SettingsPage({
             initialLayouts={((reportLayoutParameter?.valueJson as Array<{ id: string; title: string; description: string }> | null) ?? [])}
             labels={masterDataUi}
           />
-        </>
+        </div>
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
           {masterDataUi.noPlantAvailable}

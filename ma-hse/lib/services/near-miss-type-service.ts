@@ -1,7 +1,9 @@
 import { DEFAULT_NEAR_MISS_TYPES } from "@/lib/defaults/near-miss-types";
 import { prisma } from "@/lib/prisma";
+import { readStoredGeneralCatalog } from "@/lib/services/general-settings-service";
 
 export async function ensureDefaultNearMissTypes(plantId: string) {
+  if (await readStoredGeneralCatalog("nearMissType")) return;
   await prisma.$transaction(
     DEFAULT_NEAR_MISS_TYPES.map((type) =>
       prisma.nearMissType.upsert({

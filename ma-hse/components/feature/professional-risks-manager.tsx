@@ -43,9 +43,11 @@ function groupRisks(risks: ProfessionalRisk[]) {
 export function ProfessionalRisksManager({
   plantCode,
   initialRisks,
+  endpoint,
   labels = getStaticN0MasterDataUi("en"),
 }: {
-  plantCode: string;
+  plantCode?: string;
+  endpoint?: string;
   initialRisks: ProfessionalRisk[];
   labels?: N0MasterDataUi;
 }) {
@@ -89,7 +91,7 @@ export function ProfessionalRisksManager({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plantCode}/admin/professional-risks`, {
+      const response = await fetch(endpoint ?? `/api/plants/${plantCode}/admin/professional-risks`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -149,7 +151,7 @@ export function ProfessionalRisksManager({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plantCode}/admin/professional-risks`, {
+      const response = await fetch(endpoint ?? `/api/plants/${plantCode}/admin/professional-risks`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -183,7 +185,7 @@ export function ProfessionalRisksManager({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/plants/${plantCode}/admin/professional-risks`, {
+      const response = await fetch(endpoint ?? `/api/plants/${plantCode}/admin/professional-risks`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: risk.id }),
@@ -220,10 +222,10 @@ export function ProfessionalRisksManager({
             />
           </div>
         </div>
-        <Button type="button" variant="secondary" size="sm" onClick={syncDefaults} disabled={syncing}>
+        {!endpoint ? <Button type="button" variant="secondary" size="sm" onClick={syncDefaults} disabled={syncing}>
           <RefreshCw className={cn("h-4 w-4", syncing ? "animate-spin" : "")} />
           {syncing ? labels.professionalRisks.syncing : labels.professionalRisks.syncDefaultList}
-        </Button>
+        </Button> : null}
       </header>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.15fr)]">

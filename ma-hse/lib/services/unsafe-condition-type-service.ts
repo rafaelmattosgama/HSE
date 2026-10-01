@@ -1,7 +1,9 @@
 import { DEFAULT_UNSAFE_CONDITION_TYPES, LEGACY_DEFAULT_UNSAFE_CONDITION_TYPES } from "@/lib/defaults/unsafe-condition-types";
 import { prisma } from "@/lib/prisma";
+import { readStoredGeneralCatalog } from "@/lib/services/general-settings-service";
 
 export async function ensureDefaultUnsafeConditionTypes(plantId: string) {
+  if (await readStoredGeneralCatalog("unsafeConditionType")) return;
   await prisma.$transaction([
     ...DEFAULT_UNSAFE_CONDITION_TYPES.map((row) =>
       prisma.unsafeConditionType.upsert({
