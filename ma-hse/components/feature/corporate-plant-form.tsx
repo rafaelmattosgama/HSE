@@ -22,7 +22,7 @@ type CorporatePlantFormProps = {
   plants?: ManagedPlant[];
   selectedPlantId?: string | null;
   labels?: N0MasterDataUi;
-  showPlantSelector?: boolean;
+  mode?: "create" | "manage" | "both";
 };
 
 function emptyCreateState() {
@@ -42,7 +42,7 @@ export function CorporatePlantForm({
   plants = [],
   selectedPlantId = null,
   labels = getStaticN0MasterDataUi("en"),
-  showPlantSelector = true,
+  mode = "both",
 }: CorporatePlantFormProps) {
   const router = useRouter();
   const selectedPlant = useMemo(
@@ -75,17 +75,6 @@ export function CorporatePlantForm({
     setEditMessage("");
   }, [selectedPlant]);
 
-  function selectPlant(plant: ManagedPlant) {
-    setEditingPlantId(plant.id);
-    setEditCode(plant.code);
-    setEditName(plant.name);
-    setEditTimezone(plant.timezone);
-    setEditLanguage(plant.defaultLanguage);
-    setEditIsActive(plant.isActive);
-    setEditMessage("");
-    router.push(`/app/settings?plant=${plant.code}`);
-  }
-
   async function submitCreate(event: React.FormEvent) {
     event.preventDefault();
     setCreateLoading(true);
@@ -114,6 +103,7 @@ export function CorporatePlantForm({
       setGeneratedPasswords(json.data.generatedPasswords ?? []);
       setCreateMessage(labels.plantSaved);
       setCreateForm(emptyCreateState());
+      router.refresh();
     } catch (error) {
       setCreateMessage(error instanceof Error ? error.message : labels.failedToSavePlant);
     } finally {
@@ -147,7 +137,7 @@ export function CorporatePlantForm({
       }
 
       setEditMessage(labels.plantUpdated);
-      router.push(`/app/settings?plant=${json.data.plant.code}`);
+      router.push(`/app/settings?scope=plant&plant=${encodeURIComponent(json.data.plant.code)}`);
       router.refresh();
     } catch (error) {
       setEditMessage(error instanceof Error ? error.message : labels.failedToUpdatePlant);
@@ -174,7 +164,7 @@ export function CorporatePlantForm({
 
       const nextPlant = plants.find((plant) => plant.id !== editingPlantId);
       setEditMessage(labels.plantDeleted);
-      router.push(nextPlant ? `/app/settings?plant=${nextPlant.code}` : "/app/settings");
+      router.push(nextPlant ? `/app/settings?scope=plant&plant=${encodeURIComponent(nextPlant.code)}` : "/app/settings?scope=general");
       router.refresh();
     } catch (error) {
       setEditMessage(error instanceof Error ? error.message : labels.failedToDeletePlant);
@@ -185,44 +175,18 @@ export function CorporatePlantForm({
 
   return (
     <div className="space-y-6">
-      {plants.length > 0 ? (
+      {mode !== "create" && plants.length > 0 ? (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <header className="mb-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.managePlants}</h2>
           </header>
-
-          {showPlantSelector ? (
-            <div className="mb-4 flex flex-wrap gap-2">
-              {plants.map((plant) => (
-                <button
-                  key={plant.id}
-                  type="button"
-                  className={`rounded-full border px-4 py-2 text-sm font-medium ${
-                    plant.id === editingPlantId
-                      ? "border-teal-300 bg-teal-50 text-teal-900"
-                      : "border-slate-300 bg-white text-slate-700"
-                  }`}
-                  onClick={() => selectPlant(plant)}
-                >
-                  {plant.name} {!plant.isActive ? `(${labels.inactive})` : ""}
-                </button>
-              ))}
-            </div>
-          ) : selectedPlant ? (
-            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.selectedPlantTitle}</p>
-              <p className="mt-1 text-sm font-semibold text-slate-900">
-                {selectedPlant.name} {!selectedPlant.isActive ? `(${labels.inactive})` : ""}
-              </p>
-            </div>
-          ) : null}
 
           {editingPlantId ? (
             <form onSubmit={submitEdit} className="grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2">
               <input value={editCode} onChange={(event) => setEditCode(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.plantCode} required />
               <input value={editName} onChange={(event) => setEditName(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.plantName} required />
               <input value={editTimezone} onChange={(event) => setEditTimezone(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={labels.timeZone} required />
-              <select value={editLanguage} onChange={(event) => setEditLanguage(event.target.value as (typeof LANGUAGE_OPTIONS)[number])} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <select aria-label={labels.defaultLanguage} value={editLanguage} onChange={(event) => setEditLanguage(event.target.value as (typeof LANGUAGE_OPTIONS)[number])} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
                 {LANGUAGE_OPTIONS.map((entry) => (
                   <option key={entry} value={entry}>
                     {entry.toUpperCase()}
@@ -250,7 +214,7 @@ export function CorporatePlantForm({
         </section>
       ) : null}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {mode !== "manage" ? <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.createPlant}</h2>
@@ -297,7 +261,7 @@ export function CorporatePlantForm({
             ))}
           </div>
         ) : null}
-      </section>
+      </section> : null}
     </div>
   );
 }

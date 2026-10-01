@@ -16,6 +16,7 @@ export function ModuleToggleManager({
   helpButtonLabel = "Help",
   initialModules,
   moduleLabels,
+  applyToAll,
 }: {
   endpoint: string;
   title: string;
@@ -27,33 +28,34 @@ export function ModuleToggleManager({
   helpButtonLabel?: string;
   initialModules: ModuleToggleMap;
   moduleLabels?: Partial<Record<ModuleToggleKey, string>>;
+  applyToAll?: { endpoint: string; label: string; successMessage: string };
 }) {
   const [modules, setModules] = useState<ModuleToggleMap>(initialModules);
   const [message, setMessage] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<"plant" | "all" | null>(null);
 
-  async function saveModules() {
-    setSaving(true);
+  async function saveModules(scope: "plant" | "all") {
+    setSaving(scope);
     setMessage("");
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(scope === "all" && applyToAll ? applyToAll.endpoint : endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ modules }),
       });
 
       const json = await response.json();
-      if (!json.ok) {
+      if (!response.ok || !json.ok) {
         throw new Error(json.message ?? errorMessage);
       }
 
       setModules(json.data.modules ?? modules);
-      setMessage(successMessage);
+      setMessage(scope === "all" && applyToAll ? applyToAll.successMessage : successMessage);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : errorMessage);
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
 
@@ -79,6 +81,7 @@ export function ModuleToggleManager({
               <input
                 type="checkbox"
                 checked={Boolean(active)}
+                disabled={saving !== null}
                 onChange={(event) =>
                   setModules((current) => ({
                     ...current,
@@ -91,11 +94,16 @@ export function ModuleToggleManager({
         })}
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <Button type="button" size="sm" onClick={saveModules} disabled={saving}>
-          {saving ? savingLabel : saveLabel}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button type="button" size="sm" onClick={() => saveModules("plant")} disabled={saving !== null}>
+          {saving === "plant" ? savingLabel : saveLabel}
         </Button>
-        {message ? <p className="text-sm text-slate-600">{message}</p> : null}
+        {applyToAll ? (
+          <Button type="button" size="sm" variant="secondary" onClick={() => saveModules("all")} disabled={saving !== null}>
+            {saving === "all" ? savingLabel : applyToAll.label}
+          </Button>
+        ) : null}
+        {message ? <p role="status" className="text-sm text-slate-600">{message}</p> : null}
       </div>
     </section>
   );

@@ -27,6 +27,28 @@ function show(role: RoleCode = RoleCode.N2_PLANT_MANAGER) {
 }
 
 describe("user department dropdown", () => {
+  it("sends the selected N3 plant assignments from general settings without loading a plant's departments", async () => {
+    const { container } = render(createElement(UserManager, {
+      users: [], allowedCreateRoles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY],
+      endpoint: "/api/admin/users", assignmentPlants: [{ id: "plant-a", name: "Factory A" }, { id: "plant-b", name: "Factory B" }], labels,
+    }));
+    fireEvent.change(screen.getByRole("combobox", { name: labels.users.role }), { target: { value: RoleCode.N3_SAFETY } });
+    fireEvent.change(screen.getByPlaceholderText("email@company.com"), { target: { value: "safety@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText(labels.users.fullName), { target: { value: "Safety User" } });
+    fireEvent.change(screen.getByPlaceholderText(labels.users.passwordPlaceholder), { target: { value: "initial-password" } });
+    fireEvent.submit(container.querySelector("form")!);
+    expect(await screen.findByText(labels.assignedPlantsRequired)).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Factory A" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Factory B" }));
+    fireEvent.submit(container.querySelector("form")!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/admin/users", expect.objectContaining({
+      method: "POST", body: expect.stringContaining('"plantIds":["plant-a","plant-b"]'),
+    })));
+    expect(fetchMock.mock.calls.some(([url]) => url.includes("/departments"))).toBe(false);
+  });
+
   it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR])("requires a master-data selection for %s and sends its ID", async (role) => {
     const { container } = show(role);
     const option = await screen.findByRole("option", { name: "D1 — Produção" });

@@ -149,6 +149,9 @@ export function N0MasterDataManager({
   initialUnsafeConditionTypes,
   initialInjuryTypes,
   visibleCatalogTypes,
+  showWorkers = true,
+  catalogEndpoint,
+  scope = "plant",
   plantCode,
   labels,
 }: {
@@ -161,6 +164,9 @@ export function N0MasterDataManager({
   initialUnsafeConditionTypes: CatalogItem[];
   initialInjuryTypes: CatalogItem[];
   visibleCatalogTypes?: readonly MasterDataType[];
+  showWorkers?: boolean;
+  catalogEndpoint?: string;
+  scope?: "plant" | "general";
   plantCode?: string;
   labels: N0MasterDataUi;
 }) {
@@ -347,7 +353,7 @@ export function N0MasterDataManager({
     setCatalogMessage(type, "");
 
     try {
-      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+      const response = await fetch(catalogEndpoint ?? `/api/plants/${plant}/admin/master-data`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -397,7 +403,7 @@ export function N0MasterDataManager({
     setCatalogMessage(type, "");
 
     try {
-      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+      const response = await fetch(catalogEndpoint ?? `/api/plants/${plant}/admin/master-data`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ type, id: item.id }),
@@ -435,7 +441,7 @@ export function N0MasterDataManager({
     setCatalogMessage("equipment", "");
 
     try {
-      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+      const response = await fetch(catalogEndpoint ?? `/api/plants/${plant}/admin/master-data`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -485,7 +491,7 @@ export function N0MasterDataManager({
     setCatalogMessage(type, "");
 
     try {
-      const response = await fetch(`/api/plants/${plant}/admin/master-data`, {
+      const response = await fetch(catalogEndpoint ?? `/api/plants/${plant}/admin/master-data`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ type, deleteAll: true }),
@@ -860,7 +866,7 @@ export function N0MasterDataManager({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{labels.title}</h2>
           <HelpPopover title={labels.title} body={labels.help.module} buttonLabel={labels.helpButton} />
         </div>
-        <div className="flex flex-wrap gap-2">
+        {scope === "plant" ? <div className="flex flex-wrap gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -879,21 +885,21 @@ export function N0MasterDataManager({
             {labels.downloadTemplate}
           </Link>
           <HelpPopover title={labels.importExcel} body={labels.excelHelp} buttonLabel={labels.helpButton} />
-          <Button type="button" size="sm" variant="secondary" onClick={() => void syncDefaultInjuryTypes()} disabled={injuryTypesLoading}>
+          {catalogTypes.includes("injuryType") ? <Button type="button" size="sm" variant="secondary" onClick={() => void syncDefaultInjuryTypes()} disabled={injuryTypesLoading}>
             {injuryTypesLoading ? labels.syncingInjuryTypes : labels.syncInjuryTypes}
-          </Button>
-          {isPl01Code(plant) ? (
+          </Button> : null}
+          {isPl01Code(plant) && catalogTypes.includes("injuryType") ? (
             <Button type="button" size="sm" variant="secondary" onClick={() => void bootstrapPl01Defaults()} disabled={bootstrapLoading}>
               {bootstrapLoading ? labels.loadingPl01Defaults : labels.loadPl01Defaults}
             </Button>
           ) : null}
-        </div>
+        </div> : null}
       </header>
       {globalMessage ? <p className="text-xs text-slate-600" aria-live="polite">{globalMessage}</p> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
         {catalogTypes.filter((type) => type === "area" || type === "workstation" || type === "equipment").map(renderCatalogCard)}
-        <form onSubmit={(event) => void submitWorker(event)} className="space-y-3 rounded-lg border border-slate-200 p-4">
+        {showWorkers ? <form onSubmit={(event) => void submitWorker(event)} className="space-y-3 rounded-lg border border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-slate-900">{labels.workerSectionTitle}</h3>
@@ -980,7 +986,7 @@ export function N0MasterDataManager({
               ))
             )}
           </div>
-        </form>
+        </form> : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

@@ -19,18 +19,18 @@ export function SettingsPlantSelector({ plants, selectedPlantCode, labels }: Set
   const router = useRouter();
 
   return (
-    <label className="flex w-full flex-col gap-2 lg:max-w-sm">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.selectedPlantTitle}</span>
+    <label className="flex w-full flex-col gap-2 rounded-xl border border-[var(--brand-400)] bg-[var(--brand-50)] p-3 lg:max-w-sm">
+      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-700)]">{labels.selectedPlantTitle}</span>
       <select
         value={selectedPlantCode ?? ""}
-        onChange={(event) => router.push(`/app/settings?plant=${encodeURIComponent(event.target.value)}`)}
+        onChange={(event) => router.push(`/app/settings?scope=plant&plant=${encodeURIComponent(event.target.value)}`)}
         disabled={!plants.length}
         className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 shadow-sm focus:border-[var(--brand-400)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-100)]"
       >
         {plants.length ? (
           plants.map((plant) => (
             <option key={plant.code} value={plant.code}>
-              {plant.name}
+              {plant.name} ({plant.code.toUpperCase()})
               {!plant.isActive ? ` (${labels.inactive})` : ""}
             </option>
           ))

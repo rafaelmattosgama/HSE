@@ -16,6 +16,7 @@ type ManagedUser = {
   isActive: boolean;
   role: RoleCode;
   departmentId?: string | null;
+  plantIds?: string[];
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -26,6 +27,9 @@ type UserManagerProps = {
   manageableRoles?: RoleCode[];
   plantCode?: string;
   labels?: N0MasterDataUi;
+  endpoint?: string;
+  visibleRoles?: RoleCode[];
+  assignmentPlants?: Array<{ id: string; name: string }>;
 };
 
 type FeedbackPopup = {
@@ -74,9 +78,10 @@ function formatDate(value: string | Date) {
   return new Date(value).toISOString().slice(0, 16).replace("T", " ");
 }
 
-export function UserManager({ users, allowedCreateRoles, manageableRoles, plantCode, labels = getStaticN0MasterDataUi("en") }: UserManagerProps) {
+export function UserManager({ users, allowedCreateRoles, manageableRoles, plantCode, endpoint, visibleRoles, assignmentPlants, labels = getStaticN0MasterDataUi("en") }: UserManagerProps) {
   const pathname = usePathname();
   const plant = plantCode ?? pathname.split("/")[2];
+  const usersEndpoint = endpoint ?? `/api/plants/${plant}/admin/users`;
 
   const [rows, setRows] = useState<ManagedUser[]>(users);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -86,6 +91,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   const [role, setRole] = useState<RoleCode | "">(allowedCreateRoles.length ? allowedCreateRoles[0] : "");
   const [password, setPassword] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [plantIds, setPlantIds] = useState<string[]>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(true);
   const [departmentsError, setDepartmentsError] = useState(false);
@@ -99,7 +105,10 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   const [rowActionId, setRowActionId] = useState<string | null>(null);
   const needsDepartment = Boolean(role && requiresUserDepartment(role));
 
+  useEffect(() => { setRows(users); }, [users]);
+
   const loadDepartments = useCallback(async (signal?: AbortSignal) => {
+    if (endpoint) { setDepartmentsLoading(false); return; }
     setDepartmentsLoading(true);
     setDepartmentsError(false);
     try {
@@ -112,7 +121,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     } finally {
       if (!signal?.aborted) setDepartmentsLoading(false);
     }
-  }, [plant]);
+  }, [plant, endpoint]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -125,6 +134,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   const visibleRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const filtered = rows.filter((entry) => {
+      if (visibleRoles && !visibleRoles.includes(entry.role)) return false;
       if (roleFilter !== "ALL" && entry.role !== roleFilter) return false;
       if (activeFilter === "ACTIVE" && !entry.isActive) return false;
       if (activeFilter === "INACTIVE" && entry.isActive) return false;
@@ -134,7 +144,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     });
 
     return sortUsers(filtered, sortBy);
-  }, [activeFilter, roleFilter, rows, searchTerm, sortBy]);
+  }, [activeFilter, roleFilter, rows, searchTerm, sortBy, visibleRoles]);
 
   function resetForm() {
     setEditingUserId(null);
@@ -144,6 +154,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     setRole(allowedCreateRoles[0] ?? "");
     setPassword("");
     setDepartmentId("");
+    setPlantIds([]);
     setIsActive(true);
   }
 
@@ -152,7 +163,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   }
 
   async function refreshUsers() {
-    const response = await fetch(`/api/plants/${plant}/admin/users`, {
+    const response = await fetch(usersEndpoint, {
       method: "GET",
       headers: { accept: "application/json" },
     });
@@ -160,7 +171,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     if (!json.ok) {
       throw new Error(json.message ?? labels.users.loadError);
     }
-    setRows((json.data.users as ManagedUser[]) ?? []);
+    setRows(((json.data.users as ManagedUser[]) ?? []).filter(entry => !visibleRoles || visibleRoles.includes(entry.role)));
   }
 
   function startEdit(entry: ManagedUser) {
@@ -170,6 +181,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     setLanguage(entry.language as (typeof LANGUAGE_OPTIONS)[number]);
     setRole(entry.role);
     setDepartmentId(entry.departmentId ?? "");
+    setPlantIds(entry.plantIds ?? []);
     void loadDepartments();
     setPassword("");
     setIsActive(entry.isActive);
@@ -180,7 +192,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     setRowActionId(entry.id);
     setPopup(null);
     try {
-      const response = await fetch(`/api/plants/${plant}/admin/users/${entry.id}/status`, {
+      const response = await fetch(`${usersEndpoint}/${entry.id}/status`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ isActive: !entry.isActive }),
@@ -206,7 +218,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     setRowActionId(entry.id);
     setPopup(null);
     try {
-      const response = await fetch(`/api/plants/${plant}/admin/users/${entry.id}`, {
+      const response = await fetch(`${usersEndpoint}/${entry.id}`, {
         method: "DELETE",
       });
       const json = await response.json();
@@ -229,6 +241,10 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!canCreate || !role) return;
+    if (assignmentPlants && role === RoleCode.N3_SAFETY && !plantIds.length) {
+      showPopup("error", labels.users.validationError, labels.assignedPlantsRequired);
+      return;
+    }
 
     if (needsDepartment && (departmentsLoading || departmentsError || !departments.some((entry) => entry.id === departmentId))) {
       showPopup("error", labels.users.validationError, labels.users.departmentRequired);
@@ -246,7 +262,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
     try {
       const isEditing = Boolean(editingUserId);
       const response = await fetch(
-        isEditing ? `/api/plants/${plant}/admin/users/${editingUserId}` : `/api/plants/${plant}/admin/users`,
+        isEditing ? `${usersEndpoint}/${editingUserId}` : usersEndpoint,
         {
           method: isEditing ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
@@ -256,6 +272,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
             language,
             role,
             departmentId: needsDepartment ? departmentId : null,
+            ...(assignmentPlants ? { plantIds: role === RoleCode.N3_SAFETY ? plantIds : [] } : {}),
             password: password.trim() ? password : undefined,
             isActive,
           }),
@@ -337,11 +354,18 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
             </div>
           ) : null}
 
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder={editingUserId ? labels.users.newPasswordPlaceholder : labels.users.passwordPlaceholder} />
+          {assignmentPlants && role === RoleCode.N3_SAFETY ? <fieldset className="space-y-2 rounded-lg border border-slate-200 p-3 md:col-span-2">
+            <legend className="text-sm font-semibold">{labels.assignedPlants}</legend>
+            <div className="flex flex-wrap gap-4">{assignmentPlants.map(assignedPlant => <label key={assignedPlant.id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={plantIds.includes(assignedPlant.id)} onChange={event => setPlantIds(current => event.target.checked ? [...current, assignedPlant.id] : current.filter(id => id !== assignedPlant.id))} />
+              {assignedPlant.name}
+            </label>)}</div>
+          </fieldset> : null}
+          <input type="password" required={Boolean(endpoint && !editingUserId)} value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm md:col-span-2" placeholder={editingUserId ? labels.users.newPasswordPlaceholder : labels.users.passwordPlaceholder} />
           <p className="text-xs text-slate-500 md:col-span-2">
             {editingUserId
               ? labels.users.keepPasswordHelp
-              : labels.users.generatedPasswordHelp}
+              : endpoint ? labels.initialPasswordHelp : labels.users.generatedPasswordHelp}
           </p>
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -413,7 +437,9 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
               <tr key={`${entry.id}-${entry.role}`} className="border-t border-slate-200">
                 <td className="px-3 py-2">{entry.name}</td>
                 <td className="px-3 py-2">{entry.email ?? "-"}</td>
-                <td className="px-3 py-2">{ROLE_LABELS[entry.role] ?? entry.role}</td>
+                <td className="px-3 py-2">{ROLE_LABELS[entry.role] ?? entry.role}
+                  {assignmentPlants && entry.role === RoleCode.N3_SAFETY ? <p className="mt-1 text-xs text-slate-500">{assignmentPlants.filter(assignedPlant => entry.plantIds?.includes(assignedPlant.id)).map(assignedPlant => assignedPlant.name).join(", ")}</p> : null}
+                </td>
                 <td className="px-3 py-2">{entry.language.toUpperCase()}</td>
                 <td className="px-3 py-2">{entry.isActive ? labels.users.yes : labels.users.no}</td>
                 <td className="px-3 py-2">{formatDate(entry.createdAt)}</td>
@@ -427,9 +453,9 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
                       <Button type="button" size="sm" variant={entry.isActive ? "destructive" : "secondary"} onClick={() => toggleUserStatus(entry)} disabled={rowActionId === entry.id}>
                         {rowActionId === entry.id ? labels.saving : entry.isActive ? labels.users.deactivate : labels.users.activate}
                       </Button>
-                      <Button type="button" size="sm" variant="destructive" onClick={() => deleteUser(entry)} disabled={rowActionId === entry.id}>
+                      {!endpoint ? <Button type="button" size="sm" variant="destructive" onClick={() => deleteUser(entry)} disabled={rowActionId === entry.id}>
                         {labels.users.delete}
-                      </Button>
+                      </Button> : null}
                     </div>
                   ) : null}
                 </td>

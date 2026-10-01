@@ -1,9 +1,11 @@
 import { MasterDataEntityType } from "@prisma/client";
 import { DEFAULT_PROFESSIONAL_RISKS } from "@/lib/defaults/professional-risks";
 import { prisma } from "@/lib/prisma";
+import { readStoredGeneralCatalog } from "@/lib/services/general-settings-service";
 import { scheduleMasterDataTranslations } from "@/lib/services/master-data-translation-service";
 
 export async function ensureDefaultProfessionalRisks(plantId: string) {
+  if (await readStoredGeneralCatalog("riskTheme")) return;
   const existingDefaults = await prisma.riskTheme.count({
     where: {
       plantId,
