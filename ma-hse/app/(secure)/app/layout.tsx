@@ -85,7 +85,7 @@ export default async function SecureAppLayout({
     <div className="app-shell">
       <UiLanguageRuntime locale={uiLocale} />
       <header className="app-topbar" data-onboarding="topbar">
-        <DashboardWidth className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
+        <DashboardWidth className="mx-auto flex w-full flex-wrap items-center justify-between gap-3 px-6 py-4">
           <Link href={homeHref} className="flex items-center gap-3 text-[var(--brand-700)]">
             <div className="app-panel flex h-14 w-20 items-center justify-center rounded-2xl px-2 py-1">
               <MaSymbol className="h-auto w-full text-[var(--brand-700)]" title="MA" />
@@ -95,7 +95,7 @@ export default async function SecureAppLayout({
               <span data-no-translate className="text-xl font-bold leading-tight text-[var(--brand-700)]">MAx Safety</span>
             </div>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {hasN1Validation ? (
               <Link href="/app/validation" className="app-toolbar">
                 {ui.modules.validation}

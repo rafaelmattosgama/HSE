@@ -29,7 +29,7 @@ export default async function ProfileAlertsPage() {
   const scopeLabel = ProfileAlertService.getScopeLabel(session.user);
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-6">
+    <main className="mx-auto w-full max-w-none px-6 py-6">
       <div className="mb-5">
         <Link href={homeHref} className="app-toolbar inline-flex items-center gap-2">
           <span aria-hidden="true">&larr;</span>

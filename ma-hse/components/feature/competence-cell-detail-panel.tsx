@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RoleCode } from "@prisma/client";
+import { CompetenceRecordEditForm } from "@/components/feature/competence-record-edit-form";
 import { X } from "lucide-react";
 import { STATE_META } from "@/components/feature/competence-matrix-manager";
 import { CreateCompetenceAction, type CompetenceActionOwnerOption } from "@/components/feature/create-competence-action";
@@ -30,9 +31,9 @@ type CompetenceRowWire = {
   currentAuthorizationId: string | null;
 };
 
-type HistoryEventWire =
-  | { type: "TRAINING"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; result: string; provider: string | null; trainerName: string | null; certificateExpiresAt: string | null }
-  | { type: "ASSESSMENT"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; result: string; method: string; assessorName: string | null }
+export type HistoryEventWire =
+  | { type: "TRAINING"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; result: string; provider: string | null; trainerName: string | null; certificateExpiresAt: string | null; durationHours: number | null; certificateNumber: string | null; notes: string | null }
+  | { type: "ASSESSMENT"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; result: string; method: string; assessorName: string | null; score: number | null; observations: string | null }
   | { type: "AUTHORIZATION_GRANTED"; id: string; occurredAt: string; competenceTypeId: string; entryGroupId: string | null; validFrom: string; validUntil: string; restrictions: string | null; grantedByName: string | null }
   | { type: "AUTHORIZATION_SUSPENDED"; id: string; occurredAt: string; competenceTypeId: string; reason: string | null; actorName: string | null }
   | { type: "AUTHORIZATION_REACTIVATED"; id: string; occurredAt: string; competenceTypeId: string; actorName: string | null }
@@ -102,6 +103,7 @@ export function CompetenceCellDetailPanel({
   const [profile, setProfile] = useState<ProfileWire | null>(null);
   const [loadError, setLoadError] = useState("");
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -160,6 +162,7 @@ export function CompetenceCellDetailPanel({
       });
       await requireApiResponse(response, labels.formError);
       setActiveForm(null);
+      setEditingRecordId(null);
       onChanged();
     } catch (error) {
       if (error instanceof ApiError && error.errorCode === "SEGREGATION_OF_DUTIES") {
@@ -238,6 +241,9 @@ export function CompetenceCellDetailPanel({
                         {event.provider ? ` · ${event.provider}` : ""}
                       </p>
                     ) : null}
+                    {event.type === "TRAINING" && event.certificateExpiresAt ? (
+                      <p className="mt-1 text-slate-700">{labels.recordCertificateValidity}: {new Date(event.certificateExpiresAt).toLocaleDateString()}</p>
+                    ) : null}
                     {event.type === "ASSESSMENT" ? (
                       <p className="mt-1 text-slate-700">
                         {event.result === "COMPETENT" ? labels.assessmentResultCompetent : labels.assessmentResultNotYetCompetent}
@@ -257,6 +263,15 @@ export function CompetenceCellDetailPanel({
                     ) : null}
                     {event.type === "AUTHORIZATION_REACTIVATED" && event.actorName ? (
                       <p className="mt-1 text-slate-700">{event.actorName}</p>
+                    ) : null}
+                    {(event.type === "TRAINING" || event.type === "ASSESSMENT" || event.type === "AUTHORIZATION_GRANTED") && (event.type === "AUTHORIZATION_GRANTED" ? canRevoke : canRegister) ? (
+                      editingRecordId === event.id ? <>
+                        <CompetenceRecordEditForm key={event.id} record={event} labels={labels} saving={saving}
+                          onCancel={() => { setEditingRecordId(null); setFormError(""); }}
+                          onSubmit={(data) => submit(`/api/plants/${plant}/competences/entries/${event.id}`, "PATCH", { kind: event.type, data })} />
+                        {formError ? <p role="alert" className="mt-2 text-sm text-rose-600">{formError}</p> : null}
+                      </> : <Button type="button" size="sm" variant="secondary" className="mt-2" disabled={saving}
+                        onClick={() => { setEditingRecordId(event.id); setActiveForm(null); setFormError(""); }}>{labels.recordEdit}</Button>
                     ) : null}
                     </li>
                     ))}

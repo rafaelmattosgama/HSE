@@ -18,6 +18,8 @@ import { LanguageSelector } from "@/components/feature/language-selector";
 import { MasterDataManager } from "@/components/feature/master-data-manager";
 import { N0MasterDataManager } from "@/components/feature/n0-master-data-manager";
 import { CompetenceTypeManager } from "@/components/feature/competence-type-manager";
+import { TrainingTopicManager } from "@/components/feature/training-topic-manager";
+import { getTrainingUi } from "@/lib/training-ui";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { findPlantByCode } from "@/lib/plant";
 import { prisma } from "@/lib/prisma";
@@ -109,6 +111,7 @@ export default async function AdminPage({
     repeatabilityConfig,
     safetyDaysConfig,
     competenceTypes,
+    trainingTopics,
   ] = await Promise.all([
     prisma.systemParameter.findUnique({
       where: {
@@ -175,6 +178,9 @@ export default async function AdminPage({
     getPlantSafetyDaysConfig(plantRow.id),
     canViewCompetenceCatalog
       ? prisma.competenceType.findMany({ where: { plantId: plantRow.id }, orderBy: [{ displayOrder: "asc" }, { name: "asc" }] })
+      : Promise.resolve([]),
+    canViewCompetenceCatalog
+      ? prisma.plantTrainingTopic.findMany({ where: { plantId: plantRow.id }, orderBy: { name: "asc" }, select: { id: true, name: true, isActive: true } })
       : Promise.resolve([]),
   ]);
   const [localizedAreas, localizedWorkstations, localizedEquipments] = await Promise.all([
@@ -318,6 +324,7 @@ export default async function AdminPage({
         />
       )}
 
+      {canViewCompetenceCatalog && <TrainingTopicManager plant={plant} topics={trainingTopics} ui={getTrainingUi(uiLocale)} readOnly={!canManageCompetenceCatalog} />}
       {canViewCompetenceCatalog ? (
         <CompetenceTypeManager
           plant={plant}

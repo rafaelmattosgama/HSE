@@ -23,11 +23,13 @@ const transactionMock = vi.hoisted(() => ({
     update: vi.fn(),
   },
   trainingRecord: {
+    update: vi.fn(),
     create: vi.fn(),
     findMany: vi.fn(),
     findFirst: vi.fn(),
   },
   competenceAssessment: {
+    update: vi.fn(),
     create: vi.fn(),
     findMany: vi.fn(),
     findFirst: vi.fn(),
@@ -1314,5 +1316,41 @@ describe("CompetenceService.registerCompetenceEntry — §3.2/§3.3, one submiss
         "user-1",
       ),
     ).rejects.toThrow(/not found/i);
+  });
+});
+
+
+describe("CompetenceService.updateCompetenceRecord", () => {
+  beforeEach(() => { vi.clearAllMocks(); stubRecomputeDependencies(); });
+  const before = { id: "training-1", plantId: "plant-1", competenceWorkerId: "worker-1", competenceTypeId: "type-forklift", completedAt: new Date("2024-06-01"), result: TrainingResult.PASSED, certificateExpiresAt: new Date("2025-06-01") };
+  const corrected = { completedAt: before.completedAt, result: TrainingResult.PASSED, certificateExpiresAt: new Date("2029-06-01") };
+  it("corrects an existing certificate, audits it and immediately recomputes validity", async () => {
+    transactionMock.trainingRecord.findFirst.mockResolvedValue(before);
+    transactionMock.trainingRecord.update.mockResolvedValue({ ...before, ...corrected });
+    transactionMock.trainingRecord.findMany.mockResolvedValue([{ ...before, ...corrected }]);
+    transactionMock.workerAuthorization.findMany.mockResolvedValue([{ id: "auth-1", status: AuthorizationStatus.ACTIVE, validUntil: new Date("2030-04-01"), trainingRecordId: before.id, grantedAt: new Date("2024-06-01"), suspensionReason: null, revocationReason: null }]);
+    await CompetenceService.updateCompetenceRecord("plant-1", before.id, { kind: "TRAINING", data: corrected }, "editor");
+    expect(transactionMock.trainingRecord.findFirst).toHaveBeenCalledWith({ where: { id: before.id, plantId: "plant-1" } });
+    expect(transactionMock.trainingRecord.update).toHaveBeenCalledWith({ where: { id: before.id }, data: corrected });
+    expect(auditMock.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "UPDATED", actorUserId: "editor", entityId: before.id }), transactionMock);
+    expect(transactionMock.workerCompetenceState.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: expect.objectContaining({ state: CompetenceCellState.VALID, validUntil: corrected.certificateExpiresAt }) }));
+  });
+  it("cannot edit a missing record or one from another plant", async () => {
+    transactionMock.trainingRecord.findFirst.mockResolvedValue(null);
+    await expect(CompetenceService.updateCompetenceRecord("other-plant", before.id, { kind: "TRAINING", data: corrected }, "editor")).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(transactionMock.trainingRecord.update).not.toHaveBeenCalled();
+    expect(auditMock.writeAuditLog).not.toHaveBeenCalled();
+  });
+  it("preserves evidence for a live authorization when correcting a result", async () => {
+    transactionMock.trainingRecord.findFirst.mockResolvedValue(before);
+    transactionMock.workerAuthorization.findFirst.mockResolvedValue({ id: "auth-1" });
+    await expect(CompetenceService.updateCompetenceRecord("plant-1", before.id, { kind: "TRAINING", data: { ...corrected, result: TrainingResult.FAILED } }, "editor")).rejects.toMatchObject({ code: "SUPPORTING_RECORD_IN_USE" });
+    expect(transactionMock.trainingRecord.update).not.toHaveBeenCalled();
+  });
+  it("applies segregation of duties to authorization corrections", async () => {
+    transactionMock.workerAuthorization.findFirst.mockResolvedValue({ ...before, id: "auth-1", assessmentId: "assessment-1" });
+    transactionMock.competenceAssessment.findFirst.mockResolvedValue({ assessorUserId: "editor" });
+    await expect(CompetenceService.updateCompetenceRecord("plant-1", "auth-1", { kind: "AUTHORIZATION_GRANTED", data: { validFrom: new Date("2024-06-01"), validUntil: new Date("2029-06-01"), restrictions: null } }, "editor")).rejects.toMatchObject({ code: "SEGREGATION_OF_DUTIES" });
+    expect(transactionMock.workerAuthorization.update).not.toHaveBeenCalled();
   });
 });

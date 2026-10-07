@@ -18,7 +18,7 @@ export default async function ProfilePage() {
       : "/app/corporate";
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-6">
+    <main className="mx-auto w-full max-w-none px-6 py-6">
       <div className="mb-5">
         <Link href={homeHref} className="app-toolbar inline-flex items-center gap-2">
           <span aria-hidden="true">←</span>

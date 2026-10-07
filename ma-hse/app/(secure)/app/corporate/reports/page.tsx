@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getServerAuthSession } from "@/lib/auth/session";
+import { getCorporateReportAccess } from "@/lib/rbac/corporate-reports";
 import { prisma } from "@/lib/prisma";
 import { generateCorporateReportAction } from "@/app/(secure)/app/corporate/reports/actions";
 import { CorporateReportGeneratorForm } from "@/components/feature/corporate-report-generator-form";
@@ -13,7 +16,7 @@ type ReportFileKeys = {
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
-  forbidden: "Only N1 Corporate users can generate corporate reports.",
+  forbidden: "Report generation requires N1 Corporate access or N3 Safety access to the selected factory.",
   "invalid-input": "Report type, report scope, period start and period end are required.",
   "missing-factory": "Factory is required when Report Scope is Factory.",
   "invalid-period": "Period start must be before or equal to period end.",
@@ -32,11 +35,17 @@ export default async function CorporateReportsPage({
 }: {
   searchParams?: Promise<{ generated?: string; error?: string }>;
 }) {
+  const session = await getServerAuthSession();
+  if (!session?.user) redirect("/login");
+  const access = getCorporateReportAccess(session.user.plantRoles);
+  if (!access.canRead) redirect("/app/corporate");
+
   const params = (await searchParams) ?? {};
   const [plants, reportRuns] = await Promise.all([
     prisma.plant.findMany({
       where: {
         isActive: true,
+        ...(access.global ? {} : { id: { in: access.plantIds } }),
       },
       select: {
         id: true,
@@ -48,6 +57,7 @@ export default async function CorporateReportsPage({
       },
     }),
     prisma.reportRun.findMany({
+      where: access.global ? {} : { plantId: { in: access.plantIds } },
       include: {
         plant: {
           select: {
@@ -90,7 +100,7 @@ export default async function CorporateReportsPage({
   });
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-6 py-6">
+    <main className="mx-auto w-full max-w-none px-6 py-6">
       <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
@@ -114,13 +124,13 @@ export default async function CorporateReportsPage({
         </div>
       ) : null}
 
-      <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {access.canGenerate ? <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Generate Corporate Report</h2>
         </div>
 
-        <CorporateReportGeneratorForm action={generateCorporateReportAction} plants={plants} />
-      </section>
+        <CorporateReportGeneratorForm action={generateCorporateReportAction} plants={plants} allowGlobal={access.global} />
+      </section> : null}
 
       <section className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[980px] text-sm">

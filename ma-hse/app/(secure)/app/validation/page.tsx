@@ -29,7 +29,7 @@ export default async function GlobalValidationPage() {
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5 px-6 py-6">
+    <div className="mx-auto w-full max-w-none space-y-5 px-6 py-6">
       <AppHero
         eyebrow={ui.n1ValidationSewoSection}
         title={ui.n1ValidationTitle}

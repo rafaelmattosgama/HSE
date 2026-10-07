@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   recipients: vi.fn(),
   db: Object.fromEntries([
-    "alertRule", "area", "workstation", "equipment", "employeeDirectory", "unsafeActType", "unsafeConditionType", "nearMissType", "injuryType", "competenceType", "userPlantRole", "reportRecipientList",
+    "alertRule", "area", "workstation", "equipment", "employeeDirectory", "unsafeActType", "unsafeConditionType", "nearMissType", "injuryType", "competenceType", "plantTrainingTopic", "userPlantRole", "reportRecipientList",
   ].map(name => [name, { findMany: vi.fn(async () => []) }])),
 }));
 vi.mock("next-auth", () => ({ getServerSession: mocks.session }));

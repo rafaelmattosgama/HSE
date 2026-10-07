@@ -754,6 +754,30 @@ export const deleteUnsafeActTypeInput = z.object({
   id: z.string().uuid(),
 });
 
+export const upsertPlantTrainingTopicInput = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(2).max(160),
+  isActive: z.boolean().default(true),
+});
+
+export const createPlantTrainingInput = z.object({
+  occurredOn: z.iso.date(),
+  topicId: z.string().uuid(),
+  category: z.enum(["LEGAL_REQUIREMENT", "IMPROVING_SAFETY", "SAFETY_CULTURE", "OTHER"]),
+  duration: z.string().regex(/^\d{2,4}:[0-5]\d$/, "Use HH:MM")
+    .refine(value => /[1-9]/.test(value), "Duration must be greater than zero"),
+  traineeId: z.string().uuid().nullable().optional(),
+  traineeName: z.string().trim().max(160).optional(),
+  trainerIds: z.array(z.string().uuid()).min(1).refine(ids => new Set(ids).size === ids.length, "Duplicate trainers"),
+}).superRefine((input, ctx) => {
+  if (Boolean(input.traineeId) === Boolean(input.traineeName?.trim())) {
+    ctx.addIssue({ code: "custom", path: ["traineeName"], message: "Select one worker or enter one trainee name" });
+  }
+});
+
+export type CreatePlantTrainingInput = z.infer<typeof createPlantTrainingInput>;
+export type UpsertPlantTrainingTopicInput = z.infer<typeof upsertPlantTrainingTopicInput>;
+
 export const upsertCompetenceTypeInput = z.object({
   id: z.string().uuid().optional(),
   code: z.string().trim().min(1).max(40),
@@ -909,6 +933,25 @@ export const registerAssessmentInput = z.object({
   score: z.coerce.number().int().min(0).max(100).nullable().optional(),
   observations: z.string().trim().max(2000).nullable().optional(),
 });
+
+// Corrections retain the worker, competence, supporting links and lifecycle status.
+export const updateCompetenceRecordInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("TRAINING"), data: registerTrainingInput.omit({ competenceWorkerId: true, competenceTypeId: true }).strict() }),
+  z.object({ kind: z.literal("ASSESSMENT"), data: registerAssessmentInput.omit({ competenceWorkerId: true, competenceTypeId: true, trainingRecordId: true, assessorName: true }).strict() }),
+  z.object({ kind: z.literal("AUTHORIZATION_GRANTED"), data: z.object({
+    validFrom: z.coerce.date(),
+    validUntil: z.coerce.date(),
+    restrictions: z.string().trim().max(500).nullable(),
+  }).strict() }),
+]).superRefine((value, ctx) => {
+  if (value.kind === "TRAINING" && value.data.certificateExpiresAt && value.data.certificateExpiresAt < value.data.completedAt) {
+    ctx.addIssue({ code: "custom", path: ["data", "certificateExpiresAt"], message: "Certificate expiry cannot precede training completion" });
+  }
+  if (value.kind === "AUTHORIZATION_GRANTED" && value.data.validUntil < value.data.validFrom) {
+    ctx.addIssue({ code: "custom", path: ["data", "validUntil"], message: "Validity end cannot precede validity start" });
+  }
+});
+export type UpdateCompetenceRecordInput = z.infer<typeof updateCompetenceRecordInput>;
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 

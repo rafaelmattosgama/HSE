@@ -5,7 +5,6 @@ import Link from "next/link";
 import type { RoleCode } from "@prisma/client";
 import {
   AlertTriangle,
-  BarChart3,
   Ban,
   CheckCircle2,
   Clock3,
@@ -18,7 +17,8 @@ import {
 import { AddCompetenceWorkerModal } from "@/components/feature/add-competence-worker-modal";
 import { CompetenceCellDetailPanel } from "@/components/feature/competence-cell-detail-panel";
 import type { CompetenceActionOwnerOption } from "@/components/feature/create-competence-action";
-import { AppHero, AppKpiCard, AppPanel } from "@/components/ui/app-surface";
+import { AppHero, AppPanel } from "@/components/ui/app-surface";
+import { CompetenceIndicators } from "@/components/feature/competence-indicators";
 import { Button } from "@/components/ui/button";
 import { formatCompetenceCellText } from "@/lib/competence-cell-text";
 import type { CompetenceMatrixView } from "@/lib/services/competence-service";
@@ -129,45 +129,7 @@ export function CompetenceMatrixManager({
     return Array.from(seen).sort();
   }, [matrix.workers]);
 
-  const kpis = useMemo(() => {
-    let expired = 0;
-    let expiring30 = 0;
-    let expiring60 = 0;
-    let expiring90 = 0;
-    let awaitingAssessment = 0;
-    let awaitingAuthorization = 0;
-    let criticalGaps = 0;
-    const coverageByType = new Map<string, { required: number; authorized: number }>();
-    matrix.competenceTypes.forEach((type) => coverageByType.set(type.id, { required: 0, authorized: 0 }));
 
-    matrix.workers.forEach((worker) => {
-      worker.cells.forEach((cell) => {
-        if (cell.state === "EXPIRED") expired += 1;
-        if (cell.state === "EXPIRING" && cell.daysToExpiry != null) {
-          if (cell.daysToExpiry <= 30) expiring30 += 1;
-          else if (cell.daysToExpiry <= 60) expiring60 += 1;
-          else expiring90 += 1;
-        }
-        if (cell.state === "AWAITING_ASSESSMENT") awaitingAssessment += 1;
-        if (cell.state === "AWAITING_AUTHORIZATION") awaitingAuthorization += 1;
-        if (cell.isRequired && cell.state === "MISSING") criticalGaps += 1;
-
-        const bucket = coverageByType.get(cell.competenceTypeId);
-        if (bucket && cell.isRequired) {
-          bucket.required += 1;
-          if (cell.state === "VALID" || cell.state === "EXPIRING") bucket.authorized += 1;
-        }
-      });
-    });
-
-    const coverage = matrix.competenceTypes.map((type) => {
-      const bucket = coverageByType.get(type.id) ?? { required: 0, authorized: 0 };
-      const percentage = bucket.required > 0 ? Math.round((bucket.authorized / bucket.required) * 100) : null;
-      return { typeId: type.id, name: type.name, percentage, required: bucket.required, authorized: bucket.authorized };
-    });
-
-    return { expired, expiring30, expiring60, expiring90, awaitingAssessment, awaitingAuthorization, criticalGaps, coverage };
-  }, [matrix]);
 
   const filteredWorkers = useMemo(() => {
     const query = normalizeText(search);
@@ -272,7 +234,7 @@ export function CompetenceMatrixManager({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <AppHero
         title={title}
         actions={
@@ -288,76 +250,7 @@ export function CompetenceMatrixManager({
       />
       {exportError ? <p className="text-sm font-medium text-rose-600">{exportError}</p> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <button type="button" className="text-left" onClick={() => focusState("EXPIRED")}>
-          <AppKpiCard tone="danger" icon={<XCircle className="h-5 w-5" aria-hidden="true" />} label={labels.kpiExpiredTitle} value={kpis.expired} />
-        </button>
-        <button type="button" className="text-left" onClick={() => focusState("EXPIRING")}>
-          <AppKpiCard
-            tone="warning"
-            icon={<Clock3 className="h-5 w-5" aria-hidden="true" />}
-            label={labels.kpiExpiringTitle}
-            value={kpis.expiring30 + kpis.expiring60 + kpis.expiring90}
-            detail={`${labels.kpiExpiring30Label}: ${kpis.expiring30} · ${labels.kpiExpiring60Label}: ${kpis.expiring60} · ${labels.kpiExpiring90Label}: ${kpis.expiring90}`}
-          />
-        </button>
-        <button type="button" className="text-left" onClick={() => focusState("AWAITING_ASSESSMENT")}>
-          <AppKpiCard
-            tone="info"
-            icon={<HelpCircle className="h-5 w-5" aria-hidden="true" />}
-            label={labels.kpiAwaitingAssessmentTitle}
-            value={kpis.awaitingAssessment}
-          />
-        </button>
-        <button type="button" className="text-left" onClick={() => focusState("AWAITING_AUTHORIZATION")}>
-          <AppKpiCard
-            tone="info"
-            icon={<ShieldCheck className="h-5 w-5" aria-hidden="true" />}
-            label={labels.kpiAwaitingAuthorizationTitle}
-            value={kpis.awaitingAuthorization}
-          />
-        </button>
-        <button type="button" className="text-left" onClick={() => focusState("MISSING", { mandatoryOnly: true })}>
-          <AppKpiCard
-            tone="danger"
-            icon={<AlertTriangle className="h-5 w-5" aria-hidden="true" />}
-            label={labels.kpiCriticalGapsTitle}
-            value={kpis.criticalGaps}
-            detail={labels.kpiCriticalGapsDetail}
-          />
-        </button>
-        <AppKpiCard
-          tone="brand"
-          icon={<BarChart3 className="h-5 w-5" aria-hidden="true" />}
-          label={labels.kpiCoverageTitle}
-          value={
-            kpis.coverage.length === 0 ? (
-              labels.kpiCoverageEmpty
-            ) : (
-              <span className="sr-only">{labels.kpiCoverageTitle}</span>
-            )
-          }
-          detail={
-            kpis.coverage.length === 0 ? null : (
-              <div className="mt-1 space-y-1">
-                {kpis.coverage.map((row) => (
-                  <button
-                    key={row.typeId}
-                    type="button"
-                    className="flex w-full items-center justify-between gap-2 text-left text-xs text-slate-600 hover:text-slate-900"
-                    onClick={() => setCompetenceFilter(row.typeId)}
-                  >
-                    <span className="truncate">{row.name}</span>
-                    <span className="shrink-0 font-semibold">
-                      {row.percentage === null ? "—" : labels.kpiCoverageBarLabel.replace("{percentage}", String(row.percentage)).replace("{required}", String(row.required))}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )
-          }
-        />
-      </div>
+      <CompetenceIndicators matrix={matrix} labels={labels} onState={focusState} onCompetence={setCompetenceFilter} />
 
       <AppPanel>
         <h2 className="app-section-eyebrow">{labels.legendTitle}</h2>
@@ -461,12 +354,12 @@ export function CompetenceMatrixManager({
             {matrix.workers.length === 0 ? labels.noWorkersEnrolled : labels.noResultsForFilters}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label={title}>
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase text-slate-500">
                   <th className="py-2 pr-3">{labels.columnNumber}</th>
-                  <th className="py-2 pr-3">{labels.columnWorker}</th>
+                  <th className="min-w-40 py-2 pr-3">{labels.columnWorker}</th>
                   <th className="py-2 pr-3">{labels.columnDepartment}</th>
                   <th className="py-2 pr-3">{labels.columnRole}</th>
                   {matrix.competenceTypes.map((type) => (
