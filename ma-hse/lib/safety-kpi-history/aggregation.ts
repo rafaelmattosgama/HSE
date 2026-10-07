@@ -2,16 +2,38 @@ import { Prisma } from "@prisma/client";
 import { calculateSafetyKpiRates } from "@/lib/safety-kpi-history/validation";
 
 export type SafetyKpiMonth = {
-  plantId: string; plantCode: string; year: number; month: number; source: "LIVE" | "HISTORICAL";
+  plantId: string; plantCode: string; year: number; month: number; source: "LIVE" | "HISTORICAL" | "MIXED";
   hoursWorked: string; employees: number; accidents: number; lostDays: string; seriousInjury: number;
   minorInjury: number; firstAids: number; nearMiss: number; unsafeCondition: number; unsafeAct: number;
 };
 
-export function mergeSafetyKpiSources(live: SafetyKpiMonth[], historical: SafetyKpiMonth[]) {
+export type SafetyKpiField = keyof Pick<SafetyKpiMonth,
+  "hoursWorked" | "employees" | "accidents" | "lostDays" | "seriousInjury" | "minorInjury" |
+  "firstAids" | "nearMiss" | "unsafeCondition" | "unsafeAct"
+>;
+
+export function mergeSafetyKpiSources(
+  live: SafetyKpiMonth[],
+  historical: SafetyKpiMonth[],
+  liveCoverage?: Map<string, Set<SafetyKpiField>>,
+) {
+  const keyOf = (row: Pick<SafetyKpiMonth, "plantId" | "year" | "month">) => `${row.plantId}|${row.year}-${row.month}`;
   const result = new Map<string, SafetyKpiMonth>();
-  for (const row of historical) result.set(`${row.plantId}|${row.year}-${row.month}`, row);
-  // Live is canonical for an entire plant-month. Never add imported totals to it.
-  for (const row of live) result.set(`${row.plantId}|${row.year}-${row.month}`, row);
+  for (const row of historical) result.set(keyOf(row), row);
+  for (const row of live) {
+    const key = keyOf(row);
+    const prior = result.get(key);
+    const coverage = liveCoverage?.get(key);
+    if (!prior || !liveCoverage || !coverage) {
+      result.set(key, row);
+      continue;
+    }
+    const merged = { ...prior, plantCode: row.plantCode };
+    for (const field of coverage) merged[field] = row[field] as never;
+    const allFields: SafetyKpiField[] = ["hoursWorked", "employees", "accidents", "lostDays", "seriousInjury", "minorInjury", "firstAids", "nearMiss", "unsafeCondition", "unsafeAct"];
+    merged.source = allFields.every(field => coverage.has(field)) ? "LIVE" : "MIXED";
+    result.set(key, merged);
+  }
   return [...result.values()].sort((a, b) => a.year - b.year || a.month - b.month || a.plantCode.localeCompare(b.plantCode));
 }
 

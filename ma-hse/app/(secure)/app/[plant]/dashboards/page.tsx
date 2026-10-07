@@ -667,27 +667,31 @@ export default async function DashboardsPage({
   const indicatorRootCauseCount = indicatorSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const scopedHomologousPyramid = filterDashboardDepartment(homologousPyramidCommunications, departmentId);
   const scopedPyramidCommunications = filterDashboardDepartment(pyramidCommunications, departmentId);
+  const pendingPyramidCounts = buildPyramidCounts(scopedPyramidCommunications.filter((row) => isCommunicationInValidationStatus(row.status)));
   const pyramidCounts = canonicalCurrent ? {
-    ...buildPyramidCounts(scopedPyramidCommunications),
-    unsafeAct: canonicalCurrent.unsafeAct,
-    unsafeCondition: canonicalCurrent.unsafeCondition,
-    nearMiss: canonicalCurrent.nearMiss,
-    firstAid: canonicalCurrent.firstAids,
-    minorInjury: canonicalCurrent.minorInjury,
-    seriousInjury: canonicalCurrent.seriousInjury,
+    ...pendingPyramidCounts,
+    unsafeAct: canonicalCurrent.unsafeAct + pendingPyramidCounts.unsafeAct,
+    unsafeCondition: canonicalCurrent.unsafeCondition + pendingPyramidCounts.unsafeCondition,
+    nearMiss: canonicalCurrent.nearMiss + pendingPyramidCounts.nearMiss,
+    firstAid: canonicalCurrent.firstAids + pendingPyramidCounts.firstAid,
+    minorInjury: canonicalCurrent.minorInjury + pendingPyramidCounts.minorInjury,
+    seriousInjury: canonicalCurrent.seriousInjury + pendingPyramidCounts.seriousInjury,
+    fatal: pendingPyramidCounts.fatal,
   } : buildPyramidCounts(scopedPyramidCommunications);
   const pyramidRecords = scopedPyramidCommunications.flatMap(row => {
     const level = getDashboardPyramidLevel(row);
     return level ? [{ id: row.id, code: row.codigoCompleto ?? row.id, level, pending: isCommunicationInValidationStatus(row.status) }] : [];
   });
+  const homologousPendingPyramidCounts = buildPyramidCounts(scopedHomologousPyramid.filter((row) => isCommunicationInValidationStatus(row.status)));
   const homologousPyramidCounts = canonicalPrevious ? {
-    ...buildPyramidCounts(scopedHomologousPyramid),
-    unsafeAct: canonicalPrevious.unsafeAct,
-    unsafeCondition: canonicalPrevious.unsafeCondition,
-    nearMiss: canonicalPrevious.nearMiss,
-    firstAid: canonicalPrevious.firstAids,
-    minorInjury: canonicalPrevious.minorInjury,
-    seriousInjury: canonicalPrevious.seriousInjury,
+    ...homologousPendingPyramidCounts,
+    unsafeAct: canonicalPrevious.unsafeAct + homologousPendingPyramidCounts.unsafeAct,
+    unsafeCondition: canonicalPrevious.unsafeCondition + homologousPendingPyramidCounts.unsafeCondition,
+    nearMiss: canonicalPrevious.nearMiss + homologousPendingPyramidCounts.nearMiss,
+    firstAid: canonicalPrevious.firstAids + homologousPendingPyramidCounts.firstAid,
+    minorInjury: canonicalPrevious.minorInjury + homologousPendingPyramidCounts.minorInjury,
+    seriousInjury: canonicalPrevious.seriousInjury + homologousPendingPyramidCounts.seriousInjury,
+    fatal: homologousPendingPyramidCounts.fatal,
   } : scopedHomologousPyramid.length > 0
     ? buildPyramidCounts(scopedHomologousPyramid)
     : undefined;

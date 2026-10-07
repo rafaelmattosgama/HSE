@@ -120,7 +120,12 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
   const unsafeActs = distribution();
   const nearMissTypes = distribution();
   let unclassifiedAccidents = 0;
-  const liveMonthKeys = new Set(plant.kpiInputs.map(input => `${input.year}-${String(input.month).padStart(2, "0")}`));
+  const liveHoursByMonth = new Set(plant.kpiInputs.flatMap(input => {
+    if (input.hoursWorked === null || input.hoursWorked === undefined) return [];
+    const hours = Number(input.hoursWorked);
+    return Number.isFinite(hours) && hours > 0 ? [`${input.year}-${String(input.month).padStart(2, "0")}`] : [];
+  }));
+  const liveTypesByMonth = new Map<string, Set<string>>();
   function addEvent(target: SafetyTotals, event: GroupSafetyRawPlant["communications"][number]) {
     target.events += 1;
     if (event.type === "ACCIDENT") target.accidents += 1;
@@ -132,7 +137,10 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
   for (const event of plant.communications) {
     const inCurrent = within(event.eventDatetime, from, to);
     if (isCommunicationLinkableStatus(event.status)) {
-      liveMonthKeys.add(monthKey(event.eventDatetime));
+      const key = monthKey(event.eventDatetime);
+      const types = liveTypesByMonth.get(key) ?? new Set<string>();
+      types.add(event.type);
+      liveTypesByMonth.set(key, types);
       if (within(event.eventDatetime, previousPeriod.from, previousPeriod.to)) addEvent(previous, event);
       if (inCurrent) {
         addEvent(current, event);
@@ -167,22 +175,32 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
     if (currentKeys.has(key)) { current.hours += hours; reportedMonths.add(key); const month = monthly.get(key); if (month) month.hours += hours; }
     if (previousKeys.has(key)) previous.hours += hours;
   }
-  // Imported aggregates fill only months with no live/canonical record. This
-  // is whole-month precedence: sources are never added for the same period.
+  // Resolve source precedence by indicator. A live hours row cannot hide
+  // imported incident/pyramid counts; a live communication type replaces
+  // imported totals of that type for the same plant-month.
   for (const row of plant.safetyKpiHistory ?? []) {
     const key = `${row.year}-${String(row.month).padStart(2, "0")}`;
-    if (liveMonthKeys.has(key)) continue;
+    const liveTypes = liveTypesByMonth.get(key) ?? new Set<string>();
+    const hasLive = (type: string) => liveTypes.has(type);
+    const historicalAccidents = hasLive("ACCIDENT") ? 0 : row.accidents;
+    const historicalFirstAids = hasLive("FIRST_AID") ? 0 : row.firstAids;
+    const historicalNearMisses = hasLive("NEAR_MISS") ? 0 : row.nearMiss;
+    const historicalUnsafeConditions = hasLive("UNSAFE_CONDITION") ? 0 : row.unsafeCondition;
+    const historicalUnsafeActs = hasLive("UNSAFE_ACT") ? 0 : row.unsafeAct;
+    const historicalLostDays = hasLive("ACCIDENT") ? 0 : Number(row.lostDays);
+    const historicalHours = liveHoursByMonth.has(key) ? 0 : Number(row.hoursWorked);
     const addHistorical = (target: SafetyTotals) => {
-      target.accidents += row.accidents; target.firstAids += row.firstAids; target.nearMisses += row.nearMiss;
-      target.lostDays += Number(row.lostDays); target.hours += Number(row.hoursWorked);
-      target.events += row.accidents + row.firstAids + row.nearMiss + row.unsafeCondition + row.unsafeAct;
+      target.accidents += historicalAccidents; target.firstAids += historicalFirstAids; target.nearMisses += historicalNearMisses;
+      target.lostDays += historicalLostDays; target.hours += historicalHours;
+      target.events += historicalAccidents + historicalFirstAids + historicalNearMisses + historicalUnsafeConditions + historicalUnsafeActs;
     };
     if (currentKeys.has(key)) {
-      addHistorical(current); reportedMonths.add(key);
+      addHistorical(current);
+      if (historicalHours > 0) reportedMonths.add(key);
       const month = monthly.get(key); if (month) addHistorical(month);
-      pyramid.unsafeAct += row.unsafeAct; pyramid.unsafeCondition += row.unsafeCondition;
-      pyramid.nearMiss += row.nearMiss; pyramid.firstAid += row.firstAids;
-      pyramid.minorInjury += row.minorInjury; pyramid.seriousInjury += row.seriousInjury;
+      pyramid.unsafeAct += historicalUnsafeActs; pyramid.unsafeCondition += historicalUnsafeConditions;
+      pyramid.nearMiss += historicalNearMisses; pyramid.firstAid += historicalFirstAids;
+      if (!hasLive("ACCIDENT")) { pyramid.minorInjury += row.minorInjury; pyramid.seriousInjury += row.seriousInjury; }
     }
     if (previousKeys.has(key)) addHistorical(previous);
   }

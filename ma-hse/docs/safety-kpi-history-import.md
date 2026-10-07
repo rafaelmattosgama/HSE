@@ -4,11 +4,14 @@
 
 `SafetyKpiHistory` guarda totais mensais históricos por planta. A chave canónica é `plantId + year + month`, protegida por uma restrição única na base de dados.
 
-O dashboard resolve cada mês como uma unidade completa:
+O dashboard resolve a precedência por indicador dentro de cada mês:
 
-1. se existir informação live em `PlantMonthlyInput` ou em comunicações válidas para a planta/mês, usa a informação live;
-2. na ausência de informação live, usa `SafetyKpiHistory`;
-3. nunca soma as duas fontes para a mesma planta/mês.
+1. `Hours Worked` e `Employees` usam os valores live de `PlantMonthlyInput` quando estão preenchidos;
+2. cada contagem de comunicação usa o total live dessa categoria quando existem comunicações válidas dessa categoria no mês;
+3. os valores históricos preenchem os indicadores sem cobertura live nesse mês;
+4. nunca soma o valor importado e o valor live do mesmo indicador no mesmo mês.
+
+Assim, uma linha live que contenha apenas horas não apaga os acidentes ou níveis da pirâmide importados. Os meses sem sobreposição — por exemplo, histórico de janeiro a maio e registos live a partir de junho — são agregados para o mesmo ano.
 
 Os dashboards de planta e do grupo somam horas, acidentes, dias perdidos e restantes contagens. As taxas são sempre recalculadas a partir dos totais agregados:
 
