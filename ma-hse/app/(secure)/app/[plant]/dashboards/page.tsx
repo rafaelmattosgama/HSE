@@ -62,6 +62,8 @@ import {
   hasSafetyDashboardAccess,
   hasSafetyDashboardDetailedReadAccess,
 } from "@/lib/rbac/dashboard";
+import { aggregateSafetyKpiMonths } from "@/lib/safety-kpi-history/aggregation";
+import { SafetyKpiHistoryService } from "@/lib/safety-kpi-history/service";
 
 function buildPyramidCounts(
   rows: Array<{
@@ -227,6 +229,8 @@ function buildYearOptions(input: {
   communicationMax?: Date | null;
   monthlyMinYear?: number | null;
   monthlyMaxYear?: number | null;
+  historicalMinYear?: number | null;
+  historicalMaxYear?: number | null;
 }) {
   const candidates = [
     input.currentYear,
@@ -234,6 +238,8 @@ function buildYearOptions(input: {
     input.communicationMax?.getUTCFullYear(),
     input.monthlyMinYear,
     input.monthlyMaxYear,
+    input.historicalMinYear,
+    input.historicalMaxYear,
   ].filter((value): value is number => Number.isFinite(value));
 
   const minYear = Math.min(...candidates, input.currentYear - 5);
@@ -334,6 +340,28 @@ export default async function DashboardsPage({
   const monthlyInputFilter = buildMonthlyInputFilter(period);
   const homologousPeriod = getHomologousPeriod(period);
   const homologousMonthlyInputFilter = buildMonthlyInputFilter(homologousPeriod);
+  // Imported history is plant-wide. Department views intentionally retain
+  // transactional data only because the workbook has no department dimension.
+  const historicalKpis = departmentId
+    ? null
+    : await SafetyKpiHistoryService.getPlantYear(plantRow.id, plantRow.code, period.year, period.year - 1);
+  const inPeriod = (year: number, month: number, from: Date, to: Date) => {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+    return start <= to && end >= from;
+  };
+  const canonicalCurrentMonths = historicalKpis
+    ? historicalKpis.months.filter(row => inPeriod(row.year, row.month, period.from, period.to))
+    : [];
+  const canonicalThroughMonth = canonicalCurrentMonths.reduce((max, row) => Math.max(max, row.month), 0);
+  const canonicalCurrent = historicalKpis ? aggregateSafetyKpiMonths(canonicalCurrentMonths) : null;
+  const canonicalPrevious = historicalKpis
+    ? aggregateSafetyKpiMonths(historicalKpis.comparisonMonths.filter(row =>
+        inPeriod(row.year, row.month, homologousPeriod.from, homologousPeriod.to)
+        && canonicalThroughMonth > 0
+        && row.month <= canonicalThroughMonth,
+      ))
+    : null;
 
   const [
     communicationRows,
@@ -348,6 +376,7 @@ export default async function DashboardsPage({
     employeeRows,
     communicationDateRange,
     monthlyYearRange,
+    historicalYearRange,
     injuryHistoryRows,
     sifPsifIncidentRows,
     homologousSifPsifIncidentRows,
@@ -559,6 +588,11 @@ export default async function DashboardsPage({
       _min: { year: true },
       _max: { year: true },
     }),
+    prisma.safetyKpiHistory.aggregate({
+      where: { plantId: plantRow.id },
+      _min: { year: true },
+      _max: { year: true },
+    }),
     prisma.communication.findMany({
       where: {
         plantId: plantRow.id,
@@ -633,12 +667,28 @@ export default async function DashboardsPage({
   const indicatorRootCauseCount = indicatorSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const scopedHomologousPyramid = filterDashboardDepartment(homologousPyramidCommunications, departmentId);
   const scopedPyramidCommunications = filterDashboardDepartment(pyramidCommunications, departmentId);
-  const pyramidCounts = buildPyramidCounts(scopedPyramidCommunications);
+  const pyramidCounts = canonicalCurrent ? {
+    ...buildPyramidCounts(scopedPyramidCommunications),
+    unsafeAct: canonicalCurrent.unsafeAct,
+    unsafeCondition: canonicalCurrent.unsafeCondition,
+    nearMiss: canonicalCurrent.nearMiss,
+    firstAid: canonicalCurrent.firstAids,
+    minorInjury: canonicalCurrent.minorInjury,
+    seriousInjury: canonicalCurrent.seriousInjury,
+  } : buildPyramidCounts(scopedPyramidCommunications);
   const pyramidRecords = scopedPyramidCommunications.flatMap(row => {
     const level = getDashboardPyramidLevel(row);
     return level ? [{ id: row.id, code: row.codigoCompleto ?? row.id, level, pending: isCommunicationInValidationStatus(row.status) }] : [];
   });
-  const homologousPyramidCounts = scopedHomologousPyramid.length > 0
+  const homologousPyramidCounts = canonicalPrevious ? {
+    ...buildPyramidCounts(scopedHomologousPyramid),
+    unsafeAct: canonicalPrevious.unsafeAct,
+    unsafeCondition: canonicalPrevious.unsafeCondition,
+    nearMiss: canonicalPrevious.nearMiss,
+    firstAid: canonicalPrevious.firstAids,
+    minorInjury: canonicalPrevious.minorInjury,
+    seriousInjury: canonicalPrevious.seriousInjury,
+  } : scopedHomologousPyramid.length > 0
     ? buildPyramidCounts(scopedHomologousPyramid)
     : undefined;
   const homologousValidCommunications = homologousPyramidCommunications.filter((entry) => ["VALID_OPEN", "ONGOING", "CLOSED"].includes(entry.status));
@@ -657,12 +707,12 @@ export default async function DashboardsPage({
   const closedOnTimePercent = closedActionsWithDates.length > 0
     ? (closedActionsWithDates.filter((entry) => entry.closedAt! <= entry.dueDate).length / closedActionsWithDates.length) * 100
     : null;
-  const validCommunicationsCount = validCommunications.length;
-  const nearMissCount = validCommunications.filter((entry) => entry.type === "NEAR_MISS").length;
-  const unsafeActCount = validCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length;
-  const unsafeConditionCount = validCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length;
-  const injuryCount = validCommunications.filter((entry) => entry.type === "ACCIDENT").length;
-  const firstAidCount = validCommunications.filter((entry) => entry.type === "FIRST_AID").length;
+  const validCommunicationsCount = canonicalCurrent ? canonicalCurrent.accidents + canonicalCurrent.firstAids + canonicalCurrent.nearMiss + canonicalCurrent.unsafeAct + canonicalCurrent.unsafeCondition : validCommunications.length;
+  const nearMissCount = canonicalCurrent?.nearMiss ?? validCommunications.filter((entry) => entry.type === "NEAR_MISS").length;
+  const unsafeActCount = canonicalCurrent?.unsafeAct ?? validCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length;
+  const unsafeConditionCount = canonicalCurrent?.unsafeCondition ?? validCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length;
+  const injuryCount = canonicalCurrent?.accidents ?? validCommunications.filter((entry) => entry.type === "ACCIDENT").length;
+  const firstAidCount = canonicalCurrent?.firstAids ?? validCommunications.filter((entry) => entry.type === "FIRST_AID").length;
   const rootCauseCount = sewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const homologousRootCauseCount = homologousSewoRows.reduce((sum, entry) => sum + getSewoRootCauseCount(entry), 0);
   const rootCauseTopEntries = buildSewoRootCauseTopEntries(indicatorSewoRows);
@@ -675,17 +725,17 @@ export default async function DashboardsPage({
   const nearMissTypeTotal = getCommunicationTypeTotal(indicatorCommunications, CommunicationType.NEAR_MISS);
   const sifPsifIndicators = buildSifPsifIndicatorBreakdown(sifPsifIncidentRows);
   const homologousSifPsifIndicators = buildSifPsifIndicatorBreakdown(homologousSifPsifIncidentRows);
-  const lostDays = validCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
+  const lostDays = canonicalCurrent ? Number(canonicalCurrent.lostDays) : validCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
   const closedActionsPercent = totalActions > 0 ? (closedActions / totalActions) * 100 : 0;
   const actionsToClosePercent = totalActions > 0 ? (actionsToClose / totalActions) * 100 : 0;
-  const totalHoursWorked = hoursWorkedRows.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
-  const homologousHoursWorked = homologousHoursWorkedRows.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
+  const totalHoursWorked = canonicalCurrent ? Number(canonicalCurrent.hoursWorked) : hoursWorkedRows.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
+  const homologousHoursWorked = canonicalPrevious ? Number(canonicalPrevious.hoursWorked) : homologousHoursWorkedRows.reduce((sum, entry) => sum + Number(entry.hoursWorked ?? 0), 0);
   const frequencyIndex = totalHoursWorked > 0 ? (injuryCount / totalHoursWorked) * 1_000_000 : 0;
   const severityIndex = totalHoursWorked > 0 ? (lostDays / totalHoursWorked) * 1_000_000 : 0;
   const firstAidRate = totalHoursWorked > 0 ? (firstAidCount / totalHoursWorked) * 1_000_000 : null;
-  const homologousInjuryCount = homologousValidCommunications.filter((entry) => entry.type === "ACCIDENT").length;
-  const homologousFirstAidCount = homologousValidCommunications.filter((entry) => entry.type === "FIRST_AID").length;
-  const homologousLostDays = homologousValidCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
+  const homologousInjuryCount = canonicalPrevious?.accidents ?? homologousValidCommunications.filter((entry) => entry.type === "ACCIDENT").length;
+  const homologousFirstAidCount = canonicalPrevious?.firstAids ?? homologousValidCommunications.filter((entry) => entry.type === "FIRST_AID").length;
+  const homologousLostDays = canonicalPrevious ? Number(canonicalPrevious.lostDays) : homologousValidCommunications.reduce((sum, entry) => sum + (entry.lostDays ?? 0), 0);
   const homologousFrequencyIndex = homologousHoursWorked > 0 ? (homologousInjuryCount / homologousHoursWorked) * 1_000_000 : null;
   const homologousSeverityIndex = homologousHoursWorked > 0 ? (homologousLostDays / homologousHoursWorked) * 1_000_000 : null;
   const homologousFirstAidRate = homologousHoursWorked > 0 ? (homologousFirstAidCount / homologousHoursWorked) * 1_000_000 : null;
@@ -701,7 +751,15 @@ export default async function DashboardsPage({
   const homologousUnsafeConditionsClosedPercent = getLinkedCommunicationClosureRate(
     homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION"),
   );
-  const hasHomologousCommunicationData = homologousPyramidCommunications.length > 0;
+  const hasHomologousCommunicationData = canonicalPrevious
+    ? canonicalPrevious.months > 0
+    : homologousPyramidCommunications.length > 0;
+  const homologousNearMissCount = canonicalPrevious?.nearMiss
+    ?? homologousValidCommunications.filter((entry) => entry.type === "NEAR_MISS").length;
+  const homologousUnsafeActCount = canonicalPrevious?.unsafeAct
+    ?? homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length;
+  const homologousUnsafeConditionCount = canonicalPrevious?.unsafeCondition
+    ?? homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length;
   const actionBacklogTrend = monthBuckets.map((bucket) => {
     const monthEnd = getMonthEnd(bucket.year, bucket.month);
     const referenceDate = monthEnd > backlogReferenceDate ? backlogReferenceDate : monthEnd;
@@ -746,13 +804,13 @@ export default async function DashboardsPage({
       ? undefined
       : getHomologousTrend(firstAidRate, homologousFirstAidRate, ui.dashboard.samePeriodLastYearShort, uiLocale, 2),
     nearMisses: hasHomologousCommunicationData
-      ? getHomologousTrend(nearMissCount, homologousValidCommunications.filter((entry) => entry.type === "NEAR_MISS").length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      ? getHomologousTrend(nearMissCount, homologousNearMissCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
       : undefined,
     unsafeActs: hasHomologousCommunicationData
-      ? getHomologousTrend(unsafeActCount, homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_ACT").length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      ? getHomologousTrend(unsafeActCount, homologousUnsafeActCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
       : undefined,
     unsafeConditions: hasHomologousCommunicationData
-      ? getHomologousTrend(unsafeConditionCount, homologousValidCommunications.filter((entry) => entry.type === "UNSAFE_CONDITION").length, ui.dashboard.samePeriodLastYearShort, uiLocale)
+      ? getHomologousTrend(unsafeConditionCount, homologousUnsafeConditionCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
       : undefined,
     rootCauses: homologousSewoRows.length > 0
       ? getHomologousTrend(rootCauseCount, homologousRootCauseCount, ui.dashboard.samePeriodLastYearShort, uiLocale)
@@ -931,6 +989,18 @@ export default async function DashboardsPage({
     snapshot.hoursWorked += Number(row.hoursWorked ?? 0);
   }
 
+  if (historicalKpis) {
+    for (const row of canonicalCurrentMonths) {
+      const snapshot = monthlyMetricsMap.get(getMonthKey(row.year, row.month));
+      if (!snapshot) continue;
+      snapshot.validatedEvents = row.accidents + row.firstAids + row.nearMiss + row.unsafeAct + row.unsafeCondition;
+      snapshot.nearMisses = row.nearMiss;
+      snapshot.injuries = row.accidents;
+      snapshot.lostDays = Number(row.lostDays);
+      snapshot.hoursWorked = Number(row.hoursWorked);
+    }
+  }
+
   const monthlyMetrics = [...monthlyMetricsMap.values()].map((snapshot) => {
     const totalMonthlyActions = snapshot.openActions + snapshot.closedActions + Math.max(snapshot.actionsToClose - snapshot.openActions, 0);
     return {
@@ -1056,6 +1126,8 @@ export default async function DashboardsPage({
     communicationMax: communicationDateRange._max.eventDatetime,
     monthlyMinYear: monthlyYearRange._min.year,
     monthlyMaxYear: monthlyYearRange._max.year,
+    historicalMinYear: historicalYearRange._min.year,
+    historicalMaxYear: historicalYearRange._max.year,
   });
   const monthOptions = [
     { value: "1", label: getMonthLabel(uiLocale, 0) },

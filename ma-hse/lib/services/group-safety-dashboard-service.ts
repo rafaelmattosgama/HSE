@@ -35,6 +35,7 @@ export async function getGroupSafetyDashboard(roles: Roles, period: { from: Date
           select: { type: true, status: true, classification: true, eventDatetime: true, reportedAt: true, lostDays: true, updatedAt: true, unsafeActType: { select: { name: true } }, nearMissType: { select: { name: true } } },
         },
         kpiInputs: { where: { OR: months }, select: { year: true, month: true, hoursWorked: true, updatedAt: true } },
+        safetyKpiHistory: { where: { OR: months }, select: { year: true, month: true, hoursWorked: true, accidents: true, lostDays: true, seriousInjury: true, minorInjury: true, firstAids: true, nearMiss: true, unsafeCondition: true, unsafeAct: true, updatedAt: true } },
         sewoRecords: {
           where: { analysisDate: { gte: period.from, lte: period.to } },
           select: { communication: { select: { type: true } }, templateData: true, updatedAt: true, causeSelections: { select: { selected: true, isRootCause: true, causeItem: { select: { label: true } } } } },

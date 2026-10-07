@@ -10,6 +10,7 @@ import { QrTokenManager } from "@/components/feature/qr-token-manager";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { SafetyCommunicationRecipientManager } from "@/components/feature/safety-communication-recipient-manager";
 import { SafetyDaysAdminEditor } from "@/components/feature/safety-days-admin-editor";
+import { SafetyKpiHistoryImporter } from "@/components/feature/safety-kpi-history-importer";
 import { SewoRecipientListManager } from "@/components/feature/sewo-recipient-list-manager";
 import { RoleModuleManager } from "@/components/feature/role-module-manager";
 import { getPlantRoleModuleSettings } from "@/lib/services/role-module-service";
@@ -93,6 +94,7 @@ export default async function AdminPage({
   const canManageCompetenceCatalog =
     actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
   const canViewCompetenceCatalog = actorRole === RoleCode.N0_ADMIN || canManageCompetenceCatalog;
+  const canImportHistoricalSafetyKpis = actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N3_SAFETY;
 
   const [
     sla,
@@ -279,6 +281,10 @@ export default async function AdminPage({
         />
         <QrTokenManager labels={masterDataUi} reportRegenerationEnabled={env.REPORT_QR_REGENERATION_ENABLED} />
       </section>
+
+      {canImportHistoricalSafetyKpis ? (
+        <SafetyKpiHistoryImporter allowReplace={actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE} />
+      ) : null}
 
       <RepeatabilityAlertEditor
         endpoint={`/api/plants/${plant}/admin/repeatability-alerts`}

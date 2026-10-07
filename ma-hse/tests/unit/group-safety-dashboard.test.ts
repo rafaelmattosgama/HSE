@@ -64,6 +64,31 @@ describe("group safety shared calculations", () => {
     expect(summary.rates.frequency).toBe(2000);
   });
 
+  it("fills current and prior periods from imported monthly history and recalculates rates", () => {
+    const plant = raw("a", 0, 0);
+    plant.communications = [];
+    plant.kpiInputs = [];
+    plant.safetyKpiHistory = [
+      { year: 2026, month: 1, hoursWorked: 200000, accidents: 2, lostDays: 10, seriousInjury: 1, minorInjury: 1, firstAids: 3, nearMiss: 4, unsafeCondition: 5, unsafeAct: 6, updatedAt: today },
+      { year: 2025, month: 1, hoursWorked: 100000, accidents: 1, lostDays: 20, seriousInjury: 0, minorInjury: 1, firstAids: 2, nearMiss: 3, unsafeCondition: 4, unsafeAct: 5, updatedAt: today },
+    ];
+    const result = buildGroupSafetyPlant(plant, options);
+    expect(result.current).toMatchObject({ hours: 200000, accidents: 2, lostDays: 10, firstAids: 3, nearMisses: 4 });
+    expect(result.previous).toMatchObject({ hours: 100000, accidents: 1, lostDays: 20, firstAids: 2, nearMisses: 3 });
+    expect(result.rates).toMatchObject({ frequency: 10, gravity: 50 });
+    expect(result.previousRates).toMatchObject({ frequency: 10, gravity: 200 });
+    expect(result.pyramid).toMatchObject({ seriousInjury: 1, minorInjury: 1, firstAid: 3, nearMiss: 4, unsafeCondition: 5, unsafeAct: 6 });
+  });
+
+  it("uses the whole live month instead of adding an imported record for the same plant-month", () => {
+    const plant = raw("a", 100, 1);
+    plant.safetyKpiHistory = [{ year: 2026, month: 1, hoursWorked: 9999, accidents: 99, lostDays: 99, seriousInjury: 50, minorInjury: 49, firstAids: 99, nearMiss: 99, unsafeCondition: 99, unsafeAct: 99, updatedAt: today }];
+    const result = buildGroupSafetyPlant(plant, options);
+    expect(result.current).toMatchObject({ hours: 100, accidents: 1, lostDays: 2, events: 1 });
+    expect(result.rates.frequency).toBe(10000);
+    expect(result.pyramid.minorInjury).toBe(1);
+  });
+
   it("distinguishes multiple root classifications from unique typed events and unclassified events", () => {
     const plant = raw("a", 100, 0);
     const near = event("NEAR_MISS");
