@@ -1,11 +1,11 @@
 "use server";
 
-import { RoleCode } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerAuthSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { ReportService } from "@/lib/services/report-service";
+import { getCorporateReportAccess } from "@/lib/rbac/corporate-reports";
 
 const REPORT_TYPES = new Set(["WEEKLY_DIGEST", "MONTHLY", "ANNUAL"]);
 const REPORT_SCOPES = new Set(["GLOBAL", "FACTORY"]);
@@ -17,8 +17,8 @@ export async function generateCorporateReportAction(formData: FormData) {
     redirect("/login");
   }
 
-  const isCorporate = session.user.plantRoles?.some((entry) => entry.role === RoleCode.N1_CORPORATE);
-  if (!isCorporate) {
+  const access = getCorporateReportAccess(session.user.plantRoles);
+  if (!access.canGenerate) {
     redirect("/app/corporate/reports?error=forbidden");
   }
 
@@ -30,6 +30,10 @@ export async function generateCorporateReportAction(formData: FormData) {
 
   if (!REPORT_TYPES.has(reportType) || !REPORT_SCOPES.has(scope) || !periodStartRaw || !periodEndRaw) {
     redirect("/app/corporate/reports?error=invalid-input");
+  }
+
+  if (!access.global && (scope !== "FACTORY" || !access.plantIds.includes(factoryId))) {
+    redirect("/app/corporate/reports?error=forbidden");
   }
 
   const selectedFactory = scope === "FACTORY"

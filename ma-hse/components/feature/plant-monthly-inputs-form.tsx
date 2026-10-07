@@ -610,7 +610,7 @@ export function PlantMonthlyInputsForm({
               </Button>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
               {group.rows.map((row) => {
                 const values = getRowValues(row);
                 const tonKmValues = getTonKmValues(row);
@@ -626,14 +626,14 @@ export function PlantMonthlyInputsForm({
                   <article
                     key={row.id}
                     className={cn(
-                      "rounded-2xl border bg-white p-4 shadow-sm transition",
+                      "min-w-0 rounded-2xl border bg-white p-4 shadow-sm transition",
                       isDisabled ? "border-slate-200 opacity-70" : "border-slate-200 hover:border-teal-200",
                     )}
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex flex-col gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h5 className="text-base font-semibold text-slate-900">{row.label}</h5>
+                          <h5 className="break-words text-base font-semibold text-slate-900">{row.label}</h5>
                           {row.valueMode === "computed" ? (
                             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
                               Auto
@@ -674,15 +674,8 @@ export function PlantMonthlyInputsForm({
                       </div>
                     </div>
 
-                    <div
-                      className={cn(
-                        "mt-4 grid gap-3 sm:items-end",
-                        supportsTonKm(row)
-                          ? "sm:grid-cols-[minmax(0,1fr)_160px_180px]"
-                          : "sm:grid-cols-[minmax(0,1fr)_160px]",
-                      )}
-                    >
-                      <label className="space-y-1 text-sm">
+                    <div className="mt-4 grid grid-cols-2 items-end gap-3">
+                      <label className="col-span-2 min-w-0 space-y-1 text-sm">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                           {MONTH_LABELS[activeMonthIndex]} value
                         </span>
@@ -695,21 +688,21 @@ export function PlantMonthlyInputsForm({
                           value={currentValue ?? ""}
                           onChange={(event) => updateMonthValue(row, activeMonthIndex, event.target.value)}
                           className={cn(
-                            "h-12 w-full rounded-xl border px-3 py-2 text-right text-lg font-semibold",
+                            "h-12 w-full min-w-0 rounded-xl border px-3 py-2 text-right text-lg font-semibold tabular-nums",
                             isDisabled || row.valueMode === "computed"
                               ? "border-slate-200 bg-slate-100 text-slate-500"
                               : "border-slate-300 bg-white text-slate-900 focus:border-teal-400",
                           )}
                         />
                       </label>
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className={cn("min-w-0 self-stretch rounded-xl border border-slate-200 bg-slate-50 px-3 py-2", !supportsTonKm(row) && "col-span-2")}>
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Year total</p>
-                        <p className="text-lg font-bold text-slate-900">{formatTotal(values, integer)}</p>
+                        <p className="break-words text-base font-bold tabular-nums text-slate-900">{formatTotal(values, integer)}</p>
                       </div>
                       {supportsTonKm(row) ? (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                        <div className="min-w-0 self-stretch rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Ton/km</p>
-                          <p className="text-lg font-bold text-amber-950">{currentTonKm?.toFixed(2) ?? "-"}</p>
+                          <p className="break-words text-base font-bold tabular-nums text-amber-950">{currentTonKm?.toFixed(2) ?? "-"}</p>
                           <p className="text-[11px] text-amber-700">Auto calculated for {MONTH_LABELS[activeMonthIndex]}</p>
                         </div>
                       ) : null}
@@ -802,146 +795,11 @@ export function PlantMonthlyInputsForm({
                       <article
                         key={row.id}
                         className={cn(
-                          "rounded-xl border p-3",
+                          "@container min-w-0 rounded-xl border p-3",
                           isDisabled ? "border-slate-200 bg-slate-100/90 text-slate-400" : "border-slate-200 bg-white",
                         )}
                       >
-                        <div className="hidden xl:grid xl:grid-cols-[84px_88px_minmax(220px,1.4fr)_minmax(160px,0.95fr)_minmax(120px,0.75fr)_minmax(110px,0.7fr)_repeat(12,minmax(54px,1fr))_88px] xl:items-center xl:gap-2">
-                          <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                            <input
-                              type="checkbox"
-                              checked={row.enabled}
-                              onChange={(event) =>
-                                applyRowMetaUpdate(row.id, (current) => ({ ...current, enabled: event.target.checked }))
-                              }
-                            />
-                            Active
-                          </label>
-
-                          <div className="flex gap-1">
-                            <Button type="button" size="sm" variant={isEditing ? "default" : "secondary"} onClick={() => setEditingRowId((current) => (current === row.id ? null : row.id))}>
-                              {isEditing ? "Done" : "Edit"}
-                            </Button>
-                            {isCustom ? (
-                              <Button type="button" size="sm" variant="ghost" onClick={() => removeCustomIndicator(row.id)}>
-                                Remove
-                              </Button>
-                            ) : null}
-                          </div>
-
-                          {isEditing ? (
-                            <input
-                              value={row.label}
-                              onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, label: event.target.value }))}
-                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                            />
-                          ) : (
-                            <div>
-                              <p className="font-medium text-slate-900">{row.label}</p>
-                              {row.valueMode === "computed" ? <p className="text-[11px] text-slate-500">Auto</p> : null}
-                            </div>
-                          )}
-
-                          {isEditing ? (
-                            row.col2Options.length > 0 ? (
-                              <select
-                                value={row.col2Value ?? ""}
-                                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col2Value: event.target.value || null }))}
-                                className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-900"
-                              >
-                                <option value="">{row.col2Label ?? "Select"}</option>
-                                {row.col2Options.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                value={row.col2Value ?? ""}
-                                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col2Value: event.target.value || null }))}
-                                className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-900"
-                                placeholder={row.col2Label ?? "Column 2"}
-                              />
-                            )
-                          ) : (
-                            <div className="text-sm text-slate-700">{row.col2Value ?? "-"}</div>
-                          )}
-
-                          {isEditing ? (
-                            row.col3Options.length > 0 ? (
-                              <select
-                                value={row.col3Unit ?? ""}
-                                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col3Unit: event.target.value || null }))}
-                                className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-900"
-                              >
-                                <option value="">Unit</option>
-                                {row.col3Options.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                value={row.col3Unit ?? ""}
-                                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, col3Unit: event.target.value || null }))}
-                                className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-900"
-                                placeholder="Unit"
-                              />
-                            )
-                          ) : (
-                            <div className="text-sm text-slate-700">{row.col3Unit ?? "-"}</div>
-                          )}
-
-                          {hasDistance ? (
-                            isEditing ? (
-                              <input
-                                value={row.distanceKm ?? ""}
-                                onChange={(event) => applyRowMetaUpdate(row.id, (current) => ({ ...current, distanceKm: event.target.value || null }))}
-                                className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-900"
-                                placeholder="KM"
-                              />
-                            ) : (
-                              <div className="text-sm text-slate-700">{row.distanceKm ? `${row.distanceKm} KM` : "-"}</div>
-                            )
-                          ) : (
-                            <div className="text-center text-xs text-slate-400">-</div>
-                          )}
-
-                          {values.map((value, monthIndex) => (
-                            <div key={`${row.id}-${monthIndex}`} className="space-y-1">
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step={integer ? "1" : "0.01"}
-                                min="0"
-                                disabled={isDisabled || row.valueMode === "computed"}
-                                value={value ?? ""}
-                                onChange={(event) => updateMonthValue(row, monthIndex, event.target.value)}
-                                className={cn(
-                                  "w-full rounded-lg border px-2 py-2 text-right text-xs",
-                                  isDisabled || row.valueMode === "computed"
-                                    ? "border-slate-200 bg-slate-100 text-slate-500"
-                                    : "border-slate-300 bg-white text-slate-900",
-                                )}
-                                aria-label={`${row.label} ${MONTH_LABELS[monthIndex]}`}
-                              />
-                              {showTonKm ? (
-                                <div className="rounded-md bg-amber-50 px-1.5 py-1 text-right text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                                  TKM {tonKmValues[monthIndex]?.toFixed(2) ?? "-"}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-
-                          <div className="rounded-xl bg-slate-100 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            <div>{formatTotal(values, integer)}</div>
-                            {showTonKm ? <div className="mt-1 text-[10px] text-amber-700">TKM {formatTotal(tonKmValues)}</div> : null}
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 xl:hidden">
+                        <div className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                               <input
@@ -963,10 +821,11 @@ export function PlantMonthlyInputsForm({
                             ) : null}
                           </div>
 
-                          <div className="grid gap-3 md:grid-cols-4">
+                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{getPrimaryFieldLabel(row)}</p>
-                              <p className="text-sm text-slate-900">{row.label}</p>
+                              <p className="break-words text-base font-semibold text-slate-900">{row.label}</p>
+                              {row.valueMode === "computed" ? <p className="text-xs text-slate-500">Auto</p> : null}
                             </div>
                             {showSecondaryField ? (
                               <div>
@@ -986,9 +845,14 @@ export function PlantMonthlyInputsForm({
                             ) : null}
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                            <span className="font-medium text-slate-500">Year total</span>
+                            <span className="break-all font-semibold tabular-nums text-slate-900">{formatTotal(values, integer)}</span>
+                            {showTonKm ? <span className="break-all font-semibold tabular-nums text-amber-700">TKM {formatTotal(tonKmValues)}</span> : null}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 @xl:grid-cols-4 @4xl:grid-cols-6 @min-[96rem]:grid-cols-12">
                             {values.map((value, monthIndex) => (
-                              <label key={`${row.id}-mobile-${monthIndex}`} className="space-y-1">
+                              <label key={`${row.id}-${monthIndex}`} className="min-w-0 space-y-1">
                                 <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{MONTH_LABELS[monthIndex]}</span>
                                 <input
                                   type="number"
@@ -997,16 +861,17 @@ export function PlantMonthlyInputsForm({
                                   min="0"
                                   disabled={isDisabled || row.valueMode === "computed"}
                                   value={value ?? ""}
+                                  aria-label={`${row.label} ${MONTH_LABELS[monthIndex]}`}
                                   onChange={(event) => updateMonthValue(row, monthIndex, event.target.value)}
                                   className={cn(
-                                    "w-full rounded-lg border px-2 py-2 text-right text-sm",
+                                    "h-10 w-full min-w-0 rounded-lg border px-2 py-2 text-right text-sm tabular-nums",
                                     isDisabled || row.valueMode === "computed"
                                       ? "border-slate-200 bg-slate-100 text-slate-500"
                                       : "border-slate-300 bg-white text-slate-900",
                                   )}
                                 />
                                 {showTonKm ? (
-                                  <span className="block text-right text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                  <span className="block break-all text-right text-[10px] font-semibold uppercase tracking-wide text-amber-700">
                                     TKM {tonKmValues[monthIndex]?.toFixed(2) ?? "-"}
                                   </span>
                                 ) : null}
@@ -1121,9 +986,9 @@ export function PlantMonthlyInputsForm({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+        <div className="grid min-w-0 gap-3">
           <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 xl:grid-cols-12">
               {MONTH_LABELS.map((month, index) => {
                 const filled = editableRows.filter((row) => getRowValues(row)[index] !== null).length;
                 const percent = completionPercent(filled, editableRows.length);
@@ -1132,12 +997,13 @@ export function PlantMonthlyInputsForm({
                     key={month}
                     type="button"
                     className={cn(
-                      "min-w-16 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+                      "min-w-0 rounded-xl border px-2 py-2 text-sm font-semibold transition",
                       activeMonthIndex === index
                         ? "border-teal-400 bg-teal-100 text-teal-950"
                         : "border-slate-200 bg-slate-50 text-slate-700 hover:border-teal-200",
                     )}
                     onClick={() => setActiveMonthIndex(index)}
+                    aria-pressed={activeMonthIndex === index}
                   >
                     <span className="block">{month}</span>
                     <span className="text-[11px] font-medium text-slate-500">{percent}%</span>
@@ -1165,8 +1031,8 @@ export function PlantMonthlyInputsForm({
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_auto_auto] xl:min-w-[520px]">
-            <label className="relative">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-0 flex-[1_1_16rem]">
               <span className="sr-only">Search indicators</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input

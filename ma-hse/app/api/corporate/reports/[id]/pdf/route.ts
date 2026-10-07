@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { RoleCode } from "@prisma/client";
+import { getCorporateReportAccess } from "@/lib/rbac/corporate-reports";
 import { fail } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/rbac/guards";
@@ -27,15 +27,19 @@ export async function GET(
   const auth = await requireAuth();
   if ("error" in auth) return auth.error;
 
-  const isCorporate = auth.session.user.plantRoles?.some((entry) => entry.role === RoleCode.N0_ADMIN || entry.role === RoleCode.N1_CORPORATE);
-  if (!isCorporate) {
-    return fail("FORBIDDEN", "Only N1 Corporate users can download corporate reports", 403);
+  const access = getCorporateReportAccess(auth.session.user.plantRoles);
+  if (!access.canRead) {
+    return fail("FORBIDDEN", "You do not have access to corporate reports", 403);
   }
 
   const run = await prisma.reportRun.findUnique({
     where: { id },
-    select: { fileKeys: true },
+    select: { fileKeys: true, plantId: true },
   });
+
+  if (run && !access.global && (!run.plantId || !access.plantIds.includes(run.plantId))) {
+    return fail("FORBIDDEN", "You do not have access to this report's scope", 403);
+  }
 
   const fileKeys = getFileKeys(run?.fileKeys);
   if (!run || !fileKeys.pdfKey) {

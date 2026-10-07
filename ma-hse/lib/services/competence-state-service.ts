@@ -137,32 +137,35 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
     };
   }
 
-  // Step 5 — the authorization's own validity governs the cell, but a lapsed
-  // supporting training certificate overrides it to EXPIRED even though the
-  // authorization row itself stays ACTIVE in the database (§2.4).
+  // Step 5 — validity ends at the earlier of the authorization and its
+  // supporting certificate. Always report the date that determines the state.
   if (currentAuthorization && currentAuthorization.status === AuthorizationStatus.ACTIVE) {
     const supportingTraining = currentAuthorization.trainingRecordId
       ? input.trainingRecords.find((t) => t.id === currentAuthorization.trainingRecordId) ?? null
       : null;
 
+    const validUntil = supportingTraining?.certificateExpiresAt
+      && supportingTraining.certificateExpiresAt < currentAuthorization.validUntil
+      ? supportingTraining.certificateExpiresAt
+      : currentAuthorization.validUntil;
     if (supportingTraining?.certificateExpiresAt && isBeforeToday(supportingTraining.certificateExpiresAt, zonedToday)) {
       return {
         ...base,
         state: CompetenceCellState.EXPIRED,
-        validUntil: currentAuthorization.validUntil,
-        daysToExpiry: daysUntil(currentAuthorization.validUntil, zonedToday),
+        validUntil,
+        daysToExpiry: daysUntil(validUntil, zonedToday),
         currentAuthorizationId: currentAuthorization.id,
         blockedReason: BLOCKED_REASON_TRAINING_CERTIFICATE_EXPIRED,
       };
     }
 
-    const daysToExpiry = daysUntil(currentAuthorization.validUntil, zonedToday);
+    const daysToExpiry = daysUntil(validUntil, zonedToday);
 
     if (daysToExpiry < 0) {
       return {
         ...base,
         state: CompetenceCellState.EXPIRED,
-        validUntil: currentAuthorization.validUntil,
+        validUntil,
         daysToExpiry,
         currentAuthorizationId: currentAuthorization.id,
         blockedReason: null,
@@ -173,7 +176,7 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
       return {
         ...base,
         state: CompetenceCellState.EXPIRING,
-        validUntil: currentAuthorization.validUntil,
+        validUntil,
         daysToExpiry,
         currentAuthorizationId: currentAuthorization.id,
         blockedReason: null,
@@ -183,7 +186,7 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
     return {
       ...base,
       state: CompetenceCellState.VALID,
-      validUntil: currentAuthorization.validUntil,
+      validUntil,
       daysToExpiry,
       currentAuthorizationId: currentAuthorization.id,
       blockedReason: null,
@@ -244,8 +247,8 @@ export function computeCompetenceCellState(input: ComputeCompetenceCellStateInpu
       return {
         ...base,
         state: CompetenceCellState.EXPIRED,
-        validUntil: null,
-        daysToExpiry: null,
+        validUntil: passedTraining.certificateExpiresAt,
+        daysToExpiry: daysUntil(passedTraining.certificateExpiresAt, zonedToday),
         currentAuthorizationId: null,
         blockedReason: BLOCKED_REASON_TRAINING_CERTIFICATE_EXPIRED,
       };

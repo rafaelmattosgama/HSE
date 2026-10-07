@@ -81,7 +81,7 @@ export function CompetenceWorkerProfile({
     <div className="space-y-5">
       <AppHero
         eyebrow={
-          <Link href={`/app/${plant}/competences`} className="inline-flex items-center gap-1 hover:underline">
+          <Link href={`/app/${plant}/competences?area=competences`} className="inline-flex items-center gap-1 hover:underline">
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             {labels.profileBackToMatrix}
           </Link>

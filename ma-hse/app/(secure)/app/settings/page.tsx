@@ -144,7 +144,7 @@ export default async function SettingsPage({
   };
 
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-6 px-6 py-6">
+    <main className="mx-auto w-full max-w-none space-y-6 px-6 py-6">
       <section className="sticky top-3 z-20 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-onboarding="system-settings">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

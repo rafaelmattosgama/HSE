@@ -1,4 +1,5 @@
 import { GROUP_SAFETY_LABELS } from "@/lib/group-safety-ui";
+import { TRAINING_MODULE_NAMES } from "@/lib/training-ui";
 import type { AppLocale } from "@/lib/i18n/routing";
 
 export const DASHBOARD_LANGUAGES = [
@@ -409,7 +410,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Timeline",
       cellPanelNoHistory: "No training, assessment or authorization records yet.",
       cellPanelCurrentStateTitle: "Current state",
-      cellPanelExplainTrainingExpired: "The authorization is still ACTIVE in the database, but its supporting training certificate has expired — it no longer has valid support.",
+      recordEdit: "Edit record",
+      formValidUntil: "Valid until",
+      formTrainerName: "Trainer",
+      formDurationHours: "Duration (hours)",
+      formCertificateNumber: "Certificate number",
+      recordCertificateValidity: "Certificate validity",
+      cellPanelExplainTrainingExpired: "The competence expires when either its authorization or its supporting training certificate expires. Check both dates in the history below.",
       cellPanelExplainMedical: "Suspended because the medical fitness parameter is on and the worker's exam validity has lapsed.",
       eventTraining: "Training registered",
       eventAssessment: "Assessment registered",
@@ -1107,7 +1114,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Linha temporal",
       cellPanelNoHistory: "Ainda não há registos de formação, avaliação ou autorização.",
       cellPanelCurrentStateTitle: "Estado atual",
-      cellPanelExplainTrainingExpired: "A autorização continua ACTIVE na base de dados, mas o certificado de formação que a sustenta caducou — deixou de ter suporte válido.",
+      recordEdit: "Editar registo",
+      formValidUntil: "Válida até",
+      formTrainerName: "Formador",
+      formDurationHours: "Duração (horas)",
+      formCertificateNumber: "Número do certificado",
+      recordCertificateValidity: "Validade do certificado",
+      cellPanelExplainTrainingExpired: "A competência expira quando termina a validade da autorização ou do certificado de formação que a sustenta. Consulte ambas as datas no histórico abaixo.",
       cellPanelExplainMedical: "Suspensa porque o parâmetro de aptidão médica está ligado e a validade do exame do trabalhador caducou.",
       eventTraining: "Formação registada",
       eventAssessment: "Avaliação registada",
@@ -1703,7 +1716,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Cronologia",
       cellPanelNoHistory: "Ancora nessun record di formazione, valutazione o autorizzazione.",
       cellPanelCurrentStateTitle: "Stato attuale",
-      cellPanelExplainTrainingExpired: "L'autorizzazione è ancora ACTIVE nel database, ma il certificato di formazione che la sostiene è scaduto: non ha più una copertura valida.",
+      recordEdit: "Modifica registrazione",
+      formValidUntil: "Valida fino al",
+      formTrainerName: "Formatore",
+      formDurationHours: "Durata (ore)",
+      formCertificateNumber: "Numero del certificato",
+      recordCertificateValidity: "Validità del certificato",
+      cellPanelExplainTrainingExpired: "La competenza scade alla prima scadenza tra autorizzazione e certificato di formazione. Controllare entrambe le date nella cronologia.",
       cellPanelExplainMedical: "Sospesa perché il parametro di idoneità sanitaria è attivo e la validità della visita del lavoratore è scaduta.",
       eventTraining: "Formazione registrata",
       eventAssessment: "Valutazione registrata",
@@ -2299,7 +2318,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Historia",
       cellPanelNoHistory: "Brak jeszcze zapisów szkolenia, oceny lub upoważnienia.",
       cellPanelCurrentStateTitle: "Aktualny stan",
-      cellPanelExplainTrainingExpired: "Upoważnienie ma wciąż status ACTIVE w bazie danych, ale certyfikat szkolenia, na którym się opiera, wygasł — nie ma już ważnego pokrycia.",
+      recordEdit: "Edytuj wpis",
+      formValidUntil: "Ważne do",
+      formTrainerName: "Trener",
+      formDurationHours: "Czas trwania (godziny)",
+      formCertificateNumber: "Numer certyfikatu",
+      recordCertificateValidity: "Ważność certyfikatu",
+      cellPanelExplainTrainingExpired: "Kompetencja wygasa wraz z upoważnieniem lub certyfikatem szkolenia. Sprawdź obie daty w historii poniżej.",
       cellPanelExplainMedical: "Zawieszone, ponieważ parametr zdolności medycznej jest włączony, a badanie lekarskie pracownika wygasło.",
       eventTraining: "Zarejestrowano szkolenie",
       eventAssessment: "Zarejestrowano ocenę",
@@ -2895,7 +2920,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Zeitverlauf",
       cellPanelNoHistory: "Noch keine Schulungs-, Bewertungs- oder Genehmigungseinträge.",
       cellPanelCurrentStateTitle: "Aktueller Status",
-      cellPanelExplainTrainingExpired: "Die Genehmigung ist in der Datenbank weiterhin ACTIVE, aber das zugrunde liegende Schulungszertifikat ist abgelaufen — sie hat keine gültige Grundlage mehr.",
+      recordEdit: "Eintrag bearbeiten",
+      formValidUntil: "Gültig bis",
+      formTrainerName: "Trainer",
+      formDurationHours: "Dauer (Stunden)",
+      formCertificateNumber: "Zertifikatsnummer",
+      recordCertificateValidity: "Zertifikatsgültigkeit",
+      cellPanelExplainTrainingExpired: "Die Kompetenz endet mit dem früheren Ablauf der Genehmigung oder des Schulungszertifikats. Prüfen Sie beide Daten im Verlauf.",
       cellPanelExplainMedical: "Ausgesetzt, weil der Parameter für arbeitsmedizinische Eignung aktiviert ist und die Gültigkeit der Untersuchung des Mitarbeiters abgelaufen ist.",
       eventTraining: "Schulung registriert",
       eventAssessment: "Bewertung registriert",
@@ -3491,7 +3522,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Cronologie",
       cellPanelNoHistory: "Încă nu există înregistrări de formare, evaluare sau autorizare.",
       cellPanelCurrentStateTitle: "Starea actuală",
-      cellPanelExplainTrainingExpired: "Autorizația este încă ACTIVE în baza de date, dar certificatul de formare care o susține a expirat — nu mai are suport valid.",
+      recordEdit: "Editează înregistrarea",
+      formValidUntil: "Valabil până la",
+      formTrainerName: "Formator",
+      formDurationHours: "Durată (ore)",
+      formCertificateNumber: "Numărul certificatului",
+      recordCertificateValidity: "Valabilitatea certificatului",
+      cellPanelExplainTrainingExpired: "Competența expiră la prima dată de expirare a autorizației sau a certificatului de formare. Verificați ambele date în istoricul de mai jos.",
       cellPanelExplainMedical: "Suspendată pentru că parametrul de aptitudine medicală este activat, iar valabilitatea examenului lucrătorului a expirat.",
       eventTraining: "Formare înregistrată",
       eventAssessment: "Evaluare înregistrată",
@@ -4087,7 +4124,13 @@ const UI_DICTIONARY = {
       cellPanelTimelineTitle: "Chronologie",
       cellPanelNoHistory: "Aucun enregistrement de formation, d'évaluation ou d'autorisation pour l'instant.",
       cellPanelCurrentStateTitle: "État actuel",
-      cellPanelExplainTrainingExpired: "L'autorisation reste ACTIVE dans la base de données, mais le certificat de formation qui la soutient a expiré — elle n'a plus de support valide.",
+      recordEdit: "Modifier l’enregistrement",
+      formValidUntil: "Valide jusqu’au",
+      formTrainerName: "Formateur",
+      formDurationHours: "Durée (heures)",
+      formCertificateNumber: "Numéro du certificat",
+      recordCertificateValidity: "Validité du certificat",
+      cellPanelExplainTrainingExpired: "La compétence expire à la première échéance de l’autorisation ou du certificat de formation. Consultez les deux dates dans l’historique ci-dessous.",
       cellPanelExplainMedical: "Suspendue car le paramètre d'aptitude médicale est activé et la validité de l'examen du collaborateur a expiré.",
       eventTraining: "Formation enregistrée",
       eventAssessment: "Évaluation enregistrée",
@@ -4523,9 +4566,6 @@ function mergeWithFallback<T>(fallback: T, selected: unknown): T {
 
 export function getUiDictionary(locale: string | null | undefined): UiDictionary {
   const normalizedLocale = normalizeUiLocale(locale);
-  if (normalizedLocale === "en") {
-    return UI_DICTIONARY.en;
-  }
-
-  return mergeWithFallback(UI_DICTIONARY.en, UI_DICTIONARY[normalizedLocale]);
+  const dictionary = normalizedLocale === "en" ? UI_DICTIONARY.en : mergeWithFallback(UI_DICTIONARY.en, UI_DICTIONARY[normalizedLocale]);
+  return { ...dictionary, modules: { ...dictionary.modules, competences: TRAINING_MODULE_NAMES[normalizedLocale] } };
 }

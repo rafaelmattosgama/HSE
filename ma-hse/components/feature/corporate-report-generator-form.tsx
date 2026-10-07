@@ -11,10 +11,11 @@ type PlantOption = {
 type CorporateReportGeneratorFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   plants: PlantOption[];
+  allowGlobal?: boolean;
 };
 
-export function CorporateReportGeneratorForm({ action, plants }: CorporateReportGeneratorFormProps) {
-  const [scope, setScope] = useState<"GLOBAL" | "FACTORY">("GLOBAL");
+export function CorporateReportGeneratorForm({ action, plants, allowGlobal = true }: CorporateReportGeneratorFormProps) {
+  const [scope, setScope] = useState<"GLOBAL" | "FACTORY">(allowGlobal ? "GLOBAL" : "FACTORY");
 
   return (
     <form action={action} className="mt-4 grid gap-3 md:grid-cols-6">
@@ -36,7 +37,7 @@ export function CorporateReportGeneratorForm({ action, plants }: CorporateReport
           onChange={(event) => setScope(event.target.value as "GLOBAL" | "FACTORY")}
           required
         >
-          <option value="GLOBAL">Global</option>
+          {allowGlobal ? <option value="GLOBAL">Global</option> : null}
           <option value="FACTORY">Factory</option>
         </select>
       </label>

@@ -61,6 +61,8 @@ model Plant {
   smatAudits                         SmatAudit[]
   systemParameters                   SystemParameter[]
   trainingRecords                    TrainingRecord[]
+  trainingTopics                     PlantTrainingTopic[]
+  plantTrainingRecords               PlantTrainingRecord[]
   unsafeActTypes                     UnsafeActType[]
   unsafeCondTypes                    UnsafeConditionType[]
   users                              UserPlantRole[]
@@ -465,9 +467,61 @@ model EmployeeDirectory {
   competenceWorkers            CompetenceWorker[]
   occupationalHealthWorker     OccupationalHealthWorker?
   linkedUser                   User?
+  plantTrainingRecords         PlantTrainingRecord[]
+  plantTrainingTrainerRecords  PlantTrainingTrainer[]
 
   @@unique([plantId, employeeNo])
   @@index([plantId, name])
+}
+
+enum PlantTrainingCategory {
+  LEGAL_REQUIREMENT
+  IMPROVING_SAFETY
+  SAFETY_CULTURE
+  OTHER
+}
+
+model PlantTrainingTopic {
+  id        String   @id @default(uuid())
+  plantId   String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  records   PlantTrainingRecord[]
+
+  @@unique([plantId, name])
+}
+
+model PlantTrainingRecord {
+  id              String                @id @default(uuid())
+  plantId         String
+  topicId         String
+  occurredOn      DateTime              @db.Date
+  category        PlantTrainingCategory
+  durationMinutes Int
+  traineeId       String?
+  traineeName     String
+  createdByUserId String
+  createdAt       DateTime              @default(now())
+  plant           Plant                 @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  topic           PlantTrainingTopic    @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  trainee         EmployeeDirectory?    @relation(fields: [traineeId], references: [id], onDelete: SetNull)
+  trainers        PlantTrainingTrainer[]
+
+  @@index([plantId, occurredOn])
+  @@index([plantId, topicId, category])
+}
+
+model PlantTrainingTrainer {
+  recordId   String
+  employeeId String
+  name       String
+  record     PlantTrainingRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employee   EmployeeDirectory   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@id([recordId, employeeId])
 }
 
 /// Competence & Authorizations module — phase 1 (catalog + requirement matrix

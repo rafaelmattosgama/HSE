@@ -36,6 +36,7 @@ import type {
   RegisterTrainingInput,
   SetCompetenceWorkerRequirementInput,
   UpdateCompetenceWorkerRoleInput,
+  UpdateCompetenceRecordInput,
   UpsertCompetenceTypeInput,
 } from "@/lib/validation/dtos";
 
@@ -107,6 +108,9 @@ export type CompetenceHistoryEvent =
       provider: string | null;
       trainerName: string | null;
       certificateExpiresAt: Date | null;
+      durationHours: number | null;
+      certificateNumber: string | null;
+      notes: string | null;
     }
   | {
       type: "ASSESSMENT";
@@ -116,6 +120,8 @@ export type CompetenceHistoryEvent =
       entryGroupId: string | null;
       result: CompetenceAssessmentResult;
       method: CompetenceAssessmentMethod;
+      score: number | null;
+      observations: string | null;
       assessorName: string | null;
     }
   | {
@@ -602,6 +608,45 @@ export const CompetenceService = {
     });
 
     return enrolled;
+  },
+
+  /** Correct a record in place, preserving its links and complete before/after audit. */
+  async updateCompetenceRecord(plantId: string, id: string, input: UpdateCompetenceRecordInput, actorUserId: string) {
+    const [expiringThresholdDays, medicalFitnessBlocksAuthorization, segregationOfDuties] = await Promise.all([
+      getCompetenceExpiringThresholdDays(plantId), getMedicalFitnessBlocksAuthorization(plantId), getAuthorizationSegregationOfDuties(plantId),
+    ]);
+    return prisma.$transaction(async (tx) => {
+      const before = input.kind === "TRAINING"
+        ? await tx.trainingRecord.findFirst({ where: { id, plantId } })
+        : input.kind === "ASSESSMENT"
+          ? await tx.competenceAssessment.findFirst({ where: { id, plantId } })
+          : await tx.workerAuthorization.findFirst({ where: { id, plantId } });
+      if (!before) throw new CompetenceValidationError("NOT_FOUND", "Competence record not found", 404);
+
+      if (input.kind === "AUTHORIZATION_GRANTED" && segregationOfDuties && "assessmentId" in before) {
+        await assertSegregationOfDuties(tx, { plantId, competenceWorkerId: before.competenceWorkerId, competenceTypeId: before.competenceTypeId, assessmentId: before.assessmentId, actorUserId });
+      }
+      // A correction must not silently invalidate evidence supporting a live authorization.
+      if ((input.kind === "TRAINING" && input.data.result !== TrainingResult.PASSED)
+        || (input.kind === "ASSESSMENT" && input.data.result !== CompetenceAssessmentResult.COMPETENT)) {
+        const linked = await tx.workerAuthorization.findFirst({ where: {
+          plantId, status: { in: [AuthorizationStatus.ACTIVE, AuthorizationStatus.SUSPENDED] },
+          ...(input.kind === "TRAINING" ? { trainingRecordId: id } : { assessmentId: id }),
+        } });
+        if (linked) throw new CompetenceValidationError("SUPPORTING_RECORD_IN_USE", "Revoke the linked authorization before changing its supporting record to a failed result.");
+      }
+      const after = input.kind === "TRAINING"
+        ? await tx.trainingRecord.update({ where: { id }, data: input.data })
+        : input.kind === "ASSESSMENT"
+          ? await tx.competenceAssessment.update({ where: { id }, data: input.data })
+          : await tx.workerAuthorization.update({ where: { id }, data: input.data });
+      await writeAuditLog({
+        entityType: input.kind === "TRAINING" ? "TrainingRecord" : input.kind === "ASSESSMENT" ? "CompetenceAssessment" : "WorkerAuthorization",
+        entityId: id, action: "UPDATED", actorUserId, plantId, diff: buildDiff(before, after),
+      }, tx);
+      await recomputeAndSaveState(tx, { plantId, competenceWorkerId: before.competenceWorkerId, competenceTypeId: before.competenceTypeId, now: new Date(), expiringThresholdDays, medicalFitnessBlocksAuthorization });
+      return after;
+    });
   },
 
   /** Registers a completed training. N3_SAFETY and N4_SUPERVISOR (plus the N0/N1 bypass). */
@@ -1417,6 +1462,9 @@ export const CompetenceService = {
         provider: record.provider,
         trainerName: record.trainerName,
         certificateExpiresAt: record.certificateExpiresAt,
+        durationHours: record.durationHours == null ? null : Number(record.durationHours),
+        certificateNumber: record.certificateNumber,
+        notes: record.notes,
       });
     }
     for (const record of assessments) {
@@ -1428,6 +1476,8 @@ export const CompetenceService = {
         entryGroupId: record.entryGroupId,
         result: record.result,
         method: record.method,
+        score: record.score == null ? null : Number(record.score),
+        observations: record.observations,
         assessorName: record.assessorName,
       });
     }

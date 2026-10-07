@@ -16,6 +16,7 @@ import { EnvironmentDashboardBoard } from "@/components/feature/environment-dash
 import { GroupDashboardAreaNavigation, GroupDashboardFilters, GroupSafetyDashboard } from "@/components/feature/group-safety-dashboard";
 import { RepeatabilityAlertEditor } from "@/components/feature/repeatability-alert-editor";
 import { getGlobalRepeatabilityAlertConfig } from "@/lib/services/parameter-service";
+import { getCorporateReportAccess } from "@/lib/rbac/corporate-reports";
 
 export default async function CorporatePage({ searchParams }: { searchParams: Promise<DashboardSearchParams> }) {
   const session = await getServerSession(authOptions);
@@ -62,7 +63,7 @@ export default async function CorporatePage({ searchParams }: { searchParams: Pr
         <div><h1 className="text-2xl font-bold text-slate-900">{ui.dashboard.corporateTitle}</h1><p className="mt-2 text-sm text-slate-600">{area === "safety" ? ui.modules.safetyDashboard : ui.modules.environmentDashboard}</p></div>
         <div className="flex flex-wrap items-center gap-3">
           {defaultPlantRole?.plantCode && <Link href={`/app/${defaultPlantRole.plantCode}/dashboards`} className="app-toolbar">{ui.dashboard.backToPlant.replace("{plant}", defaultPlantRole.plantCode.toUpperCase())}</Link>}
-          <Link href="/app/corporate/reports" data-onboarding="corporate-reports" className="app-toolbar text-teal-700"><History aria-hidden="true" className="h-4 w-4" />{ui.dashboard.openReportHistory}</Link>
+          {getCorporateReportAccess(session.user.plantRoles).canRead && <Link href="/app/corporate/reports" data-onboarding="corporate-reports" className="app-toolbar text-teal-700"><History aria-hidden="true" className="h-4 w-4" />{ui.dashboard.openReportHistory}</Link>}
         </div>
       </div>
       <GroupDashboardAreaNavigation locale={locale} area={area} />

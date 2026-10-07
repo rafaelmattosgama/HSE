@@ -159,7 +159,8 @@ describe("computeCompetenceCellState — step 5 (active authorization)", () => {
     );
     expect(result.state).toBe(CompetenceCellState.EXPIRED);
     expect(result.blockedReason).toBe(BLOCKED_REASON_TRAINING_CERTIFICATE_EXPIRED);
-    expect(result.validUntil).toEqual(auth.validUntil);
+    expect(result.validUntil).toEqual(trainingRecord.certificateExpiresAt);
+    expect(result.daysToExpiry).toBe(-10);
   });
 
   it("returns EXPIRED when validUntil is in the past", () => {
@@ -329,5 +330,33 @@ describe("computeCompetenceCellState — DST transitions (Europe/Lisbon)", () =>
       baseInput({ now, authorizations: [auth], expiringThresholdDays: 1 }),
     );
     expect(valid.state).toBe(CompetenceCellState.VALID);
+  });
+});
+
+
+describe("effective certificate and authorization validity", () => {
+  it.each(["2029-06-30", "2030-04-30"])("does not expire a competence with valid evidence until %s", (date) => {
+    const certificateExpiresAt = new Date(date);
+    const result = computeCompetenceCellState(baseInput({
+      authorizations: [authorization({ validUntil: certificateExpiresAt, trainingRecordId: "training-1" })],
+      trainingRecords: [training({ certificateExpiresAt })],
+    }));
+    expect(result.state).toBe(CompetenceCellState.VALID);
+    expect(result.validUntil).toEqual(certificateExpiresAt);
+    expect(result.daysToExpiry).toBeGreaterThan(90);
+  });
+  it("warns when the certificate expires before the authorization", () => {
+    const result = computeCompetenceCellState(baseInput({
+      authorizations: [authorization({ trainingRecordId: "training-1", validUntil: daysFromNow(700) })],
+      trainingRecords: [training({ certificateExpiresAt: daysFromNow(30) })],
+    }));
+    expect(result.state).toBe(CompetenceCellState.EXPIRING);
+    expect(result.daysToExpiry).toBe(30);
+    expect(result.validUntil).toEqual(daysFromNow(30));
+  });
+  it("reports the certificate date when training expires without an authorization", () => {
+    const result = computeCompetenceCellState(baseInput({ trainingRecords: [training({ certificateExpiresAt: daysFromNow(-2) })] }));
+    expect(result.validUntil).toEqual(daysFromNow(-2));
+    expect(result.daysToExpiry).toBe(-2);
   });
 });

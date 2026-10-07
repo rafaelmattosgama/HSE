@@ -13,6 +13,7 @@ const VIEW_ROLES: RoleCode[] = [
   RoleCode.N3_SAFETY,
   RoleCode.N4_SUPERVISOR,
   RoleCode.N5_OPERATOR,
+  RoleCode.N6_HR,
 ];
 
 export default async function CompetenceWorkerProfilePage({

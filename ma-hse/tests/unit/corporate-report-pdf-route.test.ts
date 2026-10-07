@@ -54,15 +54,37 @@ describe("corporate report PDF route", () => {
     expect(storageMock.StorageService.getObjectBuffer).toHaveBeenCalledWith({ key: "corporate/reports/report-1.pdf" });
   });
 
-  it("rejects users without the N1 Corporate role", async () => {
+  it.each([RoleCode.N2_PLANT_MANAGER, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR])("rejects %s without report access", async role => {
     guardsMock.requireAuth.mockResolvedValue({
-      session: { user: { plantRoles: [{ role: RoleCode.N3_SAFETY, plantId: "plant-1", plantCode: "maap" }] } },
+      session: { user: { plantRoles: [{ role, plantId: "plant-1", plantCode: "maap" }] } },
     });
 
     const response = (await GET(new Request("http://localhost/api/report"), routeContext())) as Response;
 
     expect(response.status).toBe(403);
     expect(prismaMock.prisma.reportRun.findUnique).not.toHaveBeenCalled();
+    expect(storageMock.StorageService.getObjectBuffer).not.toHaveBeenCalled();
+  });
+
+  it.each(["plant-1", "plant-2"])("lets multi-plant N3 download a report for %s", async plantId => {
+    guardsMock.requireAuth.mockResolvedValue({ session: { user: { plantRoles: [
+      { role: RoleCode.N3_SAFETY, plantId: "plant-1" },
+      { role: RoleCode.N3_SAFETY, plantId: "plant-2" },
+    ] } } });
+    prismaMock.prisma.reportRun.findUnique.mockResolvedValue({ plantId, fileKeys: { pdfKey: "report.pdf" } });
+    storageMock.StorageService.getObjectBuffer.mockResolvedValue(Buffer.from("pdf"));
+    const response = await GET(new Request("http://localhost/api/report"), routeContext());
+    expect(response?.status).toBe(200);
+    expect(storageMock.StorageService.getObjectBuffer).toHaveBeenCalledWith({ key: "report.pdf" });
+  });
+
+  it.each([null, "other-plant"])("rejects N3 reading a report outside its scope (%s)", async plantId => {
+    guardsMock.requireAuth.mockResolvedValue({ session: { user: { plantRoles: [
+      { role: RoleCode.N3_SAFETY, plantId: "plant-1" },
+    ] } } });
+    prismaMock.prisma.reportRun.findUnique.mockResolvedValue({ plantId, fileKeys: { pdfKey: "report.pdf" } });
+    const response = await GET(new Request("http://localhost/api/report"), routeContext());
+    expect(response?.status).toBe(403);
     expect(storageMock.StorageService.getObjectBuffer).not.toHaveBeenCalled();
   });
 
