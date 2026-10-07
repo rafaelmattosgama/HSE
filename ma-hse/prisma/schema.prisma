@@ -473,6 +473,7 @@ model EmployeeDirectory {
   linkedUser                   User?
   plantTrainingRecords         PlantTrainingRecord[]
   plantTrainingTrainerRecords  PlantTrainingTrainer[]
+  plantTrainingAttendeeRecords PlantTrainingAttendee[]
 
   @@unique([plantId, employeeNo])
   @@index([plantId, name])
@@ -513,6 +514,7 @@ model PlantTrainingRecord {
   topic           PlantTrainingTopic     @relation(fields: [topicId], references: [id], onDelete: Restrict)
   trainee         EmployeeDirectory?     @relation(fields: [traineeId], references: [id], onDelete: SetNull)
   trainers        PlantTrainingTrainer[]
+  attendees       PlantTrainingAttendee[]
 
   @@index([plantId, occurredOn])
   @@index([plantId, topicId, category])
@@ -526,6 +528,18 @@ model PlantTrainingTrainer {
   employee   EmployeeDirectory   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@id([recordId, employeeId])
+}
+
+model PlantTrainingAttendee {
+  id         String              @id @default(uuid())
+  recordId   String
+  employeeId String?
+  name       String
+  record     PlantTrainingRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  employee   EmployeeDirectory?  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([recordId])
+  @@index([employeeId])
 }
 
 /// Competence & Authorizations module — phase 1 (catalog + requirement matrix

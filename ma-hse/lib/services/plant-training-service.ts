@@ -16,7 +16,7 @@ export const PlantTrainingService = {
     const [records, metricRows, workerCount, topics] = await Promise.all([
       prisma.plantTrainingRecord.findMany({
         where: { plantId, ...(viewer.role === RoleCode.N5_OPERATOR ? { traineeId: self?.employeeDirectoryId ?? "" } : {}) },
-        include: { topic: { select: { name: true } }, trainers: { select: { name: true }, orderBy: { name: "asc" } } },
+        include: { topic: { select: { name: true } }, trainers: { select: { name: true }, orderBy: { name: "asc" } }, attendees: { select: { name: true }, orderBy: { name: "asc" } } },
         orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
       }),
       prisma.plantTrainingRecord.findMany({ where: { plantId }, select: { occurredOn: true, category: true, durationMinutes: true } }),
@@ -35,22 +35,32 @@ export const PlantTrainingService = {
     return prisma.$transaction(async tx => {
       const topic = await tx.plantTrainingTopic.findFirst({ where: { id: input.topicId, plantId, isActive: true } });
       if (!topic) throw new PlantTrainingError("TRAINING_TOPIC_UNAVAILABLE");
-      const workerIds = [...new Set([...input.trainerIds, ...(input.traineeId ? [input.traineeId] : [])])];
+      const workerIds = [...new Set([...input.traineeIds, input.trainerId])];
       const workers = await tx.employeeDirectory.findMany({ where: { id: { in: workerIds }, plantId, isActive: true }, select: { id: true, name: true } });
       if (workers.length !== workerIds.length) throw new PlantTrainingError("TRAINING_WORKER_UNAVAILABLE");
       const names = new Map(workers.map(worker => [worker.id, worker.name]));
+      const firstTraineeId = input.traineeIds[0] ?? null;
+      const attendeeNames = [
+        ...input.traineeIds.map(employeeId => names.get(employeeId)!),
+        ...input.traineeNames.map(name => name.trim()),
+      ];
+      const firstTraineeName = attendeeNames[0]!;
       const record = await tx.plantTrainingRecord.create({ data: {
         plantId,
         topicId: topic.id,
         occurredOn: new Date(`${input.occurredOn}T00:00:00.000Z`),
         category: input.category,
         durationMinutes: durationToMinutes(input.duration),
-        traineeId: input.traineeId ?? null,
-        traineeName: input.traineeId ? names.get(input.traineeId)! : input.traineeName!.trim(),
+        traineeId: input.traineeIds[0] ?? null,
+        traineeName: attendeeNames.join(", "),
         createdByUserId: actorUserId,
-        trainers: { create: input.trainerIds.map(employeeId => ({ employeeId, name: names.get(employeeId)! })) },
+        trainers: { create: [{ employeeId: input.trainerId, name: names.get(input.trainerId)! }] },
+        attendees: { create: [
+          ...input.traineeIds.map(employeeId => ({ employeeId, name: names.get(employeeId)! })),
+          ...input.traineeNames.map(name => ({ name: name.trim() })),
+        ] },
       } });
-      await writeAuditLog({ entityType: "PlantTrainingRecord", entityId: record.id, action: "CREATE", actorUserId, plantId, diff: buildDiff(null, { ...record, trainerIds: input.trainerIds }) }, tx);
+      await writeAuditLog({ entityType: "PlantTrainingRecord", entityId: record.id, action: "CREATE", actorUserId, plantId, diff: buildDiff(null, { ...record, traineeIds: input.traineeIds, traineeNames: input.traineeNames, trainerId: input.trainerId }) }, tx);
       return record;
     });
   },

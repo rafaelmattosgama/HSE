@@ -766,12 +766,15 @@ export const createPlantTrainingInput = z.object({
   category: z.enum(["LEGAL_REQUIREMENT", "IMPROVING_SAFETY", "SAFETY_CULTURE", "OTHER"]),
   duration: z.string().regex(/^\d{2,4}:[0-5]\d$/, "Use HH:MM")
     .refine(value => /[1-9]/.test(value), "Duration must be greater than zero"),
-  traineeId: z.string().uuid().nullable().optional(),
-  traineeName: z.string().trim().max(160).optional(),
-  trainerIds: z.array(z.string().uuid()).min(1).refine(ids => new Set(ids).size === ids.length, "Duplicate trainers"),
+  traineeIds: z.array(z.string().uuid()).refine(ids => new Set(ids).size === ids.length, "Duplicate trainees"),
+  traineeNames: z.array(z.string().trim().min(1).max(160)).default([]),
+  trainerId: z.string().uuid(),
 }).superRefine((input, ctx) => {
-  if (Boolean(input.traineeId) === Boolean(input.traineeName?.trim())) {
-    ctx.addIssue({ code: "custom", path: ["traineeName"], message: "Select one worker or enter one trainee name" });
+  if (input.traineeIds.length + input.traineeNames.length === 0) {
+    ctx.addIssue({ code: "custom", path: ["traineeIds"], message: "Select at least one trainee" });
+  }
+  if (new Set(input.traineeNames.map(name => name.toLocaleLowerCase())).size !== input.traineeNames.length) {
+    ctx.addIssue({ code: "custom", path: ["traineeNames"], message: "Duplicate trainees" });
   }
 });
 

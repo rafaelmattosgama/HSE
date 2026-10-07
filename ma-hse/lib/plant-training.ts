@@ -27,7 +27,7 @@ export function formatTrainingDuration(minutes: number) {
   return `${Math.floor(minutes / 60).toString().padStart(2, "0")}:${(minutes % 60).toString().padStart(2, "0")}`;
 }
 
-/** Each record represents one trainee. Instructor count never multiplies the hours. */
+/** Training duration is counted once per record, regardless of trainee or instructor count. */
 export function trainingIndicators(rows: TrainingMetricRow[], year: number, workerCount: number) {
   const annual = rows.filter(row => Number(row.occurredOn.slice(0, 4)) === year);
   const minutes = annual.reduce((sum, row) => sum + row.durationMinutes, 0);
