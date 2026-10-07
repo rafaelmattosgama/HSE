@@ -24,6 +24,19 @@ describe("historical safety KPI workbook parser", () => {
     expect(rows[0].errors).toEqual([]);
   });
 
+  it("accepts optional source rates and ignores Excel calculated/control columns", async () => {
+    const revisedHeaders = [
+      "Plant", "Year", "Month", "Hours Worked", "Employees", "Accidents", "Lost Days", "Serious Injury", "Minor Injury", "First Aids", "Near Miss", "Unsafe Condition", "Unsafe Act", "Source", "Frequency Rate (Calculated)", "Gravity Rate (Calculated)", "Record Key", "Notes",
+    ];
+    const revisedRow = ["MAAP", 2022, 1, 20136, 125, 0, 0, 0, 0, 1, 1, 16, 2, "HISTORICAL_IMPORT", 0, 0, "MAAP|2022-01", "Revised base"];
+    const rows = await parseSafetyKpiWorkbook(await bytes([revisedRow], { headers: revisedHeaders }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].errors).toEqual([]);
+    expect(rows[0].normalized).toMatchObject({ plantCode: "maap", year: 2022, month: 1, sourceFrequencyRate: null, sourceGravityRate: null });
+    expect(rows[0].recordKey).toBe("MAAP|2022-01");
+    expect(rows[0].calculated).toEqual({ frequencyRate: "0", gravityRate: "0" });
+  });
+
   it("rejects a workbook without KPI_Import", async () => {
     await expect(parseSafetyKpiWorkbook(await bytes([valid], { sheet: "Other" }))).rejects.toMatchObject({ code: "MISSING_SHEET" } satisfies Partial<SafetyKpiExcelError>);
   });

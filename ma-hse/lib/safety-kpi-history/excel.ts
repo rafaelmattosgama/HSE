@@ -11,7 +11,7 @@ const HEADERS = {
   sourceFrequencyRate: "Frequency Rate (Source)", sourceGravityRate: "Gravity Rate (Source)", source: "Source",
   notes: "Notes",
 } as const;
-const OPTIONAL = new Set(["notes"]);
+const OPTIONAL = new Set(["sourceFrequencyRate", "sourceGravityRate", "notes"]);
 
 export class SafetyKpiExcelError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = "SafetyKpiExcelError"; }

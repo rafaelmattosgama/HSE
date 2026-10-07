@@ -23,9 +23,9 @@ O primeiro template suportado é um `.xlsx`, com máximo de 10 MB e uma folha ch
 
 Cabeçalhos obrigatórios:
 
-`Plant`, `Year`, `Month`, `Hours Worked`, `Employees`, `Accidents`, `Lost Days`, `Serious Injury`, `Minor Injury`, `First Aids`, `Near Miss`, `Unsafe Condition`, `Unsafe Act`, `Frequency Rate (Source)`, `Gravity Rate (Source)` e `Source`.
+`Plant`, `Year`, `Month`, `Hours Worked`, `Employees`, `Accidents`, `Lost Days`, `Serious Injury`, `Minor Injury`, `First Aids`, `Near Miss`, `Unsafe Condition`, `Unsafe Act` e `Source`.
 
-O cabeçalho `Notes` é opcional. A leitura ignora maiúsculas/minúsculas, espaços nas extremidades e espaços repetidos. Linhas vazias são ignoradas. Valores numéricos podem ser números Excel ou texto numérico.
+`Frequency Rate (Source)`, `Gravity Rate (Source)` e `Notes` são opcionais. As colunas de controlo `Frequency Rate (Calculated)`, `Gravity Rate (Calculated)`, `Rate Check` e `Record Key` podem estar presentes no ficheiro, mas são ignoradas como inputs; as taxas são recalculadas pelo backend. A leitura ignora maiúsculas/minúsculas, espaços nas extremidades e espaços repetidos. Linhas vazias são ignoradas. Valores numéricos podem ser números Excel ou texto numérico.
 
 `Plant` é associado ao código da planta sem distinguir maiúsculas de minúsculas. `Year` e `Month` são inteiros; o mês deve estar entre 1 e 12. Horas e dias perdidos aceitam decimal não negativo. Empregados e todas as contagens aceitam apenas inteiros não negativos. Um mês com acidentes ou dias perdidos não pode ter zero horas.
 
