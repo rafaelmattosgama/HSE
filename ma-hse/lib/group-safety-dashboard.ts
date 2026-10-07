@@ -48,6 +48,11 @@ export type GroupSafetyRawPlant = {
     unsafeActType: { name: string } | null; nearMissType: { name: string } | null;
   }>;
   kpiInputs: Array<{ year: number; month: number; hoursWorked: unknown; updatedAt: Date }>;
+  safetyKpiHistory?: Array<{
+    year: number; month: number; hoursWorked: unknown; accidents: number; lostDays: unknown;
+    seriousInjury: number; minorInjury: number; firstAids: number; nearMiss: number;
+    unsafeCondition: number; unsafeAct: number; updatedAt: Date;
+  }>;
   sewoRecords: Array<{
     communication: { type: string } | null;
     templateData: unknown; causeSelections: unknown; updatedAt: Date;
@@ -115,6 +120,7 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
   const unsafeActs = distribution();
   const nearMissTypes = distribution();
   let unclassifiedAccidents = 0;
+  const liveMonthKeys = new Set(plant.kpiInputs.map(input => `${input.year}-${String(input.month).padStart(2, "0")}`));
   function addEvent(target: SafetyTotals, event: GroupSafetyRawPlant["communications"][number]) {
     target.events += 1;
     if (event.type === "ACCIDENT") target.accidents += 1;
@@ -126,6 +132,7 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
   for (const event of plant.communications) {
     const inCurrent = within(event.eventDatetime, from, to);
     if (isCommunicationLinkableStatus(event.status)) {
+      liveMonthKeys.add(monthKey(event.eventDatetime));
       if (within(event.eventDatetime, previousPeriod.from, previousPeriod.to)) addEvent(previous, event);
       if (inCurrent) {
         addEvent(current, event);
@@ -160,6 +167,25 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
     if (currentKeys.has(key)) { current.hours += hours; reportedMonths.add(key); const month = monthly.get(key); if (month) month.hours += hours; }
     if (previousKeys.has(key)) previous.hours += hours;
   }
+  // Imported aggregates fill only months with no live/canonical record. This
+  // is whole-month precedence: sources are never added for the same period.
+  for (const row of plant.safetyKpiHistory ?? []) {
+    const key = `${row.year}-${String(row.month).padStart(2, "0")}`;
+    if (liveMonthKeys.has(key)) continue;
+    const addHistorical = (target: SafetyTotals) => {
+      target.accidents += row.accidents; target.firstAids += row.firstAids; target.nearMisses += row.nearMiss;
+      target.lostDays += Number(row.lostDays); target.hours += Number(row.hoursWorked);
+      target.events += row.accidents + row.firstAids + row.nearMiss + row.unsafeCondition + row.unsafeAct;
+    };
+    if (currentKeys.has(key)) {
+      addHistorical(current); reportedMonths.add(key);
+      const month = monthly.get(key); if (month) addHistorical(month);
+      pyramid.unsafeAct += row.unsafeAct; pyramid.unsafeCondition += row.unsafeCondition;
+      pyramid.nearMiss += row.nearMiss; pyramid.firstAid += row.firstAids;
+      pyramid.minorInjury += row.minorInjury; pyramid.seriousInjury += row.seriousInjury;
+    }
+    if (previousKeys.has(key)) addHistorical(previous);
+  }
   const rootsNearMiss = distribution();
   const rootsInjury = distribution();
   let unclassifiedAnalyses = 0;
@@ -181,7 +207,7 @@ export function buildGroupSafetyPlant(plant: GroupSafetyRawPlant, options: {
   const todayKey = toUtcDateKey(today);
   const manualDate = parseDateKey(manualLastAccidentDate);
   const accidentDates = [...new Set([...options.injuryDates.map(toUtcDateKey), ...(manualDate ? [toUtcDateKey(manualDate)] : [])])].filter(date => date <= todayKey).sort();
-  const dates = [...plant.communications, ...plant.kpiInputs, ...plant.sewoRecords, ...plant.actions].map(row => row.updatedAt.toISOString()).sort();
+  const dates = [...plant.communications, ...plant.kpiInputs, ...(plant.safetyKpiHistory ?? []), ...plant.sewoRecords, ...plant.actions].map(row => row.updatedAt.toISOString()).sort();
   return {
     id: plant.id, code: plant.code, name: plant.name, createdAt: plant.createdAt.toISOString(),
     current, previous, rates: calculateSafetyRates(current), previousRates: calculateSafetyRates(previous),

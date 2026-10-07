@@ -57,6 +57,8 @@ model Plant {
   safetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[]
   safetyCommunicationNotifications   SafetyCommunicationNotification[]
   kpiInputs                          SafetyKpiMonthlyInput[]
+  safetyKpiHistory                   SafetyKpiHistory[]
+  safetyKpiImportBatches             SafetyKpiImportBatch[]
   shifts                             Shift[]
   smatAudits                         SmatAudit[]
   systemParameters                   SystemParameter[]
@@ -72,71 +74,73 @@ model Plant {
 }
 
 model User {
-  id                                        String                              @id @default(uuid())
-  email                                     String?                             @unique
-  employeeDirectoryId                       String?                             @unique
+  id                                        String                               @id @default(uuid())
+  email                                     String?                              @unique
+  employeeDirectoryId                       String?                              @unique
   passwordHash                              String?
   name                                      String
-  language                                  String                              @default("pt")
-  isActive                                  Boolean                             @default(true)
-  createdAt                                 DateTime                            @default(now())
-  updatedAt                                 DateTime                            @updatedAt
+  language                                  String                               @default("pt")
+  isActive                                  Boolean                              @default(true)
+  createdAt                                 DateTime                             @default(now())
+  updatedAt                                 DateTime                             @updatedAt
   emailVerified                             DateTime?
   image                                     String?
-  forcePasswordChange                       Boolean                             @default(false)
-  onboardingStatus                          OnboardingStatus                    @default(NOT_STARTED)
-  onboardingVersion                         Int                                 @default(0)
+  forcePasswordChange                       Boolean                              @default(false)
+  onboardingStatus                          OnboardingStatus                     @default(NOT_STARTED)
+  onboardingVersion                         Int                                  @default(0)
   onboardingStartedAt                       DateTime?
   onboardingCompletedAt                     DateTime?
-  currentOnboardingStep                     Int                                 @default(0)
+  currentOnboardingStep                     Int                                  @default(0)
   accounts                                  Account[]
-  actionClosed                              Action[]                            @relation("ActionClosedBy")
-  actionsOwned                              Action[]                            @relation("ActionOwner")
-  actionReopened                            Action[]                            @relation("ActionReopenedBy")
+  actionClosed                              Action[]                             @relation("ActionClosedBy")
+  actionsOwned                              Action[]                             @relation("ActionOwner")
+  actionReopened                            Action[]                             @relation("ActionReopenedBy")
   actionAlertDeliveries                     ActionAlertDelivery[]
   actionCoOwned                             ActionCoOwner[]
   actionEvidenceAtt                         ActionEvidenceAttachment[]
   agentPendingConfirmations                 AgentPendingConfirmation[]
   auditLogs                                 AuditLog[]
   authenticators                            Authenticator[]
-  manualClosedCommunications                Communication[]                     @relation("ManuallyClosedByUser")
-  reportedCommunications                    Communication[]                     @relation("ReporterUser")
-  validatedCommunications                   Communication[]                     @relation("ValidatedByUser")
+  manualClosedCommunications                Communication[]                      @relation("ManuallyClosedByUser")
+  reportedCommunications                    Communication[]                      @relation("ReporterUser")
+  validatedCommunications                   Communication[]                      @relation("ValidatedByUser")
   communicationAtt                          CommunicationAttachment[]
-  occupationalHealthWorkerAttachments        OccupationalHealthWorkerAttachment[]
-  occupationalHealthExamAttachments          OccupationalHealthExamAttachment[]
-  contractorCompanies                       ExternalCompany[]                   @relation("ExternalContractorOwner")
-  reviewedExternalCompanyDocuments          ExternalCompanyDocument[]           @relation("ExternalCompanyDocumentReviewer")
-  contractorInvitationsSent                 ExternalCompanyInvitation[]         @relation("ExternalInvitationSponsor")
-  reviewedExternalWorkerDocuments           ExternalWorkerDocument[]            @relation("ExternalWorkerDocumentReviewer")
+  occupationalHealthWorkerAttachments       OccupationalHealthWorkerAttachment[]
+  occupationalHealthExamAttachments         OccupationalHealthExamAttachment[]
+  contractorCompanies                       ExternalCompany[]                    @relation("ExternalContractorOwner")
+  reviewedExternalCompanyDocuments          ExternalCompanyDocument[]            @relation("ExternalCompanyDocumentReviewer")
+  contractorInvitationsSent                 ExternalCompanyInvitation[]          @relation("ExternalInvitationSponsor")
+  reviewedExternalWorkerDocuments           ExternalWorkerDocument[]             @relation("ExternalWorkerDocumentReviewer")
   notifications                             Notification[]
-  sewoApproved                              SEWO[]                              @relation("SewoApprovedBy")
-  sewoDeleted                               SEWO[]                              @relation("SewoDeletedBy")
-  sewoPerformed                             SEWO[]                              @relation("SewoPerformedBy")
+  sewoApproved                              SEWO[]                               @relation("SewoApprovedBy")
+  sewoDeleted                               SEWO[]                               @relation("SewoDeletedBy")
+  sewoPerformed                             SEWO[]                               @relation("SewoPerformedBy")
   sewoAttachment                            SEWOAttachment[]
-  createdSafetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientCreatedBy")
-  updatedSafetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientUpdatedBy")
-  safetyCommunicationAlertRecipients        SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientUser")
-  safetyCommunicationNotifications          SafetyCommunicationNotification[]   @relation("SafetyCommunicationNotificationRecipient")
+  createdSafetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[]  @relation("SafetyCommunicationAlertRecipientCreatedBy")
+  updatedSafetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[]  @relation("SafetyCommunicationAlertRecipientUpdatedBy")
+  safetyCommunicationAlertRecipients        SafetyCommunicationAlertRecipient[]  @relation("SafetyCommunicationAlertRecipientUser")
+  safetyCommunicationNotifications          SafetyCommunicationNotification[]    @relation("SafetyCommunicationNotificationRecipient")
   sessions                                  Session[]
-  smatAuditsCreated                         SmatAudit[]                         @relation("SMATAuditorUser")
+  smatAuditsCreated                         SmatAudit[]                          @relation("SMATAuditorUser")
   smatAttachment                            SmatAuditAttachment[]
-  addedCompetenceWorkers                    CompetenceWorker[]                  @relation("CompetenceWorkerAddedBy")
-  setCompetenceWorkerRequirements           CompetenceWorkerRequirement[]       @relation("CompetenceWorkerRequirementSetBy")
-  createdFireEquipment                      FireEquipment[]                     @relation("FireEquipmentCreatedBy")
-  performedFireChecklistExecutions          FireChecklistExecution[]            @relation("FireChecklistExecutionPerformedBy")
-  assignedFireEquipmentTags                 FireEquipmentTagAssignment[]        @relation("FireEquipmentTagAssignedBy")
-  employeeDirectory                         EmployeeDirectory?                  @relation(fields: [employeeDirectoryId], references: [id])
+  addedCompetenceWorkers                    CompetenceWorker[]                   @relation("CompetenceWorkerAddedBy")
+  setCompetenceWorkerRequirements           CompetenceWorkerRequirement[]        @relation("CompetenceWorkerRequirementSetBy")
+  createdFireEquipment                      FireEquipment[]                      @relation("FireEquipmentCreatedBy")
+  performedFireChecklistExecutions          FireChecklistExecution[]             @relation("FireChecklistExecutionPerformedBy")
+  assignedFireEquipmentTags                 FireEquipmentTagAssignment[]         @relation("FireEquipmentTagAssignedBy")
+  employeeDirectory                         EmployeeDirectory?                   @relation(fields: [employeeDirectoryId], references: [id])
   competenceAssessmentsPerformed            CompetenceAssessment[]
-  authorizationsGranted                     WorkerAuthorization[]               @relation("AuthorizationGrantedBy")
-  authorizationsSuspended                   WorkerAuthorization[]               @relation("AuthorizationSuspendedBy")
-  authorizationsRevoked                     WorkerAuthorization[]               @relation("AuthorizationRevokedBy")
-  authorizationsReactivated                 WorkerAuthorization[]               @relation("AuthorizationReactivatedBy")
+  authorizationsGranted                     WorkerAuthorization[]                @relation("AuthorizationGrantedBy")
+  authorizationsSuspended                   WorkerAuthorization[]                @relation("AuthorizationSuspendedBy")
+  authorizationsRevoked                     WorkerAuthorization[]                @relation("AuthorizationRevokedBy")
+  authorizationsReactivated                 WorkerAuthorization[]                @relation("AuthorizationReactivatedBy")
   trainingRecordAttachmentsUploaded         TrainingRecordAttachment[]
   competenceAssessmentAttachmentsUploaded   CompetenceAssessmentAttachment[]
   competenceAlertDeliveries                 CompetenceAlertDelivery[]
   fireEquipmentAlertDeliveries              FireEquipmentAlertDelivery[]
   plantRoles                                UserPlantRole[]
+  safetyKpiHistoryCreated                   SafetyKpiHistory[]                   @relation("SafetyKpiHistoryCreatedBy")
+  safetyKpiImportBatchesCreated             SafetyKpiImportBatch[]               @relation("SafetyKpiImportBatchCreatedBy")
 }
 
 model Role {
@@ -148,16 +152,16 @@ model Role {
 }
 
 model UserPlantRole {
-  id        String   @id @default(uuid())
-  userId    String
-  plantId   String?
-  roleId    String
+  id           String   @id @default(uuid())
+  userId       String
+  plantId      String?
+  roleId       String
   departmentId String?
-  department Area? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  createdAt DateTime @default(now())
-  plant     Plant?   @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Area?    @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+  plant        Plant?   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, plantId, roleId])
   @@index([plantId])
@@ -230,9 +234,9 @@ model Workstation {
 }
 
 model OccupationalHealthWorker {
-  id                  String       @id @default(uuid())
+  id                  String                               @id @default(uuid())
   plantId             String
-  employeeDirectoryId String?      @unique
+  employeeDirectoryId String?                              @unique
   employeeNo          String
   name                String
   birthDate           DateTime
@@ -246,14 +250,14 @@ model OccupationalHealthWorker {
   /// reads use the most recent OccupationalHealthExam instead.
   examDate            DateTime?
   validUntil          DateTime?
-  status              String       @default("VALID")
+  status              String                               @default("VALID")
   observation         String?
-  isActive            Boolean      @default(true)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  plant               Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  employeeDirectory   EmployeeDirectory? @relation(fields: [employeeDirectoryId], references: [id], onDelete: SetNull)
-  workstation         Workstation? @relation(fields: [workstationId], references: [id], onDelete: SetNull)
+  isActive            Boolean                              @default(true)
+  createdAt           DateTime                             @default(now())
+  updatedAt           DateTime                             @updatedAt
+  plant               Plant                                @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  employeeDirectory   EmployeeDirectory?                   @relation(fields: [employeeDirectoryId], references: [id], onDelete: SetNull)
+  workstation         Workstation?                         @relation(fields: [workstationId], references: [id], onDelete: SetNull)
   attachments         OccupationalHealthWorkerAttachment[]
   exams               OccupationalHealthExam[]
 
@@ -269,16 +273,16 @@ model OccupationalHealthWorker {
 /// bare fileKey column (see fire-equipment-service.ts's own note on why a
 /// lone fileKey field never gets a working view mechanism).
 model OccupationalHealthWorkerAttachment {
-  id                          String                   @id @default(uuid())
-  occupationalHealthWorkerId  String
-  fileKey                     String
-  fileName                    String
-  contentType                 String
-  createdAt                   DateTime                 @default(now())
-  uploadedById                String?
+  id                         String   @id @default(uuid())
+  occupationalHealthWorkerId String
+  fileKey                    String
+  fileName                   String
+  contentType                String
+  createdAt                  DateTime @default(now())
+  uploadedById               String?
 
   occupationalHealthWorker OccupationalHealthWorker @relation(fields: [occupationalHealthWorkerId], references: [id], onDelete: Cascade)
-  uploadedBy               User?                     @relation(fields: [uploadedById], references: [id])
+  uploadedBy               User?                    @relation(fields: [uploadedById], references: [id])
 
   @@index([occupationalHealthWorkerId])
 }
@@ -296,8 +300,8 @@ model OccupationalHealthExam {
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 
-  plant       Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  worker      OccupationalHealthWorker @relation(fields: [occupationalHealthWorkerId], references: [id], onDelete: Cascade)
+  plant       Plant                              @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  worker      OccupationalHealthWorker           @relation(fields: [occupationalHealthWorkerId], references: [id], onDelete: Cascade)
   attachments OccupationalHealthExamAttachment[]
 
   @@index([occupationalHealthWorkerId, examDate])
@@ -307,13 +311,13 @@ model OccupationalHealthExam {
 /// New documents belong to an examination. The older worker-level table is
 /// intentionally retained so its rows can be copied safely during migration.
 model OccupationalHealthExamAttachment {
-  id                        String                 @id @default(uuid())
-  occupationalHealthExamId  String
-  fileKey                   String
-  fileName                  String
-  contentType               String
-  createdAt                 DateTime               @default(now())
-  uploadedById              String?
+  id                       String   @id @default(uuid())
+  occupationalHealthExamId String
+  fileKey                  String
+  fileName                 String
+  contentType              String
+  createdAt                DateTime @default(now())
+  uploadedById             String?
 
   exam       OccupationalHealthExam @relation(fields: [occupationalHealthExamId], references: [id], onDelete: Cascade)
   uploadedBy User?                  @relation(fields: [uploadedById], references: [id])
@@ -482,32 +486,32 @@ enum PlantTrainingCategory {
 }
 
 model PlantTrainingTopic {
-  id        String   @id @default(uuid())
+  id        String                @id @default(uuid())
   plantId   String
   name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  plant     Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  isActive  Boolean               @default(true)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  plant     Plant                 @relation(fields: [plantId], references: [id], onDelete: Cascade)
   records   PlantTrainingRecord[]
 
   @@unique([plantId, name])
 }
 
 model PlantTrainingRecord {
-  id              String                @id @default(uuid())
+  id              String                 @id @default(uuid())
   plantId         String
   topicId         String
-  occurredOn      DateTime              @db.Date
+  occurredOn      DateTime               @db.Date
   category        PlantTrainingCategory
   durationMinutes Int
   traineeId       String?
   traineeName     String
   createdByUserId String
-  createdAt       DateTime              @default(now())
-  plant           Plant                 @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  topic           PlantTrainingTopic    @relation(fields: [topicId], references: [id], onDelete: Restrict)
-  trainee         EmployeeDirectory?    @relation(fields: [traineeId], references: [id], onDelete: SetNull)
+  createdAt       DateTime               @default(now())
+  plant           Plant                  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  topic           PlantTrainingTopic     @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  trainee         EmployeeDirectory?     @relation(fields: [traineeId], references: [id], onDelete: SetNull)
   trainers        PlantTrainingTrainer[]
 
   @@index([plantId, occurredOn])
@@ -529,21 +533,21 @@ model PlantTrainingTrainer {
 /// and the state-computation algorithm are introduced in later phases; for now
 /// every WorkerCompetenceState is either MISSING (required) or NOT_APPLICABLE.
 model CompetenceType {
-  id                    String                    @id @default(uuid())
+  id                    String                        @id @default(uuid())
   plantId               String
   code                  String
   name                  String
-  category              CompetenceCategory        @default(EQUIPMENT_OPERATION)
-  requiresTraining      Boolean                   @default(true)
-  requiresAssessment    Boolean                   @default(true)
-  requiresAuthorization Boolean                   @default(true)
-  validityMonths        Int                       @default(12)
+  category              CompetenceCategory            @default(EQUIPMENT_OPERATION)
+  requiresTraining      Boolean                       @default(true)
+  requiresAssessment    Boolean                       @default(true)
+  requiresAuthorization Boolean                       @default(true)
+  validityMonths        Int                           @default(12)
   refresherMonths       Int?
   legalReference        String?
-  displayOrder          Int                       @default(0)
-  isActive              Boolean                   @default(true)
+  displayOrder          Int                           @default(0)
+  isActive              Boolean                       @default(true)
   sourceLanguage        String?
-  plant                 Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  plant                 Plant                         @relation(fields: [plantId], references: [id], onDelete: Cascade)
   workerRequirements    CompetenceWorkerRequirement[]
   states                WorkerCompetenceState[]
   trainingRecords       TrainingRecord[]
@@ -575,10 +579,10 @@ model CompetenceWorker {
   addedAt             DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  plant           Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  employee        EmployeeDirectory         @relation(fields: [employeeDirectoryId], references: [id], onDelete: Cascade)
-  area            Area?                     @relation(fields: [areaId], references: [id], onDelete: SetNull)
-  addedBy         User?                     @relation("CompetenceWorkerAddedBy", fields: [addedById], references: [id])
+  plant           Plant                         @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  employee        EmployeeDirectory             @relation(fields: [employeeDirectoryId], references: [id], onDelete: Cascade)
+  area            Area?                         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  addedBy         User?                         @relation("CompetenceWorkerAddedBy", fields: [addedById], references: [id])
   states          WorkerCompetenceState[]
   requirements    CompetenceWorkerRequirement[]
   trainingRecords TrainingRecord[]
@@ -935,28 +939,28 @@ enum FireEquipmentCategory {
 /// is the field a caller should actually rely on for common-area equipment
 /// (corridors, stairwells) instead of inventing a fictitious Workstation row.
 model FireEquipment {
-  id                  String              @id @default(uuid())
-  plantId             String
-  fireEquipmentTypeId String
+  id                   String                  @id @default(uuid())
+  plantId              String
+  fireEquipmentTypeId  String
   // Fase 0 item 4: RecordCodeService is closed to COMMUNICATION/SEWO/REPORT and
   // WorkerAuthorization.sequenceNumber's own max+1 (plantId only, no advisory
   // lock) is itself a known race — this counter is scoped to (plantId,
   // fireEquipmentTypeId) and must only be advanced under
   // pg_advisory_xact_lock (fire-equipment-service.ts).
-  sequenceNumber      Int
+  sequenceNumber       Int
   // Typed by the user at creation (e.g. matching a physical tag already on
   // the equipment) — see fire-equipment-service.ts's create(). Immutable
   // after creation, same as before, but no longer auto-generated from
   // codePrefix + sequenceNumber; sequenceNumber is kept purely as an
   // internal, advisory-lock-protected counter (§2.8's original rationale).
-  internalCode        String
-  areaId              String?
-  workstationId       String?
-  locationDescription String?
-  manufacturer        String?
-  model               String?
-  serialNumber        String?
-  capacity            String?
+  internalCode         String
+  areaId               String?
+  workstationId        String?
+  locationDescription  String?
+  manufacturer         String?
+  model                String?
+  serialNumber         String?
+  capacity             String?
   // "Foto do local": the add-equipment form's own request — a single photo of
   // where the equipment lives, not a multi-attachment gallery. Write-only key,
   // same as WorkerAuthorization.documentFileKey / FireChecklistExecution's own
@@ -964,16 +968,16 @@ model FireEquipment {
   locationPhotoFileKey String?
   // Only meaningful when fireEquipmentType.code === "EXTINGUISHER" — the
   // service silently drops it for any other type rather than validating.
-  extinguishingAgent  FireExtinguishingAgent?
-  installedAt         DateTime?
-  manufactureDate     DateTime?
-  status              FireEquipmentStatus @default(ACTIVE)
-  decommissionedAt    DateTime?
-  decommissionReason  String?
-  isActive            Boolean             @default(true)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  createdById         String?
+  extinguishingAgent   FireExtinguishingAgent?
+  installedAt          DateTime?
+  manufactureDate      DateTime?
+  status               FireEquipmentStatus     @default(ACTIVE)
+  decommissionedAt     DateTime?
+  decommissionReason   String?
+  isActive             Boolean                 @default(true)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  createdById          String?
 
   plant             Plant                         @relation(fields: [plantId], references: [id], onDelete: Cascade)
   fireEquipmentType FireEquipmentType             @relation(fields: [fireEquipmentTypeId], references: [id], onDelete: Cascade)
@@ -1730,6 +1734,110 @@ model SafetyKpiMonthlyInput {
   plant       Plant    @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@unique([plantId, year, month])
+}
+
+enum SafetyKpiHistorySource {
+  HISTORICAL_IMPORT
+  MANUAL_IMPORT
+  SYSTEM_COMPUTED
+}
+
+enum SafetyKpiImportBatchStatus {
+  PREVIEWED
+  IMPORTED
+  PARTIAL
+  FAILED
+}
+
+enum SafetyKpiImportRowStatus {
+  NEW
+  INVALID
+  DUPLICATE_FILE
+  EXISTS_DB
+  IMPORTED
+  SKIPPED
+  ERROR
+}
+
+enum SafetyKpiImportRowAction {
+  CREATE
+  SKIP
+  REPLACE
+  ERROR
+}
+
+model SafetyKpiHistory {
+  id                  String                 @id @default(uuid())
+  plantId             String
+  year                Int
+  month               Int
+  hoursWorked         Decimal                @db.Decimal(14, 2)
+  employees           Int
+  accidents           Int                    @default(0)
+  lostDays            Decimal                @db.Decimal(10, 2)
+  seriousInjury       Int                    @default(0)
+  minorInjury         Int                    @default(0)
+  firstAids           Int                    @default(0)
+  nearMiss            Int                    @default(0)
+  unsafeCondition     Int                    @default(0)
+  unsafeAct           Int                    @default(0)
+  sourceFrequencyRate Decimal?               @db.Decimal(16, 6)
+  sourceGravityRate   Decimal?               @db.Decimal(16, 6)
+  source              SafetyKpiHistorySource @default(HISTORICAL_IMPORT)
+  importBatchId       String?
+  createdById         String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  plant               Plant                  @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  importBatch         SafetyKpiImportBatch?  @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  createdBy           User?                  @relation("SafetyKpiHistoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([plantId, year, month])
+  @@index([plantId, year])
+  @@index([year, month])
+}
+
+model SafetyKpiImportBatch {
+  id               String                     @id @default(uuid())
+  plantId          String?
+  originalFileName String
+  fileHash         String
+  storageKey       String?
+  status           SafetyKpiImportBatchStatus @default(PREVIEWED)
+  totalRows        Int                        @default(0)
+  validRows        Int                        @default(0)
+  importedRows     Int                        @default(0)
+  skippedRows      Int                        @default(0)
+  errorRows        Int                        @default(0)
+  createdById      String
+  createdAt        DateTime                   @default(now())
+  completedAt      DateTime?
+  metadata         Json?
+  plant            Plant?                     @relation(fields: [plantId], references: [id], onDelete: SetNull)
+  createdBy        User                       @relation("SafetyKpiImportBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  records          SafetyKpiHistory[]
+  rows             SafetyKpiImportRow[]
+
+  @@index([createdById, createdAt])
+  @@index([plantId, createdAt])
+  @@index([fileHash])
+}
+
+model SafetyKpiImportRow {
+  id             String                    @id @default(uuid())
+  batchId        String
+  rowNumber      Int
+  recordKey      String?
+  status         SafetyKpiImportRowStatus
+  action         SafetyKpiImportRowAction?
+  rawData        Json?
+  normalizedData Json?
+  messages       Json?
+  createdAt      DateTime                  @default(now())
+  batch          SafetyKpiImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, status])
+  @@index([recordKey])
 }
 
 model PlantMonthlyInput {
