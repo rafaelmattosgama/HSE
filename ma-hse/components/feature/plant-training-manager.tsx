@@ -59,9 +59,10 @@ export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [manual, setManual] = useState(false);
-  const [traineeId, setTraineeId] = useState("");
-  const [traineeName, setTraineeName] = useState("");
-  const [trainerIds, setTrainerIds] = useState<string[]>([]);
+  const [manualName, setManualName] = useState("");
+  const [traineeIds, setTraineeIds] = useState<string[]>([]);
+  const [traineeNames, setTraineeNames] = useState<string[]>([]);
+  const [trainerId, setTrainerId] = useState("");
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -69,15 +70,15 @@ export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
-    if (!trainerIds.length) { setError(ui.trainerRequired); return; }
-    if (!(manual ? traineeName.trim() : traineeId)) { setError(ui.traineeRequired); return; }
+    if (!trainerId) { setError(ui.trainerRequired); return; }
+    if (!traineeIds.length && !traineeNames.length) { setError(ui.traineeRequired); return; }
     const data = new FormData(event.currentTarget);
     const occurredOn = String(data.get("occurredOn"));
     setSaving(true); setError("");
     try {
       const response = await fetch(`/api/plants/${plant}/competences/training-records`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
         occurredOn, topicId: data.get("topicId"), category: data.get("category"), duration: data.get("duration"),
-        ...(manual ? { traineeName: traineeName.trim() } : { traineeId }), trainerIds,
+        traineeIds, traineeNames, trainerId,
       }) });
       const json = await response.json();
       if (!response.ok) throw new Error(trainingErrorMessage(json.errorCode, ui));
@@ -95,19 +96,17 @@ export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose
         <label className="space-y-1"><span className="text-sm font-semibold">{ui.type}</span><select name="category" className="app-field w-full" defaultValue="" required><option value="" disabled>{ui.select}</option>{TRAINING_CATEGORIES.map(type => <option key={type} value={type}>{TRAINING_CATEGORY_LABELS[type]}</option>)}</select></label>
         <div className="space-y-1"><label htmlFor="training-duration" className="text-sm font-semibold">{ui.duration}</label><input id="training-duration" name="duration" className="app-field w-full" placeholder="00:00" pattern="[0-9]{2,4}:[0-5][0-9]" maxLength={7} required aria-describedby="training-duration-hint" /><p id="training-duration-hint" className="text-xs text-slate-500">{ui.durationHint}</p></div>
         <div className="space-y-2 sm:col-span-2">
-          <label className="block space-y-1"><span className="text-sm font-semibold">{ui.trainee}</span>{manual
-            ? <input className="app-field w-full" value={traineeName} onChange={e => setTraineeName(e.target.value)} maxLength={160} required />
-            : <select className="app-field w-full" value={traineeId} onChange={e => setTraineeId(e.target.value)} required><option value="">{ui.select}</option>{workers.map(worker => <option key={worker.id} value={worker.id}>{worker.name} · {worker.employeeNo}</option>)}</select>}
-          </label>
-          <button type="button" className="text-sm font-semibold text-[var(--primary)] underline" onClick={() => { setManual(!manual); setTraineeId(""); setTraineeName(""); }}>{manual ? ui.selectWorker : ui.manual}</button>
+          <p className="text-sm font-semibold">{ui.trainee}</p>
+          <input type="search" aria-label={ui.workerSearch} placeholder={ui.workerSearch} className="app-field w-full" value={search} onChange={e => setSearch(e.target.value)} />
+          <select aria-label={ui.addTrainer} className="app-field w-full" value="" onChange={e => { const id = e.target.value; if (id) setTraineeIds(current => current.includes(id) ? current : [...current, id]); }}>
+            <option value="">{ui.selectWorker}</option>{matchingWorkers.filter(worker => !traineeIds.includes(worker.id)).map(worker => <option key={worker.id} value={worker.id}>{worker.name} · {worker.employeeNo}</option>)}
+          </select>
+          {manual && <div className="flex gap-2"><input aria-label={ui.manual} className="app-field min-w-0 flex-1" value={manualName} onChange={e => setManualName(e.target.value)} maxLength={160} /><Button type="button" variant="secondary" disabled={!manualName.trim()} onClick={() => { const name = manualName.trim(); if (name && !traineeNames.some(value => value.toLocaleLowerCase() === name.toLocaleLowerCase())) setTraineeNames(current => [...current, name]); setManualName(""); }}>{ui.addTrainer}</Button></div>}
+          <button type="button" className="text-sm font-semibold text-[var(--primary)] underline" onClick={() => { setManual(!manual); setManualName(""); }}>{manual ? ui.selectWorker : ui.manual}</button>
+          <ul className="flex flex-wrap gap-2">{traineeIds.map(id => <li key={id} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm"><span className="min-w-0 break-words">{workers.find(worker => worker.id === id)?.name}</span><button type="button" aria-label={`${ui.remove} ${workers.find(worker => worker.id === id)?.name}`} onClick={() => setTraineeIds(current => current.filter(value => value !== id))}><X className="h-4 w-4" /></button></li>)}{traineeNames.map(name => <li key={name} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm"><span className="min-w-0 break-words">{name}</span><button type="button" aria-label={`${ui.remove} ${name}`} onClick={() => setTraineeNames(current => current.filter(value => value !== name))}><X className="h-4 w-4" /></button></li>)}</ul>
         </div>
         <div className="space-y-2 sm:col-span-2">
-          <p className="text-sm font-semibold">{ui.trainers}</p>
-          <input type="search" aria-label={ui.workerSearch} placeholder={ui.workerSearch} className="app-field w-full" value={search} onChange={e => setSearch(e.target.value)} />
-          <select aria-label={ui.addTrainer} className="app-field w-full" value="" onChange={e => { const id = e.target.value; if (id) setTrainerIds(current => current.includes(id) ? current : [...current, id]); }}>
-            <option value="">{ui.addTrainer}</option>{matchingWorkers.filter(worker => !trainerIds.includes(worker.id)).map(worker => <option key={worker.id} value={worker.id}>{worker.name} · {worker.employeeNo}</option>)}
-          </select>
-          <ul className="flex flex-wrap gap-2">{trainerIds.map(id => <li key={id} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm"><span className="min-w-0 break-words">{workers.find(worker => worker.id === id)?.name}</span><button type="button" aria-label={`${ui.remove} ${workers.find(worker => worker.id === id)?.name}`} onClick={() => setTrainerIds(current => current.filter(value => value !== id))}><X className="h-4 w-4" /></button></li>)}</ul>
+          <label className="block space-y-1"><span className="text-sm font-semibold">{ui.trainers}</span><input type="search" aria-label={ui.workerSearch} placeholder={ui.workerSearch} className="app-field w-full" value={search} onChange={e => setSearch(e.target.value)} /><select aria-label={ui.trainers} className="app-field w-full" value={trainerId} onChange={e => setTrainerId(e.target.value)} required><option value="">{ui.select}</option>{matchingWorkers.map(worker => <option key={worker.id} value={worker.id}>{worker.name} · {worker.employeeNo}</option>)}</select></label>
         </div>
       </fieldset>
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}

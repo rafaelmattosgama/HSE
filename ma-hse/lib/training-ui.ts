@@ -19,8 +19,8 @@ export type TrainingUi = typeof en;
 const pt: TrainingUi = {
   module: "Formação / Competências", training: "Formação", competences: "Competências", overview: "Visão geral",
   add: "+ Adicionar formação", date: "Data", topic: "Tema de Formação", type: "Tipo Formação", duration: "Carga Horária (HH:MM)",
-  trainee: "Formando", trainers: "Formadores", select: "Selecionar…", manual: "Escrever nome manualmente", selectWorker: "Selecionar trabalhador",
-  workerSearch: "Pesquisar trabalhador", addTrainer: "Adicionar formador", remove: "Remover", save: "Guardar", cancel: "Cancelar", saving: "A guardar…",
+  trainee: "Formandos", trainers: "Formador", select: "Selecionar…", manual: "Escrever nome manualmente", selectWorker: "Selecionar trabalhador",
+  workerSearch: "Pesquisar trabalhador", addTrainer: "Adicionar formando", remove: "Remover", save: "Guardar", cancel: "Cancelar", saving: "A guardar…",
   allTopics: "Todos os temas", allTypes: "Todos os tipos de formação", year: "Ano", noRecords: "Sem formações para os filtros selecionados.",
   noTopics: "Sem temas de formação ativos. Defina a lista de temas em Admin antes de adicionar uma formação.", admin: "Abrir Admin",
   catalog: "Temas de Formação", newTopic: "Adicionar tema", edit: "Editar", active: "Ativo", inactive: "Inativo", status: "Estado", actions: "Ações",
@@ -30,7 +30,7 @@ const pt: TrainingUi = {
   indicators: "Indicadores da planta", indicatorHelp: "Totais anuais da planta. Os filtros de tema e tipo aplicam-se apenas à tabela.",
   error: "Não foi possível guardar. Verifique os campos e tente novamente.", duplicate: "Já existe um tema com este nome.",
   unavailableTopic: "Este tema já não está disponível. Atualize a página.", unavailableWorker: "Um trabalhador selecionado já não está ativo nesta planta. Atualize a página.",
-  trainerRequired: "Selecione pelo menos um formador.", traineeRequired: "Selecione um trabalhador ou escreva o nome do formando.",
+  trainerRequired: "Selecione um formador.", traineeRequired: "Selecione pelo menos um formando.",
   durationHint: "Horas e minutos, por exemplo 02:30.", personalRecords: "A tabela apresenta as suas formações.",
 };
 
