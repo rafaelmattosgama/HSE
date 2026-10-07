@@ -23,6 +23,21 @@ describe("historical safety KPI aggregation", () => {
     const live = month(2025, { source: "LIVE", accidents: 1, hoursWorked: "200" });
     expect(mergeSafetyKpiSources([live], [historical])).toEqual([live]);
   });
+  it("lets live hours override imported hours without hiding imported incident and pyramid totals", () => {
+    const historical = month(2025, { hoursWorked: "18000", employees: 120, accidents: 2, lostDays: "64", seriousInjury: 1, minorInjury: 1, firstAids: 3, nearMiss: 4, unsafeCondition: 5, unsafeAct: 6 });
+    const live = month(2025, { source: "LIVE", hoursWorked: "20000", employees: 125 });
+    const key = "p1|2025-1";
+    const [merged] = mergeSafetyKpiSources([live], [historical], new Map([[key, new Set(["hoursWorked", "employees"] as const)]]));
+    expect(merged).toMatchObject({ source: "MIXED", hoursWorked: "20000", employees: 125, accidents: 2, lostDays: "64", seriousInjury: 1, minorInjury: 1, firstAids: 3, nearMiss: 4, unsafeCondition: 5, unsafeAct: 6 });
+  });
+  it("aggregates imported January-May with live June-December for one YTD year", () => {
+    const historical = [1, 2, 3, 4, 5].map(monthNumber => month(2026, { month: monthNumber, hoursWorked: "100", accidents: 1, lostDays: "2" }));
+    const live = [6, 7, 8, 9, 10, 11, 12].map(monthNumber => month(2026, { month: monthNumber, source: "LIVE", hoursWorked: "200", accidents: 0, lostDays: "0" }));
+    const merged = mergeSafetyKpiSources(live, historical);
+    const annual = aggregateSafetyKpiMonths(merged);
+    expect(annual).toMatchObject({ months: 12, hoursWorked: "1900", accidents: 5, lostDays: "10" });
+    expect(annual.frequencyRate).toBe("2631.5789473684");
+  });
   it("recalculates group rates from summed numerators and denominators", () => {
     const aggregate = aggregateSafetyKpiMonths([month(2025, { plantId: "a", hoursWorked: "100000", accidents: 1 }), month(2025, { plantId: "b", hoursWorked: "900000", accidents: 9 })]);
     expect(aggregate.frequencyRate).toBe("10");

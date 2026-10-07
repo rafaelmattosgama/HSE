@@ -89,6 +89,16 @@ describe("group safety shared calculations", () => {
     expect(result.pyramid.minorInjury).toBe(1);
   });
 
+  it("keeps historical pyramid data when the live month only has hours", () => {
+    const plant = raw("a", 100, 0);
+    plant.communications = [];
+    plant.safetyKpiHistory = [{ year: 2026, month: 1, hoursWorked: 9999, accidents: 2, lostDays: 10, seriousInjury: 1, minorInjury: 1, firstAids: 3, nearMiss: 4, unsafeCondition: 5, unsafeAct: 6, updatedAt: today }];
+    const result = buildGroupSafetyPlant(plant, options);
+    expect(result.current).toMatchObject({ hours: 100, accidents: 2, lostDays: 10, firstAids: 3, nearMisses: 4 });
+    expect(result.rates.frequency).toBe(20000);
+    expect(result.pyramid).toMatchObject({ seriousInjury: 1, minorInjury: 1, firstAid: 3, nearMiss: 4, unsafeCondition: 5, unsafeAct: 6 });
+  });
+
   it("distinguishes multiple root classifications from unique typed events and unclassified events", () => {
     const plant = raw("a", 100, 0);
     const near = event("NEAR_MISS");

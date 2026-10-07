@@ -138,28 +138,42 @@ export const SafetyKpiHistoryService = {
       prisma.communication.findMany({ where: { plantId, status: { in: ["VALID_OPEN", "ONGOING", "CLOSED"] }, eventDatetime: { gte: new Date(Date.UTC(Math.min(...years), 0, 1)), lt: new Date(Date.UTC(Math.max(...years) + 1, 0, 1)) } }, select: { eventDatetime: true, type: true, classification: true, lostDays: true } }),
     ]);
     const liveMap = new Map<string, SafetyKpiMonth>();
+    const liveCoverage = new Map<string, Set<import("@/lib/safety-kpi-history/aggregation").SafetyKpiField>>();
+    const cover = (year: number, month: number, ...fields: import("@/lib/safety-kpi-history/aggregation").SafetyKpiField[]) => {
+      const key = `${plantId}|${year}-${month}`;
+      const fieldsForMonth = liveCoverage.get(key) ?? new Set<import("@/lib/safety-kpi-history/aggregation").SafetyKpiField>();
+      fields.forEach(field => fieldsForMonth.add(field));
+      liveCoverage.set(key, fieldsForMonth);
+    };
     const ensure = (y: number, month: number) => {
       const key = `${y}-${month}`;
       let row = liveMap.get(key);
       if (!row) { row = { plantId, plantCode, year: y, month, source: "LIVE", hoursWorked: "0", employees: 0, accidents: 0, lostDays: "0", seriousInjury: 0, minorInjury: 0, firstAids: 0, nearMiss: 0, unsafeCondition: 0, unsafeAct: 0 }; liveMap.set(key, row); }
       return row;
     };
-    for (const input of monthlyInputs) { const row = ensure(input.year, input.month); row.hoursWorked = input.hoursWorked?.toString() ?? "0"; row.employees = input.workerCount ?? 0; }
+    for (const input of monthlyInputs) {
+      const row = ensure(input.year, input.month);
+      if (input.hoursWorked !== null && !input.hoursWorked.isZero()) { row.hoursWorked = input.hoursWorked.toString(); cover(input.year, input.month, "hoursWorked"); }
+      if (input.workerCount !== null) { row.employees = input.workerCount; cover(input.year, input.month, "employees"); }
+    }
     for (const event of communications) {
       const row = ensure(event.eventDatetime.getUTCFullYear(), event.eventDatetime.getUTCMonth() + 1);
+      const eventYear = event.eventDatetime.getUTCFullYear();
+      const eventMonth = event.eventDatetime.getUTCMonth() + 1;
       if (event.type === "ACCIDENT") {
         row.accidents += 1;
         row.lostDays = new Prisma.Decimal(row.lostDays).add(event.lostDays ?? 0).toString();
+        cover(eventYear, eventMonth, "accidents", "lostDays", "seriousInjury", "minorInjury");
         if (event.classification === "SERIOUS") row.seriousInjury += 1;
         if (event.classification === "MINOR") row.minorInjury += 1;
       }
-      if (event.type === "FIRST_AID") row.firstAids += 1;
-      if (event.type === "NEAR_MISS") row.nearMiss += 1;
-      if (event.type === "UNSAFE_CONDITION") row.unsafeCondition += 1;
-      if (event.type === "UNSAFE_ACT") row.unsafeAct += 1;
+      if (event.type === "FIRST_AID") { row.firstAids += 1; cover(eventYear, eventMonth, "firstAids"); }
+      if (event.type === "NEAR_MISS") { row.nearMiss += 1; cover(eventYear, eventMonth, "nearMiss"); }
+      if (event.type === "UNSAFE_CONDITION") { row.unsafeCondition += 1; cover(eventYear, eventMonth, "unsafeCondition"); }
+      if (event.type === "UNSAFE_ACT") { row.unsafeAct += 1; cover(eventYear, eventMonth, "unsafeAct"); }
     }
     const historyMonths: SafetyKpiMonth[] = historical.map(row => ({ plantId, plantCode, year: row.year, month: row.month, source: "HISTORICAL", hoursWorked: row.hoursWorked.toString(), employees: row.employees, accidents: row.accidents, lostDays: row.lostDays.toString(), seriousInjury: row.seriousInjury, minorInjury: row.minorInjury, firstAids: row.firstAids, nearMiss: row.nearMiss, unsafeCondition: row.unsafeCondition, unsafeAct: row.unsafeAct }));
-    const months = mergeSafetyKpiSources([...liveMap.values()], historyMonths);
+    const months = mergeSafetyKpiSources([...liveMap.values()], historyMonths, liveCoverage);
     return {
       months: months.filter(row => row.year === year),
       comparisonMonths: months.filter(row => row.year === compareTo),
