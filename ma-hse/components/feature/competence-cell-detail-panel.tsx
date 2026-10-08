@@ -321,10 +321,11 @@ export function CompetenceCellDetailPanel({
               competenceType={competenceType}
               allowAuthorization={canRevoke}
               existingEntry={
-                latestPassedTraining?.entryGroupId && !latestCompetentAssessment
+                latestPassedTraining?.entryGroupId
                   ? { entryGroupId: latestPassedTraining.entryGroupId, trainingCompletedAt: new Date(latestPassedTraining.occurredAt).toLocaleDateString() }
                   : null
               }
+              hasCompetentAssessment={Boolean(latestCompetentAssessment)}
               assessorOptions={assessorOptions}
               onCancel={() => setActiveForm(null)}
               onSubmit={(payload) => submit(`/api/plants/${plant}/competences/entries`, "POST", { competenceWorkerId, competenceTypeId, ...payload })}
@@ -416,6 +417,7 @@ function CompetenceEntryForm({
   competenceType,
   allowAuthorization,
   existingEntry,
+  hasCompetentAssessment,
   assessorOptions,
   onSubmit,
   onCancel,
@@ -425,6 +427,7 @@ function CompetenceEntryForm({
   competenceType: { requiresAssessment: boolean; requiresAuthorization: boolean };
   allowAuthorization: boolean;
   existingEntry: { entryGroupId: string; trainingCompletedAt: string } | null;
+  hasCompetentAssessment: boolean;
   assessorOptions: Array<{ id: string; name: string }>;
   onSubmit: (payload: {
     entryGroupId?: string;
@@ -451,7 +454,9 @@ function CompetenceEntryForm({
   const [authorizationOpen, setAuthorizationOpen] = useState(false);
   const [validFrom, setValidFrom] = useState(todayInputValue());
   const [restrictions, setRestrictions] = useState("");
-  const authorizationAvailable = !competenceType.requiresAssessment || (assessmentOpen && assessmentResult === "COMPETENT");
+  const authorizationAvailable = assessmentOpen
+    ? assessmentResult === "COMPETENT"
+    : !competenceType.requiresAssessment || hasCompetentAssessment;
 
   return (
     <form

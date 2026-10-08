@@ -24,10 +24,22 @@ export function PlantTrainingManager(props: Props) {
   const [topicId, setTopicId] = useState("");
   const [category, setCategory] = useState("");
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<PlantTrainingRow | null>(null);
+  const [listError, setListError] = useState("");
   const years = [...new Set([currentYear, year, ...props.metricRows.map(row => Number(row.occurredOn.slice(0, 4)))])].sort((a, b) => b - a);
   const filtered = records.filter(row => Number(row.occurredOn.slice(0, 4)) === year && (!topicId || row.topicId === topicId) && (!category || row.category === category));
   const activeTopics = topics.filter(topic => topic.isActive);
   const dateFormat = new Intl.DateTimeFormat(locale, { timeZone: "UTC" });
+  async function deleteRecord(id: string) {
+    if (!window.confirm(ui.deleteConfirm)) return;
+    setListError("");
+    try {
+      const response = await fetch(`/api/plants/${plant}/competences/training-records/${id}`, { method: "DELETE" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(trainingErrorMessage(json.errorCode, ui));
+      router.refresh();
+    } catch (error) { setListError(error instanceof Error ? error.message : ui.error); }
+  }
   return <div className="min-w-0 space-y-5">
     <AppHero title={ui.training} actions={props.canRegister && <Button type="button" disabled={!activeTopics.length} onClick={() => setOpen(true)}>{ui.add}</Button>} />
     {!activeTopics.length && <div className="app-empty"><p>{ui.noTopics}</p>{props.canAdmin && <Link className="mt-2 inline-block font-semibold underline" href={`/app/${plant}/admin#training-topics`}>{ui.admin}</Link>}</div>}
@@ -43,26 +55,30 @@ export function PlantTrainingManager(props: Props) {
       </div>
       {props.personalRecords && <p className="mb-3 text-sm text-slate-600">{ui.personalRecords}</p>}
       <div className="app-table-shell" role="region" aria-label={ui.training} tabIndex={0}><table className="app-table min-w-[760px]">
-        <thead><tr>{[ui.date, ui.topic, ui.type, ui.duration, ui.trainee, ui.trainers].map(label => <th key={label}>{label}</th>)}</tr></thead>
+        <thead><tr>{[ui.date, ui.topic, ui.type, ui.duration, ui.trainee, ui.trainers].map(label => <th key={label}>{label}</th>)}{props.canRegister && <th>{ui.actions}</th>}</tr></thead>
         <tbody>{filtered.map(row => <tr key={row.id}>
           <td className="whitespace-nowrap">{dateFormat.format(new Date(`${row.occurredOn}T00:00:00Z`))}</td><td data-no-translate>{row.topicName}</td><td data-no-translate>{TRAINING_CATEGORY_LABELS[row.category]}</td><td>{formatTrainingDuration(row.durationMinutes)}</td><td data-no-translate>{row.traineeName}</td><td data-no-translate>{row.trainers.join(", ")}</td>
-        </tr>)}{!filtered.length && <tr><td colSpan={6} className="text-center">{ui.noRecords}</td></tr>}</tbody>
+          {props.canRegister && <td><div className="flex gap-3"><button type="button" className="font-semibold text-[var(--primary)] underline" onClick={() => setEditing(row)}>{ui.edit}</button><button type="button" className="font-semibold text-red-700 underline" onClick={() => void deleteRecord(row.id)}>{ui.delete}</button></div></td>}
+        </tr>)}{!filtered.length && <tr><td colSpan={props.canRegister ? 7 : 6} className="text-center">{ui.noRecords}</td></tr>}</tbody>
       </table></div>
+      {listError && <p role="alert" className="mt-3 text-sm text-red-700">{listError}</p>}
     </AppPanel>
-    {open && <TrainingRecordModal plant={plant} topics={activeTopics} workers={props.workers} ui={ui} today={today} onClose={() => setOpen(false)} onSaved={date => { setOpen(false); setYear(Number(date.slice(0, 4))); setTopicId(""); setCategory(""); router.refresh(); }} />}
+    {(open || editing) && <TrainingRecordModal key={editing?.id ?? "new"} plant={plant} topics={topics} workers={props.workers} ui={ui} today={today} record={editing ?? undefined} onClose={() => { setOpen(false); setEditing(null); }} onSaved={date => { setOpen(false); setEditing(null); setYear(Number(date.slice(0, 4))); setTopicId(""); setCategory(""); router.refresh(); }} />}
   </div>;
 }
 
-export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose, onSaved }: {
-  plant: string; topics: TrainingTopicOption[]; workers: TrainingWorkerOption[]; ui: TrainingUi; today: string;
+export function TrainingRecordModal({ plant, topics, workers, ui, today, record, onClose, onSaved }: {
+  plant: string; topics: TrainingTopicOption[]; workers: TrainingWorkerOption[]; ui: TrainingUi; today: string; record?: PlantTrainingRow;
   onClose: () => void; onSaved: (date: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [manual, setManual] = useState(false);
+  const [manual, setManual] = useState(Boolean(record?.attendees.some(attendee => !attendee.employeeId)));
   const [manualName, setManualName] = useState("");
-  const [traineeIds, setTraineeIds] = useState<string[]>([]);
-  const [traineeNames, setTraineeNames] = useState<string[]>([]);
-  const [trainerId, setTrainerId] = useState("");
+  const [traineeIds, setTraineeIds] = useState<string[]>(record?.attendees.flatMap(attendee => attendee.employeeId ? [attendee.employeeId] : []) ?? []);
+  const [traineeNames, setTraineeNames] = useState<string[]>(record?.attendees.flatMap(attendee => attendee.employeeId ? [] : [attendee.name]) ?? []);
+  const [trainerId, setTrainerId] = useState(record?.trainerId ?? "");
+  const [manualTrainer, setManualTrainer] = useState(Boolean(record?.manualTrainerName));
+  const [trainerName, setTrainerName] = useState(record?.manualTrainerName ?? "");
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -70,15 +86,16 @@ export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
-    if (!trainerId) { setError(ui.trainerRequired); return; }
+    if ((!trainerId && !trainerName.trim()) || (trainerId && trainerName.trim())) { setError(ui.trainerRequired); return; }
     if (!traineeIds.length && !traineeNames.length) { setError(ui.traineeRequired); return; }
     const data = new FormData(event.currentTarget);
     const occurredOn = String(data.get("occurredOn"));
     setSaving(true); setError("");
     try {
-      const response = await fetch(`/api/plants/${plant}/competences/training-records`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      const response = await fetch(`/api/plants/${plant}/competences/training-records${record ? `/${record.id}` : ""}`, { method: record ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
         occurredOn, topicId: data.get("topicId"), category: data.get("category"), duration: data.get("duration"),
-        traineeIds, traineeNames, trainerId,
+        traineeIds, traineeNames,
+        ...(manualTrainer ? { trainerName: trainerName.trim() } : { trainerId }),
       }) });
       const json = await response.json();
       if (!response.ok) throw new Error(trainingErrorMessage(json.errorCode, ui));
@@ -87,14 +104,15 @@ export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose
     finally { setSaving(false); }
   }
   const matchingWorkers = workers.filter(worker => `${worker.name} ${worker.employeeNo}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const availableTopics = topics.filter(topic => topic.isActive || topic.id === record?.topicId);
   return <dialog ref={dialog} aria-labelledby="training-modal-title" onCancel={event => { event.preventDefault(); if (!saving) onClose(); }} className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl backdrop:bg-slate-950/50 sm:p-6">
-    <div className="mb-5 flex items-center justify-between gap-3"><h2 id="training-modal-title" className="text-xl font-bold">{ui.add}</h2><button type="button" disabled={saving} aria-label={ui.cancel} className="app-icon-button" onClick={onClose}><X className="h-5 w-5" /></button></div>
+    <div className="mb-5 flex items-center justify-between gap-3"><h2 id="training-modal-title" className="text-xl font-bold">{record ? ui.editTraining : ui.add}</h2><button type="button" disabled={saving} aria-label={ui.cancel} className="app-icon-button" onClick={onClose}><X className="h-5 w-5" /></button></div>
     <form onSubmit={submit}>
       <fieldset disabled={saving} className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <label className="space-y-1"><span className="text-sm font-semibold">{ui.date}</span><input type="date" name="occurredOn" className="app-field w-full" defaultValue={today} required /></label>
-        <label className="space-y-1"><span className="text-sm font-semibold">{ui.topic}</span><select name="topicId" className="app-field w-full" required defaultValue=""><option value="" disabled>{ui.select}</option>{topics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select></label>
-        <label className="space-y-1"><span className="text-sm font-semibold">{ui.type}</span><select name="category" className="app-field w-full" defaultValue="" required><option value="" disabled>{ui.select}</option>{TRAINING_CATEGORIES.map(type => <option key={type} value={type}>{TRAINING_CATEGORY_LABELS[type]}</option>)}</select></label>
-        <div className="space-y-1"><label htmlFor="training-duration" className="text-sm font-semibold">{ui.duration}</label><input id="training-duration" name="duration" className="app-field w-full" placeholder="00:00" pattern="[0-9]{2,4}:[0-5][0-9]" maxLength={7} required aria-describedby="training-duration-hint" /><p id="training-duration-hint" className="text-xs text-slate-500">{ui.durationHint}</p></div>
+        <label className="space-y-1"><span className="text-sm font-semibold">{ui.date}</span><input type="date" name="occurredOn" className="app-field w-full" defaultValue={record?.occurredOn ?? today} required /></label>
+        <label className="space-y-1"><span className="text-sm font-semibold">{ui.topic}</span><select name="topicId" className="app-field w-full" required defaultValue={record?.topicId ?? ""}><option value="" disabled>{ui.select}</option>{availableTopics.map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}</select></label>
+        <label className="space-y-1"><span className="text-sm font-semibold">{ui.type}</span><select name="category" className="app-field w-full" defaultValue={record?.category ?? ""} required><option value="" disabled>{ui.select}</option>{TRAINING_CATEGORIES.map(type => <option key={type} value={type}>{TRAINING_CATEGORY_LABELS[type]}</option>)}</select></label>
+        <div className="space-y-1"><label htmlFor="training-duration" className="text-sm font-semibold">{ui.duration}</label><input id="training-duration" name="duration" className="app-field w-full" placeholder="00:00" defaultValue={record ? formatTrainingDuration(record.durationMinutes) : ""} pattern="[0-9]{2,4}:[0-5][0-9]" maxLength={7} required aria-describedby="training-duration-hint" /><p id="training-duration-hint" className="text-xs text-slate-500">{ui.durationHint}</p></div>
         <div className="space-y-2 sm:col-span-2">
           <p className="text-sm font-semibold">{ui.trainee}</p>
           <input type="search" aria-label={ui.workerSearch} placeholder={ui.workerSearch} className="app-field w-full" value={search} onChange={e => setSearch(e.target.value)} />
@@ -106,7 +124,10 @@ export function TrainingRecordModal({ plant, topics, workers, ui, today, onClose
           <ul className="flex flex-wrap gap-2">{traineeIds.map(id => <li key={id} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm"><span className="min-w-0 break-words">{workers.find(worker => worker.id === id)?.name}</span><button type="button" aria-label={`${ui.remove} ${workers.find(worker => worker.id === id)?.name}`} onClick={() => setTraineeIds(current => current.filter(value => value !== id))}><X className="h-4 w-4" /></button></li>)}{traineeNames.map(name => <li key={name} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm"><span className="min-w-0 break-words">{name}</span><button type="button" aria-label={`${ui.remove} ${name}`} onClick={() => setTraineeNames(current => current.filter(value => value !== name))}><X className="h-4 w-4" /></button></li>)}</ul>
         </div>
         <div className="space-y-2 sm:col-span-2">
-          <label className="block space-y-1"><span className="text-sm font-semibold">{ui.trainers}</span><input type="search" aria-label={ui.workerSearch} placeholder={ui.workerSearch} className="app-field w-full" value={search} onChange={e => setSearch(e.target.value)} /><select aria-label={ui.trainers} className="app-field w-full" value={trainerId} onChange={e => setTrainerId(e.target.value)} required><option value="">{ui.select}</option>{matchingWorkers.map(worker => <option key={worker.id} value={worker.id}>{worker.name} · {worker.employeeNo}</option>)}</select></label>
+          <label className="block space-y-1"><span className="text-sm font-semibold">{ui.trainers}</span>{manualTrainer
+            ? <input aria-label={ui.trainerName} placeholder={ui.trainerName} className="app-field w-full" value={trainerName} onChange={e => setTrainerName(e.target.value)} maxLength={160} required />
+            : <><input type="search" aria-label={ui.workerSearch} placeholder={ui.workerSearch} className="app-field w-full" value={search} onChange={e => setSearch(e.target.value)} /><select aria-label={ui.trainers} className="app-field w-full" value={trainerId} onChange={e => setTrainerId(e.target.value)} required><option value="">{ui.select}</option>{matchingWorkers.map(worker => <option key={worker.id} value={worker.id}>{worker.name} · {worker.employeeNo}</option>)}</select></>}</label>
+          <button type="button" className="text-sm font-semibold text-[var(--primary)] underline" onClick={() => { setManualTrainer(current => !current); setTrainerId(""); setTrainerName(""); setError(""); }}>{manualTrainer ? ui.selectFromList : ui.manual}</button>
         </div>
       </fieldset>
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}

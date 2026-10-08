@@ -15,7 +15,10 @@ export type PlantTrainingRow = TrainingMetricRow & {
   topicId: string;
   topicName: string;
   traineeName: string;
+  attendees: Array<{ employeeId: string | null; name: string }>;
   trainers: string[];
+  trainerId: string | null;
+  manualTrainerName: string | null;
 };
 
 export function durationToMinutes(value: string) {

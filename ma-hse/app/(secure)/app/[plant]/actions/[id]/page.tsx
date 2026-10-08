@@ -12,8 +12,11 @@ import { getActionLinkedRecordCodes, getActionLinkedRecordDescription } from "@/
 import { authOptions } from "@/lib/auth/options";
 import { prisma } from "@/lib/prisma";
 import { getServerUiLocale } from "@/lib/server-ui-language";
+import { canCloseAction } from "@/lib/rbac/action-close";
 import { getLocalizedActionsUi } from "@/lib/services/actions-ui-localization";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
+import { ActionFollowUp } from "@/components/feature/action-follow-up";
+import { RoleCode } from "@prisma/client";
 
 export default async function ActionDetailPage({
   params,
@@ -52,6 +55,13 @@ export default async function ActionDetailPage({
       },
       closedByUser: true,
       reopenedByUser: true,
+      updates: {
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          attachments: { select: { id: true, fileName: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
@@ -59,13 +69,21 @@ export default async function ActionDetailPage({
   const actionsUi = await getLocalizedActionsUi(uiLocale);
   const linkedRecordDescription = getActionLinkedRecordDescription(action);
   const linkedRecordCodes = getActionLinkedRecordCodes(action);
-  const [translatedTitle, translatedDescription, translatedLinkedRecordDescription, translatedClosureComment, translatedReopenReason] = await translateForViewer(uiLocale, [
+  const [translatedTitle, translatedDescription, translatedLinkedRecordDescription] = await translateForViewer(uiLocale, [
     action.title,
     action.description,
     linkedRecordDescription,
-    action.closureComment,
-    action.reopenReason,
   ]);
+  const translatedUpdates = await translateForViewer(uiLocale, action.updates.map((update) => update.content));
+  const actorRole = session?.user.plantRoles.some((entry) => entry.role === RoleCode.N0_ADMIN)
+    ? RoleCode.N0_ADMIN
+    : session?.user.plantRoles.some((entry) => entry.role === RoleCode.N1_CORPORATE)
+      ? RoleCode.N1_CORPORATE
+      : session?.user.plantRoles.find((entry) => entry.plantCode === plant)?.role ?? null;
+  const isAssigned = action.ownerUserId === session?.user.id || action.coOwners.some((entry) => entry.userId === session?.user.id);
+  const canManageAny = actorRole === RoleCode.N0_ADMIN || actorRole === RoleCode.N1_CORPORATE || actorRole === RoleCode.N2_PLANT_MANAGER || actorRole === RoleCode.N3_SAFETY;
+  const canAddUpdate = action.status !== "CLOSED" && (canManageAny || isAssigned);
+  const canClose = canCloseAction({ actorRole, actorUserId: session?.user.id ?? "", ownerUserId: action.ownerUserId });
 
   return (
     <>
@@ -141,13 +159,24 @@ export default async function ActionDetailPage({
         </article>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{actionsUi.detail.comments}</h2>
-        <dl className="mt-3 space-y-2 text-sm">
-          <div className="flex justify-between gap-4"><dt>{actionsUi.detail.closureComment}</dt><dd>{translatedClosureComment || "-"}</dd></div>
-          <div className="flex justify-between gap-4"><dt>{actionsUi.detail.reopenReason}</dt><dd>{translatedReopenReason || "-"}</dd></div>
-        </dl>
-      </section>
+      <ActionFollowUp
+        plant={plant}
+        actionId={action.id}
+        status={action.status}
+        canAddUpdate={canAddUpdate}
+        canClose={canClose}
+        labels={{ ...actionsUi.detail, statusLabels: actionsUi.statusLabels }}
+        updates={action.updates.map((update, index) => ({
+          id: update.id,
+          kind: update.kind,
+          content: translatedUpdates[index] ?? update.content,
+          statusFrom: update.statusFrom,
+          statusTo: update.statusTo,
+          createdAt: update.createdAt.toISOString(),
+          createdByName: update.createdBy?.name ?? null,
+          attachments: update.attachments,
+        }))}
+      />
 
       <Link href={`/app/${plant}/actions`} className="inline-block text-sm font-semibold text-teal-700 hover:underline">
         {actionsUi.detail.backToActions}

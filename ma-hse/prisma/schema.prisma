@@ -98,6 +98,7 @@ model User {
   actionAlertDeliveries                     ActionAlertDelivery[]
   actionCoOwned                             ActionCoOwner[]
   actionEvidenceAtt                         ActionEvidenceAttachment[]
+  actionUpdates                             ActionUpdate[]
   agentPendingConfirmations                 AgentPendingConfirmation[]
   auditLogs                                 AuditLog[]
   authenticators                            Authenticator[]
@@ -500,21 +501,22 @@ model PlantTrainingTopic {
 }
 
 model PlantTrainingRecord {
-  id              String                 @id @default(uuid())
-  plantId         String
-  topicId         String
-  occurredOn      DateTime               @db.Date
-  category        PlantTrainingCategory
-  durationMinutes Int
-  traineeId       String?
-  traineeName     String
-  createdByUserId String
-  createdAt       DateTime               @default(now())
-  plant           Plant                  @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  topic           PlantTrainingTopic     @relation(fields: [topicId], references: [id], onDelete: Restrict)
-  trainee         EmployeeDirectory?     @relation(fields: [traineeId], references: [id], onDelete: SetNull)
-  trainers        PlantTrainingTrainer[]
-  attendees       PlantTrainingAttendee[]
+  id                String                  @id @default(uuid())
+  plantId           String
+  topicId           String
+  occurredOn        DateTime                @db.Date
+  category          PlantTrainingCategory
+  durationMinutes   Int
+  traineeId         String?
+  traineeName       String
+  manualTrainerName String?
+  createdByUserId   String
+  createdAt         DateTime                @default(now())
+  plant             Plant                   @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  topic             PlantTrainingTopic      @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  trainee           EmployeeDirectory?      @relation(fields: [traineeId], references: [id], onDelete: SetNull)
+  trainers          PlantTrainingTrainer[]
+  attendees         PlantTrainingAttendee[]
 
   @@index([plantId, occurredOn])
   @@index([plantId, topicId, category])
@@ -1442,6 +1444,7 @@ model Action {
   alertDeliveries     ActionAlertDelivery[]
   coOwners            ActionCoOwner[]
   evidenceAttachments ActionEvidenceAttachment[]
+  updates             ActionUpdate[]
   sewoLinks           SEWOActionLink[]
   smatLinks           SmatAuditActionLink[]
   competenceLinks     CompetenceActionLink[]
@@ -1726,15 +1729,36 @@ model ActionAlertDelivery {
 }
 
 model ActionEvidenceAttachment {
-  id           String   @id @default(uuid())
+  id           String        @id @default(uuid())
   actionId     String
+  updateId     String?
   fileKey      String
   fileName     String
   contentType  String
-  uploadedAt   DateTime @default(now())
+  uploadedAt   DateTime      @default(now())
   uploadedById String?
-  action       Action   @relation(fields: [actionId], references: [id], onDelete: Cascade)
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+  action       Action        @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  update       ActionUpdate? @relation(fields: [updateId], references: [id], onDelete: SetNull)
+  uploadedBy   User?         @relation(fields: [uploadedById], references: [id])
+
+  @@index([actionId, uploadedAt])
+  @@index([updateId])
+}
+
+model ActionUpdate {
+  id          String                     @id @default(uuid())
+  actionId    String
+  kind        ActionUpdateKind
+  content     String
+  statusFrom  ActionStatus?
+  statusTo    ActionStatus?
+  createdById String?
+  createdAt   DateTime                   @default(now())
+  action      Action                     @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  createdBy   User?                      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  attachments ActionEvidenceAttachment[]
+
+  @@index([actionId, createdAt])
 }
 
 model SafetyKpiMonthlyInput {
@@ -2433,6 +2457,15 @@ enum ActionStatus {
   OPEN
   ONGOING
   CLOSED
+}
+
+enum ActionUpdateKind {
+  CREATED
+  COMMENT
+  STATUS_CHANGED
+  CLOSED
+  REOPENED
+  DETAILS_CHANGED
 }
 
 enum ActionAlertType {
