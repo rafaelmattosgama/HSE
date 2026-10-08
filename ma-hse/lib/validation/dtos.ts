@@ -396,6 +396,19 @@ export const closeActionInput = z.object({
     .default([]),
 });
 
+export const createActionFollowUpInput = z.object({
+  comment: z.string().trim().min(1).max(5000),
+  evidence: z
+    .array(
+      z.object({
+        fileKey: z.string().min(3),
+        fileName: z.string().min(1),
+        contentType: z.string().min(3),
+      }),
+    )
+    .default([]),
+});
+
 export const bulkCloseActionInput = z.object({
   actionIds: z.array(z.string().uuid()).min(1),
   closureComment: z.string().min(5),
@@ -768,13 +781,17 @@ export const createPlantTrainingInput = z.object({
     .refine(value => /[1-9]/.test(value), "Duration must be greater than zero"),
   traineeIds: z.array(z.string().uuid()).refine(ids => new Set(ids).size === ids.length, "Duplicate trainees"),
   traineeNames: z.array(z.string().trim().min(1).max(160)).default([]),
-  trainerId: z.string().uuid(),
+  trainerId: z.string().uuid().optional(),
+  trainerName: z.string().trim().min(1).max(160).optional(),
 }).superRefine((input, ctx) => {
   if (input.traineeIds.length + input.traineeNames.length === 0) {
     ctx.addIssue({ code: "custom", path: ["traineeIds"], message: "Select at least one trainee" });
   }
   if (new Set(input.traineeNames.map(name => name.toLocaleLowerCase())).size !== input.traineeNames.length) {
     ctx.addIssue({ code: "custom", path: ["traineeNames"], message: "Duplicate trainees" });
+  }
+  if (Boolean(input.trainerId) === Boolean(input.trainerName)) {
+    ctx.addIssue({ code: "custom", path: ["trainerName"], message: "Select a trainer or enter a trainer name" });
   }
 });
 
@@ -1305,6 +1322,7 @@ export type ManualCloseSewoInput = z.infer<typeof manualCloseSewoInput>;
 export type CreateActionInput = z.infer<typeof createActionInput>;
 export type CreateSMATAuditInput = z.infer<typeof createSMATAuditInput>;
 export type CloseActionInput = z.infer<typeof closeActionInput>;
+export type CreateActionFollowUpInput = z.infer<typeof createActionFollowUpInput>;
 export type BulkCloseActionInput = z.infer<typeof bulkCloseActionInput>;
 export type ReopenActionInput = z.infer<typeof reopenEntityInput>;
 export type CreateSEWOInput = z.infer<typeof createSEWOInput>;

@@ -5,6 +5,7 @@ import {
   CompetenceAssessmentMethod,
   CompetenceAssessmentResult,
   CompetenceCellState,
+  CompetenceCategory,
   MasterDataEntityType,
   type Prisma,
   RoleCode,
@@ -51,6 +52,25 @@ export class CompetenceValidationError extends Error {
     super(message);
     this.name = "CompetenceValidationError";
   }
+}
+
+const PLANT_TRAINING_COMPETENCE_MAP: Record<string, { code: string; name: string; category: CompetenceCategory }> = {
+  "desfibrilhador automatico externo dae": { code: "DAE", name: "DAE", category: CompetenceCategory.SAFETY_ROLE },
+  "desfibrilador automatico externo dae": { code: "DAE", name: "DAE", category: CompetenceCategory.SAFETY_ROLE },
+  "desfribilhador automatico externo dae": { code: "DAE", name: "DAE", category: CompetenceCategory.SAFETY_ROLE },
+  "desfibrilhacao automatica externa dae": { code: "DAE", name: "DAE", category: CompetenceCategory.SAFETY_ROLE },
+  "desfibrilacao automatica externa dae": { code: "DAE", name: "DAE", category: CompetenceCategory.SAFETY_ROLE },
+  "primeiros socorros": { code: "PRIMEIROS_SOCORROS", name: "Primeiros Socorros", category: CompetenceCategory.SAFETY_ROLE },
+  "regras internas empilhadores": { code: "EMPILHADORES_INTERNA", name: "Empilhadores Interna", category: CompetenceCategory.EQUIPMENT_OPERATION },
+  "conducao segura empilhadores": { code: "EMPILHADORES_CERTIFICADA", name: "Empilhadores Certificada", category: CompetenceCategory.EQUIPMENT_OPERATION },
+};
+
+function normalizePlantTrainingTopic(value: string) {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export function getCompetenceForPlantTrainingTopic(topicName: string) {
+  return PLANT_TRAINING_COMPETENCE_MAP[normalizePlantTrainingTopic(topicName)] ?? null;
 }
 
 export type CompetenceMatrixCellView = {
@@ -608,6 +628,210 @@ export const CompetenceService = {
     });
 
     return enrolled;
+  },
+
+  /** Mirrors a plant-training attendee into the competence register without replacing existing records. */
+  async registerPlantTrainingAttendee(
+    tx: TransactionClient,
+    input: {
+      plantId: string;
+      employeeDirectoryId: string;
+      topicName: string;
+      completedAt: Date;
+      durationMinutes: number;
+      trainerName: string;
+      actorUserId: string;
+    },
+  ) {
+    const mapping = getCompetenceForPlantTrainingTopic(input.topicName);
+    if (!mapping) return null;
+
+    const employee = await tx.employeeDirectory.findFirst({
+      where: { id: input.employeeDirectoryId, plantId: input.plantId },
+      select: { id: true, employeeNo: true },
+    });
+    if (!employee) return null;
+
+    let competenceType = await tx.competenceType.findFirst({
+      where: { plantId: input.plantId, code: mapping.code },
+    });
+    if (!competenceType) {
+      competenceType = await tx.competenceType.findFirst({
+        where: { plantId: input.plantId, name: { equals: mapping.name, mode: "insensitive" } },
+      });
+    }
+    if (!competenceType) {
+      competenceType = await tx.competenceType.create({
+        data: {
+          plantId: input.plantId,
+          code: mapping.code,
+          name: mapping.name,
+          category: mapping.category,
+          requiresTraining: true,
+          requiresAssessment: true,
+          requiresAuthorization: true,
+          validityMonths: 12,
+          displayOrder: 100,
+          sourceLanguage: "pt",
+        },
+      });
+      await writeAuditLog({
+        entityType: "CompetenceType",
+        entityId: competenceType.id,
+        action: "CREATED_FROM_PLANT_TRAINING",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: buildDiff(null, competenceType),
+      }, tx);
+    } else if (!competenceType.isActive) {
+      const before = competenceType;
+      competenceType = await tx.competenceType.update({ where: { id: competenceType.id }, data: { isActive: true } });
+      await writeAuditLog({
+        entityType: "CompetenceType",
+        entityId: competenceType.id,
+        action: "REACTIVATED_FROM_PLANT_TRAINING",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: buildDiff(before, competenceType),
+      }, tx);
+    }
+    if (!competenceType.requiresTraining || !competenceType.requiresAssessment || !competenceType.requiresAuthorization) {
+      const before = competenceType;
+      competenceType = await tx.competenceType.update({
+        where: { id: competenceType.id },
+        data: { requiresTraining: true, requiresAssessment: true, requiresAuthorization: true },
+      });
+      await writeAuditLog({
+        entityType: "CompetenceType",
+        entityId: competenceType.id,
+        action: "CONFIGURED_FROM_PLANT_TRAINING",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: buildDiff(before, competenceType),
+      }, tx);
+    }
+
+    const existingWorker = await tx.competenceWorker.findUnique({
+      where: { plantId_employeeDirectoryId: { plantId: input.plantId, employeeDirectoryId: employee.id } },
+    });
+    const competenceWorker = existingWorker
+      ? await tx.competenceWorker.update({ where: { id: existingWorker.id }, data: { isActive: true } })
+      : await tx.competenceWorker.create({
+          data: {
+            plantId: input.plantId,
+            employeeDirectoryId: employee.id,
+            addedById: input.actorUserId,
+          },
+        });
+
+    if (!existingWorker) {
+      await writeAuditLog({
+        entityType: "CompetenceWorker",
+        entityId: competenceWorker.id,
+        action: "ENROLLED_FROM_TRAINING",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: buildDiff(null, { employeeDirectoryId: employee.id, employeeNo: employee.employeeNo }),
+      }, tx);
+    }
+
+    const requirement = await tx.competenceWorkerRequirement.findUnique({
+      where: {
+        competenceWorkerId_competenceTypeId: {
+          competenceWorkerId: competenceWorker.id,
+          competenceTypeId: competenceType.id,
+        },
+      },
+    });
+    if (!requirement?.isRequired) {
+      const updatedRequirement = await tx.competenceWorkerRequirement.upsert({
+        where: {
+          competenceWorkerId_competenceTypeId: {
+            competenceWorkerId: competenceWorker.id,
+            competenceTypeId: competenceType.id,
+          },
+        },
+        update: { isRequired: true, setById: input.actorUserId, setAt: new Date() },
+        create: {
+          plantId: input.plantId,
+          competenceWorkerId: competenceWorker.id,
+          competenceTypeId: competenceType.id,
+          isRequired: true,
+          setById: input.actorUserId,
+        },
+      });
+      await writeAuditLog({
+        entityType: "CompetenceWorkerRequirement",
+        entityId: updatedRequirement.id,
+        action: "REQUIRED_FROM_PLANT_TRAINING",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: buildDiff(requirement, updatedRequirement),
+      }, tx);
+    }
+
+    const dayStart = new Date(input.completedAt);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const nextDay = new Date(dayStart);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    let trainingRecord = await tx.trainingRecord.findFirst({
+      where: {
+        plantId: input.plantId,
+        competenceWorkerId: competenceWorker.id,
+        competenceTypeId: competenceType.id,
+        result: TrainingResult.PASSED,
+        completedAt: { gte: dayStart, lt: nextDay },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!trainingRecord) {
+      trainingRecord = await tx.trainingRecord.create({
+        data: {
+          plantId: input.plantId,
+          competenceWorkerId: competenceWorker.id,
+          competenceTypeId: competenceType.id,
+          completedAt: input.completedAt,
+          durationHours: input.durationMinutes / 60,
+          trainerName: input.trainerName,
+          result: TrainingResult.PASSED,
+          notes: `Formação: ${input.topicName}. Registo automático do módulo Formação.`,
+          createdById: input.actorUserId,
+        },
+      });
+      await writeAuditLog({
+        entityType: "TrainingRecord",
+        entityId: trainingRecord.id,
+        action: "REGISTERED_FROM_PLANT_TRAINING",
+        actorUserId: input.actorUserId,
+        plantId: input.plantId,
+        diff: buildDiff(null, {
+          competenceWorkerId: competenceWorker.id,
+          competenceTypeId: competenceType.id,
+          completedAt: input.completedAt,
+          topicName: input.topicName,
+        }),
+      }, tx);
+    }
+
+    const [expiringThresholdDays, medicalFitnessBlocksAuthorization] = await Promise.all([
+      getCompetenceExpiringThresholdDays(input.plantId),
+      getMedicalFitnessBlocksAuthorization(input.plantId),
+    ]);
+    const now = new Date();
+    const activeTypes = await tx.competenceType.findMany({ where: { plantId: input.plantId, isActive: true }, select: { id: true } });
+    const typesToRecompute = existingWorker ? [competenceType.id] : activeTypes.map((type) => type.id);
+    for (const competenceTypeId of typesToRecompute) {
+      await recomputeAndSaveState(tx, {
+        plantId: input.plantId,
+        competenceWorkerId: competenceWorker.id,
+        competenceTypeId,
+        now,
+        expiringThresholdDays,
+        medicalFitnessBlocksAuthorization,
+      });
+    }
+
+    return { competenceWorker, trainingRecord, competenceType };
   },
 
   /** Correct a record in place, preserving its links and complete before/after audit. */

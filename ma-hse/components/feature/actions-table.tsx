@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { parseApiResponse, uploadAttachment } from "@/lib/client-api";
+import { parseApiResponse } from "@/lib/client-api";
 import { formatActionCode, getActionStatusClasses } from "@/lib/helpers";
 import {
   BASE_ACTIONS_UI,
@@ -13,11 +13,6 @@ import {
   type ActionsUi,
 } from "@/lib/actions-ui";
 import { formatRecordLevel } from "@/lib/record-level";
-
-type EvidenceRow = {
-  id: string;
-  fileName: string;
-};
 
 type ActionRow = {
   id: string;
@@ -43,14 +38,9 @@ type ActionRow = {
   sewoCode: string | null;
   smatAuditId: string | null;
   smatCode: string | null;
-  evidence: EvidenceRow[];
 };
 
 type DateSortDirection = "asc" | "desc";
-
-function todayDateInputValue() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 async function readExportError(response: Response, fallback: string) {
   const contentType = response.headers.get("content-type") ?? "";
@@ -68,9 +58,6 @@ export function ActionsTable({
   plant,
   actions,
   canDelete = false,
-  canCloseAnyActions = false,
-  canCloseOwnActions = false,
-  viewerUserId,
   labels,
   statusLabels,
   priorityLabels,
@@ -79,9 +66,6 @@ export function ActionsTable({
   plant: string;
   actions: ActionRow[];
   canDelete?: boolean;
-  canCloseAnyActions?: boolean;
-  canCloseOwnActions?: boolean;
-  viewerUserId?: string;
   showPlant?: boolean;
   labels?: ActionsUi["table"];
   statusLabels?: ActionsUi["statusLabels"];
@@ -90,16 +74,7 @@ export function ActionsTable({
   const text = labels ?? BASE_ACTIONS_UI.table;
   const localizedStatusLabels = statusLabels ?? BASE_ACTIONS_UI.statusLabels;
   const localizedPriorityLabels = priorityLabels ?? BASE_ACTIONS_UI.priorityLabels;
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [bulkComment, setBulkComment] = useState("");
-  const [bulkClosedAt, setBulkClosedAt] = useState(todayDateInputValue());
-  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
-  const [rowComments, setRowComments] = useState<Record<string, string>>({});
-  const [rowClosedDates, setRowClosedDates] = useState<Record<string, string>>({});
-  const [rowFiles, setRowFiles] = useState<Record<string, File[]>>({});
   const [message, setMessage] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [localFilter, setLocalFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -147,79 +122,6 @@ export function ActionsTable({
     () => filteredActions.filter((action) => action.status === "OPEN" || action.status === "ONGOING"),
     [filteredActions],
   );
-  const canCloseRow = (action: ActionRow) =>
-    canCloseAnyActions || (canCloseOwnActions && Boolean(viewerUserId) && action.ownerUserId === viewerUserId);
-  const canCloseAnyVisibleAction = canCloseAnyActions || (canCloseOwnActions && Boolean(viewerUserId));
-
-  useEffect(() => {
-    const visibleActionIds = new Set(filteredActions.map((action) => action.id));
-    setSelectedIds((current) => current.filter((actionId) => visibleActionIds.has(actionId)));
-  }, [filteredActions]);
-
-  async function uploadFiles(files: File[], plantCode = plant) {
-    const uploaded: Array<{ fileKey: string; fileName: string; contentType: string }> = [];
-    for (const file of files) {
-      let uploadResult: { key: string };
-      try {
-        uploadResult = await uploadAttachment({
-          plantCode,
-          folder: "actions",
-          file,
-          contentType: file.type || "application/octet-stream",
-          fallbackErrorMessage: "Failed to prepare evidence upload",
-        });
-      } catch {
-        throw new Error(`Failed to upload ${file.name}`);
-      }
-
-      uploaded.push({
-        fileKey: uploadResult.key,
-        fileName: file.name,
-        contentType: file.type || "application/octet-stream",
-      });
-    }
-    return uploaded;
-  }
-
-  async function closeAction(actionId: string) {
-    const action = actions.find((entry) => entry.id === actionId);
-    const actionPlant = action?.plantCode ?? plant;
-    const comment = rowComments[actionId] ?? "";
-    const closedAt = rowClosedDates[actionId] ?? todayDateInputValue();
-    if (comment.trim().length < 5) {
-      setMessage(text.closureCommentMin);
-      return;
-    }
-    if (!closedAt) {
-      setMessage(text.selectClosureDate);
-      return;
-    }
-
-    setBusyId(actionId);
-    setMessage("");
-    try {
-      const evidence = await uploadFiles(rowFiles[actionId] ?? [], actionPlant);
-      const response = await fetch(`/api/plants/${actionPlant}/actions/${actionId}/close`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          closureComment: comment,
-          closedAt,
-          evidence,
-        }),
-      });
-      const json = await parseApiResponse(response);
-      if (!response.ok || !json?.ok) {
-        throw new Error(text.closeFailed);
-      }
-      window.location.reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : text.closeFailed);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function deleteAction(actionId: string) {
     const action = actions.find((entry) => entry.id === actionId);
     const actionPlant = action?.plantCode ?? plant;
@@ -243,53 +145,6 @@ export function ActionsTable({
     } finally {
       setDeletingId(null);
     }
-  }
-
-  async function closeSelected() {
-    if (!selectedIds.length) {
-      setMessage(text.selectAtLeastOne);
-      return;
-    }
-    if (bulkComment.trim().length < 5) {
-      setMessage(text.bulkClosureCommentMin);
-      return;
-    }
-    if (!bulkClosedAt) {
-      setMessage(text.selectClosureDate);
-      return;
-    }
-
-    setBusyId("bulk");
-    setMessage("");
-    try {
-      if (showPlant) {
-        throw new Error("Bulk closure is available after selecting a single plant.");
-      }
-      const evidence = await uploadFiles(bulkFiles);
-      const response = await fetch(`/api/plants/${plant}/actions/close-batch`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          actionIds: selectedIds,
-          closureComment: bulkComment,
-          closedAt: bulkClosedAt,
-          evidence,
-        }),
-      });
-      const json = await parseApiResponse(response);
-      if (!response.ok || !json?.ok) {
-        throw new Error(text.bulkCloseFailed);
-      }
-      window.location.reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : text.bulkCloseFailed);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function toggleSelection(actionId: string, checked: boolean) {
-    setSelectedIds((current) => (checked ? [...current, actionId] : current.filter((entry) => entry !== actionId)));
   }
 
   async function exportFiltered(format: "xlsx" | "pdf") {
@@ -346,9 +201,7 @@ export function ActionsTable({
 
   return (
     <div className="min-w-0 space-y-4">
-      {!showPlant && canCloseAnyVisibleAction ? (
-        <>
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid max-w-[90rem] gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 [&>label]:min-w-0">
               <label className="space-y-1">
                 <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.local}</span>
@@ -395,29 +248,6 @@ export function ActionsTable({
             </div>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid max-w-6xl items-end gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_10rem_minmax(0,1.5fr)_auto]">
-              <div className="min-w-0">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.bulkClosureComment}</label>
-                <textarea value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder={text.bulkClosurePlaceholder} />
-              </div>
-              <div className="min-w-0 md:max-w-48">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</label>
-                <input type="date" value={bulkClosedAt} onChange={(event) => setBulkClosedAt(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-              </div>
-              <div className="min-w-0">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.photosDocuments}</label>
-                <input type="file" multiple onChange={(event) => setBulkFiles(Array.from(event.target.files ?? []))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-              </div>
-              <Button type="button" size="sm" className="justify-self-start" onClick={closeSelected} disabled={busyId === "bulk"}>
-                {busyId === "bulk" ? text.closing : text.closeSelected}
-              </Button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">{text.bulkHelp}</p>
-          </section>
-        </>
-      ) : null}
-
       <section className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <p className="text-sm text-slate-600">{formatLabel(text.shownCount, { count: String(filteredActions.length), openCount: String(openActions.length) })}</p>
@@ -446,7 +276,6 @@ export function ActionsTable({
           <table className="w-full min-w-[1040px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="w-16 px-4 py-3">{text.select}</th>
                 {showPlant ? <th className="px-4 py-3">Plant</th> : null}
                 <th className="px-4 py-3">{text.action}</th>
                 <th className="px-4 py-3">{text.local}</th>
@@ -455,25 +284,13 @@ export function ActionsTable({
                 <th className="w-32 px-4 py-3">{text.status}</th>
                 <th className="px-4 py-3">{text.owner}</th>
                 <th className="w-32 px-4 py-3">{text.due}</th>
-                <th className="sticky right-0 z-10 w-40 min-w-40 bg-slate-50 px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">{text.open}</th>
+                <th className="sticky right-0 z-10 w-44 min-w-44 bg-slate-50 px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">{text.followUp}</th>
               </tr>
             </thead>
             <tbody>
               {filteredActions.map((row) => {
-                const isOpen = row.status === "OPEN" || row.status === "ONGOING";
-                const isExpanded = expandedId === row.id;
                 return (
-                  <Fragment key={row.id}>
                     <tr key={row.id} className="border-t border-slate-200">
-                      <td className="px-4 py-3">
-                        {isOpen && !showPlant && canCloseRow(row) ? (
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(row.id)}
-                            onChange={(event) => toggleSelection(row.id, event.target.checked)}
-                          />
-                        ) : null}
-                      </td>
                       {showPlant ? <td className="px-4 py-3 font-semibold text-slate-700">{row.plantName ?? row.plantCode?.toUpperCase() ?? "-"}</td> : null}
                       <td className="px-4 py-3">
                         <div className="font-mono text-xs text-slate-500">{formatActionCode(row.plantCode ?? plant, row.sequenceNumber)}</div>
@@ -501,9 +318,9 @@ export function ActionsTable({
                       <td className="whitespace-nowrap px-4 py-3">{row.dueDate}</td>
                       <td className="sticky right-0 z-10 bg-[var(--surface)] px-4 py-3 shadow-[-6px_0_12px_-8px_var(--border)]">
                         <div className="flex flex-col items-start gap-2">
-                          <Button type="button" size="sm" variant="ghost" className="whitespace-nowrap" aria-expanded={isExpanded} onClick={() => setExpandedId(isExpanded ? null : row.id)}>
-                            {isExpanded ? text.hide : isOpen ? text.openClose : text.openOnly}
-                          </Button>
+                          <Link href={`/app/${row.plantCode ?? plant}/actions/${row.id}`} className="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            {text.followUp}
+                          </Link>
                           {canDelete ? (
                             <button
                               type="button"
@@ -518,83 +335,11 @@ export function ActionsTable({
                         </div>
                       </td>
                     </tr>
-                    {isExpanded ? (
-                      <tr className="border-t border-slate-100 bg-slate-50">
-                        <td colSpan={9 + (showPlant ? 1 : 0)} className="px-4 py-4">
-                          <div className="grid max-w-6xl items-start gap-4 lg:grid-cols-2">
-                            <div className="space-y-3">
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.linkedRecords}</p>
-                                <dl className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
-                                  {[
-                                    [text.manualOrigin, row.manualOrigin],
-                                    [text.communication, row.communicationCode],
-                                    [text.sewo, row.sewoCode],
-                                    [text.smat, row.smatCode],
-                                  ].map(([label, value]) => (
-                                    <div key={label} className="min-w-0">
-                                      <dt className="text-xs text-slate-500">{label}</dt>
-                                      <dd className="mt-1 break-words text-slate-700">{value ?? "-"}</dd>
-                                    </div>
-                                  ))}
-                                </dl>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</p>
-                                <p className="mt-2 text-sm text-slate-700">{row.closedDate ?? "-"}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.evidenceAttached}</p>
-                                <div className="mt-2 space-y-1 text-sm text-slate-700">
-                                  {row.evidence.length ? row.evidence.map((item) => <p key={item.id}>{item.fileName}</p>) : <p>-</p>}
-                                </div>
-                              </div>
-                            </div>
-                            {isOpen && canCloseRow(row) ? (
-                              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-                                <h3 className="text-sm font-semibold text-slate-900">{text.closeAction}</h3>
-                                <label className="space-y-1 text-sm">
-                                  <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{text.closureDate}</span>
-                                  <input
-                                    type="date"
-                                    value={rowClosedDates[row.id] ?? todayDateInputValue()}
-                                    onChange={(event) => setRowClosedDates((current) => ({ ...current, [row.id]: event.target.value }))}
-                                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                                    required
-                                  />
-                                </label>
-                                <textarea
-                                  value={rowComments[row.id] ?? ""}
-                                  onChange={(event) => setRowComments((current) => ({ ...current, [row.id]: event.target.value }))}
-                                  rows={3}
-                                  placeholder={text.describeClosure}
-                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                                />
-                                <input
-                                  type="file"
-                                  multiple
-                                  onChange={(event) => setRowFiles((current) => ({ ...current, [row.id]: Array.from(event.target.files ?? []) }))}
-                                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                                />
-                                <Button type="button" size="sm" onClick={() => closeAction(row.id)} disabled={busyId === row.id}>
-                                  {busyId === row.id ? text.closing : text.closeAction}
-                                </Button>
-                              </div>
-                            ) : !isOpen ? (
-                              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                                {text.alreadyClosed}
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
                 );
               })}
               {filteredActions.length === 0 ? (
                 <tr className="border-t border-slate-200">
-                  <td colSpan={9 + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={8 + (showPlant ? 1 : 0)} className="px-4 py-6 text-center text-sm text-slate-500">
                     {text.noRows}
                   </td>
                 </tr>

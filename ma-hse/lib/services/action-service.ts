@@ -1,4 +1,4 @@
-import { ActionPriority, ActionSourceType, ActionStatus, Prisma, SEWOStatus } from "@prisma/client";
+import { ActionPriority, ActionSourceType, ActionStatus, ActionUpdateKind, Prisma, SEWOStatus } from "@prisma/client";
 import { addDays } from "date-fns";
 import { buildDiff, writeAuditLog } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -8,7 +8,7 @@ import { isCommunicationLinkableStatus } from "@/lib/communication-status";
 import { CommunicationService } from "@/lib/services/communication-service";
 import { getSlaConfig } from "@/lib/services/parameter-service";
 import { SewaService } from "@/lib/services/sewo-service";
-import type { BulkCloseActionInput, CloseActionInput, CreateActionInput, ReopenActionInput, UpdateActionInput } from "@/lib/validation/dtos";
+import type { BulkCloseActionInput, CloseActionInput, CreateActionFollowUpInput, CreateActionInput, ReopenActionInput, UpdateActionInput } from "@/lib/validation/dtos";
 
 function calculateDueDate(priority: ActionPriority, slaDays: Record<ActionPriority, number>, inputDueDate?: Date) {
   if (inputDueDate) {
@@ -206,6 +206,16 @@ export const ActionService = {
         },
       });
 
+      await tx.actionUpdate.create({
+        data: {
+          actionId: createdAction.id,
+          kind: ActionUpdateKind.CREATED,
+          content: "Ação criada",
+          statusTo: ActionStatus.OPEN,
+          createdById: input.actorUserId,
+        },
+      });
+
       if (input.payload.sourceType === ActionSourceType.SMAT && input.payload.smatAuditId) {
         await tx.smatAuditActionLink.create({
           data: {
@@ -326,37 +336,51 @@ export const ActionService = {
     payload: CloseActionInput;
   }) {
     const before = await prisma.action.findUniqueOrThrow({ where: { id: input.actionId } });
+    if (before.status === ActionStatus.CLOSED) {
+      throw new ActionValidationError("ACTION_ALREADY_CLOSED", "This action is already closed.");
+    }
 
-    const action = await prisma.action.update({
-      where: { id: input.actionId },
-      data: {
-        status: ActionStatus.CLOSED,
-        closedAt: input.payload.closedAt,
-        closedBy: input.actorUserId,
-        closureComment: input.payload.closureComment,
-        evidenceAttachments: input.payload.evidence.length
-          ? {
-              createMany: {
-                data: input.payload.evidence.map((entry) => ({
-                  ...entry,
-                  uploadedById: input.actorUserId,
-                })),
-              },
-            }
-          : undefined,
-      },
-      include: {
-        evidenceAttachments: true,
-      },
-    });
-
-    await writeAuditLog({
-      entityType: "Action",
-      entityId: input.actionId,
-      action: "CLOSE",
-      actorUserId: input.actorUserId,
-      plantId: action.plantId,
-      diff: buildDiff(before as unknown as Record<string, unknown>, action as unknown as Record<string, unknown>),
+    const action = await prisma.$transaction(async (tx) => {
+      const closedUpdate = await tx.actionUpdate.create({
+        data: {
+          actionId: input.actionId,
+          kind: ActionUpdateKind.CLOSED,
+          content: input.payload.closureComment,
+          statusFrom: before.status,
+          statusTo: ActionStatus.CLOSED,
+          createdById: input.actorUserId,
+        },
+      });
+      const updatedAction = await tx.action.update({
+        where: { id: input.actionId },
+        data: {
+          status: ActionStatus.CLOSED,
+          closedAt: input.payload.closedAt,
+          closedBy: input.actorUserId,
+          closureComment: input.payload.closureComment,
+          evidenceAttachments: input.payload.evidence.length
+            ? {
+                createMany: {
+                  data: input.payload.evidence.map((entry) => ({
+                    ...entry,
+                    updateId: closedUpdate.id,
+                    uploadedById: input.actorUserId,
+                  })),
+                },
+              }
+            : undefined,
+        },
+        include: { evidenceAttachments: true },
+      });
+      await writeAuditLog({
+        entityType: "Action",
+        entityId: input.actionId,
+        action: "CLOSE",
+        actorUserId: input.actorUserId,
+        plantId: updatedAction.plantId,
+        diff: buildDiff(before as unknown as Record<string, unknown>, updatedAction as unknown as Record<string, unknown>),
+      }, tx);
+      return updatedAction;
     });
 
     await this.syncParentStatuses({
@@ -366,6 +390,61 @@ export const ActionService = {
     });
 
     return action;
+  },
+
+  async addFollowUp(input: {
+    actionId: string;
+    actorUserId: string;
+    payload: CreateActionFollowUpInput;
+  }) {
+    const before = await prisma.action.findUniqueOrThrow({ where: { id: input.actionId } });
+    if (before.status === ActionStatus.CLOSED) {
+      throw new ActionValidationError("ACTION_ALREADY_CLOSED", "Reopen the action before adding a follow-up.");
+    }
+
+    const nextStatus = before.status === ActionStatus.OPEN ? ActionStatus.ONGOING : before.status;
+    const kind = before.status === nextStatus ? ActionUpdateKind.COMMENT : ActionUpdateKind.STATUS_CHANGED;
+    const result = await prisma.$transaction(async (tx) => {
+      const update = await tx.actionUpdate.create({
+        data: {
+          actionId: input.actionId,
+          kind,
+          content: input.payload.comment,
+          statusFrom: before.status,
+          statusTo: nextStatus,
+          createdById: input.actorUserId,
+        },
+      });
+      if (input.payload.evidence.length) {
+        await tx.actionEvidenceAttachment.createMany({
+          data: input.payload.evidence.map((entry) => ({
+            ...entry,
+            actionId: input.actionId,
+            updateId: update.id,
+            uploadedById: input.actorUserId,
+          })),
+        });
+      }
+      const action = await tx.action.update({
+        where: { id: input.actionId },
+        data: { status: nextStatus },
+      });
+      await writeAuditLog({
+        entityType: "Action",
+        entityId: input.actionId,
+        action: kind === ActionUpdateKind.STATUS_CHANGED ? "STARTED_FOLLOW_UP" : "FOLLOW_UP_ADDED",
+        actorUserId: input.actorUserId,
+        plantId: action.plantId,
+        diff: buildDiff(before as unknown as Record<string, unknown>, { status: nextStatus, update } as unknown as Record<string, unknown>),
+      }, tx);
+      return tx.actionUpdate.findUniqueOrThrow({
+        where: { id: update.id },
+        include: { createdBy: { select: { id: true, name: true } }, attachments: true },
+      });
+    });
+
+    await this.syncParentStatuses({ actionId: input.actionId, communicationId: before.communicationId, sewoId: before.sewoId });
+    return result;
   },
 
   async update(input: {
@@ -396,6 +475,32 @@ export const ActionService = {
       plantId: action.plantId,
       diff: buildDiff(before as unknown as Record<string, unknown>, action as unknown as Record<string, unknown>),
     });
+
+    const dueDateChanged = input.payload.dueDate && input.payload.dueDate.getTime() !== before.dueDate.getTime();
+    const fieldsChanged = [
+      input.payload.title !== before.title,
+      input.payload.description !== before.description,
+      input.payload.ownerUserId !== before.ownerUserId,
+      input.payload.priority !== before.priority,
+      input.payload.category !== before.category,
+      input.payload.level !== undefined && input.payload.level !== before.level,
+      Boolean(dueDateChanged),
+    ].some(Boolean);
+    if (fieldsChanged) {
+      const dateText = (date: Date) => date.toISOString().slice(0, 10);
+      await prisma.actionUpdate.create({
+        data: {
+          actionId: input.actionId,
+          kind: ActionUpdateKind.DETAILS_CHANGED,
+          content: dueDateChanged
+            ? `Detalhes atualizados. Prazo alterado de ${dateText(before.dueDate)} para ${dateText(action.dueDate)}.`
+            : "Detalhes da ação atualizados.",
+          statusFrom: action.status,
+          statusTo: action.status,
+          createdById: input.actorUserId,
+        },
+      });
+    }
 
     return action;
   },
@@ -428,23 +533,35 @@ export const ActionService = {
   }) {
     const before = await prisma.action.findUniqueOrThrow({ where: { id: input.actionId } });
 
-    const action = await prisma.action.update({
-      where: { id: input.actionId },
-      data: {
-        status: ActionStatus.OPEN,
-        reopenedAt: new Date(),
-        reopenedBy: input.actorUserId,
-        reopenReason: input.payload.reason,
-      },
-    });
-
-    await writeAuditLog({
-      entityType: "Action",
-      entityId: input.actionId,
-      action: "REOPEN",
-      actorUserId: input.actorUserId,
-      plantId: action.plantId,
-      diff: buildDiff(before as unknown as Record<string, unknown>, action as unknown as Record<string, unknown>),
+    const action = await prisma.$transaction(async (tx) => {
+      const reopened = await tx.action.update({
+        where: { id: input.actionId },
+        data: {
+          status: ActionStatus.OPEN,
+          reopenedAt: new Date(),
+          reopenedBy: input.actorUserId,
+          reopenReason: input.payload.reason,
+        },
+      });
+      await tx.actionUpdate.create({
+        data: {
+          actionId: input.actionId,
+          kind: ActionUpdateKind.REOPENED,
+          content: input.payload.reason,
+          statusFrom: before.status,
+          statusTo: ActionStatus.OPEN,
+          createdById: input.actorUserId,
+        },
+      });
+      await writeAuditLog({
+        entityType: "Action",
+        entityId: input.actionId,
+        action: "REOPEN",
+        actorUserId: input.actorUserId,
+        plantId: reopened.plantId,
+        diff: buildDiff(before as unknown as Record<string, unknown>, reopened as unknown as Record<string, unknown>),
+      }, tx);
+      return reopened;
     });
 
     await this.syncParentStatuses({

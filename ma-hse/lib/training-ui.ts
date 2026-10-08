@@ -1,4 +1,6 @@
 const en = {
+  editTraining: "Edit training", delete: "Delete", deleteConfirm: "Delete this training record? This action cannot be undone.",
+  trainerName: "Trainer name", selectFromList: "Select from list",
   module: "Training / Competences", training: "Training", competences: "Competences", overview: "Overview",
   add: "+ Add training", date: "Date", topic: "Training topic", type: "Training type", duration: "Duration (HH:MM)",
   trainee: "Trainee", trainers: "Trainers", select: "Select…", manual: "Enter a name manually", selectWorker: "Select a worker",
@@ -17,6 +19,8 @@ const en = {
 };
 export type TrainingUi = typeof en;
 const pt: TrainingUi = {
+  editTraining: "Editar formação", delete: "Eliminar", deleteConfirm: "Eliminar este registo de formação? Esta ação não pode ser anulada.",
+  trainerName: "Nome do formador", selectFromList: "Selecionar da lista",
   module: "Formação / Competências", training: "Formação", competences: "Competências", overview: "Visão geral",
   add: "+ Adicionar formação", date: "Data", topic: "Tema de Formação", type: "Tipo Formação", duration: "Carga Horária (HH:MM)",
   trainee: "Formandos", trainers: "Formador", select: "Selecionar…", manual: "Escrever nome manualmente", selectWorker: "Selecionar trabalhador",

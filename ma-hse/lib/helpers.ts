@@ -81,7 +81,11 @@ export function getCommunicationStatusClasses(status: CommunicationStatus | stri
     return "bg-emerald-100 text-emerald-700";
   }
 
-  if (normalized === "on_going" || normalized === "in_validation") {
+  if (normalized === "in_validation") {
+    return "bg-slate-100 text-slate-600";
+  }
+
+  if (normalized === "on_going") {
     return "bg-amber-100 text-amber-700";
   }
 

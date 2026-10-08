@@ -1,0 +1,1 @@
+ALTER TYPE "ActionUpdateKind" ADD VALUE 'DETAILS_CHANGED';
