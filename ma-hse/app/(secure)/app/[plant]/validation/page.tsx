@@ -13,6 +13,7 @@ import { getLocalizedSewoUi } from "@/lib/services/sewo-ui-localization";
 import { getPendingSewoValidationRows, getSewoValidationHistoryRows } from "@/lib/services/sewo-validation-service";
 import { translateForViewer } from "@/lib/services/viewer-translation-service";
 import { getUiDictionary } from "@/lib/ui-language";
+import { COMMUNICATION_IN_VALIDATION_STATUSES } from "@/lib/communication-status";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
@@ -60,7 +61,7 @@ export default async function ValidationPage({
     where: {
       plantId: { in: plantRows.map((row) => row.id) },
       status: {
-        in: ["SUBMITTED", "PENDING_VALIDATION"],
+        in: [...COMMUNICATION_IN_VALIDATION_STATUSES],
       },
     },
     include: {
@@ -69,10 +70,9 @@ export default async function ValidationPage({
       workstation: true,
     },
     orderBy: [
-      { eventDatetime: "asc" },
-      { reportedAt: "asc" },
+      { reportedAt: "desc" },
+      { eventDatetime: "desc" },
     ],
-    take: 100,
   });
   const uniqueAreas = Array.from(new Map(pending.flatMap((row) => row.area ? [[row.area.id, row.area] as const] : [])).values());
   const uniqueWorkstations = Array.from(new Map(pending.flatMap((row) => row.workstation ? [[row.workstation.id, row.workstation] as const] : [])).values());

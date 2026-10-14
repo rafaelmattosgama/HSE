@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ClipboardCheck, Clock3, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -99,12 +98,12 @@ export function ActionFloatingAlert({ enabled }: { enabled: boolean }) {
                 <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
                 <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{alert.body}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Link
+                  <a
                     href={alert.actionUrl}
                     className="inline-flex rounded-lg bg-[var(--brand-700)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-800)]"
                   >
-                    Abrir acao
-                  </Link>
+                    Abrir ação
+                  </a>
                   <Button
                     type="button"
                     size="sm"
