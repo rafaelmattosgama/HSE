@@ -149,7 +149,7 @@ async function buildAlertContent(action: ActionAlertRecord, alertType: ActionAle
   const dueDate = formatLisbonDateTime(action.dueDate, locale);
   const actionUrl = getActionUrl(action);
   const communicationLine = action.communicationId
-    ? [`${copy.communication}: ${action.communicationId}`]
+    ? [`${copy.communication}: ${action.communication?.codigoCompleto ?? action.communication?.codigoAbreviado ?? "-"}`]
     : [];
 
   const body = [
@@ -428,6 +428,12 @@ export const ActionAlertService = {
         action: {
           include: {
             plant: true,
+            communication: {
+              select: {
+                codigoCompleto: true,
+                codigoAbreviado: true,
+              },
+            },
           },
         },
       },
@@ -439,10 +445,16 @@ export const ActionAlertService = {
 
     return rows.flatMap((row): ActionFloatingAlert[] => {
       if (!row.notification) return [];
+      const communicationCode = row.action.communication?.codigoCompleto
+        ?? row.action.communication?.codigoAbreviado
+        ?? "-";
+      const body = row.action.communicationId
+        ? row.notification.body.replaceAll(row.action.communicationId, communicationCode)
+        : row.notification.body;
       return [{
         id: row.notification.id,
         title: row.notification.title,
-        body: row.notification.body,
+        body,
         createdAt: row.notification.createdAt.toISOString(),
         actionUrl: `/app/${row.action.plant.code}/actions/${row.action.id}`,
       }];
