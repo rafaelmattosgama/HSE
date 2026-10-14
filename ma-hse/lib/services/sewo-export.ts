@@ -608,7 +608,8 @@ function drawMiniField(doc: PdfDocument, input: {
 function measureTextBox(doc: PdfDocument, input: { label: string; value: string; width: number; minHeight: number }) {
   const labelWidth = input.width - 14;
   const compact = input.minHeight <= 48;
-  const labelHeight = compact ? 10 : Math.min(14, doc.fontSize(6.8).heightOfString(input.label.toUpperCase(), { width: labelWidth }));
+  const measuredLabelHeight = doc.fontSize(6.8).heightOfString(input.label.toUpperCase(), { width: labelWidth });
+  const labelHeight = compact ? Math.max(10, Math.min(18, measuredLabelHeight)) : Math.min(18, measuredLabelHeight);
   const valueTop = 9 + labelHeight + 4;
   const fontSize = input.minHeight >= 80 ? 6.8 : 7.6;
   const text = normalizeMultilineText(input.value);
@@ -1229,6 +1230,16 @@ export const SewoExportService = {
         return { startPage, endPage: flow.currentPageIndex(), endY };
       }
 
+      function startPlanPage(title: string) {
+        const top = flow.newPage(title);
+        flow.recordBand(flow.currentPageIndex(), 68, 720, "PLAN", GREEN);
+        return top;
+      }
+
+      function ensurePlanSpace(y: number, height: number, title: string) {
+        return y + height > PORTRAIT_BOTTOM ? startPlanPage(title) : y;
+      }
+
       // ---------------- PAGE 1 ----------------
       let cursorY = flow.startPage(pageOneTitle);
       let cursorPage = flow.currentPageIndex();
@@ -1274,26 +1285,32 @@ export const SewoExportService = {
         { label: "WHAT - nature and body location", value: `${injuryTypeName} | ${bodyLocationText}`, minHeight: 36 },
         { label: "WHERE - workplace, machine, press, line, etc.", value: occurrenceLocation, minHeight: 36 },
         { label: "WHO - usual job of the injured person", value: getDisplayValue(sewo.whoText, ui.summaryReportNotApplicable), minHeight: 36 },
-        { label: "HOW - how did the accident happen", value: display(sewo.howText), minHeight: 42 },
       ];
-      const analysisStackHeight = analysisBoxes.reduce((sum, box) => sum + measureTextBox(doc, { ...box, width: 224 }).height, 0) + (analysisBoxes.length - 1) * 6;
-      const immediateActionMeasured = measureTextBox(doc, { label: "Immediate action description", value: display(sewo.immediateCorrectiveActionText), width: 106, minHeight: 126 });
-      const analysisRowHeight = Math.max(228, 30 + analysisStackHeight + 10, 30 + immediateActionMeasured.height + 10);
-      if (cursorY + analysisRowHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageOneTitle);
-        cursorPage = flow.currentPageIndex();
-        flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-      }
-      drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: 244, height: analysisRowHeight, title: "Analysis - event description", color: TEAL });
-      let boxY = cursorY + 30;
-      analysisBoxes.forEach((box) => {
-        const height = drawTextBox(doc, { label: box.label, value: box.value, x: 56, y: boxY, width: 224, minHeight: box.minHeight });
-        boxY += height + 6;
-      });
+      const analysisColumns = [56, 219, 382].map((x, index) => ({ ...analysisBoxes[index], x, width: 157 }));
+      const analysisSummaryHeight = Math.max(...analysisColumns.map((box) => measureTextBox(doc, box).height));
+      const analysisSummaryPanelHeight = 30 + analysisSummaryHeight + 10;
+      cursorY = ensurePlanSpace(cursorY, analysisSummaryPanelHeight, pageOneTitle);
+      cursorPage = flow.currentPageIndex();
+      drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: analysisSummaryPanelHeight, title: "Analysis - event description", color: TEAL });
+      analysisColumns.forEach((box) => drawTextBox(doc, { ...box, y: cursorY + 30, minHeight: analysisSummaryHeight }));
+      cursorY += analysisSummaryPanelHeight + 8;
 
-      drawPortraitPanel(doc, { x: 302, y: cursorY, width: 247, height: analysisRowHeight, title: "Immediate action and classification", color: BLUE });
+      const howBox = { label: "HOW - how did the accident happen", value: display(sewo.howText), width: 481, minHeight: 42 };
+      const howHeight = measureTextBox(doc, howBox).height;
+      const howPanelHeight = 30 + howHeight + 10;
+      cursorY = ensurePlanSpace(cursorY, howPanelHeight, pageTwoTitle);
+      cursorPage = flow.currentPageIndex();
+      drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: howPanelHeight, title: "Occurrence description", color: GREEN });
+      drawTextBox(doc, { ...howBox, x: 56, y: cursorY + 30 });
+      cursorY += howPanelHeight + 8;
+
+      const immediateActionMeasured = measureTextBox(doc, { label: "Immediate action description", value: display(sewo.immediateCorrectiveActionText), width: 359, minHeight: 126 });
+      const immediateActionPanelHeight = 30 + Math.max(126, immediateActionMeasured.height) + 10;
+      cursorY = ensurePlanSpace(cursorY, immediateActionPanelHeight, pageTwoTitle);
+      cursorPage = flow.currentPageIndex();
+      drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: immediateActionPanelHeight, title: "Immediate action and classification", color: BLUE });
       drawAnatomyPanel(doc, {
-        x: 312,
+        x: 56,
         y: cursorY + 30,
         width: 112,
         height: 126,
@@ -1302,54 +1319,29 @@ export const SewoExportService = {
         injuryType: injuryTypeName,
         required: anatomyRequired,
       });
-      drawTextBox(doc, { label: "Immediate action description", value: display(sewo.immediateCorrectiveActionText), x: 432, y: cursorY + 30, width: 106, minHeight: 126 });
-      cursorY += analysisRowHeight + 10;
+      drawTextBox(doc, { label: "Immediate action description", value: display(sewo.immediateCorrectiveActionText), x: 178, y: cursorY + 30, width: 359, minHeight: Math.max(126, immediateActionMeasured.height) });
+      cursorY += immediateActionPanelHeight + 8;
 
       const previousDetectedText = normalizeMultilineText(display(templateData.previousDetectedDescription));
       const previousDetectedTextHeight = doc.fontSize(7).heightOfString(previousDetectedText, { width: 390 });
       const ucUaPanelHeight = Math.max(54, 30 + Math.max(previousDetectedTextHeight, 14) + 14);
-      if (cursorY + ucUaPanelHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageOneTitle);
-        cursorPage = flow.currentPageIndex();
-        flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-      }
+      cursorY = ensurePlanSpace(cursorY, ucUaPanelHeight, pageTwoTitle);
+      cursorPage = flow.currentPageIndex();
       drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: ucUaPanelHeight, title: "UC / UA related to the event", color: GREEN });
       doc.fillColor(INK).fontSize(7.5).font("Helvetica").text("Have any UA/UC related to the dynamic and root causes been previously detected?", 58, cursorY + 29, { width: 280 });
       drawCheckbox(doc, { x: 345, y: cursorY + 27, checked: isSewoRootCauseAffirmative(templateData.previousDetected), label: ui.yes });
       drawCheckbox(doc, { x: 400, y: cursorY + 27, checked: templateData.previousDetected === "NO" || templateData.previousDetected === false, label: ui.no });
       doc.fillColor(MUTED).fontSize(7).font("Helvetica-Bold").text("Description:", 58, cursorY + 44, { width: 70 });
       doc.fillColor(INK).fontSize(7).font("Helvetica").text(previousDetectedText, 132, cursorY + 44, { width: 390 });
-
-      // ---------------- PAGE 2 ----------------
-      cursorY = flow.newPage(pageTwoTitle);
-      cursorPage = flow.currentPageIndex();
-      flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-
-      const occurrenceBoxes = [
-        { label: "How did the accident happen?", value: display(sewo.howText), x: 56, width: 238, minHeight: 96 },
-        { label: "Immediate corrective action plan", value: display(sewo.immediateCorrectiveActionText), x: 302, width: 236, minHeight: 96 },
-      ];
-      const occurrenceRowHeight = Math.max(...occurrenceBoxes.map((box) => measureTextBox(doc, box).height));
-      const occurrencePanelHeight = Math.max(154, 30 + occurrenceRowHeight + 10);
-      if (cursorY + occurrencePanelHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageTwoTitle);
-        cursorPage = flow.currentPageIndex();
-        flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-      }
-      drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: occurrencePanelHeight, title: "Occurrence description", color: GREEN });
-      occurrenceBoxes.forEach((box) => drawTextBox(doc, { ...box, y: cursorY + 30, minHeight: occurrenceRowHeight }));
-      cursorY += occurrencePanelHeight + 10;
+      cursorY += ucUaPanelHeight + 10;
 
       const analysisTextMeasured = measureTextBox(doc, { label: "Analysis text", value: display(templateData.analysisText), width: 260, minHeight: 48 });
       const havePreviousMeasured = measureMiniField(doc, { label: "Have previous UA / UC been detected?", value: yesNo(templateData.previousDetected), width: 96, height: 48 });
       const describePreviousMeasured = measureTextBox(doc, { label: "Describe previous detection", value: display(templateData.previousDetectedDescription), width: 108, minHeight: 48 });
       const analysisContentHeight = Math.max(analysisTextMeasured.height, havePreviousMeasured.height, describePreviousMeasured.height);
       const analysisPanelHeight = Math.max(92, 30 + analysisContentHeight + 10);
-      if (cursorY + analysisPanelHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageTwoTitle);
-        cursorPage = flow.currentPageIndex();
-        flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-      }
+      cursorY = ensurePlanSpace(cursorY, analysisPanelHeight, pageTwoTitle);
+      cursorPage = flow.currentPageIndex();
       drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: analysisPanelHeight, title: "Analysis", color: TEAL });
       drawTextBox(doc, { label: "Analysis text", value: display(templateData.analysisText), x: 56, y: cursorY + 30, width: 260, minHeight: analysisContentHeight });
       drawMiniField(doc, { label: "Have previous UA / UC been detected?", value: yesNo(templateData.previousDetected), x: 326, y: cursorY + 30, width: 96, height: analysisContentHeight });
@@ -1358,12 +1350,9 @@ export const SewoExportService = {
 
       const fiveWhyRows = fiveWhys.map((entry, index) => [`${ui.whyLabel} ${index + 1}`, display(entry.why), display(entry.answer)]);
       const fiveWhyTableHeight = measureTableHeight(doc, fiveWhyRows, [58, 210, 213], 18);
-      const fiveWhyPanelHeight = Math.max(118, 30 + fiveWhyTableHeight + 10);
-      if (cursorY + fiveWhyPanelHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageTwoTitle);
-        cursorPage = flow.currentPageIndex();
-        flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-      }
+      const fiveWhyPanelHeight = Math.max(84, 30 + fiveWhyTableHeight + 10);
+      cursorY = ensurePlanSpace(cursorY, fiveWhyPanelHeight, pageTwoTitle);
+      cursorPage = flow.currentPageIndex();
       drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: fiveWhyPanelHeight, title: "5 Why", color: BLUE });
       drawLandscapeTable(doc, { x: 56, y: cursorY + 30, widths: [58, 210, 213], minRowHeight: 18, headers: [ui.whyLabel, ui.question, ui.answerLabel], rows: fiveWhyRows });
       cursorY += fiveWhyPanelHeight + 10;
@@ -1382,20 +1371,17 @@ export const SewoExportService = {
           ]
         : [[ui.sifPsifDecisionTree, ui.pendingResult]];
       const sifTableHeight = measureTableHeight(doc, sifRows, [358, 123], 16);
-      const sifPanelHeight = Math.max(222, 30 + sifTableHeight + 10);
-      if (cursorY + sifPanelHeight > PORTRAIT_BOTTOM) {
-        cursorY = flow.newPage(pageTwoTitle);
-        cursorPage = flow.currentPageIndex();
-        flow.recordBand(cursorPage, 68, 720, "PLAN", GREEN);
-      }
+      const sifPanelHeight = Math.max(60, 30 + sifTableHeight + 10);
+      cursorY = ensurePlanSpace(cursorY, sifPanelHeight, pageTwoTitle);
+      cursorPage = flow.currentPageIndex();
       drawPortraitPanel(doc, { x: PORTRAIT_X, y: cursorY, width: PORTRAIT_WIDTH, height: sifPanelHeight, title: "SIF / PSIF decision tree", color: BRAND });
       drawLandscapeTable(doc, { x: 56, y: cursorY + 30, widths: [358, 123], minRowHeight: 16, headers: [ui.field, ui.value], rows: sifRows });
-
-      // ---------------- PAGE 3 ----------------
-      cursorY = flow.newPage(pageThreeTitle);
-      cursorPage = flow.currentPageIndex();
+      cursorY += sifPanelHeight + 10;
 
       const rootCauseRows = rootCauseDetails.map((entry) => [display(entry.label), yesNo(entry.isRootCause), display(entry.comment)]);
+      const rootCausePanelHeight = 30 + measureTableHeight(doc, rootCauseRows, [170, 70, 241], 20) + 10;
+      cursorY = ensurePlanSpace(cursorY, rootCausePanelHeight, pageThreeTitle);
+      cursorPage = flow.currentPageIndex();
       const rootCauseResult = drawPanelWithTable({
         y: cursorY,
         title: "Root cause analysis",
