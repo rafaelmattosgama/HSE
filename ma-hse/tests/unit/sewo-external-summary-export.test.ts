@@ -8,6 +8,9 @@ const prismaMock = vi.hoisted(() => ({
   injuryType: {
     findFirst: vi.fn(),
   },
+  bodyPart: {
+    findFirst: vi.fn(),
+  },
 }));
 
 const storageMock = vi.hoisted(() => ({
@@ -577,6 +580,10 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("Exported by: Ana Silva");
     expect(rendered.texts).toContain("Valenca (PL1)");
     expect(rendered.texts).not.toContain("Readable occurrence description from the linked communication.");
+    const whatIndex = rendered.texts.indexOf("WHAT - NATURE AND BODY LOCATION");
+    expect(rendered.texts[whatIndex + 1]).toBe("Hand contusion | Hand");
+    const whoIndex = rendered.texts.indexOf("WHO - USUAL JOB OF THE INJURED PERSON");
+    expect(rendered.texts[whoIndex + 1]).toBe("Normal press operation");
     expect(rendered.texts.filter((text) => text === "Operator slipped near the conveyor.")).toHaveLength(1);
     expect(rendered.texts.filter((text) => text.includes("HOW - HOW DID THE ACCIDENT HAPPEN"))).toHaveLength(1);
     const immediateSection = rendered.texts.slice(
@@ -707,6 +714,10 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("sewo-legacy-action");
     expect(rendered.texts.some((entry) => entry.includes("Review platform stop"))).toBe(true);
     expect(rendered.texts).toContain("Not applicable");
+    const whatIndex = rendered.texts.indexOf("WHAT - NATURE AND BODY LOCATION");
+    expect(rendered.texts[whatIndex + 1]).toBe("Not applicable");
+    const whoIndex = rendered.texts.indexOf("WHO - USUAL JOB OF THE INJURED PERSON");
+    expect(rendered.texts[whoIndex + 1]).toBe("Lifting operations");
   });
 
   function baseSewoFixture(overrides: Record<string, unknown> = {}) {
