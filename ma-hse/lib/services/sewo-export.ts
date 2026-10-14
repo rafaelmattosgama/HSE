@@ -249,15 +249,6 @@ function isUuid(value: unknown): value is string {
     && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function getReadableText(values: unknown[], fallback: string) {
-  for (const value of values) {
-    if (typeof value !== "string") continue;
-    const normalized = value.trim();
-    if (normalized && !isUuid(normalized)) return normalized;
-  }
-  return fallback;
-}
-
 function toYesNoAnswer(value: unknown): YesNoAnswer {
   if (value === "YES" || value === true) return "YES";
   if (value === "NO" || value === false) return "NO";
@@ -1120,10 +1111,44 @@ export const SewoExportService = {
             isRootCause: selection.isRootCause,
           }));
     const mergedActions = mergeSewoActions(sewo);
+    const templateNatureId = getDisplayValue(templateData.natureId, "");
+    const storedNatureId = isUuid(templateNatureId)
+      ? templateNatureId
+      : isUuid(sewo.whatText)
+        ? sewo.whatText
+        : "";
+    const templateBodyPartId = getDisplayValue(templateData.bodyPartId, "");
+    const [injuryTypeFromMaster, bodyPartFromMaster] = await Promise.all([
+      !sewo.communication?.injuryType?.name && storedNatureId
+        ? prisma.injuryType.findFirst({
+            where: { id: storedNatureId, plantId: sewo.plantId },
+            select: { name: true },
+          })
+        : null,
+      !sewo.communication?.bodyPart?.name && isUuid(templateBodyPartId)
+        ? prisma.bodyPart.findFirst({
+            where: { id: templateBodyPartId, plantId: sewo.plantId },
+            select: { name: true },
+          })
+        : null,
+    ]);
+    const injuryTypeName = getDisplayValue(
+      sewo.communication?.injuryType?.name ?? injuryTypeFromMaster?.name,
+      ui.summaryReportNotApplicable,
+    );
+    const templateBodyPart = getDisplayValue(templateData.bodyPart, "");
+    const bodyPartName = getDisplayValue(
+      sewo.communication?.bodyPart?.name
+        ?? bodyPartFromMaster?.name
+        ?? (isUuid(templateBodyPart) ? "" : templateBodyPart),
+      ui.summaryReportNotApplicable,
+    );
     const translatableTexts = [
       sewo.eventClassification,
       sewo.whichText ?? "",
       sewo.communication?.description ?? "",
+      ...(injuryTypeName === ui.summaryReportNotApplicable ? [] : [injuryTypeName]),
+      ...(bodyPartName === ui.summaryReportNotApplicable ? [] : [bodyPartName]),
       sewo.howText,
       sewo.immediateCorrectiveActionText,
       getString(templateData.analysisText),
@@ -1156,14 +1181,6 @@ export const SewoExportService = {
       sewo.communication?.type ?? templateData.eventType ?? sewo.whichText,
       "",
     );
-    const bodyPartName = getDisplayValue(
-      sewo.communication?.bodyPart?.name ?? templateData.bodyPart,
-      ui.summaryReportNotApplicable,
-    );
-    const injuryTypeName = getDisplayValue(
-      getReadableText([sewo.communication?.injuryType?.name, sewo.whatText], ""),
-      ui.summaryReportNotApplicable,
-    );
     const lostDays = typeof templateData.lostDays === "number"
       ? templateData.lostDays
       : sewo.communication?.lostDays ?? null;
@@ -1184,6 +1201,9 @@ export const SewoExportService = {
       const bodyLocationText = anatomyRequired && bodyPartName === ui.summaryReportNotApplicable
         ? "Body location not specified"
         : bodyPartName;
+      const whatValue = injuryTypeName === ui.summaryReportNotApplicable && bodyPartName === ui.summaryReportNotApplicable
+        ? ui.summaryReportNotApplicable
+        : `${display(injuryTypeName)} | ${display(bodyPartName)}`;
 
       const flow = createPortraitReportFlow(doc, {
         plant: sewo.plant.code.toUpperCase(),
@@ -1282,9 +1302,9 @@ export const SewoExportService = {
       cursorY += generalInfoPanelHeight + 10;
 
       const analysisBoxes = [
-        { label: "WHAT - nature and body location", value: `${injuryTypeName} | ${bodyLocationText}`, minHeight: 36 },
+        { label: "WHAT - nature and body location", value: whatValue, minHeight: 36 },
         { label: "WHERE - workplace, machine, press, line, etc.", value: occurrenceLocation, minHeight: 36 },
-        { label: "WHO - usual job of the injured person", value: getDisplayValue(sewo.whoText, ui.summaryReportNotApplicable), minHeight: 36 },
+        { label: "WHO - usual job of the injured person", value: display(sewo.whichText), minHeight: 36 },
       ];
       const analysisColumns = [56, 219, 382].map((x, index) => ({ ...analysisBoxes[index], x, width: 157 }));
       const analysisSummaryHeight = Math.max(...analysisColumns.map((box) => measureTextBox(doc, box).height));
