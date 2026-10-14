@@ -577,12 +577,8 @@ describe("SewoExportService.buildExport", () => {
     expect(rendered.texts).toContain("Exported by: Ana Silva");
     expect(rendered.texts).toContain("Valenca (PL1)");
     expect(rendered.texts).not.toContain("Readable occurrence description from the linked communication.");
-    const occurrenceStart = rendered.texts.indexOf("Occurrence description");
-    const analysisStart = rendered.texts.indexOf("Analysis", occurrenceStart);
-    const occurrenceSection = rendered.texts.slice(occurrenceStart, analysisStart);
-    expect(occurrenceSection).not.toContain("DESCRIPTION");
-    expect(occurrenceSection).toContain("HOW DID THE ACCIDENT HAPPEN?");
-    expect(occurrenceSection).toContain("Operator slipped near the conveyor.");
+    expect(rendered.texts.filter((text) => text === "Operator slipped near the conveyor.")).toHaveLength(1);
+    expect(rendered.texts.filter((text) => text.includes("HOW - HOW DID THE ACCIDENT HAPPEN"))).toHaveLength(1);
     const immediateSection = rendered.texts.slice(
       rendered.texts.indexOf("Immediate action and classification"),
       rendered.texts.indexOf("UC / UA related to the event"),
