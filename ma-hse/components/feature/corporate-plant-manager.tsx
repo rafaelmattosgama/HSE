@@ -8,6 +8,7 @@ import { DashboardVisualizationStudio } from "@/components/feature/dashboard-vis
 import { PlantSafetyRankings } from "@/components/feature/plant-safety-rankings";
 import { getSafetyDashboardLayoutCopy } from "@/lib/safety-dashboard-layout";
 import type { PlantSummary, RankingEntry, RankingGroup, RankingSeriesSnapshot } from "@/lib/dashboard-visualization";
+import type { DashboardPyramidLevel, PyramidDepartmentPareto } from "@/lib/dashboard-pyramid";
 import { getUiDictionary, type DashboardUiDictionary } from "@/lib/ui-language";
 import { AppCard, AppKpiCard, AppSectionHeader } from "@/components/ui/app-surface";
 
@@ -48,6 +49,7 @@ type CorporatePlantManagerProps = {
   title?: string;
   scopeLabelOverride?: string;
   departmentScope?: boolean;
+  pyramidDepartmentPareto?: Record<DashboardPyramidLevel, PyramidDepartmentPareto>;
   compactPlantRankings?: boolean;
   locale?: string;
   description?: string;
@@ -221,6 +223,7 @@ export function CorporatePlantManager({
   compactPlantRankings = false,
   locale = "en",
   departmentScope = false,
+  pyramidDepartmentPareto,
   plantListTitle,
   pyramidDescription,
   storageKeyBase = "ma-hse-corporate",
@@ -506,7 +509,7 @@ export function CorporatePlantManager({
 
   if (compactPlantRankings) {
     return <>
-      <PlantSafetyRankings rankings={rankings} scopeLabel={scopeLabel} locale={locale} labels={text} />
+      <PlantSafetyRankings rankings={rankings} scopeLabel={scopeLabel} locale={locale} labels={text} pyramidDepartmentPareto={pyramidDepartmentPareto} />
       <details className="app-panel col-span-full min-w-0 rounded-2xl p-5">
         <summary className="cursor-pointer text-sm font-semibold text-[var(--brand-700)]">{getSafetyDashboardLayoutCopy(locale).charts} <span className="ml-2 text-xs font-normal text-slate-600">{scopeLabel}</span></summary>
         <div className="mt-4 min-w-0">

@@ -1,5 +1,10 @@
 export type DashboardPyramidLevel = "unsafeAct" | "unsafeCondition" | "nearMiss" | "firstAid" | "minorInjury" | "seriousInjury" | "fatal";
 
+export type PyramidDepartmentPareto = {
+  total: number;
+  departments: Array<{ id: string; name: string; count: number }>;
+};
+
 export function getDashboardPyramidLevel(row: { type: string; classification: string | null }): DashboardPyramidLevel | null {
   switch (row.type) {
     case "UNSAFE_ACT": return "unsafeAct";

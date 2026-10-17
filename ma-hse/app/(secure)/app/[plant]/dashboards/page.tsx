@@ -31,10 +31,11 @@ import {
 } from "@/lib/communication-type-top";
 import { CorporatePlantManager } from "@/components/feature/corporate-plant-manager";
 import { SafetyCommunicationPyramid } from "@/components/feature/safety-communication-pyramid";
+import { SafetyPyramidInteractionProvider } from "@/components/feature/safety-pyramid-interaction";
 import { DashboardDepartmentFilter } from "@/components/feature/dashboard-department-filter";
 import { SafetyDashboardOverview } from "@/components/feature/safety-dashboard-overview";
 import { getSafetyDashboardLayoutCopy } from "@/lib/safety-dashboard-layout";
-import { getDashboardPyramidLevel } from "@/lib/dashboard-pyramid";
+import { getDashboardPyramidLevel, type DashboardPyramidLevel, type PyramidDepartmentPareto } from "@/lib/dashboard-pyramid";
 import { SafetyDashboardKpiGroups } from "@/components/feature/safety-dashboard-kpi-groups";
 import { SafetyDaysSpotlight } from "@/components/feature/safety-days-dashboard";
 import { getUiDictionary } from "@/lib/ui-language";
@@ -682,6 +683,24 @@ export default async function DashboardsPage({
     const level = getDashboardPyramidLevel(row);
     return level ? [{ id: row.id, code: row.codigoCompleto ?? row.id, level, pending: isCommunicationInValidationStatus(row.status) }] : [];
   });
+  const departmentNameById = new Map(departments.map((department) => [department.id, department.name]));
+  const pyramidDepartmentPareto = Object.fromEntries(
+    (["fatal", "seriousInjury", "minorInjury", "firstAid", "nearMiss", "unsafeCondition", "unsafeAct"] as DashboardPyramidLevel[]).map((level) => {
+      const countsByDepartment = new Map<string, number>();
+      for (const row of scopedPyramidCommunications) {
+        if (getDashboardPyramidLevel(row) !== level || !row.areaId) continue;
+        const name = departmentNameById.get(row.areaId);
+        if (!name) continue;
+        countsByDepartment.set(row.areaId, (countsByDepartment.get(row.areaId) ?? 0) + 1);
+      }
+      const departmentsForLevel = [...countsByDepartment.entries()]
+        .map(([id, count]) => ({ id, name: departmentNameById.get(id)!, count }))
+        .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, uiLocale))
+        .slice(0, 5);
+      const total = [...countsByDepartment.values()].reduce((sum, count) => sum + count, 0);
+      return [level, { total, departments: departmentsForLevel } satisfies PyramidDepartmentPareto];
+    }),
+  ) as Record<DashboardPyramidLevel, PyramidDepartmentPareto>;
   const homologousPendingPyramidCounts = buildPyramidCounts(scopedHomologousPyramid.filter((row) => isCommunicationInValidationStatus(row.status)));
   const homologousPyramidCounts = canonicalPrevious ? {
     ...homologousPendingPyramidCounts,
@@ -1294,6 +1313,7 @@ export default async function DashboardsPage({
             dates={period.mode === "range" ? { from: period.from.toISOString().slice(0, 10), to: period.to.toISOString().slice(0, 10) } : { year: String(period.year), month: period.month ? String(period.month) : "" }}
           />
         </div>
+        <SafetyPyramidInteractionProvider>
         <div className={`grid min-w-0 items-start gap-5 ${showDetailedKpis ? "xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]" : ""}`}>
           <SafetyCommunicationPyramid
             title={ui.dashboard.safetyCommunicationPyramid}
@@ -1309,6 +1329,7 @@ export default async function DashboardsPage({
             emptyLabel={ui.dashboard.pyramidEmptyState}
             previousPeriodLabel={ui.dashboard.samePeriodLastYearShort}
             helpLabel={ui.dashboard.help}
+            departmentPreviewToggleLabel={showDetailedKpis ? ui.dashboard.pyramidDepartmentPreviewToggle : undefined}
             labels={{
               fatal: ui.dashboard.pyramidFatal,
               seriousInjury: ui.dashboard.pyramidSeriousInjury,
@@ -1342,6 +1363,7 @@ export default async function DashboardsPage({
           title={ui.dashboard.plantIndicators}
           scopeLabelOverride={indicatorScopeLabel}
           departmentScope={Boolean(departmentId)}
+          pyramidDepartmentPareto={pyramidDepartmentPareto}
           pyramidDescription={ui.dashboard.plantPyramidDescription}
           storageKeyBase={`ma-hse-plant-${plantRow.code}`}
           initialActivePlantCode={plantRow.code}
@@ -1354,6 +1376,7 @@ export default async function DashboardsPage({
         />
       ) : null}
         </div>
+        </SafetyPyramidInteractionProvider>
       </section>
 
       <details className="app-panel min-w-0 rounded-2xl p-5">
