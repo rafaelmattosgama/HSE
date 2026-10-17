@@ -1,11 +1,13 @@
 "use client";
 
 import { useId, useRef, useState, type CSSProperties } from "react";
+import { Pin, PinOff } from "lucide-react";
 import Link from "next/link";
 import { AppCard } from "@/components/ui/app-surface";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { getUiDictionary } from "@/lib/ui-language";
 import { getSafetyDashboardLayoutCopy } from "@/lib/safety-dashboard-layout";
+import { useSafetyPyramidInteraction } from "@/components/feature/safety-pyramid-interaction";
 
 export type SafetyCommunicationPyramidCounts = {
   unsafeAct: number; unsafeCondition: number; nearMiss: number; firstAid: number;
@@ -29,6 +31,7 @@ export function SafetyCommunicationPyramid({
   previousCounts, previousPeriodLabel,
   classificationRule, hierarchyLabel, emptyLabel, helpLabel,
   records, plantCode,
+  departmentPreviewToggleLabel,
 }: {
   title: string;
   counts: SafetyCommunicationPyramidCounts;
@@ -44,6 +47,7 @@ export function SafetyCommunicationPyramid({
   helpLabel?: string;
   records?: PyramidRecord[];
   plantCode?: string;
+  departmentPreviewToggleLabel?: string;
 }) {
   const text = getUiDictionary(locale).dashboard;
   const copy = getSafetyDashboardLayoutCopy(locale);
@@ -60,6 +64,7 @@ export function SafetyCommunicationPyramid({
   const dialog = useRef<HTMLDialogElement>(null);
   const [selected, setSelected] = useState<Level | null>(null);
   const [limit, setLimit] = useState(20);
+  const interaction = useSafetyPyramidInteraction();
   const id = useId();
   const selectedRecords = records?.filter(record => record.level === selected) ?? [];
   const showRecords = (level: Level) => {
@@ -73,6 +78,7 @@ export function SafetyCommunicationPyramid({
       <div className="min-w-0"><h2 className="text-base font-bold text-slate-950">{title}</h2><p className="mt-1 break-words text-xs text-slate-600">{scopeLabel}</p><p className="mt-1 text-xs text-slate-500">{periodLabel}</p></div>
       <div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700">{number(total)} {copy.total}</span><HelpPopover title={title} body={`${classificationRule ?? text.pyramidClassificationRule}\n\n${hierarchyLabel ?? text.pyramidHierarchyNote}`} buttonLabel={helpLabel ?? text.help} /></div>
     </header>
+    {departmentPreviewToggleLabel ? <p className="mt-2 text-xs leading-5 text-slate-500">{text.pyramidDepartmentPreviewHint}</p> : null}
     {total === 0 ? <p className="app-empty mt-3" role="status">{emptyLabel ?? text.pyramidEmptyState}</p> : null}
     <ol className="mt-4 space-y-1.5" aria-label={title}>
       {PYRAMID_LAYERS.map(layer => {
@@ -92,7 +98,25 @@ export function SafetyCommunicationPyramid({
         const rowClass = "grid w-full min-w-0 grid-cols-[minmax(0,1fr)_minmax(4.5rem,auto)] gap-2 rounded-md text-left @sm:grid-cols-[minmax(0,1fr)_minmax(6rem,auto)]";
         const accessibleLabel = `${label}: ${number(value)}, ${percentage(value)}`;
         return <li key={layer.key}>
-          {records && plantCode ? <button type="button" className={`${rowClass} cursor-pointer hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-700)]`} aria-label={`${accessibleLabel}. ${copy.view}`} onClick={() => showRecords(layer.key)}>{band}</button> : <div className={rowClass} aria-label={accessibleLabel}>{band}</div>}
+          <div
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-1 rounded-md"
+            onPointerEnter={(event) => { if (event.pointerType !== "touch") interaction?.setHoveredLevel(layer.key); }}
+            onPointerLeave={(event) => { if (event.pointerType !== "touch") interaction?.setHoveredLevel(null); }}
+            onFocusCapture={() => interaction?.setFocusedLevel(layer.key)}
+            onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) interaction?.setFocusedLevel(null); }}
+          >
+            {records && plantCode ? <button type="button" className={`${rowClass} cursor-pointer hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-700)]`} aria-label={`${accessibleLabel}. ${copy.view}`} onClick={() => showRecords(layer.key)}>{band}</button> : <div className={rowClass} aria-label={accessibleLabel}>{band}</div>}
+            {departmentPreviewToggleLabel && interaction ? <button
+              type="button"
+              className="inline-flex min-h-10 w-10 items-center justify-center self-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-700)]"
+              aria-label={`${departmentPreviewToggleLabel}: ${label}`}
+              aria-pressed={interaction.pinnedLevel === layer.key}
+              title={`${departmentPreviewToggleLabel}: ${label}`}
+              onClick={() => interaction.togglePinnedLevel(layer.key)}
+            >
+              {interaction.pinnedLevel === layer.key ? <PinOff className="h-4 w-4" aria-hidden="true" /> : <Pin className="h-4 w-4" aria-hidden="true" />}
+            </button> : null}
+          </div>
         </li>;
       })}
     </ol>

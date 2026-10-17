@@ -94,6 +94,28 @@ function formatValue(value: number, variant: "count" | "percent" | "index") {
   return value.toLocaleString();
 }
 
+function wrapChartLabel(label: string, maxChars: number) {
+  const words = label.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (word.length > maxChars) {
+      if (current) lines.push(current);
+      current = "";
+      for (let index = 0; index < word.length; index += maxChars) lines.push(word.slice(index, index + maxChars));
+      continue;
+    }
+    if (current && `${current} ${word}`.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 function metricValue(snapshot: MonthlyMetricSnapshot, metricId: MetricId) {
   if (metricId === "nearMisses") return snapshot.nearMisses;
   if (metricId === "injuries") return snapshot.injuries;
@@ -250,8 +272,9 @@ function TrendBarChart({
   if (labels.length === 0 || !hasValues) return <div className="app-empty" role="status">{noDataLabel}</div>;
 
   const width = 720;
-  const height = 260;
-  const chartHeight = 180;
+  const height = 300;
+  // Keep a clear top gutter for value labels above the tallest bars.
+  const chartHeight = 150;
   const chartWidth = 660;
   const maxValue = Math.max(1, ...series.flatMap((entry) => entry.values));
   const groupWidth = chartWidth / Math.max(labels.length, 1);
@@ -268,26 +291,28 @@ function TrendBarChart({
               const value = entry.values[labelIndex] ?? 0;
               const barHeight = (value / maxValue) * chartHeight;
               return (
-                <rect
-                  key={`${entry.key}-${label}`}
-                  x={8 + seriesIndex * barWidth}
-                  y={210 - barHeight}
-                  width={barWidth - 4}
-                  height={barHeight}
-                  rx="6"
-                  fill={COLORS[seriesIndex % COLORS.length]}
-                />
+                <g key={`${entry.key}-${label}`}>
+                  <rect
+                    x={8 + seriesIndex * barWidth}
+                    y={210 - barHeight}
+                    width={barWidth - 4}
+                    height={barHeight}
+                    rx="6"
+                    fill={COLORS[seriesIndex % COLORS.length]}
+                  ><title>{`${entry.label} · ${label}: ${formatValue(value, variant)}`}</title></rect>
+                  {value > 0 ? <text x={8 + seriesIndex * barWidth + (barWidth - 4) / 2} y={210 - barHeight - 9} textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--chart-text-strong)">{formatValue(value, variant)}</text> : null}
+                </g>
               );
             })}
-            <text x={groupWidth / 2} y="232" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
-              {label}
+            <text x={groupWidth / 2} y="228" textAnchor="middle" fontSize="10" fill="var(--chart-text-muted)">
+              {wrapChartLabel(label, Math.max(7, Math.floor(groupWidth / 6))).map((line, lineIndex) => <tspan key={`${label}-${lineIndex}`} x={groupWidth / 2} dy={lineIndex === 0 ? 0 : 12}>{line}</tspan>)}
             </text>
           </g>
         ))}
         <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {maxLabel}: {formatValue(maxValue, variant)}
         </text>
-        <text x="370" y="254" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">{monthLabel}</text>
+        <text x="370" y="286" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">{monthLabel}</text>
       </svg>
       <figcaption className="sr-only">{title}</figcaption>
     </figure>
@@ -315,21 +340,21 @@ function TrendPointsChart({
   if (labels.length === 0 || !hasValues) return <div className="app-empty" role="status">{noDataLabel}</div>;
 
   const width = 720;
-  const height = 260;
+  const height = 300;
   const maxValue = Math.max(1, ...series.flatMap((entry) => entry.values));
-  const chartWidth = 660;
+  const chartWidth = 600;
   const stepX = labels.length > 1 ? chartWidth / (labels.length - 1) : chartWidth;
 
   return (
     <figure className="overflow-x-auto">
       <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]" role="img" aria-label={`${title}. ${monthLabel} on the horizontal axis.`}>
         <title>{title}</title>
-        <line x1="40" y1="210" x2="700" y2="210" stroke="var(--chart-axis)" />
+        <line x1="40" y1="205" x2="700" y2="205" stroke="var(--chart-axis)" />
         {series.map((entry, seriesIndex) => {
           const points = entry.values
             .map((value, pointIndex) => {
-              const x = 40 + pointIndex * stepX;
-              const y = 210 - (value / maxValue) * 170;
+              const x = 60 + pointIndex * stepX;
+              const y = 205 - (value / maxValue) * 145;
               return `${x},${y}`;
             })
             .join(" ");
@@ -338,22 +363,25 @@ function TrendPointsChart({
             <g key={entry.key}>
               <polyline fill="none" stroke={COLORS[seriesIndex % COLORS.length]} strokeWidth="3" points={points} />
               {entry.values.map((value, pointIndex) => {
-                const x = 40 + pointIndex * stepX;
-                const y = 210 - (value / maxValue) * 170;
-                return <circle key={`${entry.key}-${labels[pointIndex]}`} cx={x} cy={y} r="4.5" fill={COLORS[seriesIndex % COLORS.length]} />;
+                const x = 60 + pointIndex * stepX;
+                const y = 205 - (value / maxValue) * 145;
+                return <g key={`${entry.key}-${labels[pointIndex]}`}>
+                  <circle cx={x} cy={y} r="5" fill={COLORS[seriesIndex % COLORS.length]}><title>{`${entry.label} · ${labels[pointIndex]}: ${formatValue(value, variant)}`}</title></circle>
+                  <text x={x} y={Math.max(34, y - 10)} textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--chart-text-strong)">{formatValue(value, variant)}</text>
+                </g>;
               })}
             </g>
           );
         })}
         {labels.map((label, labelIndex) => (
-          <text key={label} x={40 + labelIndex * stepX} y="232" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
-            {label}
+          <text key={label} x={60 + labelIndex * stepX} y="223" textAnchor="middle" fontSize="10" fill="var(--chart-text-muted)">
+            {wrapChartLabel(label, 10).map((line, lineIndex) => <tspan key={`${label}-${lineIndex}`} x={60 + labelIndex * stepX} dy={lineIndex === 0 ? 0 : 12}>{line}</tspan>)}
           </text>
         ))}
         <text x="40" y="24" fontSize="12" fill="var(--chart-text-muted)">
           {maxLabel}: {formatValue(maxValue, variant)}
         </text>
-        <text x="370" y="254" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">{monthLabel}</text>
+        <text x="370" y="286" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">{monthLabel}</text>
       </svg>
       <figcaption className="sr-only">{title}</figcaption>
     </figure>
@@ -442,7 +470,7 @@ function ParetoChart({
 }: {
   data: DistributionDatum[];
   variant: "count" | "percent" | "index";
-  labels: Pick<DashboardUiDictionary, "noDataForPeriod" | "total">;
+  labels: Pick<DashboardUiDictionary, "noDataForPeriod" | "total" | "value">;
 }) {
   const rawTotal = data.reduce((sum, item) => sum + item.value, 0);
   if (data.length === 0 || rawTotal === 0) {
@@ -452,12 +480,16 @@ function ParetoChart({
   const sorted = [...data].sort((a, b) => b.value - a.value);
   const total = variant === "percent" ? 100 : Math.max(1, sorted.reduce((sum, item) => sum + item.value, 0));
   const width = 720;
-  const height = 280;
+  const height = 310;
   const maxValue = Math.max(1, ...sorted.map((item) => item.value));
   const cumulativeValues = sorted.map((_, index) => sorted.slice(0, index + 1).reduce((sum, item) => sum + item.value, 0));
 
   return (
     <div className="overflow-x-auto">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="Legenda do gráfico de Pareto">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--chart-series-1)]" aria-hidden="true" />{labels.value}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-[var(--chart-line)]" aria-hidden="true" />% acumulada</span>
+      </div>
       <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
         <line x1="40" y1="220" x2="700" y2="220" stroke="var(--chart-axis)" />
         {sorted.map((item, index) => {
@@ -467,8 +499,9 @@ function ParetoChart({
           const percentY = 220 - ((cumulativeValues[index] / total) * 170);
           return (
             <g key={item.key}>
-              <rect x={x} y={220 - barHeight} width={barWidth - 16} height={barHeight} rx="6" fill={COLORS[index % COLORS.length]} />
-              <circle cx={x + (barWidth - 16) / 2} cy={percentY} r="4" fill="var(--chart-line)" />
+              <rect x={x} y={220 - barHeight} width={barWidth - 16} height={barHeight} rx="6" fill="var(--chart-series-1)"><title>{`${item.label}: ${formatValue(item.value, variant)} · ${(item.value / total * 100).toFixed(1)}%`}</title></rect>
+              <text x={x + (barWidth - 16) / 2} y={barHeight >= 22 ? 220 - barHeight + 15 : Math.max(38, 220 - barHeight - 8)} textAnchor="middle" fontSize="10" fontWeight="700" fill={barHeight >= 22 ? "white" : "var(--chart-text-strong)"}>{formatValue(item.value, variant)}</text>
+              <circle cx={x + (barWidth - 16) / 2} cy={percentY} r="4" fill="var(--chart-line)"><title>{`${item.label}: ${(cumulativeValues[index] / total * 100).toFixed(1)}% acumulado`}</title></circle>
               {index > 0 ? (
                 <line
                   x1={56 + (index - 1) * barWidth + (barWidth - 16) / 2}
@@ -479,8 +512,8 @@ function ParetoChart({
                   strokeWidth="2"
                 />
               ) : null}
-              <text x={x + (barWidth - 16) / 2} y="242" textAnchor="middle" fontSize="11" fill="var(--chart-text-muted)">
-                {item.label}
+              <text x={x + (barWidth - 16) / 2} y="240" textAnchor="middle" fontSize="10" fill="var(--chart-text-muted)">
+                {wrapChartLabel(item.label, Math.max(10, Math.floor((barWidth - 16) / 6))).map((line, lineIndex) => <tspan key={`${item.key}-${lineIndex}`} x={x + (barWidth - 16) / 2} dy={lineIndex === 0 ? 0 : 12}>{line}</tspan>)}
               </text>
             </g>
           );
@@ -527,8 +560,10 @@ export function DashboardVisualizationStudio({
     [departmentScope, rootCauseLabel, text],
   );
   const trendChartsEnabled = monthAxis.length > 1;
-  const chartStorageKey = `${storageKeyBase}-chart-type`;
-  const [chartType, setChartType] = useState<ChartType>(getDefaultChartType(trendChartsEnabled));
+  const indicatorChartStorageKey = `${storageKeyBase}-indicator-chart-type`;
+  const rankingChartStorageKey = `${storageKeyBase}-ranking-chart-type`;
+  const [indicatorChartType, setIndicatorChartType] = useState<ChartType>(getDefaultChartType(trendChartsEnabled));
+  const [rankingChartType, setRankingChartType] = useState<ChartType>(getDefaultChartType(trendChartsEnabled));
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId>("nearMisses");
   const [selectedRankingId, setSelectedRankingId] = useState<string>(() => {
     const panels = rankings.flatMap((group) => {
@@ -555,10 +590,13 @@ export function DashboardVisualizationStudio({
   );
 
   useEffect(() => {
-    const nextChartType = resolveStoredChartType(window.localStorage.getItem(chartStorageKey), trendChartsEnabled);
-    setChartType((current) => (current === nextChartType ? current : nextChartType));
-    window.localStorage.setItem(chartStorageKey, nextChartType);
-  }, [chartStorageKey, trendChartsEnabled]);
+    const nextIndicator = resolveStoredChartType(window.localStorage.getItem(indicatorChartStorageKey), trendChartsEnabled);
+    const nextRanking = resolveStoredChartType(window.localStorage.getItem(rankingChartStorageKey), trendChartsEnabled);
+    setIndicatorChartType(nextIndicator);
+    setRankingChartType(nextRanking);
+    window.localStorage.setItem(indicatorChartStorageKey, nextIndicator);
+    window.localStorage.setItem(rankingChartStorageKey, nextRanking);
+  }, [indicatorChartStorageKey, rankingChartStorageKey, trendChartsEnabled]);
 
   const selectedMetric = metricOptions.find((metric) => metric.id === selectedMetricId) ?? metricOptions[0];
   const effectiveMetricId = selectedMetric.id;
@@ -595,9 +633,24 @@ export function DashboardVisualizationStudio({
     });
   };
 
-  const handleChartTypeChange = (nextChartType: ChartType) => {
-    setChartType(nextChartType);
-    window.localStorage.setItem(chartStorageKey, nextChartType);
+  const chartTypeControls = (chartType: ChartType, onChange: (next: ChartType) => void) => (
+    <div className="flex flex-wrap gap-2" aria-label={text.visualAnalysis}>
+      {(["bar", "circular", "points", "pareto"] as ChartType[]).map((type) => {
+        const disabled = !trendChartsEnabled && (type === "bar" || type === "points");
+        return <button key={type} type="button" disabled={disabled} className={`app-chip disabled:cursor-not-allowed disabled:opacity-45 ${chartType === type ? "app-chip--active" : ""}`} onClick={() => onChange(type)}>
+          {type === "bar" ? text.bars : type === "circular" ? text.circular : type === "points" ? text.points : text.pareto}
+        </button>;
+      })}
+    </div>
+  );
+
+  const handleIndicatorChartTypeChange = (next: ChartType) => {
+    setIndicatorChartType(next);
+    window.localStorage.setItem(indicatorChartStorageKey, next);
+  };
+  const handleRankingChartTypeChange = (next: ChartType) => {
+    setRankingChartType(next);
+    window.localStorage.setItem(rankingChartStorageKey, next);
   };
 
   return (
@@ -605,34 +658,12 @@ export function DashboardVisualizationStudio({
       <AppSectionHeader
         eyebrow={text.visualAnalysis}
         title={<span className="sr-only">{text.visualAnalysis}</span>}
-        actions={
-          <div className="flex flex-wrap gap-2">
-          <HelpPopover title={text.visualAnalysis} body={text.visualAnalysisDescription} buttonLabel={text.help} />
-          {(["bar", "circular", "points", "pareto"] as ChartType[]).map((type) => {
-            const disabled = !trendChartsEnabled && (type === "bar" || type === "points");
-            return (
-              <button
-                key={type}
-                type="button"
-                disabled={disabled}
-                className={`app-chip disabled:cursor-not-allowed disabled:opacity-45 ${
-                  chartType === type
-                    ? "app-chip--active"
-                    : ""
-                }`}
-                onClick={() => handleChartTypeChange(type)}
-              >
-                {type === "bar" ? text.bars : type === "circular" ? text.circular : type === "points" ? text.points : text.pareto}
-              </button>
-            );
-          })}
-          </div>
-        }
+        actions={<HelpPopover title={text.visualAnalysis} body={text.visualAnalysisDescription} buttonLabel={text.help} />}
       />
 
-      <div className="mt-4 space-y-4">
+      <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-2">
           {plants.length > 1 ? (
-            <AppCard>
+            <AppCard className="min-w-0 xl:col-span-full">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.comparePlants}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {plants.slice(0, 10).map((plant) => {
@@ -652,8 +683,8 @@ export function DashboardVisualizationStudio({
             </AppCard>
           ) : null}
 
-          <AppCard>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <AppCard className="min-w-0">
+            <div className="flex min-w-0 flex-col gap-3">
               <label className="space-y-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.indicator}</span>
                 <select
@@ -668,10 +699,10 @@ export function DashboardVisualizationStudio({
                   ))}
                 </select>
               </label>
-              <ChartLegend series={chartType === "bar" || chartType === "points" ? indicatorTrend.series : indicatorDistribution} />
+              <div className="flex min-w-0 flex-col gap-2">{chartTypeControls(indicatorChartType, handleIndicatorChartTypeChange)}{indicatorChartType === "pareto" ? null : <ChartLegend series={indicatorChartType === "bar" || indicatorChartType === "points" ? indicatorTrend.series : indicatorDistribution} />}</div>
             </div>
             <div className="mt-4">
-              {chartType === "bar" ? (
+              {indicatorChartType === "bar" ? (
                 <TrendBarChart
                   labels={indicatorTrend.labels}
                   series={indicatorTrend.series}
@@ -682,7 +713,7 @@ export function DashboardVisualizationStudio({
                   noDataLabel={text.noDataForPeriod}
                 />
               ) : null}
-              {chartType === "points" ? (
+              {indicatorChartType === "points" ? (
                 <TrendPointsChart
                   labels={indicatorTrend.labels}
                   series={indicatorTrend.series}
@@ -693,14 +724,14 @@ export function DashboardVisualizationStudio({
                   noDataLabel={text.noDataForPeriod}
                 />
               ) : null}
-              {chartType === "circular" ? <CircularChart data={indicatorDistribution} variant={selectedMetric.variant} labels={text} /> : null}
-              {chartType === "pareto" ? <ParetoChart data={indicatorDistribution} variant={selectedMetric.variant} labels={text} /> : null}
+              {indicatorChartType === "circular" ? <CircularChart data={indicatorDistribution} variant={selectedMetric.variant} labels={text} /> : null}
+              {indicatorChartType === "pareto" ? <ParetoChart data={indicatorDistribution} variant={selectedMetric.variant} labels={text} /> : null}
             </div>
           </AppCard>
 
           {selectedRankingPanel ? (
-            <AppCard>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <AppCard className="min-w-0">
+              <div className="flex min-w-0 flex-col gap-3">
                 <label className="space-y-1 text-sm">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{text.topRanking}</span>
                   <select
@@ -715,10 +746,10 @@ export function DashboardVisualizationStudio({
                     ))}
                   </select>
                 </label>
-                <ChartLegend series={chartType === "bar" || chartType === "points" ? rankingTrend.series : rankingDistribution} />
+                <div className="flex min-w-0 flex-col gap-2">{chartTypeControls(rankingChartType, handleRankingChartTypeChange)}{rankingChartType === "pareto" ? null : <ChartLegend series={rankingChartType === "bar" || rankingChartType === "points" ? rankingTrend.series : rankingDistribution} />}</div>
               </div>
               <div className="mt-4">
-                {chartType === "bar" ? (
+                {rankingChartType === "bar" ? (
                   <TrendBarChart
                     labels={rankingTrend.labels}
                     series={rankingTrend.series}
@@ -729,7 +760,7 @@ export function DashboardVisualizationStudio({
                     noDataLabel={text.noDataForPeriod}
                   />
                 ) : null}
-                {chartType === "points" ? (
+                {rankingChartType === "points" ? (
                   <TrendPointsChart
                     labels={rankingTrend.labels}
                     series={rankingTrend.series}
@@ -740,8 +771,8 @@ export function DashboardVisualizationStudio({
                     noDataLabel={text.noDataForPeriod}
                   />
                 ) : null}
-                {chartType === "circular" ? <CircularChart data={rankingDistribution} variant={selectedRankingPanel.variant} labels={text} /> : null}
-                {chartType === "pareto" ? <ParetoChart data={rankingDistribution} variant={selectedRankingPanel.variant} labels={text} /> : null}
+                {rankingChartType === "circular" ? <CircularChart data={rankingDistribution} variant={selectedRankingPanel.variant} labels={text} /> : null}
+                {rankingChartType === "pareto" ? <ParetoChart data={rankingDistribution} variant={selectedRankingPanel.variant} labels={text} /> : null}
               </div>
             </AppCard>
           ) : null}
