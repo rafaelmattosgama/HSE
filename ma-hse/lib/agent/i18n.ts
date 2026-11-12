@@ -140,7 +140,7 @@ const COPY: Record<AppLocale, InternalAgentCopy> = {
     locale: "pt",
     languageName: "Portuguese (Portugal)",
     ui: {
-      openChat: "Abrir chat do agente interno",
+      openChat: "Abrir assistente MAX",
       title: "Agente interno",
       closeChat: "Fechar chat",
       close: "Fechar",

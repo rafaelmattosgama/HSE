@@ -55,6 +55,12 @@ describe("internal agent language", () => {
     expect(instructions).not.toContain("Portuguese is acceptable by default");
   });
 
+  it("limits local agent tools to the resolved intent", () => {
+    const agent = createInternalHseAgent(context("pt"), "qwen3:1.7b", "LIST_OPEN_ACTIONS");
+
+    expect(agent.tools.map((agentTool) => agentTool.name)).toEqual(["list_actions"]);
+  });
+
   it("normalizes regional variants and localizes known API errors", () => {
     expect(normalizeInternalAgentLocale("pt-PT")).toBe("pt");
     expect(normalizeInternalAgentLocale("unsupported")).toBe("en");

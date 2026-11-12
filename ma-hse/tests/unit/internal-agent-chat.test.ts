@@ -29,8 +29,13 @@ describe("InternalAgentChat quick actions", () => {
   });
 
   it("shows the seven quick actions on open, with responsive and accessible controls", () => {
-    render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
-    fireEvent.click(screen.getByRole("button", { name: "Abrir chat do agente interno" }));
+    window.sessionStorage.clear();
+    const view = render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
+    const launcher = screen.getByRole("button", { name: "Abrir assistente MAX" });
+    expect(launcher.tagName).toBe("BUTTON");
+    expect(launcher.className).toContain("focus-visible:ring-2");
+    expect(view.container.querySelector(".max-mascot--greeting")).toBeTruthy();
+    fireEvent.click(launcher);
 
     expect(screen.getByText("Como posso ajudar nesta fábrica?")).toBeTruthy();
     expect(screen.getByText("Escolha uma das opções ou escreva a sua pergunta.")).toBeTruthy();
@@ -42,11 +47,59 @@ describe("InternalAgentChat quick actions", () => {
     expect(screen.getByRole("button", { name: "Ações abertas" }).className).toContain("focus-visible:ring-2");
   });
 
+  it("opens the existing chat, posts to the existing endpoint, and keeps history after closing and reopening", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(successResponse({ message: "Resposta do MAX." }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir assistente MAX" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Mensagem" }), { target: { value: "Qual o estado?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+
+    expect(await screen.findByText("Resposta do MAX.")).toBeTruthy();
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      plantCode: "pt01",
+      message: "Qual o estado?",
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/agent");
+
+    fireEvent.click(screen.getByRole("button", { name: "Fechar chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir assistente MAX" }));
+
+    expect(screen.getByText("Qual o estado?")).toBeTruthy();
+    expect(screen.getByText("Resposta do MAX.")).toBeTruthy();
+  });
+
+  it("keeps the MAX launcher available without starting the login journey", () => {
+    window.sessionStorage.clear();
+    const view = render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
+
+    expect(view.container.querySelector(".max-login-journey")).toBeNull();
+    expect(screen.getByRole("button", { name: "Abrir assistente MAX" })).toBeTruthy();
+  });
+
+  it("shows thinking while the existing agent request is pending and speaking when the reply arrives", async () => {
+    let complete!: (response: Response) => void;
+    const fetchMock = vi.fn().mockReturnValue(new Promise<Response>((resolve) => { complete = resolve; }));
+    vi.stubGlobal("fetch", fetchMock);
+    const view = render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir assistente MAX" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Mensagem" }), { target: { value: "Olá MAX" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar mensagem" }));
+
+    await waitFor(() => expect(view.container.querySelector(".max-mascot--thinking")).toBeTruthy());
+    expect(view.container.querySelector(".max-mascot--header .max-mascot__thinking")).toBeTruthy();
+    complete(successResponse({ message: "Estou a analisar." }));
+    expect(await screen.findByText("Estou a analisar.")).toBeTruthy();
+    expect(view.container.querySelector(".max-mascot--speaking")).toBeTruthy();
+    expect(view.container.querySelector(".max-mascot--header .max-mascot__speaking")).toBeTruthy();
+  });
+
   it("sends stable intents independently of quick-action labels and can show the options again", async () => {
     const fetchMock = vi.fn().mockResolvedValue(successResponse());
     vi.stubGlobal("fetch", fetchMock);
     render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
-    fireEvent.click(screen.getByRole("button", { name: "Abrir chat do agente interno" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir assistente MAX" }));
 
     for (const [label, intent] of quickActions) {
       fireEvent.click(screen.getByRole("button", { name: label }));
@@ -63,7 +116,7 @@ describe("InternalAgentChat quick actions", () => {
     const fetchMock = vi.fn().mockReturnValue(new Promise<Response>((resolve) => { complete = resolve; }));
     vi.stubGlobal("fetch", fetchMock);
     render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
-    fireEvent.click(screen.getByRole("button", { name: "Abrir chat do agente interno" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir assistente MAX" }));
 
     const button = screen.getByRole("button", { name: "Ações abertas" });
     button.focus();
@@ -86,7 +139,7 @@ describe("InternalAgentChat quick actions", () => {
       .mockResolvedValueOnce(successResponse({ message: "Confirme o fecho.", confirmation: { confirmationId: "22222222-2222-4222-8222-222222222222", summary: "Fechar ação #7", status: "pending" } }));
     vi.stubGlobal("fetch", fetchMock);
     render(createElement(InternalAgentChat, { plantCode: "pt01", locale: "pt" }));
-    fireEvent.click(screen.getByRole("button", { name: "Abrir chat do agente interno" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir assistente MAX" }));
     fireEvent.click(screen.getByRole("button", { name: "Fechar uma ação" }));
     await screen.findByRole("button", { name: "Selecione uma ação: #7 Corrigir guarda" });
 
@@ -105,12 +158,14 @@ describe("InternalAgentChat quick actions", () => {
       headers: { "content-type": "application/json" },
     }));
     vi.stubGlobal("fetch", fetchMock);
-    render(createElement(InternalAgentChat, { plantCode: "fr01", locale: "fr" }));
+    const view = render(createElement(InternalAgentChat, { plantCode: "fr01", locale: "fr" }));
     fireEvent.click(screen.getByRole("button", { name: "Ouvrir le chat de l'agent interne" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Mes KPI" } });
     fireEvent.click(screen.getByRole("button", { name: "Envoyer le message" }));
 
     expect(await screen.findByText("Trop de demandes. Veuillez réessayer dans quelques secondes.")).toBeTruthy();
+    expect(view.container.querySelector(".max-mascot--error")).toBeTruthy();
+    expect(view.container.querySelector(".max-mascot--header .max-mascot__error")).toBeNull();
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ plantCode: "fr01", message: "Mes KPI", intent: "SHOW_PLANT_KPIS" });
   });
 });

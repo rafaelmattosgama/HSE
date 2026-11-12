@@ -15,6 +15,9 @@ const prismaMock = vi.hoisted(() => ({
   reportRecipient: {
     findMany: vi.fn(),
   },
+  systemParameter: {
+    findFirst: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 const auditMock = vi.hoisted(() => ({
@@ -50,6 +53,9 @@ const loggerMock = vi.hoisted(() => ({
 const queuesMock = vi.hoisted(() => ({
   sewoApprovedNotificationQueue: {
     add: vi.fn().mockResolvedValue({ id: "job-1" }),
+  },
+  incidentKnowledgeSewoSyncQueue: {
+    add: vi.fn().mockResolvedValue({ id: "knowledge-sync-1" }),
   },
 }));
 
@@ -128,6 +134,14 @@ describe("SewaService approval notifications", () => {
       { sewoId: "sewo-1" },
       expect.objectContaining({
         jobId: "sewo-approved-notification:sewo-1",
+        attempts: 3,
+      }),
+    );
+    expect(queuesMock.incidentKnowledgeSewoSyncQueue.add).toHaveBeenCalledWith(
+      "sync-approved-sewo",
+      { sewoId: "sewo-1", plantId: "plant-1", actorUserId: "user-1" },
+      expect.objectContaining({
+        jobId: expect.stringContaining("incident-knowledge-sewo-sync:sewo-1:"),
         attempts: 3,
       }),
     );

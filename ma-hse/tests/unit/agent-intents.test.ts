@@ -27,6 +27,12 @@ describe("agent intent normalization", () => {
     expect(resolveAgentIntent(message)).toBe(intent);
   });
 
+  it("keeps historical incident questions on the general agent path so Knowledge Base tools remain available", () => {
+    expect(resolveAgentIntent("Encontra acidentes semelhantes ao que aconteceu na logística.")).toBeNull();
+    expect(resolveAgentIntent("Quais são as causas raiz confirmadas no S-EWO? ")).toBeNull();
+    expect(resolveAgentIntent("Mostra as ações corretivas anteriores para este incidente.")).toBeNull();
+  });
+
   it("uses fixed protocol messages rather than UI labels", () => {
     expect(getAgentMessageForIntent("LIST_OPEN_ACTIONS")).toBe("List open actions.");
     expect(buildActionFlowMessage({ intent: "START_CLOSE_ACTION", actionId: "action-id" })).toBe("Close action action-id.");

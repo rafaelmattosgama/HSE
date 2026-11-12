@@ -8,6 +8,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button } from "@/components/ui/button";
+import { SearchableEmployeeSelect } from "@/components/ui/searchable-employee-select";
 import { supportsUnsafeActType } from "@/lib/communication-classification";
 import { sanitizeCommunicationPdfFileName, supportsCommunicationPdfReport } from "@/lib/communication-report";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
@@ -405,16 +406,24 @@ export function CommunicationDetailEditor({
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <select value={reporterEmployeeNo} onChange={(event) => {
-            setReporterEmployeeNo(event.target.value);
-            const employee = employees.find((entry) => entry.employeeNo === event.target.value);
-            if (employee) setReporterName(employee.name);
-          }} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">{text.reporterFromPlantWorkers}</option>
-            {employees.map((employee) => (
-              <option key={employee.id} value={employee.employeeNo}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-            ))}
-          </select>
+          <SearchableEmployeeSelect
+            value={reporterEmployeeNo}
+            onChange={(employeeNo) => {
+              setReporterEmployeeNo(employeeNo);
+              const employee = employees.find((entry) => entry.employeeNo === employeeNo);
+              if (employee) setReporterName(employee.name);
+            }}
+            searchPlaceholder={text.searchEmployee}
+            requiredMessage={text.employeeSelectionRequired}
+            noResultsMessage={text.noEmployeesFound}
+            disabled={!canEdit}
+            required
+            options={employees.flatMap((employee) => employee.employeeNo ? [{
+              value: employee.employeeNo,
+              label: `${employee.employeeNo} - ${employee.name}`,
+              searchText: employee.employeeNo,
+            }] : [])}
+          />
           <input value={reporterName} onChange={(event) => setReporterName(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required />
         </div>
 
@@ -502,12 +511,20 @@ export function CommunicationDetailEditor({
         ) : null}
 
         {needsInvolvedWorker || needsClinicalFields ? (
-          <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required>
-            <option value="">{text.involvedWorker}</option>
-            {employees.map((employee) => (
-              <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-            ))}
-          </select>
+          <SearchableEmployeeSelect
+            value={targetEmployeeId}
+            onChange={setTargetEmployeeId}
+            searchPlaceholder={text.searchEmployee}
+            requiredMessage={text.employeeSelectionRequired}
+            noResultsMessage={text.noEmployeesFound}
+            disabled={!canEdit}
+            required
+            options={employees.map((employee) => ({
+              value: employee.id,
+              label: employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name,
+              searchText: employee.employeeNo,
+            }))}
+          />
         ) : null}
 
         {needsClinicalFields ? (

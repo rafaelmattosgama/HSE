@@ -10,6 +10,9 @@ export const AGENT_INTENTS = [
 
 export type AgentIntent = (typeof AGENT_INTENTS)[number];
 
+/** Internal tool scopes; these are not exposed as user-selectable intents. */
+export type AgentToolScope = AgentIntent | "HISTORICAL_KNOWLEDGE" | "CONVERSATIONAL";
+
 export type AgentQuickAction = {
   intent: AgentIntent;
   label: string;
@@ -105,6 +108,44 @@ function includesKeyword(tokens: string[], keywords: string[]) {
   );
 }
 
+export function isHistoricalIncidentQuery(message: string | null | undefined) {
+  const tokens = normalizeText(message ?? "").split(" ").filter(Boolean);
+  return includesKeyword(tokens, [
+    "historico", "historica", "historicos", "historicas", "similar", "similares", "semelhante", "semelhantes",
+    "parecido", "parecida", "parecidos", "parecidas", "causa", "causas", "licao", "lesson", "lessons",
+    "incident", "incidente", "incidentes", "acidente", "acidentes", "ocorrencia", "ocorrencias", "corretiva",
+    "corretivas", "corrective", "preventiva", "preventivas", "preventive", "ewo",
+  ]);
+}
+
+function isConversationalOnlyMessage(message: string | null | undefined) {
+  const normalized = normalizeText(message ?? "");
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 16) return false;
+
+  const greetingPrefixes = ["ola", "oi", "bom dia", "boa tarde", "boa noite", "hello", "hi", "thanks", "obrigado", "obrigada", "tchau", "adeus"];
+  const beginsWithGreeting = greetingPrefixes.some((greeting) => normalized === greeting || normalized.startsWith(`${greeting} `));
+  if (!beginsWithGreeting) return false;
+
+  const operationalKeywords = [
+    "acao", "acoes", "action", "actions", "comunicacao", "comunicacoes", "communication", "communications",
+    "incidente", "incidentes", "acidente", "acidentes", "sewo", "ewo", "trabalhador", "trabalhadores",
+    "employee", "employees", "kpi", "indicador", "indicadores", "relatorio", "report", "dados", "data",
+    "quantos", "quantas", "mostra", "listar", "lista", "planta", "fabrica", "departamento", "risco",
+  ];
+  return !includesKeyword(tokens, operationalKeywords);
+}
+
+export function resolveAgentToolScope(
+  message: string | null | undefined,
+  intent?: AgentIntent | null,
+): AgentToolScope | null {
+  if (intent) return intent;
+  if (isHistoricalIncidentQuery(message)) return "HISTORICAL_KNOWLEDGE";
+  if (isConversationalOnlyMessage(message)) return "CONVERSATIONAL";
+  return null;
+}
+
 /**
  * Maps the supported Portuguese and English requests to stable intent IDs.
  * It deliberately keeps this matching deterministic; arbitrary requests still
@@ -116,6 +157,12 @@ export function resolveAgentIntent(message: string | null | undefined): AgentInt
   const tokens = normalized.split(" ");
   const has = (keywords: string[]) => includesKeyword(tokens, keywords);
   const action = has(["acao", "acoes", "action", "actions"]);
+
+  // Let the real agent choose the historical knowledge tools for these queries
+  // instead of narrowing the available tools to a current communications list.
+  if (has(["historico", "historica", "historicos", "historicas", "similar", "similares", "semelhante", "semelhantes", "parecido", "parecida", "parecidos", "parecidas", "causa", "causas", "lição", "licao", "lesson", "lessons", "incident", "incidente", "incidentes", "acidente", "acidentes", "ocorrencia", "ocorrencias", "corretiva", "corretivas", "corrective", "preventiva", "preventivas", "preventive", "ewo"])) {
+    return null;
+  }
 
   if (action && has(["atrasada", "atrasadas", "atraso", "vencida", "vencidas", "overdue", "late"])) {
     return "LIST_OVERDUE_ACTIONS";

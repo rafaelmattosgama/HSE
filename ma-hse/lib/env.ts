@@ -48,6 +48,9 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value === "true"),
+    AGENT_PROVIDER: z.enum(["openai", "ollama"]).default("openai"),
+    AGENT_LOCAL_BASE_URL: z.string().url().default("http://127.0.0.1:11434/v1"),
+    AGENT_LOCAL_MODEL: z.string().trim().min(1).default("qwen3:1.7b"),
     AGENT_MOCK_MODE: z
       .string()
       .optional()
@@ -61,11 +64,14 @@ const envSchema = z
     AGENT_MAX_MESSAGE_CHARS: z.coerce.number().int().positive().default(4000),
     AGENT_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
     AGENT_MAX_TOOL_CALLS: z.coerce.number().int().positive().default(8),
+    AGENT_LOCAL_MAX_TOOL_CALLS: z.coerce.number().int().positive().default(4),
+    AGENT_LOCAL_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(256),
     AGENT_MAX_OUTPUT_CHARS: z.coerce.number().int().positive().default(4000),
     OPENAI_API_KEY: z.string().optional(),
     TRANSLATION_PROVIDER: z.enum(["openai", "disabled"]).default("openai"),
     OPENAI_AGENT_MODEL: z.string().default("gpt-5.4-mini"),
     OPENAI_TRANSLATION_MODEL: z.string().default("gpt-5.2"),
+    OPENAI_EMBEDDING_MODEL: z.string().trim().min(1).default("text-embedding-3-small"),
     OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
     S3_ENDPOINT: z.string().url().default("http://localhost:9000"),
     S3_REGION: z.string().default("us-east-1"),

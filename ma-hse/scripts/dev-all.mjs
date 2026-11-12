@@ -76,17 +76,6 @@ function isPortFree(port) {
   });
 }
 
-async function findAvailablePort(start = 3000, end = 3020) {
-  for (let port = start; port <= end; port += 1) {
-    const free = await isPortFree(port);
-    if (free) {
-      return port;
-    }
-  }
-
-  throw new Error(`No available port found in range ${start}-${end}`);
-}
-
 function spawnNpmLongRunning(args, env) {
   const { command, commandArgs } = resolveNpmInvocation(args);
 
@@ -97,7 +86,10 @@ function spawnNpmLongRunning(args, env) {
 }
 
 async function main() {
-  const port = await findAvailablePort(3000, 3020);
+  const port = 3000;
+  if (!(await isPortFree(port))) {
+    throw new Error(`Port ${port} is already in use. Stop the process using it and restart npm run dev:all.`);
+  }
   const baseUrl = `http://localhost:${port}`;
   const nextDevLockPath = path.join(process.cwd(), ".next", "dev", "lock");
 

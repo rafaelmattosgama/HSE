@@ -13,6 +13,9 @@ import { handleSewoRejectedNotification, type SewoRejectedNotificationJob } from
 import { handleMasterDataTranslation, type MasterDataTranslationJob } from "@/jobs/handlers/master-data-translation";
 import { handleCompetenceExpiry } from "@/jobs/handlers/competence-expiry";
 import { handleFireEquipmentDueDates } from "@/jobs/handlers/fire-equipment-due-dates";
+import { handleIncidentKnowledgeExtraction, type IncidentKnowledgeExtractionJob } from "@/jobs/handlers/incident-knowledge-extraction";
+import { handleIncidentKnowledgeIndex, type IncidentKnowledgeIndexJob } from "@/jobs/handlers/incident-knowledge-index";
+import { handleIncidentKnowledgeSewoSync, type IncidentKnowledgeSewoSyncJob } from "@/jobs/handlers/incident-knowledge-sewo-sync";
 
 const connection = getQueueConnection();
 const scheduledReportQueues: ReadonlySet<string> = new Set([
@@ -34,6 +37,9 @@ const workerMap: [string, (data: unknown) => Promise<void>, number][] = [
   [QUEUE_NAMES.MASTER_DATA_TRANSLATION, (data) => handleMasterDataTranslation(data as MasterDataTranslationJob), 3],
   [QUEUE_NAMES.COMPETENCE_EXPIRY, (data) => handleCompetenceExpiry(data as { plantId: string }), 2],
   [QUEUE_NAMES.FIRE_EQUIPMENT_DUE_DATES, (data) => handleFireEquipmentDueDates(data as { plantId: string }), 2],
+  [QUEUE_NAMES.INCIDENT_KNOWLEDGE_EXTRACTION, (data) => handleIncidentKnowledgeExtraction(data as IncidentKnowledgeExtractionJob), 1],
+  [QUEUE_NAMES.INCIDENT_KNOWLEDGE_INDEX, (data) => handleIncidentKnowledgeIndex(data as IncidentKnowledgeIndexJob), 1],
+  [QUEUE_NAMES.INCIDENT_KNOWLEDGE_SEWO_SYNC, (data) => handleIncidentKnowledgeSewoSync(data as IncidentKnowledgeSewoSyncJob), 1],
 ];
 
 for (const [queueName, handler, concurrency] of workerMap) {
@@ -47,7 +53,21 @@ for (const [queueName, handler, concurrency] of workerMap) {
       }
 
       scoped.info("processing job");
-      await handler(job.data);
+      await handler(queueName === QUEUE_NAMES.INCIDENT_KNOWLEDGE_EXTRACTION
+        ? {
+            ...(job.data as IncidentKnowledgeExtractionJob),
+            attemptsMade: job.attemptsMade,
+            maxAttempts: job.opts.attempts ?? 1,
+          }
+        : queueName === QUEUE_NAMES.INCIDENT_KNOWLEDGE_INDEX
+          ? {
+              ...(job.data as IncidentKnowledgeIndexJob),
+              attemptsMade: job.attemptsMade,
+              maxAttempts: job.opts.attempts ?? 1,
+            }
+          : queueName === QUEUE_NAMES.INCIDENT_KNOWLEDGE_SEWO_SYNC
+            ? job.data as IncidentKnowledgeSewoSyncJob
+          : job.data);
       scoped.info("job done");
     },
     {

@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model Plant {
@@ -59,6 +61,11 @@ model Plant {
   kpiInputs                          SafetyKpiMonthlyInput[]
   safetyKpiHistory                   SafetyKpiHistory[]
   safetyKpiImportBatches             SafetyKpiImportBatch[]
+  incidentKnowledgeDocuments         IncidentKnowledgeDocument[]
+  incidentKnowledgeRecords           IncidentKnowledgeRecord[]
+  incidentKnowledgeChunks            IncidentKnowledgeChunk[]
+  incidentKnowledgeImportBatches     IncidentKnowledgeImportBatch[]
+  incidentKnowledgeAudits            IncidentKnowledgeAudit[]
   shifts                             Shift[]
   smatAudits                         SmatAudit[]
   systemParameters                   SystemParameter[]
@@ -142,6 +149,10 @@ model User {
   plantRoles                                UserPlantRole[]
   safetyKpiHistoryCreated                   SafetyKpiHistory[]                   @relation("SafetyKpiHistoryCreatedBy")
   safetyKpiImportBatchesCreated             SafetyKpiImportBatch[]               @relation("SafetyKpiImportBatchCreatedBy")
+  incidentKnowledgeUploadedDocuments        IncidentKnowledgeDocument[]          @relation("IncidentKnowledgeUploadedBy")
+  incidentKnowledgeReviewedDocuments        IncidentKnowledgeDocument[]          @relation("IncidentKnowledgeReviewedBy")
+  incidentKnowledgeImportBatches            IncidentKnowledgeImportBatch[]       @relation("IncidentKnowledgeBatchUploadedBy")
+  incidentKnowledgeAudits                   IncidentKnowledgeAudit[]             @relation("IncidentKnowledgeAuditActor")
 }
 
 model Role {
@@ -1449,6 +1460,7 @@ model Action {
   smatLinks           SmatAuditActionLink[]
   competenceLinks     CompetenceActionLink[]
   fireEquipmentLinks  FireEquipmentActionLink[]
+  incidentKnowledgeActions IncidentKnowledgeAction[]
 
   @@unique([plantId, sequenceNumber])
   @@index([plantId, status, dueDate])
@@ -2027,6 +2039,7 @@ model SEWO {
   actionLinks                   SEWOActionLink[]
   attachments                   SEWOAttachment[]
   causeSelections               SEWOCauseSelection[]
+  incidentKnowledgeDocument     IncidentKnowledgeDocument?
 
   @@index([tipo, codigoFabrica, ano, numeroSequencial])
   @@index([plantId, deletedAt])
@@ -2110,6 +2123,208 @@ model SEWOActionLink {
   sewo      SEWO     @relation(fields: [sewoId], references: [id], onDelete: Cascade)
 
   @@unique([sewoId, actionId])
+}
+
+model IncidentKnowledgeImportBatch {
+  id             String                       @id @default(uuid())
+  plantId        String
+  uploadedById   String?
+  status         IncidentKnowledgeBatchStatus @default(QUEUED)
+  fileCount      Int                          @default(0)
+  processedCount Int                          @default(0)
+  failedCount    Int                          @default(0)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+  plant          Plant                        @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  uploadedBy     User?                        @relation("IncidentKnowledgeBatchUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  documents      IncidentKnowledgeDocument[]
+  audits         IncidentKnowledgeAudit[]
+
+  @@index([plantId, status, createdAt])
+}
+
+model IncidentKnowledgeDocument {
+  id               String                            @id @default(uuid())
+  plantId          String
+  importBatchId    String?
+  sourceType       IncidentKnowledgeSourceType       @default(HISTORICAL_PDF)
+  sourceReference  String?
+  sourceSewoId     String?                           @unique
+  originalFilename String?
+  originalFileKey  String?                           @unique
+  fileHash         String?                           @db.Char(64)
+  fileSize         BigInt?
+  mimeType         String?
+  documentVersion  Int                               @default(1)
+  incidentDate     DateTime?                         @db.Date
+  incidentType     String?
+  documentLanguage String?                           @db.VarChar(10)
+  extractionStatus IncidentKnowledgeExtractionStatus @default(UPLOADED)
+  reviewStatus     IncidentKnowledgeReviewStatus     @default(PENDING)
+  indexedAt        DateTime?
+  uploadedById     String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewComment    String?                           @db.Text
+  lastError        String?                           @db.Text
+  archivedAt       DateTime?
+  createdAt        DateTime                          @default(now())
+  updatedAt        DateTime                          @updatedAt
+  plant            Plant                             @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  importBatch      IncidentKnowledgeImportBatch?     @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  sourceSewo       SEWO?                             @relation(fields: [sourceSewoId], references: [id], onDelete: SetNull)
+  uploadedBy       User?                             @relation("IncidentKnowledgeUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  reviewedBy       User?                             @relation("IncidentKnowledgeReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  record           IncidentKnowledgeRecord?
+  chunks           IncidentKnowledgeChunk[]
+  audits           IncidentKnowledgeAudit[]
+
+  @@unique([plantId, fileHash])
+  @@index([plantId, extractionStatus, createdAt])
+  @@index([plantId, reviewStatus, createdAt])
+  @@index([plantId, incidentDate, incidentType])
+  @@index([importBatchId])
+}
+
+model IncidentKnowledgeRecord {
+  id                         String                    @id @default(uuid())
+  documentId                 String                    @unique
+  plantId                    String
+  incidentCode               String?
+  incidentDate               DateTime?                 @db.Date
+  department                 String?
+  workstation                String?
+  equipment                  String?
+  shift                      String?
+  operationType              String?
+  occurrenceDescription      String?                   @db.Text
+  occurrenceMechanism        String?                   @db.Text
+  injuryType                 String?
+  bodyPart                   String?
+  consequence                String?                   @db.Text
+  immediateCorrectiveAction  String?                   @db.Text
+  lessonsLearned             String?                   @db.Text
+  previousRelatedOccurrences String?                   @db.Text
+  sifPsifClassification      String?
+  extractionConfidence       Float?
+  reviewedAt                 DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  document                   IncidentKnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  plant                      Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  evidences                  IncidentKnowledgeEvidence[]
+  causes                     IncidentKnowledgeCause[]
+  actions                    IncidentKnowledgeAction[]
+
+  @@index([plantId, incidentDate])
+  @@index([plantId, department, incidentDate])
+  @@index([plantId, equipment, incidentDate])
+}
+
+model IncidentKnowledgeEvidence {
+  id                String                          @id @default(uuid())
+  incidentRecordId  String
+  fieldName         String
+  extractedValue    String?                         @db.Text
+  supportingExcerpt String?                         @db.Text
+  sourcePage        Int?
+  sourceSection     String?
+  confidence        Float?
+  validationStatus  IncidentKnowledgeEvidenceStatus @default(UNREVIEWED)
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  incidentRecord    IncidentKnowledgeRecord         @relation(fields: [incidentRecordId], references: [id], onDelete: Cascade)
+
+  @@index([incidentRecordId, fieldName])
+}
+
+model IncidentKnowledgeCause {
+  id                      String                           @id @default(uuid())
+  incidentRecordId        String
+  originalCauseCode       String?
+  originalCauseLabel      String?
+  originalTaxonomyVersion String?
+  normalizedCauseCode     String?
+  normalizedCategory      String?
+  description             String?                          @db.Text
+  assessmentStatus        IncidentKnowledgeCauseAssessment @default(UNCERTAIN)
+  sourcePage              Int?
+  sourceSection           String?
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
+  incidentRecord          IncidentKnowledgeRecord          @relation(fields: [incidentRecordId], references: [id], onDelete: Cascade)
+
+  @@index([incidentRecordId, assessmentStatus])
+  @@index([originalCauseCode, originalTaxonomyVersion])
+  @@index([normalizedCauseCode])
+}
+
+model IncidentKnowledgeAction {
+  id                 String                        @id @default(uuid())
+  incidentRecordId   String
+  description        String                        @db.Text
+  actionType         String?
+  responsible        String?
+  plannedClosureDate DateTime?                     @db.Date
+  actualClosureDate  DateTime?                     @db.Date
+  status             IncidentKnowledgeActionStatus @default(UNKNOWN)
+  sourcePage         Int?
+  sourceSection      String?
+  linkedActionId     String?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  incidentRecord     IncidentKnowledgeRecord       @relation(fields: [incidentRecordId], references: [id], onDelete: Cascade)
+  linkedAction       Action?                       @relation(fields: [linkedActionId], references: [id], onDelete: SetNull)
+
+  @@index([incidentRecordId, status])
+  @@index([linkedActionId])
+}
+
+model IncidentKnowledgeChunk {
+  id                  String                    @id @default(uuid())
+  documentId          String
+  plantId             String
+  chunkIndex          Int
+  sectionName         String?
+  pageStart           Int?
+  pageEnd             Int?
+  content             String                    @db.Text
+  sanitizedContent    String                    @db.Text
+  contentHash         String                    @db.Char(64)
+  embedding           Unsupported("vector(1536)")?
+  embeddingModel      String?
+  embeddingDimensions Int                       @default(1536)
+  createdAt           DateTime                  @default(now())
+  document            IncidentKnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  plant               Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([plantId, documentId])
+  @@index([plantId, contentHash])
+}
+
+model IncidentKnowledgeAudit {
+  id            String                        @id @default(uuid())
+  plantId       String
+  documentId    String?
+  importBatchId String?
+  actorUserId   String?
+  operation     String                        @db.VarChar(80)
+  changes       Json?
+  stateBefore   Json?
+  stateAfter    Json?
+  error         String?                       @db.Text
+  createdAt     DateTime                      @default(now())
+  plant         Plant                         @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  document      IncidentKnowledgeDocument?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  importBatch   IncidentKnowledgeImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  actorUser     User?                         @relation("IncidentKnowledgeAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([plantId, createdAt])
+  @@index([documentId, createdAt])
+  @@index([importBatchId, createdAt])
 }
 
 model Notification {
@@ -2492,6 +2707,57 @@ enum SEWOStatus {
   APPROVED
   REJECTED
   CLOSED
+}
+
+enum IncidentKnowledgeSourceType {
+  HISTORICAL_PDF
+  CURRENT_SEWO
+}
+
+enum IncidentKnowledgeExtractionStatus {
+  UPLOADED
+  EXTRACTING
+  PENDING_REVIEW
+  APPROVED
+  INDEXING
+  INDEXED
+  FAILED
+  REJECTED
+}
+
+enum IncidentKnowledgeReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IncidentKnowledgeCauseAssessment {
+  CONFIRMED
+  REJECTED
+  UNCERTAIN
+}
+
+enum IncidentKnowledgeActionStatus {
+  UNKNOWN
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum IncidentKnowledgeEvidenceStatus {
+  UNREVIEWED
+  CONFIRMED
+  CORRECTED
+  REJECTED
+}
+
+enum IncidentKnowledgeBatchStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
 }
 
 enum SEWOAttachmentType {

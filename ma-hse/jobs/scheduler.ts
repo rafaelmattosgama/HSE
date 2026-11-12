@@ -6,6 +6,7 @@ import {
   competenceExpiryQueue,
   digestWeeklyQueue,
   fireEquipmentDueDatesQueue,
+  incidentKnowledgeSewoSyncQueue,
   reportAnnualQueue,
   reportMonthlyQueue,
 } from "@/jobs/queues";
@@ -41,6 +42,29 @@ async function upsertPlantJobs() {
   });
 
   for (const plant of plants) {
+    await incidentKnowledgeSewoSyncQueue.upsertJobScheduler(`incident-knowledge-sewo-backfill-${plant.id}`, {
+      pattern: "15 3 * * *",
+      tz: plant.timezone,
+    }, {
+      name: "backfill-approved-sewo",
+      data: { plantId: plant.id, backfill: true },
+      opts: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+      },
+    });
+
+    await incidentKnowledgeSewoSyncQueue.add("backfill-approved-sewo", {
+      plantId: plant.id,
+      backfill: true,
+    }, {
+      jobId: `incident-knowledge-sewo-backfill-startup-${plant.id}-${new Date().toISOString().slice(0, 10)}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 60_000 },
+      removeOnComplete: 100,
+      removeOnFail: 500,
+    });
+
     await actionsOverdueQueue.upsertJobScheduler(`overdue-${plant.id}`, {
       pattern: "0 8 * * *",
       tz: ACTION_ALERT_TIMEZONE,

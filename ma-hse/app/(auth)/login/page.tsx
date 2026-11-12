@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, EyeOff, LockKeyhole, ShieldCheck, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { MaSymbol } from "@/components/branding/ma-symbol";
@@ -40,6 +40,13 @@ export default function LoginPage() {
   const [loadingCredentials, setLoadingCredentials] = useState(false);
   const [loadingSso, setLoadingSso] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
+      if (key?.startsWith("max-login-greeting:")) window.sessionStorage.removeItem(key);
+    }
+  }, []);
 
   async function submitCredentials(event: React.FormEvent) {
     event.preventDefault();

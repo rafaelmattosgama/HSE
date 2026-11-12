@@ -7,6 +7,10 @@ const headersMock = vi.hoisted(() => ({
 
 const openAiMock = vi.hoisted(() => ({
   run: vi.fn(),
+  OpenAIProvider: vi.fn().mockImplementation(() => ({ close: vi.fn() })),
+  Runner: vi.fn().mockImplementation(() => ({
+    run: vi.fn().mockResolvedValue({ finalOutput: "Agent response" }),
+  })),
 }));
 
 const agentMock = vi.hoisted(() => ({
@@ -54,7 +58,12 @@ const envMock = vi.hoisted(() => ({
     AGENT_MAX_MESSAGE_CHARS: 4000,
     AGENT_REQUEST_TIMEOUT_MS: 30000,
     AGENT_MAX_TOOL_CALLS: 8,
+    AGENT_LOCAL_MAX_TOOL_CALLS: 4,
+    AGENT_LOCAL_MAX_OUTPUT_TOKENS: 256,
     AGENT_MAX_OUTPUT_CHARS: 4000,
+    AGENT_PROVIDER: "openai",
+    AGENT_LOCAL_BASE_URL: "http://127.0.0.1:11434/v1",
+    AGENT_LOCAL_MODEL: "qwen3:1.7b",
     OPENAI_API_KEY: "test-openai-key",
   },
 }));
@@ -125,7 +134,12 @@ describe("agent route security abuse cases", () => {
     envMock.env.AGENT_MAX_MESSAGE_CHARS = 4000;
     envMock.env.AGENT_REQUEST_TIMEOUT_MS = 30000;
     envMock.env.AGENT_MAX_TOOL_CALLS = 8;
+    envMock.env.AGENT_LOCAL_MAX_TOOL_CALLS = 4;
+    envMock.env.AGENT_LOCAL_MAX_OUTPUT_TOKENS = 256;
     envMock.env.AGENT_MAX_OUTPUT_CHARS = 4000;
+    envMock.env.AGENT_PROVIDER = "openai";
+    envMock.env.AGENT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1";
+    envMock.env.AGENT_LOCAL_MODEL = "qwen3:1.7b";
     envMock.env.OPENAI_API_KEY = "test-openai-key";
     agentAuditMock.createAgentRequestId.mockReturnValue("request-1");
     agentAuditMock.writeAgentAuditEvent.mockResolvedValue({});
@@ -305,6 +319,67 @@ describe("agent route security abuse cases", () => {
     expect(agentRateLimitMock.enforceAgentRateLimit).toHaveBeenCalledWith(resolvedContext);
     expect(openAiMock.run).not.toHaveBeenCalled();
     expect(agentMock.createInternalHseAgent).not.toHaveBeenCalled();
+  });
+
+  it("sends recognized intents to the configured model when mock mode is disabled", async () => {
+    const resolvedContext = ctx({ role: RoleCode.N3_SAFETY });
+    permissionsMock.resolveAgentToolContext.mockResolvedValue({ ok: true, context: resolvedContext });
+
+    const response = await POST(
+      request({
+        plantCode: "pl01",
+        message: "lista acoes abertas",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({
+      ok: true,
+      data: {
+        type: "agent_response",
+        message: "Agent response",
+      },
+    });
+    expect(mockAgentMock.runMockAgent).not.toHaveBeenCalled();
+    expect(agentMock.createInternalHseAgent).toHaveBeenCalled();
+    expect(openAiMock.run).toHaveBeenCalled();
+  });
+
+  it("disables Qwen thinking and limits local generation for Ollama requests", async () => {
+    envMock.env.AGENT_PROVIDER = "ollama";
+    permissionsMock.resolveAgentToolContext.mockResolvedValue({
+      ok: true,
+      context: ctx({ role: RoleCode.N3_SAFETY }),
+    });
+
+    const response = await POST(request({
+      plantCode: "pl01",
+      message: "qual o trabalhador com mais comunicações realizadas?",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(openAiMock.OpenAIProvider).toHaveBeenCalledWith({
+      apiKey: "ollama",
+      baseURL: "http://127.0.0.1:11434/v1",
+      useResponses: false,
+    });
+    expect(openAiMock.Runner).toHaveBeenCalledWith({
+      modelProvider: expect.anything(),
+      modelSettings: { maxTokens: 256 },
+      tracingDisabled: true,
+    });
+    expect(agentMock.createInternalHseAgent).toHaveBeenCalledWith(
+      expect.anything(),
+      "qwen3:1.7b",
+      "LIST_COMMUNICATIONS",
+    );
+    const localRunner = openAiMock.Runner.mock.results[0]?.value;
+    expect(localRunner.run).toHaveBeenCalledWith(
+      expect.anything(),
+      "/no_think\nqual o trabalhador com mais comunicações realizadas?",
+      expect.objectContaining({ context: expect.anything(), maxTurns: 6 }),
+    );
+    expect(openAiMock.run).not.toHaveBeenCalled();
   });
 
   it("still validates session before mock mode execution", async () => {
