@@ -2,7 +2,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 import type { NextConfig } from "next";
 import { execSync } from "node:child_process";
 import { resolvePublicBuildInfo } from "./lib/build-info";
-import { securityHeaders } from "./lib/security-headers";
+import { contentSecurityPolicy, securityHeaders } from "./lib/security-headers";
 
 const withNextIntl = createNextIntlPlugin("./lib/i18n/request.ts");
 
@@ -26,6 +26,16 @@ const publicBuildInfo = resolvePublicBuildInfo({
   warn: console.warn,
 });
 
+const sameOriginPdfHeaders = securityHeaders.map((header) => {
+  if (header.key === "X-Frame-Options") {
+    return { ...header, value: "SAMEORIGIN" };
+  }
+  if (header.key === "Content-Security-Policy") {
+    return { ...header, value: contentSecurityPolicy.replace("frame-ancestors 'none'", "frame-ancestors 'self'") };
+  }
+  return header;
+});
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["pdfkit"],
@@ -35,8 +45,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: "/((?!api/plants/[^/]+/incident-knowledge/[^/]+/file).*)",
         headers: [...securityHeaders],
+      },
+      {
+        source: "/api/plants/:plantCode/incident-knowledge/:documentId/file",
+        headers: sameOriginPdfHeaders,
       },
     ];
   },

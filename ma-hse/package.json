@@ -54,6 +54,7 @@
     "next-auth": "^4.24.13",
     "next-intl": "^4.4.0",
     "nodemailer": "^7.0.13",
+    "pdfjs-dist": "6.4.299",
     "pdfkit": "^0.17.1",
     "pino": "^10.1.0",
     "qrcode": "^1.5.4",

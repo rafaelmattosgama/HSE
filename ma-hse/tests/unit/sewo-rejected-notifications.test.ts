@@ -12,6 +12,9 @@ const prismaMock = vi.hoisted(() => ({
   userPlantRole: {
     findMany: vi.fn(),
   },
+  incidentKnowledgeDocument: {
+    findFirst: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 const auditMock = vi.hoisted(() => ({
@@ -40,6 +43,9 @@ const loggerMock = vi.hoisted(() => ({
 const queuesMock = vi.hoisted(() => ({
   sewoRejectedNotificationQueue: {
     add: vi.fn().mockResolvedValue({ id: "job-1" }),
+  },
+  incidentKnowledgeSewoSyncQueue: {
+    add: vi.fn().mockResolvedValue({ id: "knowledge-sync-1" }),
   },
 }));
 

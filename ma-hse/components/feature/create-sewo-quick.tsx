@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BodyZonePicker } from "@/components/feature/body-zone-picker";
 import { Button } from "@/components/ui/button";
+import { SearchableEmployeeSelect } from "@/components/ui/searchable-employee-select";
 import { HelpPopover } from "@/components/ui/help-popover";
 import { parseApiResponse, requireApiResponse, uploadAttachment } from "@/lib/client-api";
 import { hasOpenLinkedActions } from "@/lib/communication-status";
@@ -1274,14 +1275,18 @@ export function CreateSewoQuick({
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.involvedPerson}</span>
-                  <select value={involvedWorkerId} onChange={(event) => setInvolvedWorkerId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                    <option value="">{ui.selectWorker}</option>
-                    {workers.map((worker) => (
-                      <option key={worker.id} value={worker.id}>
-                        {worker.employeeNo} - {worker.name}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableEmployeeSelect
+                    value={involvedWorkerId}
+                    onChange={setInvolvedWorkerId}
+                    searchPlaceholder={ui.searchWorker}
+                    requiredMessage={ui.workerSelectionRequired}
+                    noResultsMessage={ui.noWorkersFound}
+                    options={workers.map((worker) => ({
+                      value: worker.id,
+                      label: `${worker.employeeNo} - ${worker.name}`,
+                      searchText: worker.employeeNo,
+                    }))}
+                  />
                 </label>
                 <label className="space-y-1 text-sm">
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ui.nature}</span>

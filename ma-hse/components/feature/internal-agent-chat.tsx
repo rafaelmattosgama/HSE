@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Ban, Bot, Check, ChevronDown, MessageCircle, RotateCcw, Send, User, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Ban, Check, ChevronDown, RotateCcw, Send, User, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MaxMascot, type MaxMascotStatus } from "@/components/feature/max-mascot";
 import {
   buildActionFlowMessage,
   getAgentMessageForIntent,
@@ -118,6 +120,9 @@ function getChatCopy(locale: AppLocale) {
     mockNotice: isPortuguese
       ? "Modo de demonstração ativo. As alterações continuam a exigir confirmação explícita."
       : "Demonstration mode is active. Changes still require explicit confirmation.",
+    filterHint: isPortuguese
+      ? "Também pode filtrar por estado, tipo, período, trabalhador ou departamento. Ex.: comunicações de quase acidente no departamento Logística em maio de 2026."
+      : "You can also filter by status, type, period, worker, or department. Example: near miss communications in the Logistics department in May 2026.",
   };
 }
 
@@ -125,11 +130,29 @@ function actionReference(action: ActionChoice) {
   return action.sequenceNumber ? `#${action.sequenceNumber}` : action.id;
 }
 
-export function InternalAgentChat({ plantCode, locale }: { plantCode: string; locale: AppLocale }) {
+function renderMessageText(text: string, plantCode: string) {
+  const parts = text.split(/(\[[^\]]+\]\([^)]+\))/g);
+  const plantPath = `/app/${encodeURIComponent(plantCode)}`;
+  const allowedRecordLink = new RegExp(`^${plantPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/(communications|actions)/[0-9a-f-]{36}$`, "i");
+  return parts.map((part, index) => {
+    const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (!match || !allowedRecordLink.test(match[2]!)) return <span key={index}>{part}</span>;
+    return <Link key={index} href={match[2]!} className="font-semibold text-teal-700 underline decoration-teal-300 underline-offset-2 hover:text-teal-900">{match[1]}</Link>;
+  });
+}
+
+export function InternalAgentChat({
+  plantCode,
+  locale,
+}: {
+  plantCode: string;
+  locale: AppLocale;
+}) {
   const copy = useMemo(() => getInternalAgentCopy(locale), [locale]);
   const chatCopy = useMemo(() => getChatCopy(locale), [locale]);
   const quickActions = useMemo(() => getAgentQuickActions(locale), [locale]);
   const requestInFlight = useRef(false);
+  const speakingTimer = useRef<number | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -141,9 +164,42 @@ export function InternalAgentChat({ plantCode, locale }: { plantCode: string; lo
   const [isMockMode, setIsMockMode] = useState(false);
   const [error, setError] = useState("");
   const [retryRequest, setRetryRequest] = useState<RetryRequest | null>(null);
+  const [showLauncherHint, setShowLauncherHint] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  useEffect(() => {
+    if (window.sessionStorage.getItem("agent-launcher-hint-dismissed") === "1") return;
+    setShowLauncherHint(true);
+    const hideTimer = window.setTimeout(() => {
+      setShowLauncherHint(false);
+      window.sessionStorage.setItem("agent-launcher-hint-dismissed", "1");
+    }, 8_000);
+    return () => {
+      window.clearTimeout(hideTimer);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    if (speakingTimer.current) window.clearTimeout(speakingTimer.current);
+  }, []);
 
   const canSubmit = useMemo(() => draft.trim().length > 0 && !isBusy, [draft, isBusy]);
   const canActOnConfirmation = pendingConfirmation?.status === "pending" && !isBusy;
+  const mascotStatus: MaxMascotStatus = error
+    ? "error"
+    : isBusy
+      ? "thinking"
+      : isSpeaking
+        ? "speaking"
+        : showLauncherHint
+          ? "greeting"
+          : "idle";
+  const openChat = useCallback(() => {
+    setShowLauncherHint(false);
+    window.sessionStorage.setItem("agent-launcher-hint-dismissed", "1");
+    setShowQuickActions(true);
+    setIsOpen(true);
+  }, []);
 
   async function postAgent(body: { plantCode: string; message?: string; intent?: AgentIntent; confirmationId?: string; confirmationAction?: "confirm" | "cancel" }) {
     const response = await fetch("/api/agent", {
@@ -159,6 +215,11 @@ export function InternalAgentChat({ plantCode, locale }: { plantCode: string; lo
 
   function appendMessage(message: Omit<ChatMessage, "id">) {
     setMessages((current) => [...current, { ...message, id: createMessageId() }]);
+    if (message.role === "agent") {
+      setIsSpeaking(true);
+      if (speakingTimer.current) window.clearTimeout(speakingTimer.current);
+      speakingTimer.current = window.setTimeout(() => setIsSpeaking(false), 1_400);
+    }
   }
 
   function applyAgentResponse(data: AgentResponseData) {
@@ -265,13 +326,33 @@ export function InternalAgentChat({ plantCode, locale }: { plantCode: string; lo
   }
 
   if (!isOpen) {
-    return <button type="button" data-onboarding="ai-assistant" data-no-translate onClick={() => { setShowQuickActions(true); setIsOpen(true); }} className="fixed bottom-5 right-5 z-[95] inline-flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 text-white shadow-2xl transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2" aria-label={copy.ui.openChat} title={copy.ui.title}><MessageCircle className="h-6 w-6" /></button>;
+    return (
+      <div className="agent-chat-launcher fixed z-[95] flex items-center gap-3">
+        {error ? <div role="alert" className="agent-chat-launcher-error pointer-events-none max-w-[220px] rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 shadow-lg">{error}</div> : null}
+        {!error && showLauncherHint ? (
+          <div role="status" className="agent-chat-launcher-hint pointer-events-none max-w-[220px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-lg">
+            {locale === "pt" ? "O agente está aqui para ajudar. Pergunte-me algo." : "The agent is here to help. Ask me anything."}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          data-onboarding="ai-assistant"
+          data-no-translate
+          onClick={openChat}
+          className="agent-chat-launcher-button inline-flex items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2"
+          aria-label={copy.ui.openChat}
+          title={copy.ui.title}
+        >
+          <MaxMascot status={mascotStatus} size="launcher" />
+        </button>
+      </div>
+    );
   }
 
   return (
-    <section data-onboarding="ai-assistant" data-no-translate className="fixed bottom-5 right-5 z-[95] flex h-[min(680px,calc(100vh-40px))] w-[min(420px,calc(100vw-32px))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <section data-onboarding="ai-assistant" data-no-translate className="agent-chat-panel fixed z-[95] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
       <header className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
-        <div className="flex min-w-0 items-center gap-2"><Bot className="h-5 w-5 shrink-0" /><div className="min-w-0"><p className="truncate text-sm font-semibold">{copy.ui.title}</p><p className="text-xs uppercase tracking-[0.18em] text-slate-300">{plantCode}</p></div></div>
+        <div className="flex min-w-0 items-center gap-2"><MaxMascot status={mascotStatus} size="header" /><div className="min-w-0"><p className="truncate text-sm font-semibold">MAX · {copy.ui.title}</p><p className="text-xs uppercase tracking-[0.18em] text-slate-300">{plantCode}</p></div></div>
         <button type="button" onClick={() => setIsOpen(false)} className="rounded-full p-1 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={copy.ui.closeChat} title={copy.ui.close}><X className="h-5 w-5" /></button>
       </header>
 
@@ -284,12 +365,12 @@ export function InternalAgentChat({ plantCode, locale }: { plantCode: string; lo
             <div className="mt-3 grid grid-cols-2 gap-2 max-[359px]:grid-cols-1">
               {quickActions.map((action) => <button key={action.intent} type="button" onClick={() => startQuickAction(action.intent, action.label)} disabled={isBusy} aria-label={action.ariaLabel} className="min-h-11 rounded-full border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-[var(--primary)] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">{action.label}</button>)}
             </div>
+            <p className="mt-3 text-xs leading-5 text-slate-500">{chatCopy.filterHint}</p>
           </aside>
         ) : null}
         {messages.map((message) => {
           const isUser = message.role === "user";
-          const Icon = isUser ? User : Bot;
-          return <div key={message.id} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>{!isUser ? <div className="mt-1 rounded-full bg-white p-1.5 text-slate-600 shadow-sm"><Icon className="h-4 w-4" /></div> : null}<p className={`max-w-[82%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm leading-5 shadow-sm ${isUser ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-800"}`}>{message.text}</p></div>;
+          return <div key={message.id} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>{!isUser ? <MaxMascot status="idle" size="avatar" /> : null}{isUser ? <span className="mt-1 rounded-full bg-slate-200 p-1.5 text-slate-600"><User className="h-4 w-4" /></span> : null}<p className={`max-w-[82%] whitespace-pre-line rounded-2xl px-3 py-2 text-sm leading-5 shadow-sm ${isUser ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-800"}`}>{renderMessageText(message.text, plantCode)}</p></div>;
         })}
         {guidedFlow && !selectedAction ? (
           <section aria-label={chatCopy.selectAction} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><p className="text-sm font-semibold text-slate-900">{chatCopy.selectAction}</p><div className="mt-2 space-y-2">{guidedFlow.actions.map((action) => <button key={action.id} type="button" onClick={() => selectAction(action)} disabled={isBusy} aria-label={`${chatCopy.selectAction}: ${actionReference(action)} ${action.title}`} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-800 transition hover:border-[var(--primary)] hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"><span className="block font-semibold">{actionReference(action)} — {action.title}</span><span className="block text-xs text-slate-500">{action.status} · {action.priority}</span></button>)}</div></section>

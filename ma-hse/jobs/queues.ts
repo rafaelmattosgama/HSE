@@ -18,6 +18,9 @@ export const QUEUE_NAMES = {
   MASTER_DATA_TRANSLATION: "master-data-translation",
   COMPETENCE_EXPIRY: "competence-expiry",
   FIRE_EQUIPMENT_DUE_DATES: "fire-equipment-due-dates",
+  INCIDENT_KNOWLEDGE_EXTRACTION: "incident-knowledge-extraction",
+  INCIDENT_KNOWLEDGE_INDEX: "incident-knowledge-index",
+  INCIDENT_KNOWLEDGE_SEWO_SYNC: "incident-knowledge-sewo-sync",
 } as const;
 
 export const digestWeeklyQueue = new Queue(QUEUE_NAMES.DIGEST_WEEKLY, { connection });
@@ -31,6 +34,9 @@ export const sewoRejectedNotificationQueue = new Queue(QUEUE_NAMES.SEWO_REJECTED
 export const masterDataTranslationQueue = new Queue(QUEUE_NAMES.MASTER_DATA_TRANSLATION, { connection });
 export const competenceExpiryQueue = new Queue(QUEUE_NAMES.COMPETENCE_EXPIRY, { connection });
 export const fireEquipmentDueDatesQueue = new Queue(QUEUE_NAMES.FIRE_EQUIPMENT_DUE_DATES, { connection });
+export const incidentKnowledgeExtractionQueue = new Queue(QUEUE_NAMES.INCIDENT_KNOWLEDGE_EXTRACTION, { connection });
+export const incidentKnowledgeIndexQueue = new Queue(QUEUE_NAMES.INCIDENT_KNOWLEDGE_INDEX, { connection });
+export const incidentKnowledgeSewoSyncQueue = new Queue(QUEUE_NAMES.INCIDENT_KNOWLEDGE_SEWO_SYNC, { connection });
 
 export function getQueueConnection() {
   return connection;

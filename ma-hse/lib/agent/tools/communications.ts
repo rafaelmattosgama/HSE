@@ -31,6 +31,11 @@ import { createCommunicationInput } from "@/lib/validation/dtos";
 
 const listCommunicationsInput = z.object({
   status: z.nativeEnum(CommunicationStatus).optional(),
+  type: z.nativeEnum(CommunicationType).optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  search: z.string().trim().min(1).max(100).optional(),
+  areaName: z.string().trim().min(1).max(100).optional(),
   limit: z.number().int().min(1).max(100).default(25),
 });
 
@@ -107,7 +112,7 @@ export function createCommunicationTools(ctx: AgentToolContext) {
   return [
     tool({
       name: "list_communications",
-      description: "List recent safety communications for the authenticated user's current plant.",
+      description: "List safety communications for the authenticated user's current plant. Supports status, type, event date range, reporter/worker/description text search, and department or area name filters. Each result includes a URL for opening the record.",
       parameters: listCommunicationsInput,
       execute: async (input) =>
         runAgentTool({
@@ -127,6 +132,42 @@ export function createCommunicationTools(ctx: AgentToolContext) {
               where: {
                 plantId: ctx.plantId,
                 status: input.status ? input.status : { in: defaultStatuses },
+                ...(input.type ? { type: input.type } : {}),
+                ...(input.dateFrom || input.dateTo
+                  ? { eventDatetime: { ...(input.dateFrom ? { gte: new Date(input.dateFrom) } : {}), ...(input.dateTo ? { lte: new Date(input.dateTo) } : {}) } }
+                  : {}),
+                ...(input.areaName || input.search
+                  ? {
+                      AND: [
+                        ...(input.areaName
+                          ? [{
+                              OR: [
+                                { area: { name: { contains: input.areaName, mode: "insensitive" as const } } },
+                                { targetEmployee: { dept: { contains: input.areaName, mode: "insensitive" as const } } },
+                                { involvedEmployees: { some: { employee: { dept: { contains: input.areaName, mode: "insensitive" as const } } } } },
+                              ],
+                            }]
+                          : []),
+                        ...(input.search
+                          ? [{
+                              OR: [
+                                { codigoCompleto: { contains: input.search, mode: "insensitive" as const } },
+                                { codigoAbreviado: { contains: input.search, mode: "insensitive" as const } },
+                                { reporterName: { contains: input.search, mode: "insensitive" as const } },
+                                { reporterEmployeeNo: { contains: input.search, mode: "insensitive" as const } },
+                                { targetText: { contains: input.search, mode: "insensitive" as const } },
+                                { targetEmployeeNo: { contains: input.search, mode: "insensitive" as const } },
+                                { targetEmployee: { name: { contains: input.search, mode: "insensitive" as const } } },
+                                { targetEmployee: { employeeNo: { contains: input.search, mode: "insensitive" as const } } },
+                                { involvedEmployees: { some: { employee: { name: { contains: input.search, mode: "insensitive" as const } } } } },
+                                { involvedEmployees: { some: { employee: { employeeNo: { contains: input.search, mode: "insensitive" as const } } } } },
+                                { description: { contains: input.search, mode: "insensitive" as const } },
+                              ],
+                            }]
+                          : []),
+                      ],
+                    }
+                  : {}),
               },
               include: {
                 riskTheme: true,
@@ -155,6 +196,7 @@ export function createCommunicationTools(ctx: AgentToolContext) {
             return rows.map((row) => ({
               id: row.id,
               code: row.codigoCompleto ?? row.codigoAbreviado,
+              url: `/app/${encodeURIComponent(ctx.plantCode)}/communications/${encodeURIComponent(row.id)}`,
               type: row.type,
               level: row.level,
               status: row.status,

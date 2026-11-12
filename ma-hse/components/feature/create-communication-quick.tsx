@@ -9,6 +9,7 @@ import { ProfessionalRiskSelect } from "@/components/feature/professional-risk-s
 import { UnsafeActTypeSelect } from "@/components/feature/unsafe-act-type-select";
 import { UnsafeConditionTypeSelect } from "@/components/feature/unsafe-condition-type-select";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { SearchableEmployeeSelect } from "@/components/ui/searchable-employee-select";
 import { uploadAttachment } from "@/lib/client-api";
 import { supportsUnsafeActType } from "@/lib/communication-classification";
 import { BASE_COMMUNICATION_UI, type CommunicationUi } from "@/lib/communication-ui";
@@ -333,21 +334,35 @@ export function CreateCommunicationQuick({
             </select>
           ) : null}
           <div className="grid gap-3 md:grid-cols-2">
-            <select value={reporterEmployeeId} onChange={(event) => setReporterEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-              <option value="">{text.reporterFromPlantWorkers}</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-              ))}
-            </select>
+            <SearchableEmployeeSelect
+              value={reporterEmployeeId}
+              onChange={setReporterEmployeeId}
+              searchPlaceholder={text.searchEmployee}
+              requiredMessage={text.employeeSelectionRequired}
+              noResultsMessage={text.noEmployeesFound}
+              required
+              options={employees.map((employee) => ({
+                value: employee.id,
+                label: employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name,
+                searchText: employee.employeeNo,
+              }))}
+            />
             <input value={reporterEmployee?.employeeNo ?? ""} placeholder={text.reporterNumber} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-slate-50" readOnly />
           </div>
           {needsInvolvedWorker ? (
-            <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-              <option value="">{text.involvedWorkerFromPlantWorkers}</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-              ))}
-            </select>
+            <SearchableEmployeeSelect
+              value={targetEmployeeId}
+              onChange={setTargetEmployeeId}
+              searchPlaceholder={text.searchEmployee}
+              requiredMessage={text.employeeSelectionRequired}
+              noResultsMessage={text.noEmployeesFound}
+              required
+              options={employees.map((employee) => ({
+                value: employee.id,
+                label: employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name,
+                searchText: employee.employeeNo,
+              }))}
+            />
           ) : null}
           {needsImprovementSubtype ? (
             <select value={improvementSubtype} onChange={(event) => setImprovementSubtype(event.target.value as CommunicationImprovementSubtype)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
@@ -361,12 +376,19 @@ export function CreateCommunicationQuick({
             <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-sm font-semibold text-slate-900">{text.clinicalDetails}</p>
               <div className="grid gap-3 md:grid-cols-2">
-                <select value={targetEmployeeId} onChange={(event) => setTargetEmployeeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
-                  <option value="">{text.involvedWorker}</option>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>{employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name}</option>
-                  ))}
-                </select>
+                <SearchableEmployeeSelect
+                  value={targetEmployeeId}
+                  onChange={setTargetEmployeeId}
+                  searchPlaceholder={text.searchEmployee}
+                  requiredMessage={text.employeeSelectionRequired}
+                  noResultsMessage={text.noEmployeesFound}
+                  required
+                  options={employees.map((employee) => ({
+                    value: employee.id,
+                    label: employee.employeeNo ? `${employee.employeeNo} - ${employee.name}` : employee.name,
+                    searchText: employee.employeeNo,
+                  }))}
+                />
                 <select value={injuryTypeId} onChange={(event) => setInjuryTypeId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" required>
                   <option value="">{text.injuryType}</option>
                   {injuryTypes.map((injuryType) => (

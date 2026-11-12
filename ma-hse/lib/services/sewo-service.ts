@@ -10,6 +10,7 @@ import { RecordCodeService } from "@/lib/services/record-code-service";
 import { buildPlantRoleScope } from "@/lib/rbac/user-management";
 import { listSewoReportRecipients, normalizeSewoReportRecipientLanguage } from "@/lib/services/sewo-recipient-service";
 import { getReadableSewoCode } from "@/lib/record-code";
+import { revokeSewoIncidentKnowledge } from "@/lib/services/incident-knowledge-sewo-sync-service";
 import {
   sendSewoSubmittedForValidationEmail,
   sendSewoValidatedDistributionEmail,
@@ -476,6 +477,17 @@ function isApprovedLifecycleState(sewo: {
   return sewo.status === SEWOStatus.APPROVED || Boolean(sewo.approvedAt || sewo.approvedByUserId);
 }
 
+function isKnowledgePublishedSewo(sewo: {
+  status: SEWOStatus;
+  approvedAt: Date | null;
+  approvedByUserId: string | null;
+  deletedAt?: Date | null;
+}) {
+  return !sewo.deletedAt
+    && (sewo.status === SEWOStatus.APPROVED || sewo.status === SEWOStatus.CLOSED)
+    && Boolean(sewo.approvedAt || sewo.approvedByUserId);
+}
+
 async function enqueueSewoSubmittedNotification(sewoId: string, actorRole: RoleCode | null) {
   try {
     const { sewoSubmittedNotificationQueue } = await import("@/jobs/queues");
@@ -542,6 +554,53 @@ async function enqueueSewoApprovedNotification(sewoId: string) {
       },
       "failed_to_enqueue_sewo_approved_notification",
     );
+  }
+}
+
+async function enqueueSewoKnowledgeSync(input: { sewoId: string; plantId: string; actorUserId?: string | null }) {
+  try {
+    const { incidentKnowledgeSewoSyncQueue } = await import("@/jobs/queues");
+    await incidentKnowledgeSewoSyncQueue.add("sync-approved-sewo", input, {
+      jobId: `incident-knowledge-sewo-sync:${input.sewoId}:${Date.now()}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 3_000 },
+      removeOnComplete: 100,
+      removeOnFail: 500,
+    });
+  } catch (error) {
+    logger.error({ error, sewoId: input.sewoId, plantId: input.plantId }, "incident_knowledge_sewo_sync_queue_failed");
+    try {
+      await prisma.incidentKnowledgeAudit.create({
+        data: {
+          plantId: input.plantId,
+          actorUserId: input.actorUserId ?? null,
+          operation: "CURRENT_SEWO_SYNC_QUEUE_FAILED",
+          changes: { sourceSewoId: input.sewoId },
+          error: "The approved S-EWO synchronization queue was unavailable.",
+        },
+      });
+    } catch (auditError) {
+      logger.error({ error: auditError, sewoId: input.sewoId, plantId: input.plantId }, "incident_knowledge_sewo_sync_failure_audit_failed");
+    }
+  }
+}
+
+async function reconcileSewoKnowledgeAvailability(input: {
+  sewoId: string;
+  plantId: string;
+  approved: boolean;
+  actorUserId?: string | null;
+}) {
+  if (input.approved) {
+    await enqueueSewoKnowledgeSync(input);
+    return;
+  }
+
+  try {
+    await revokeSewoIncidentKnowledge(input.sewoId, input.plantId, input.actorUserId);
+  } catch (error) {
+    logger.error({ error, sewoId: input.sewoId, plantId: input.plantId }, "incident_knowledge_sewo_revoke_failed");
+    await enqueueSewoKnowledgeSync(input);
   }
 }
 
@@ -1207,6 +1266,15 @@ export const SewaService = {
       void enqueueSewoSubmittedNotification(updated.id, actorRole);
     }
 
+    if (isKnowledgePublishedSewo(before) || isKnowledgePublishedSewo(updated)) {
+      await reconcileSewoKnowledgeAvailability({
+        sewoId: updated.id,
+        plantId: updated.plantId,
+        approved: isKnowledgePublishedSewo(updated),
+        actorUserId: input.actorUserId,
+      });
+    }
+
     return updated;
   },
 
@@ -1271,12 +1339,16 @@ export const SewaService = {
     });
 
     if (input.payload.approved) {
+      await enqueueSewoKnowledgeSync({ sewoId: updated.id, plantId: updated.plantId, actorUserId: input.actorUserId });
       if (input.payload.shareReport !== false) {
         void enqueueSewoApprovedNotification(updated.id);
       }
       return updated;
     }
 
+    if (isKnowledgePublishedSewo(before) || isKnowledgePublishedSewo(updated)) {
+      await reconcileSewoKnowledgeAvailability({ sewoId: updated.id, plantId: updated.plantId, approved: false, actorUserId: input.actorUserId });
+    }
     void enqueueSewoRejectedNotification(updated.id, input.actorUserId, input.payload.approvalComment);
 
     return updated;
@@ -1315,6 +1387,15 @@ export const SewaService = {
       plantId: updated.plantId,
       diff: buildDiff(before as unknown as Record<string, unknown>, updated as unknown as Record<string, unknown>),
     });
+
+    if (isKnowledgePublishedSewo(before) || isKnowledgePublishedSewo(updated)) {
+      await reconcileSewoKnowledgeAvailability({
+        sewoId: updated.id,
+        plantId: updated.plantId,
+        approved: input.payload.approved && isKnowledgePublishedSewo(updated),
+        actorUserId: input.actorUserId,
+      });
+    }
 
     if (!input.payload.approved) {
       void enqueueSewoRejectedNotification(updated.id, input.actorUserId, input.payload.approvalComment);
@@ -1422,6 +1503,15 @@ export const SewaService = {
       },
     });
 
+    if (isKnowledgePublishedSewo(before) || isKnowledgePublishedSewo(updated)) {
+      await reconcileSewoKnowledgeAvailability({
+        sewoId: updated.id,
+        plantId: updated.plantId,
+        approved: isKnowledgePublishedSewo(updated),
+        actorUserId: input.actorUserId,
+      });
+    }
+
     return updated;
   },
 
@@ -1464,6 +1554,15 @@ export const SewaService = {
         } as unknown as Record<string, unknown>,
       },
     });
+
+    if (isKnowledgePublishedSewo(before) || isKnowledgePublishedSewo(updated)) {
+      await reconcileSewoKnowledgeAvailability({
+        sewoId: updated.id,
+        plantId: updated.plantId,
+        approved: isKnowledgePublishedSewo(updated),
+        actorUserId: input.actorUserId,
+      });
+    }
 
     return updated;
   },
@@ -1594,16 +1693,20 @@ export const SewaService = {
       approved: isApprovedLifecycleState(sewo),
     });
 
-    if (!nextStatus || nextStatus === sewo.status) {
-      return prisma.sEWO.findUniqueOrThrow({ where: { id: sewoId } });
+    const updated = !nextStatus || nextStatus === sewo.status
+      ? sewo
+      : await prisma.sEWO.update({
+          where: { id: sewoId },
+          data: { status: nextStatus },
+        });
+    if (isKnowledgePublishedSewo(sewo) || isKnowledgePublishedSewo(updated)) {
+      await reconcileSewoKnowledgeAvailability({
+        sewoId,
+        plantId: updated.plantId,
+        approved: isKnowledgePublishedSewo(updated),
+      });
     }
-
-    return prisma.sEWO.update({
-      where: { id: sewoId },
-      data: {
-        status: nextStatus,
-      },
-    });
+    return updated;
   },
 
   async linkAction(sewoId: string, actionId: string) {

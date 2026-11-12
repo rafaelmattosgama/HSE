@@ -23,6 +23,11 @@ import { createActionInput, updateActionInput } from "@/lib/validation/dtos";
 
 const listActionsInput = z.object({
   status: z.nativeEnum(ActionStatus).optional(),
+  priority: z.nativeEnum(ActionPriority).optional(),
+  dueDateFrom: z.string().datetime().optional(),
+  dueDateTo: z.string().datetime().optional(),
+  ownerName: z.string().trim().min(1).max(100).optional(),
+  search: z.string().trim().min(1).max(100).optional(),
   limit: z.number().int().min(1).max(100).default(25),
 });
 
@@ -82,13 +87,18 @@ const updateActionPriorityToolInput = z.object({
 
 const findOverdueActionsInput = z
   .object({
+    priority: z.nativeEnum(ActionPriority).optional(),
+    dueDateFrom: z.string().datetime().optional(),
+    dueDateTo: z.string().datetime().optional(),
+    ownerName: z.string().trim().min(1).max(100).optional(),
+    search: z.string().trim().min(1).max(100).optional(),
     limit: z.number().int().min(1).max(100).default(25),
   })
   .passthrough();
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const updateActionAllowedKeys = new Set(["actionId", "title", "description", "ownerUserId", "priority", "category", "level", "dueDate"]);
-const findOverdueAllowedKeys = new Set(["limit"]);
+const findOverdueAllowedKeys = new Set(["priority", "dueDateFrom", "dueDateTo", "ownerName", "search", "limit"]);
 
 function assertAllowedKeys(input: unknown, allowedKeys: Set<string>, message: string) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return;
@@ -248,7 +258,7 @@ export function createActionTools(ctx: AgentToolContext) {
   return [
     tool({
       name: "list_actions",
-      description: "List recent action plans for the authenticated user's current plant.",
+      description: "List action plans for the authenticated user's current plant. Supports status, priority, due date range, owner name, and title/description text filters. Each result includes a URL for opening the record.",
       parameters: listActionsInput,
       execute: async (input) =>
         runAgentTool({
@@ -261,6 +271,20 @@ export function createActionTools(ctx: AgentToolContext) {
               where: {
                 plantId: ctx.plantId,
                 ...(input.status ? { status: input.status } : {}),
+                ...(input.priority ? { priority: input.priority } : {}),
+                ...(input.dueDateFrom || input.dueDateTo
+                  ? { dueDate: { ...(input.dueDateFrom ? { gte: new Date(input.dueDateFrom) } : {}), ...(input.dueDateTo ? { lte: new Date(input.dueDateTo) } : {}) } }
+                  : {}),
+                ...(input.ownerName ? { ownerUser: { name: { contains: input.ownerName, mode: "insensitive" as const } } } : {}),
+                ...(input.search
+                  ? {
+                      OR: [
+                        { title: { contains: input.search, mode: "insensitive" as const } },
+                        { description: { contains: input.search, mode: "insensitive" as const } },
+                        ...(Number.isInteger(Number(input.search)) ? [{ sequenceNumber: Number(input.search) }] : []),
+                      ],
+                    }
+                  : {}),
               },
               include: {
                 ownerUser: { select: { id: true, name: true, email: true } },
@@ -279,6 +303,7 @@ export function createActionTools(ctx: AgentToolContext) {
 
             return rows.map((row) => ({
               id: row.id,
+              url: `/app/${encodeURIComponent(ctx.plantCode)}/actions/${encodeURIComponent(row.id)}`,
               sequenceNumber: row.sequenceNumber,
               sourceType: row.sourceType,
               title: row.title,
@@ -432,7 +457,16 @@ export function createActionTools(ctx: AgentToolContext) {
               where: {
                 plantId: ctx.plantId,
                 status: { in: [ActionStatus.OPEN, ActionStatus.ONGOING] },
-                dueDate: { lt: now },
+                dueDate: {
+                  lt: now,
+                  ...(parsed.data.dueDateFrom ? { gte: new Date(parsed.data.dueDateFrom) } : {}),
+                  ...(parsed.data.dueDateTo ? { lte: new Date(parsed.data.dueDateTo) } : {}),
+                },
+                ...(parsed.data.priority ? { priority: parsed.data.priority } : {}),
+                ...(parsed.data.ownerName ? { ownerUser: { name: { contains: parsed.data.ownerName, mode: "insensitive" as const } } } : {}),
+                ...(parsed.data.search
+                  ? { OR: [{ title: { contains: parsed.data.search, mode: "insensitive" as const } }, { description: { contains: parsed.data.search, mode: "insensitive" as const } }] }
+                  : {}),
               },
               select: {
                 id: true,
@@ -453,6 +487,7 @@ export function createActionTools(ctx: AgentToolContext) {
               count: rows.length,
               actions: rows.map((row) => ({
                 id: row.id,
+                url: `/app/${encodeURIComponent(ctx.plantCode)}/actions/${encodeURIComponent(row.id)}`,
                 sequenceNumber: row.sequenceNumber,
                 title: row.title,
                 priority: row.priority,

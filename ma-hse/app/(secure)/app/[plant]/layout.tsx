@@ -38,6 +38,7 @@ const items: Array<{ href: string; label: string; roles: RoleCode[]; spotlight?:
   { href: "communications", label: "communications", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR] },
   { href: "actions", label: "actions", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR] },
   { href: "sewo", label: "S-EWO", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N6_HR] },
+  { href: "knowledge-base", label: "knowledgeBase", roles: [RoleCode.N0_ADMIN] },
   { href: "smat", label: "SMAT", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR] },
   { href: "occupational-health", label: "occupationalHealth", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N3_SAFETY, RoleCode.N6_HR] },
   { href: "competences", label: "competences", roles: [RoleCode.N0_ADMIN, RoleCode.N1_CORPORATE, RoleCode.N2_PLANT_MANAGER, RoleCode.N3_SAFETY, RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR] },
@@ -297,7 +298,13 @@ export default async function PlantLayout({
         labels={ui.fireEquipment}
         enabled={!isAllPlants && hasFireEquipmentUrgentAlerts && Boolean(moduleToggles.FIRE_SAFETY_EQUIPMENT)}
       />
-      {showInternalAgentChat ? <InternalAgentChat key={agentLocale} plantCode={plant} locale={agentLocale} /> : null}
+      {showInternalAgentChat ? (
+        <InternalAgentChat
+          key={agentLocale}
+          plantCode={plant}
+          locale={agentLocale}
+        />
+      ) : null}
     </>
   );
 }

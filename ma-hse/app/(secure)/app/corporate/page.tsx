@@ -1,4 +1,4 @@
-import { History } from "lucide-react";
+import { BookOpen, History } from "lucide-react";
 import Link from "next/link";
 import { RoleCode } from "@prisma/client";
 import { getServerSession } from "next-auth";
@@ -62,6 +62,7 @@ export default async function CorporatePage({ searchParams }: { searchParams: Pr
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div><h1 className="text-2xl font-bold text-slate-900">{ui.dashboard.corporateTitle}</h1><p className="mt-2 text-sm text-slate-600">{area === "safety" ? ui.modules.safetyDashboard : ui.modules.environmentDashboard}</p></div>
         <div className="flex flex-wrap items-center gap-3">
+          {session.user.plantRoles.some(entry => entry.role === RoleCode.N0_ADMIN) && <Link href="/app/corporate/knowledge-base" className="app-toolbar text-blue-900"><BookOpen aria-hidden="true" className="h-4 w-4" />Base de Conhecimento</Link>}
           {defaultPlantRole?.plantCode && <Link href={`/app/${defaultPlantRole.plantCode}/dashboards`} className="app-toolbar">{ui.dashboard.backToPlant.replace("{plant}", defaultPlantRole.plantCode.toUpperCase())}</Link>}
           {getCorporateReportAccess(session.user.plantRoles).canRead && <Link href="/app/corporate/reports" data-onboarding="corporate-reports" className="app-toolbar text-teal-700"><History aria-hidden="true" className="h-4 w-4" />{ui.dashboard.openReportHistory}</Link>}
         </div>

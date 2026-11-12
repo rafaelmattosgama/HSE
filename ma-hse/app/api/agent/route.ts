@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { run } from "@openai/agents";
+import { OpenAIProvider, Runner, run } from "@openai/agents";
 import { z } from "zod";
 import { fail, ok } from "@/lib/api";
 import { buildAgentRequestSummary, createAgentRequestId, writeAgentAuditEvent } from "@/lib/agent/audit";
@@ -13,7 +13,7 @@ import {
   truncateAgentOutput,
 } from "@/lib/agent/guardrails";
 import { runMockAgent } from "@/lib/agent/mock-agent";
-import { AGENT_INTENTS, resolveAgentIntent } from "@/lib/agent/intents";
+import { AGENT_INTENTS, resolveAgentIntent, resolveAgentToolScope } from "@/lib/agent/intents";
 import { canUseAgent, getAgentCookiePlantCode, resolveAgentToolContext } from "@/lib/agent/permissions";
 import { enforceAgentRateLimit } from "@/lib/agent/rate-limit";
 import { env } from "@/lib/env";
@@ -216,7 +216,8 @@ export async function POST(request: Request) {
   }
 
   const resolvedIntent = parsed.data.intent ?? resolveAgentIntent(parsed.data.message);
-  if (env.AGENT_MOCK_MODE || resolvedIntent) {
+  const agentToolScope = resolveAgentToolScope(parsed.data.message, resolvedIntent);
+  if (env.AGENT_MOCK_MODE) {
     try {
       const mode = env.AGENT_MOCK_MODE ? "mock" : "real";
       const result = await runMockAgent(ctx, parsed.data.message!, resolvedIntent);
@@ -265,7 +266,7 @@ export async function POST(request: Request) {
     }
   }
 
-  if (!env.OPENAI_API_KEY) {
+  if (env.AGENT_PROVIDER === "openai" && !env.OPENAI_API_KEY) {
     await writeAgentAuditEvent({
       ctx,
       eventType: "agent_error",
@@ -278,23 +279,56 @@ export async function POST(request: Request) {
     return fail("AGENT_NOT_CONFIGURED", AGENT_NOT_CONFIGURED_MESSAGE, 503);
   }
 
+  let agentDurationMs: number | null = null;
+  const agentStartedAt = Date.now();
   try {
-    const timeout = createAgentTimeoutController(env.AGENT_REQUEST_TIMEOUT_MS);
+    // Local models run on the user's CPU and often need several seconds per tool round.
+    const requestTimeoutMs = env.AGENT_PROVIDER === "ollama"
+      ? Math.max(env.AGENT_REQUEST_TIMEOUT_MS, 90_000)
+      : env.AGENT_REQUEST_TIMEOUT_MS;
+    const timeout = createAgentTimeoutController(requestTimeoutMs);
+    const maxToolCalls = env.AGENT_PROVIDER === "ollama"
+      ? Math.min(env.AGENT_MAX_TOOL_CALLS, env.AGENT_LOCAL_MAX_TOOL_CALLS)
+      : env.AGENT_MAX_TOOL_CALLS;
     configureAgentExecutionGuardrails(ctx, {
-      maxToolCalls: env.AGENT_MAX_TOOL_CALLS,
+      maxToolCalls,
       abortController: timeout.controller,
     });
-    const agent = createInternalHseAgent(ctx);
+    const localProvider = env.AGENT_PROVIDER === "ollama"
+      ? new OpenAIProvider({
+          apiKey: "ollama",
+          baseURL: env.AGENT_LOCAL_BASE_URL,
+          useResponses: false,
+        })
+      : undefined;
+    const localRunner = localProvider
+      ? new Runner({
+          modelProvider: localProvider,
+          modelSettings: { maxTokens: env.AGENT_LOCAL_MAX_OUTPUT_TOKENS },
+          tracingDisabled: true,
+        })
+      : undefined;
+    const agent = env.AGENT_PROVIDER === "ollama"
+      ? createInternalHseAgent(ctx, env.AGENT_LOCAL_MODEL, agentToolScope)
+      : createInternalHseAgent(ctx);
+    const agentMessage = env.AGENT_PROVIDER === "ollama"
+      ? `/no_think\n${parsed.data.message!}`
+      : parsed.data.message!;
     let finalOutput = "";
     try {
-      const result = await run(agent, parsed.data.message!, {
+      const runOptions = {
         context: ctx,
-        maxTurns: env.AGENT_MAX_TOOL_CALLS + 2,
+        maxTurns: agentToolScope === "CONVERSATIONAL" ? 1 : maxToolCalls + 2,
         signal: timeout.signal,
-      });
+      };
+      const result = localRunner
+        ? await localRunner.run(agent, agentMessage, runOptions)
+        : await run(agent, agentMessage, runOptions);
+      agentDurationMs = Date.now() - agentStartedAt;
       finalOutput = String(result.finalOutput ?? "");
     } finally {
       timeout.clear();
+      await localProvider?.close();
     }
     if (ctx.guardrails?.toolCallLimitExceeded) {
       throw new Error("AGENT_MAX_TOOL_CALLS_EXCEEDED");
@@ -333,6 +367,9 @@ export async function POST(request: Request) {
         confirmationId: ctx.pendingConfirmation?.confirmationId ?? null,
         toolCallCount: ctx.guardrails?.toolCallCount ?? null,
         maxToolCalls: ctx.guardrails?.maxToolCalls ?? null,
+        durationMs: agentDurationMs,
+        provider: env.AGENT_PROVIDER,
+        model: env.AGENT_PROVIDER === "ollama" ? env.AGENT_LOCAL_MODEL : env.OPENAI_AGENT_MODEL,
       },
     });
 
@@ -343,12 +380,18 @@ export async function POST(request: Request) {
       confirmation: ctx.pendingConfirmation ?? null,
     });
   } catch (error) {
+    agentDurationMs ??= Date.now() - agentStartedAt;
     const safeError = classifyAgentRunError(error);
     logger.error(
       {
         error,
         userId: ctx.userId,
         plantCode: ctx.plantCode,
+        durationMs: agentDurationMs,
+        provider: env.AGENT_PROVIDER,
+        model: env.AGENT_PROVIDER === "ollama" ? env.AGENT_LOCAL_MODEL : env.OPENAI_AGENT_MODEL,
+        toolCallCount: ctx.guardrails?.toolCallCount ?? null,
+        maxToolCalls: ctx.guardrails?.maxToolCalls ?? null,
       },
       "agent_run_failed",
       );
@@ -372,6 +415,9 @@ export async function POST(request: Request) {
       outputSummary: {
         toolCallCount: ctx.guardrails?.toolCallCount ?? null,
         maxToolCalls: ctx.guardrails?.maxToolCalls ?? null,
+        durationMs: agentDurationMs,
+        provider: env.AGENT_PROVIDER,
+        model: env.AGENT_PROVIDER === "ollama" ? env.AGENT_LOCAL_MODEL : env.OPENAI_AGENT_MODEL,
       },
     });
     return fail(safeError.errorCode, safeError.message, safeError.status);
