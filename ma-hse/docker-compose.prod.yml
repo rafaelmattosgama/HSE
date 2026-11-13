@@ -1,6 +1,10 @@
 services:
   postgres:
-    image: postgres:16
+    # PostgreSQL 16 with the pgvector extension (required since migration
+    # 20261028120000_add_incident_knowledge_base). Same Debian base (trixie) as
+    # the official postgres:16 image, so the existing volume keeps its collation.
+    # Check the OS of the running container before switching (see DEPLOY.md).
+    image: pgvector/pgvector:0.8.7-pg16-trixie
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ehs}
@@ -134,7 +138,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["sh", "-lc", "npm run db:migrate:deploy && npm run db:repair:encoding -- --apply"]
+    command: ["sh", "-lc", "npm run db:repair:pgvector-migration && npm run db:migrate:deploy && npm run db:repair:encoding -- --apply"]
 
   scheduler:
     image: ma-hse-app
