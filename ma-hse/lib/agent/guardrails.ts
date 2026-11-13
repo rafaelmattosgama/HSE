@@ -6,6 +6,8 @@ export const AGENT_TOO_MANY_TOOL_CALLS_MESSAGE =
   "O agente precisou de demasiadas operacoes para concluir este pedido. Tenta reformular.";
 export const AGENT_OPENAI_QUOTA_MESSAGE = "A conta OpenAI API nao tem quota ou billing disponivel.";
 export const AGENT_OPENAI_AUTH_MESSAGE = "Nao foi possivel autenticar o agente OpenAI neste ambiente.";
+export const AGENT_ANTHROPIC_QUOTA_MESSAGE = "A conta Anthropic API atingiu o limite de pedidos ou nao tem credito disponivel.";
+export const AGENT_ANTHROPIC_AUTH_MESSAGE = "Nao foi possivel autenticar o agente Anthropic neste ambiente.";
 export const AGENT_GENERIC_RUN_MESSAGE = "Nao foi possivel processar o pedido do agente.";
 
 export class AgentTooManyToolCallsError extends Error {

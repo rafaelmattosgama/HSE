@@ -5,7 +5,7 @@
 1. Abrir **Base de Conhecimento** dentro da planta.
 2. N0 ou N3 da planta pode importar até cinco PDFs por lote, com limite de 15 MiB por ficheiro e 50 MiB no lote.
 3. A aplicação valida o cabeçalho PDF, calcula SHA-256 e impede duplicados na mesma planta. O original fica no MinIO privado.
-4. O worker extrai texto e páginas. Quando o Ollama local está configurado, pode preencher um rascunho estruturado; caso contrário, os campos ficam para preenchimento manual.
+4. O worker extrai texto e páginas e, conforme `INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER`, preenche um rascunho estruturado com o Claude da Anthropic (`anthropic`) ou com um Ollama local (`ollama`). Com `disabled`, ou se a extração falhar, os campos ficam para preenchimento manual. Sem a variável definida mantém-se o comportamento anterior (Ollama local apenas quando `AGENT_PROVIDER=ollama`).
 5. O N0/N3 compara o PDF e as evidências com os campos, causas e ações, corrige o conteúdo, guarda e aprova ou rejeita. A rejeição exige comentário.
 6. A aprovação é auditada. Apenas documentos aprovados são visíveis para os perfis de consulta. Alterar documentos aprovados ou rejeitados requer uma nova revisão, preservando o histórico.
 
@@ -17,7 +17,9 @@
 - Outros perfis não têm acesso.
 - O PDF original e evidências textuais brutas são servidos apenas aos revisores N0/N3 e os acessos ao PDF são auditados.
 - Perfis de consulta recebem texto filtrado e não recebem excertos brutos da extração.
-- A extração estruturada só chama Ollama em `localhost`/loopback. Não envia o PDF para a API OpenAI.
+- Com o provider `ollama`, a extração estruturada só chama Ollama em `localhost`/loopback.
+- Com o provider `anthropic` (desde 2026-11-13), o texto do relatório é enviado à API da Anthropic, depois de sanitizado (`sanitizeIncidentKnowledgeExtractionText`): nomes, emails, telefones, números de trabalhador e datas de nascimento são removidos; as datas do incidente mantêm-se. O PDF original nunca é enviado. Validado localmente em 2026-11-13: relatório de 2 páginas extraído em cerca de 30 s (3 causas, 4 ações).
+- A extração não envia o PDF para a API OpenAI. A OpenAI só é usada nos embeddings, depois da aprovação.
 
 ## Estados e falhas
 
