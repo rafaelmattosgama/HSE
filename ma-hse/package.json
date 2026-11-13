@@ -18,6 +18,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:repair:encoding": "node scripts/repair-db-mojibake.mjs",
+    "db:repair:pgvector-migration": "node scripts/repair-failed-pgvector-migration.mjs",
     "db:backfill-master-data-translations": "tsx scripts/backfill-master-data-translations.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",

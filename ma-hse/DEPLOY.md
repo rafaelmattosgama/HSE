@@ -493,6 +493,61 @@ curl -f http://localhost:${APP_PORT:-3004}/api/health/ready
 docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=100 app worker
 ```
 
+## Migrar O PostgreSQL Para pgvector (v2.2.1+)
+
+A partir da migracao `20261028120000_add_incident_knowledge_base` a base de
+dados precisa da extensao `vector`. A imagem `postgres:16` nao a tem; o
+`docker-compose.prod.yml` usa agora `pgvector/pgvector:0.8.7-pg16-trixie`.
+Sem esta troca, `migrate` falha (P3018) e os deploys seguintes ficam
+bloqueados com P3009.
+
+Reparacao automatica: o servico `migrate` corre primeiro
+`npm run db:repair:pgvector-migration`
+(`scripts/repair-failed-pgvector-migration.mjs`). Se esta migracao estiver
+marcada como falhada, a extensao `vector` estiver disponivel e nenhum objeto
+`IncidentKnowledge*` tiver sido criado, o script marca-a como revertida e o
+`prisma migrate deploy` volta a aplica-la. Se o postgres ainda nao tiver
+pgvector, para com a mensagem `[pgvector-repair] STOP`. Basta entao recriar o
+container (passo 4) e voltar a fazer deploy. Mesmo com a reparacao automatica,
+fazer os passos 1 e 3 (sistema da imagem e backup) antes do primeiro deploy.
+
+Procedimento manual, a executar uma unica vez, em `/opt/ma-hse`, depois de `git pull`:
+
+```bash
+cd /opt/ma-hse
+DC="docker compose --env-file .env.production -f docker-compose.prod.yml"
+
+# 1. Confirmar o sistema da imagem atual. Tem de dizer Debian 13 (trixie).
+#    Se disser 12 (bookworm), usar pgvector/pgvector:0.8.7-pg16-bookworm no
+#    docker-compose.prod.yml, para nao mudar a collation do volume existente.
+$DC exec -T postgres cat /etc/os-release | grep VERSION_CODENAME
+
+# 2. Ver a migracao falhada (se existir) e o motivo.
+$DC exec -T postgres psql -U ehs -d ehs -c "select migration_name, started_at, logs from _prisma_migrations where finished_at is null and rolled_back_at is null;"
+
+# 3. Backup antes de trocar a imagem (ver seccao Backups).
+mkdir -p backups
+$DC exec -T postgres pg_dump -U ehs -d ehs -Fc > backups/ehs-before-pgvector-$(date +%Y%m%d-%H%M%S).dump
+
+# 4. Recriar apenas o container do postgres com a nova imagem (o volume mantem-se).
+$DC pull postgres
+$DC up -d postgres
+$DC exec -T postgres psql -U ehs -d ehs -c "select datname, datcollversion, pg_database_collation_actual_version(oid) from pg_database where datname = 'ehs';"
+#    As duas versoes de collation devem ser iguais.
+
+# 5. Se o passo 2 mostrou a migracao falhada, marca-la como revertida.
+$DC --profile tasks run --rm migrate npx prisma migrate resolve --rolled-back 20261028120000_add_incident_knowledge_base
+
+# 6. Aplicar as migracoes e seguir o "Deploy De Atualizacao" normal.
+$DC --profile tasks run --rm migrate
+$DC --profile tasks run --rm scheduler
+$DC up -d app worker
+```
+
+So e possivel marcar como revertida porque a migracao falha logo na primeira
+instrucao (`CREATE EXTENSION`), sem criar tabelas. Se o passo 2 mostrar outro
+erro nos `logs`, parar e analisar antes de continuar.
+
 ## Nginx Opcional
 
 Se usares Nginx/HTTPS, podes manter a porta `3004` apenas local alterando o
