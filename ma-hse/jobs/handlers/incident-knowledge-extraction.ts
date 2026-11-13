@@ -9,7 +9,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
 import { extractIncidentPdf, type ExtractedIncidentPdfPage } from "@/lib/services/incident-knowledge-pdf-service";
-import { extractIncidentKnowledgeDraftLocally } from "@/lib/services/incident-knowledge-extraction-service";
+import { extractIncidentKnowledgeDraft } from "@/lib/services/incident-knowledge-extraction-service";
 import { sanitizeIncidentKnowledgeText } from "@/lib/services/incident-knowledge-privacy";
 import { refreshIncidentKnowledgeImportBatch } from "@/lib/services/incident-knowledge-import-batch-service";
 
@@ -85,7 +85,7 @@ function splitPage(page: ExtractedIncidentPdfPage, startIndex: number) {
   return chunks;
 }
 
-function toRecordData(draft: Awaited<ReturnType<typeof extractIncidentKnowledgeDraftLocally>>["draft"]) {
+function toRecordData(draft: Awaited<ReturnType<typeof extractIncidentKnowledgeDraft>>["draft"]) {
   return {
     incidentCode: draft?.incidentCode ?? null,
     incidentDate: nullableDate(draft?.incidentDate ?? null),
@@ -119,7 +119,7 @@ function evidenceForPages(pages: ExtractedIncidentPdfPage[]) {
   }));
 }
 
-function evidenceFromDraft(draft: NonNullable<Awaited<ReturnType<typeof extractIncidentKnowledgeDraftLocally>>["draft"]>) {
+function evidenceFromDraft(draft: NonNullable<Awaited<ReturnType<typeof extractIncidentKnowledgeDraft>>["draft"]>) {
   return draft.evidence.map((evidence) => ({
     ...evidence,
     validationStatus: IncidentKnowledgeEvidenceStatus.UNREVIEWED,
@@ -179,7 +179,7 @@ export async function handleIncidentKnowledgeExtraction(job: IncidentKnowledgeEx
       return;
     }
 
-    const { draft, warning } = await extractIncidentKnowledgeDraftLocally(extracted.pages);
+    const { draft, warning } = await extractIncidentKnowledgeDraft(extracted.pages);
     const normalizedChunks = extracted.pages.flatMap((page) => splitPage(page, 0))
       .map((chunk, index) => ({ ...chunk, chunkIndex: index }));
     const fieldEvidence = [

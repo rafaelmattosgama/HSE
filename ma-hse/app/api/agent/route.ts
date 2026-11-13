@@ -5,8 +5,11 @@ import { fail, ok } from "@/lib/api";
 import { buildAgentRequestSummary, createAgentRequestId, writeAgentAuditEvent } from "@/lib/agent/audit";
 import { cancelPendingConfirmation, executePendingConfirmation } from "@/lib/agent/confirmations";
 import { createInternalHseAgent } from "@/lib/agent/agent";
+import { runAgentWithAnthropic } from "@/lib/agent/anthropic-runner";
 import { getInternalAgentCopy } from "@/lib/agent/i18n";
 import {
+  AGENT_ANTHROPIC_AUTH_MESSAGE,
+  AGENT_ANTHROPIC_QUOTA_MESSAGE,
   classifyAgentRunError,
   configureAgentExecutionGuardrails,
   createAgentTimeoutController,
@@ -66,6 +69,12 @@ async function resolveContext(plantCode?: string | null) {
     plantCode,
     cookiePlantCode: getAgentCookiePlantCode(cookieStore),
   });
+}
+
+function getAgentModelName() {
+  if (env.AGENT_PROVIDER === "ollama") return env.AGENT_LOCAL_MODEL;
+  if (env.AGENT_PROVIDER === "anthropic") return env.ANTHROPIC_MODEL;
+  return env.OPENAI_AGENT_MODEL;
 }
 
 function getAgentInputErrorMessage(error: z.ZodError) {
@@ -266,7 +275,10 @@ export async function POST(request: Request) {
     }
   }
 
-  if (env.AGENT_PROVIDER === "openai" && !env.OPENAI_API_KEY) {
+  if (
+    (env.AGENT_PROVIDER === "openai" && !env.OPENAI_API_KEY)
+    || (env.AGENT_PROVIDER === "anthropic" && !env.ANTHROPIC_API_KEY)
+  ) {
     await writeAgentAuditEvent({
       ctx,
       eventType: "agent_error",
@@ -283,9 +295,12 @@ export async function POST(request: Request) {
   const agentStartedAt = Date.now();
   try {
     // Local models run on the user's CPU and often need several seconds per tool round.
+    // Claude may think before each tool round; allow at least 60 s in total.
     const requestTimeoutMs = env.AGENT_PROVIDER === "ollama"
       ? Math.max(env.AGENT_REQUEST_TIMEOUT_MS, 90_000)
-      : env.AGENT_REQUEST_TIMEOUT_MS;
+      : env.AGENT_PROVIDER === "anthropic"
+        ? Math.max(env.AGENT_REQUEST_TIMEOUT_MS, 60_000)
+        : env.AGENT_REQUEST_TIMEOUT_MS;
     const timeout = createAgentTimeoutController(requestTimeoutMs);
     const maxToolCalls = env.AGENT_PROVIDER === "ollama"
       ? Math.min(env.AGENT_MAX_TOOL_CALLS, env.AGENT_LOCAL_MAX_TOOL_CALLS)
@@ -310,7 +325,9 @@ export async function POST(request: Request) {
       : undefined;
     const agent = env.AGENT_PROVIDER === "ollama"
       ? createInternalHseAgent(ctx, env.AGENT_LOCAL_MODEL, agentToolScope)
-      : createInternalHseAgent(ctx);
+      : env.AGENT_PROVIDER === "anthropic"
+        ? createInternalHseAgent(ctx, env.ANTHROPIC_MODEL)
+        : createInternalHseAgent(ctx);
     const agentMessage = env.AGENT_PROVIDER === "ollama"
       ? `/no_think\n${parsed.data.message!}`
       : parsed.data.message!;
@@ -321,11 +338,27 @@ export async function POST(request: Request) {
         maxTurns: agentToolScope === "CONVERSATIONAL" ? 1 : maxToolCalls + 2,
         signal: timeout.signal,
       };
-      const result = localRunner
-        ? await localRunner.run(agent, agentMessage, runOptions)
-        : await run(agent, agentMessage, runOptions);
-      agentDurationMs = Date.now() - agentStartedAt;
-      finalOutput = String(result.finalOutput ?? "");
+      if (env.AGENT_PROVIDER === "anthropic") {
+        // Same agent instructions and tools; only the model loop differs.
+        const result = await runAgentWithAnthropic({
+          ctx,
+          instructions: typeof agent.instructions === "string" ? agent.instructions : "",
+          tools: agent.tools,
+          message: agentMessage,
+          model: env.ANTHROPIC_MODEL,
+          apiKey: env.ANTHROPIC_API_KEY!,
+          maxTurns: runOptions.maxTurns,
+          signal: timeout.signal,
+        });
+        agentDurationMs = Date.now() - agentStartedAt;
+        finalOutput = result.finalOutput;
+      } else {
+        const result = localRunner
+          ? await localRunner.run(agent, agentMessage, runOptions)
+          : await run(agent, agentMessage, runOptions);
+        agentDurationMs = Date.now() - agentStartedAt;
+        finalOutput = String(result.finalOutput ?? "");
+      }
     } finally {
       timeout.clear();
       await localProvider?.close();
@@ -369,7 +402,7 @@ export async function POST(request: Request) {
         maxToolCalls: ctx.guardrails?.maxToolCalls ?? null,
         durationMs: agentDurationMs,
         provider: env.AGENT_PROVIDER,
-        model: env.AGENT_PROVIDER === "ollama" ? env.AGENT_LOCAL_MODEL : env.OPENAI_AGENT_MODEL,
+        model: getAgentModelName(),
       },
     });
 
@@ -381,7 +414,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     agentDurationMs ??= Date.now() - agentStartedAt;
-    const safeError = classifyAgentRunError(error);
+    const classifiedError = classifyAgentRunError(error);
+    // Error codes stay provider-neutral for the UI; only the message names the provider.
+    const safeError = env.AGENT_PROVIDER === "anthropic" && classifiedError.kind === "openai_quota"
+      ? { ...classifiedError, message: AGENT_ANTHROPIC_QUOTA_MESSAGE }
+      : env.AGENT_PROVIDER === "anthropic" && classifiedError.kind === "openai_auth"
+        ? { ...classifiedError, message: AGENT_ANTHROPIC_AUTH_MESSAGE }
+        : classifiedError;
     logger.error(
       {
         error,
@@ -389,7 +428,7 @@ export async function POST(request: Request) {
         plantCode: ctx.plantCode,
         durationMs: agentDurationMs,
         provider: env.AGENT_PROVIDER,
-        model: env.AGENT_PROVIDER === "ollama" ? env.AGENT_LOCAL_MODEL : env.OPENAI_AGENT_MODEL,
+        model: getAgentModelName(),
         toolCallCount: ctx.guardrails?.toolCallCount ?? null,
         maxToolCalls: ctx.guardrails?.maxToolCalls ?? null,
       },
@@ -417,7 +456,7 @@ export async function POST(request: Request) {
         maxToolCalls: ctx.guardrails?.maxToolCalls ?? null,
         durationMs: agentDurationMs,
         provider: env.AGENT_PROVIDER,
-        model: env.AGENT_PROVIDER === "ollama" ? env.AGENT_LOCAL_MODEL : env.OPENAI_AGENT_MODEL,
+        model: getAgentModelName(),
       },
     });
     return fail(safeError.errorCode, safeError.message, safeError.status);

@@ -17,6 +17,24 @@ export function sanitizeIncidentKnowledgeText(value: string | null | undefined) 
     .replace(PERSONAL_NAME_CONTEXT, "[REDACTED_PERSON]");
 }
 
+const DATE_LIKE = /\b(?:\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b/g;
+const DATE_PLACEHOLDER = /__IKDATE(\d+)__/g;
+
+/**
+ * Text allowed to leave MAxSafety for structured extraction by an external
+ * model. Personal data is redacted as in sanitizeIncidentKnowledgeText, but
+ * dates are preserved (the PHONE pattern would otherwise swallow them) because
+ * incident and action dates are part of the extracted draft. A date on a
+ * personal field line (e.g. date of birth) is still redacted with that line.
+ */
+export function sanitizeIncidentKnowledgeExtractionText(value: string | null | undefined) {
+  if (!value) return value ?? null;
+  const dates: string[] = [];
+  const masked = value.replace(DATE_LIKE, (match) => `__IKDATE${dates.push(match) - 1}__`);
+  const sanitized = sanitizeIncidentKnowledgeText(masked) ?? "";
+  return sanitized.replace(DATE_PLACEHOLDER, (_match, index: string) => dates[Number(index)] ?? "");
+}
+
 /** Text allowed to leave MAxSafety for embedding generation. */
 export function sanitizeIncidentKnowledgeEmbeddingText(value: string | null | undefined) {
   const sanitized = sanitizeIncidentKnowledgeText(value)?.trim();

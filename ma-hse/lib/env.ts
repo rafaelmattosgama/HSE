@@ -48,7 +48,7 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value === "true"),
-    AGENT_PROVIDER: z.enum(["openai", "ollama"]).default("openai"),
+    AGENT_PROVIDER: z.enum(["openai", "ollama", "anthropic"]).default("openai"),
     AGENT_LOCAL_BASE_URL: z.string().url().default("http://127.0.0.1:11434/v1"),
     AGENT_LOCAL_MODEL: z.string().trim().min(1).default("qwen3:1.7b"),
     AGENT_MOCK_MODE: z
@@ -73,6 +73,16 @@ const envSchema = z
     OPENAI_TRANSLATION_MODEL: z.string().default("gpt-5.2"),
     OPENAI_EMBEDDING_MODEL: z.string().trim().min(1).default("text-embedding-3-small"),
     OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+    // Anthropic (Claude). The SDK reads ANTHROPIC_API_KEY; it is validated here so
+    // callers can check it is configured before sending any request.
+    ANTHROPIC_API_KEY: optionalTrimmedString,
+    ANTHROPIC_MODEL: z.string().trim().min(1).default("claude-sonnet-5-5"),
+    // Structured extraction of historical incident PDFs. When unset, the legacy
+    // behaviour applies (local Ollama only when AGENT_PROVIDER=ollama).
+    INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z.enum(["anthropic", "ollama", "disabled"]).optional(),
+    ),
     S3_ENDPOINT: z.string().url().default("http://localhost:9000"),
     S3_REGION: z.string().default("us-east-1"),
     S3_ACCESS_KEY: z.string().default(productionRequiredValues.S3_ACCESS_KEY),

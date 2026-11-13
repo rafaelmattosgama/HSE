@@ -17,6 +17,10 @@ const agentMock = vi.hoisted(() => ({
   createInternalHseAgent: vi.fn(),
 }));
 
+const anthropicRunnerMock = vi.hoisted(() => ({
+  runAgentWithAnthropic: vi.fn(),
+}));
+
 const mockAgentMock = vi.hoisted(() => ({
   runMockAgent: vi.fn(),
 }));
@@ -65,6 +69,8 @@ const envMock = vi.hoisted(() => ({
     AGENT_LOCAL_BASE_URL: "http://127.0.0.1:11434/v1",
     AGENT_LOCAL_MODEL: "qwen3:1.7b",
     OPENAI_API_KEY: "test-openai-key",
+    ANTHROPIC_API_KEY: undefined as string | undefined,
+    ANTHROPIC_MODEL: "claude-sonnet-5-5",
   },
 }));
 
@@ -84,6 +90,7 @@ vi.mock("@/lib/agent/permissions", () => permissionsMock);
 vi.mock("@/lib/agent/confirmations", () => confirmationsMock);
 vi.mock("@/lib/agent/rate-limit", () => agentRateLimitMock);
 vi.mock("@/lib/agent/audit", () => agentAuditMock);
+vi.mock("@/lib/agent/anthropic-runner", () => anthropicRunnerMock);
 vi.mock("@/lib/env", () => envMock);
 vi.mock("@/lib/logger", () => loggerMock);
 
@@ -380,6 +387,64 @@ describe("agent route security abuse cases", () => {
       expect.objectContaining({ context: expect.anything(), maxTurns: 6 }),
     );
     expect(openAiMock.run).not.toHaveBeenCalled();
+  });
+
+  it("blocks the Anthropic provider when the API key is missing", async () => {
+    envMock.env.AGENT_PROVIDER = "anthropic";
+    envMock.env.ANTHROPIC_API_KEY = undefined;
+    permissionsMock.resolveAgentToolContext.mockResolvedValue({ ok: true, context: ctx({ role: RoleCode.N3_SAFETY }) });
+
+    const response = await POST(request({ plantCode: "pl01", message: "Quais as acoes abertas?" }));
+
+    expect(response.status).toBe(503);
+    expect(await json(response)).toMatchObject({ ok: false, errorCode: "AGENT_NOT_CONFIGURED" });
+    expect(anthropicRunnerMock.runAgentWithAnthropic).not.toHaveBeenCalled();
+    expect(openAiMock.run).not.toHaveBeenCalled();
+  });
+
+  it("runs the same agent tools and instructions on Claude for the Anthropic provider", async () => {
+    envMock.env.AGENT_PROVIDER = "anthropic";
+    envMock.env.ANTHROPIC_API_KEY = "test-key";
+    envMock.env.ANTHROPIC_MODEL = "claude-sonnet-5-5";
+    const agentTools = [{ type: "function", name: "list_actions" }];
+    agentMock.createInternalHseAgent.mockReturnValue({ name: "test-agent", instructions: "HSE instructions", tools: agentTools });
+    anthropicRunnerMock.runAgentWithAnthropic.mockResolvedValue({ finalOutput: "Resposta do Claude", turns: 2 });
+    permissionsMock.resolveAgentToolContext.mockResolvedValue({ ok: true, context: ctx({ role: RoleCode.N3_SAFETY }) });
+
+    const response = await POST(request({ plantCode: "pl01", message: "Quais as acoes abertas?" }));
+
+    expect(response.status).toBe(200);
+    expect(await json(response)).toMatchObject({ ok: true, data: { type: "agent_response", message: "Resposta do Claude" } });
+    expect(agentMock.createInternalHseAgent).toHaveBeenCalledWith(expect.anything(), "claude-sonnet-5-5");
+    expect(anthropicRunnerMock.runAgentWithAnthropic).toHaveBeenCalledWith(expect.objectContaining({
+      instructions: "HSE instructions",
+      tools: agentTools,
+      message: "Quais as acoes abertas?",
+      model: "claude-sonnet-5-5",
+      apiKey: "test-key",
+      maxTurns: 10,
+    }));
+    expect(openAiMock.run).not.toHaveBeenCalled();
+    expect(agentAuditMock.writeAgentAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "agent_response",
+      outputSummary: expect.objectContaining({ provider: "anthropic", model: "claude-sonnet-5-5" }),
+    }));
+  });
+
+  it("names Anthropic in authentication errors for the Anthropic provider", async () => {
+    envMock.env.AGENT_PROVIDER = "anthropic";
+    envMock.env.ANTHROPIC_API_KEY = "test-key";
+    envMock.env.ANTHROPIC_MODEL = "claude-sonnet-5-5";
+    agentMock.createInternalHseAgent.mockReturnValue({ name: "test-agent", instructions: "HSE instructions", tools: [] });
+    anthropicRunnerMock.runAgentWithAnthropic.mockRejectedValue(Object.assign(new Error("invalid x-api-key"), { status: 401 }));
+    permissionsMock.resolveAgentToolContext.mockResolvedValue({ ok: true, context: ctx({ role: RoleCode.N3_SAFETY }) });
+
+    const response = await POST(request({ plantCode: "pl01", message: "Quais as acoes abertas?" }));
+
+    expect(response.status).toBe(503);
+    const payload = await json(response);
+    expect(payload).toMatchObject({ ok: false, errorCode: "OPENAI_AUTH_ERROR" });
+    expect(payload.message).toContain("Anthropic");
   });
 
   it("still validates session before mock mode execution", async () => {

@@ -105,6 +105,9 @@ SMTP_FROM
 OPENAI_API_KEY
 OPENAI_TRANSLATION_MODEL
 OPENAI_BASE_URL
+ANTHROPIC_API_KEY
+ANTHROPIC_MODEL
+INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER
 RATE_LIMIT_POINTS
 RATE_LIMIT_WINDOW_SEC
 AUTH_LOGIN_RATE_LIMIT_POINTS
@@ -125,6 +128,36 @@ S3_SECRET_KEY=minio123
 ```
 
 A aplicacao bloqueia o runtime em producao se esses defaults forem usados.
+
+### Extracao de PDFs da Base de Conhecimento (Anthropic)
+
+Com `INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER=anthropic`, o worker envia o texto
+dos relatorios S-EWO importados para a API da Anthropic (`ANTHROPIC_MODEL`,
+por omissao `claude-sonnet-5-5`) e recebe um rascunho estruturado para revisao
+HSE. Antes do envio, o texto e sanitizado: nomes, emails, telefones, numeros de
+trabalhador e datas de nascimento sao removidos; as datas do incidente mantem-se.
+
+Requisitos:
+
+- `ANTHROPIC_API_KEY` definido em `.env.production` (nunca versionar a chave).
+- O container `worker` precisa de acesso HTTPS de saida a `api.anthropic.com`
+  (porta 443). Confirmar com a equipa de rede antes do deploy.
+- Sem chave, sem rede ou com o provider em `disabled`, a importacao continua a
+  funcionar: os campos ficam vazios para preenchimento manual na revisao HSE.
+
+Valores possiveis de `INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER`: `anthropic`,
+`ollama` (apenas um Ollama em `localhost`) ou `disabled`.
+
+### Agente interno com Claude (Anthropic)
+
+Com `AGENT_PROVIDER=anthropic` (e `AGENT_ENABLED=true`, `AGENT_MOCK_MODE=false`),
+o agente interno usa o Claude (`ANTHROPIC_MODEL`) com as mesmas ferramentas,
+permissoes por perfil/planta, confirmacoes e auditoria dos outros providers.
+As perguntas dos utilizadores e os resultados das ferramentas (acoes,
+comunicacoes, S-EWO, KPIs da planta) sao enviados a API da Anthropic. O timeout
+minimo por pedido e 60 s. O container `app` precisa de acesso HTTPS de saida a
+`api.anthropic.com`. Sem `ANTHROPIC_API_KEY`, o agente responde
+`AGENT_NOT_CONFIGURED` (503).
 
 ## Build Das Imagens
 
