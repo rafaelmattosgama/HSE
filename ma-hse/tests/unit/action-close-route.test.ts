@@ -56,7 +56,7 @@ describe("action closure permissions", () => {
     expect(actionServiceMock.ActionService.close).toHaveBeenCalledOnce();
   });
 
-  it.each([RoleCode.N4_SUPERVISOR, RoleCode.N6_HR])("allows %s to close its own action", async (role) => {
+  it.each([RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR])("allows %s to close its own action", async (role) => {
     guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     prismaMock.prisma.action.findFirst.mockResolvedValue({ id: actionId, ownerUserId: "actor-1" });
@@ -67,7 +67,7 @@ describe("action closure permissions", () => {
     expect(response.status).toBe(200);
   });
 
-  it.each([RoleCode.N4_SUPERVISOR, RoleCode.N6_HR])("rejects %s closing another user's action", async (role) => {
+  it.each([RoleCode.N4_SUPERVISOR, RoleCode.N5_OPERATOR, RoleCode.N6_HR])("rejects %s closing another user's action", async (role) => {
     guardsMock.requirePlantAccess.mockResolvedValue(allowed(role));
     plantMock.getPlantByCode.mockResolvedValue({ id: "plant-1" });
     prismaMock.prisma.action.findFirst.mockResolvedValue({ id: actionId, ownerUserId: "owner-2" });

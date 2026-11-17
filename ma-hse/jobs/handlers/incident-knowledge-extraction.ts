@@ -9,7 +9,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { StorageService } from "@/lib/services/storage-service";
 import { extractIncidentPdf, type ExtractedIncidentPdfPage } from "@/lib/services/incident-knowledge-pdf-service";
-import { extractIncidentKnowledgeDraft } from "@/lib/services/incident-knowledge-extraction-service";
+import {
+  extractIncidentKnowledgeDraft,
+  supportsVisualPdfExtraction,
+} from "@/lib/services/incident-knowledge-extraction-service";
 import { sanitizeIncidentKnowledgeText } from "@/lib/services/incident-knowledge-privacy";
 import { refreshIncidentKnowledgeImportBatch } from "@/lib/services/incident-knowledge-import-batch-service";
 
@@ -157,7 +160,8 @@ export async function handleIncidentKnowledgeExtraction(job: IncidentKnowledgeEx
       throw new Error("Stored document integrity check failed.");
     }
 
-    if (extracted.requiresOcr) {
+    // Without a text layer the PDF can still be read visually by Claude.
+    if (extracted.requiresOcr && !supportsVisualPdfExtraction()) {
       const message = "The PDF has no usable text layer. Complete review manually from the original PDF; OCR is not configured.";
       await prisma.$transaction([
         prisma.incidentKnowledgeDocument.update({
@@ -179,7 +183,10 @@ export async function handleIncidentKnowledgeExtraction(job: IncidentKnowledgeEx
       return;
     }
 
-    const { draft, warning } = await extractIncidentKnowledgeDraft(extracted.pages);
+    const { draft, warning } = await extractIncidentKnowledgeDraft(extracted.pages, {
+      pdf: buffer,
+      filename: document.originalFilename,
+    });
     const normalizedChunks = extracted.pages.flatMap((page) => splitPage(page, 0))
       .map((chunk, index) => ({ ...chunk, chunkIndex: index }));
     const fieldEvidence = [

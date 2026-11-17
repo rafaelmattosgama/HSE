@@ -40,7 +40,7 @@ tests/e2e/                        Playwright smoke test
 3. **N2_PLANT_MANAGER** — Plant-level, approves S-EWO
 4. **N3_SAFETY** — Validates communications, manages plant admin
 5. **N4_SUPERVISOR** — Creates actions and closes only actions assigned to them
-6. **N5_OPERATOR** — Creates communications/actions
+6. **N5_OPERATOR** — Creates communications/actions and closes only actions assigned to them
 7. **N6_HR** — Plant HR role: full Competences access (same as N3), full Communications and Occupational Health access, closes only actions assigned to them, and has read-only S-EWO access
 
 Public QR/link submissions are not user roles; they are represented by `PlantAccessTokenType` and `CommunicationSource`.

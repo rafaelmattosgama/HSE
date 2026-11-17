@@ -9,6 +9,7 @@ const CLOSE_ANY_ACTION_ROLES: readonly RoleCode[] = [
 
 const CLOSE_OWN_ACTION_ROLES: readonly RoleCode[] = [
   RoleCode.N4_SUPERVISOR,
+  RoleCode.N5_OPERATOR,
   RoleCode.N6_HR,
 ];
 

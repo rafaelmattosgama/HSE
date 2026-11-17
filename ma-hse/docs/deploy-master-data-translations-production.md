@@ -50,7 +50,7 @@ foreach ($Line in Get-Content -LiteralPath .env.production) {
 foreach ($Name in $Required) {
   [pscustomobject]@{ Name = $Name; Present = -not [string]::IsNullOrWhiteSpace([string]$EnvMap[$Name]) }
 }
-if ($EnvMap['TRANSLATION_PROVIDER'] -ne 'openai') { throw 'TRANSLATION_PROVIDER must be openai' }
+if ($EnvMap['TRANSLATION_PROVIDER'] -notin @('openai','anthropic')) { throw 'TRANSLATION_PROVIDER must be openai or anthropic' }
 if ($EnvMap['DEPLOY_VERSION'] -ne $TargetSha) { throw 'DEPLOY_VERSION must match the approved SHA' }
 ```
 

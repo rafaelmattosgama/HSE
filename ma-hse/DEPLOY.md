@@ -102,6 +102,8 @@ SMTP_PORT
 SMTP_USER
 SMTP_PASS
 SMTP_FROM
+SMTP_GATEWAY_BASE_URL
+SMTP_GATEWAY_API_KEY
 OPENAI_API_KEY
 OPENAI_TRANSLATION_MODEL
 OPENAI_BASE_URL
@@ -131,11 +133,19 @@ A aplicacao bloqueia o runtime em producao se esses defaults forem usados.
 
 ### Extracao de PDFs da Base de Conhecimento (Anthropic)
 
-Com `INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER=anthropic`, o worker envia o texto
-dos relatorios S-EWO importados para a API da Anthropic (`ANTHROPIC_MODEL`,
-por omissao `claude-sonnet-5-5`) e recebe um rascunho estruturado para revisao
-HSE. Antes do envio, o texto e sanitizado: nomes, emails, telefones, numeros de
-trabalhador e datas de nascimento sao removidos; as datas do incidente mantem-se.
+Com `INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER=anthropic`, o worker envia o **PDF
+original** dos relatorios S-EWO importados para a API da Anthropic
+(`ANTHROPIC_MODEL`, por omissao `claude-sonnet-5-5`) e recebe um rascunho
+estruturado para revisao HSE. O Claude le cada pagina como imagem e texto, por
+isso ve caixas assinaladas, circulos, fotografias, esquemas e PDFs digitalizados
+sem camada de texto.
+
+Privacidade (decisao validada em 2026-11-17): o PDF segue completo, incluindo
+nomes/iniciais, assinaturas e fotografias. O que fica gravado e filtrado: as
+instrucoes pedem ao modelo que nao copie nomes nem iniciais, os campos devolvidos
+passam pela mesma sanitizacao do texto e o responsavel das acoes fica sempre
+vazio. Se o PDF nao estiver disponivel ou exceder os limites, usa-se o caminho
+anterior: so o texto, sanitizado antes do envio.
 
 Requisitos:
 
@@ -158,6 +168,15 @@ comunicacoes, S-EWO, KPIs da planta) sao enviados a API da Anthropic. O timeout
 minimo por pedido e 60 s. O container `app` precisa de acesso HTTPS de saida a
 `api.anthropic.com`. Sem `ANTHROPIC_API_KEY`, o agente responde
 `AGENT_NOT_CONFIGURED` (503).
+
+### Traducoes automaticas com Claude (Anthropic)
+
+Com `TRANSLATION_PROVIDER=anthropic`, as traducoes de conteudo e de Plant
+Master Data (e a detecao de idioma) usam o Claude (`ANTHROPIC_TRANSLATION_MODEL`,
+ou `ANTHROPIC_MODEL` se estiver vazio) em vez da OpenAI. Correm na `app` e no
+`worker`, que precisam de HTTPS de saida para `api.anthropic.com`. A
+`OPENAI_API_KEY` continua necessaria para os embeddings da Base de
+Conhecimento (`OPENAI_EMBEDDING_MODEL`).
 
 ## Build Das Imagens
 

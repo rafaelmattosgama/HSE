@@ -28,6 +28,7 @@ vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }));
 import {
   extractIncidentKnowledgeDraft,
   resolveIncidentKnowledgeExtractionProvider,
+  supportsVisualPdfExtraction,
 } from "@/lib/services/incident-knowledge-extraction-service";
 import { sanitizeIncidentKnowledgeExtractionText } from "@/lib/services/incident-knowledge-privacy";
 
@@ -108,11 +109,62 @@ describe("incident knowledge extraction provider", () => {
     const request = mocks.create.mock.calls[0][0];
     expect(request.model).toBe("claude-sonnet-5-5");
     expect(request.output_config.format.type).toBe("json_schema");
-    const sent = request.messages[0].content as string;
+    const blocks = request.messages[0].content as Array<{ type: string; text?: string }>;
+    expect(blocks.map((block) => block.type)).toEqual(["text"]);
+    const sent = blocks[0].text ?? "";
     expect(sent).toContain("14.03.2026");
     expect(sent).not.toContain("John Smith");
     expect(sent).not.toContain("john.smith@example.com");
     expect(sent).not.toContain("912 345 678");
+  });
+
+  it("sends the original PDF when available and sanitizes the returned draft", async () => {
+    setEnv({ INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "test-key" });
+    mocks.create.mockResolvedValue({
+      stop_reason: "end_turn",
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          ...emptyDraft,
+          incidentType: "Accident (=<30 days)",
+          occurrenceDescription: "Injured worker John Smith was caught between two bolsters",
+          actions: [{
+            description: "Install mirrors",
+            actionType: null,
+            responsible: "MB.J",
+            plannedClosureDate: "27/05/2025",
+            actualClosureDate: null,
+            status: "PLANNED",
+            sourcePage: 1,
+            sourceSection: "CORRECTION PLAN",
+            supportingExcerpt: null,
+          }],
+        }),
+      }],
+    });
+
+    const pdf = Buffer.from("%PDF-1.7 test");
+    const result = await extractIncidentKnowledgeDraft(pages, { pdf, filename: "07 ESV 14.05.2025.pdf" });
+
+    const blocks = mocks.create.mock.calls[0][0].messages[0].content as Array<Record<string, unknown>>;
+    expect(blocks[0]).toEqual({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: pdf.toString("base64") },
+    });
+    expect(blocks[1]).toMatchObject({ type: "text" });
+    expect(String(blocks[1].text)).toContain("07 ESV 14.05.2025.pdf");
+    expect(result.draft?.incidentType).toBe("Accident (=<30 days)");
+    expect(result.draft?.occurrenceDescription).not.toContain("John Smith");
+    expect(result.draft?.actions[0]).toMatchObject({ responsible: null, plannedClosureDate: "2025-05-27" });
+  });
+
+  it("only reads scanned PDFs visually when Anthropic is configured", () => {
+    setEnv({ INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "test-key" });
+    expect(supportsVisualPdfExtraction()).toBe(true);
+    setEnv({ INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER: "anthropic", ANTHROPIC_API_KEY: undefined });
+    expect(supportsVisualPdfExtraction()).toBe(false);
+    setEnv({ INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER: "ollama", ANTHROPIC_API_KEY: "test-key" });
+    expect(supportsVisualPdfExtraction()).toBe(false);
   });
 
   it("returns a warning instead of throwing on refusals and API errors", async () => {

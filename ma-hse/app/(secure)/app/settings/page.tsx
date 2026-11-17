@@ -1,5 +1,7 @@
 import { MasterDataEntityType, RoleCode } from "@prisma/client";
+import { BookOpen } from "lucide-react";
 import { getServerSession } from "next-auth";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth/options";
 import { CorporatePlantForm } from "@/components/feature/corporate-plant-form";
@@ -149,7 +151,13 @@ export default async function SettingsPage({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{masterDataUi.n0Admin}</p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-900">{ui.modules.settings}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold text-slate-900">{ui.modules.settings}</h1>
+              <Link href="/app/corporate/knowledge-base" className="app-toolbar text-blue-900">
+                <BookOpen aria-hidden="true" className="h-4 w-4" />
+                {ui.modules.knowledgeBase}
+              </Link>
+            </div>
           </div>
           {scope === "plant" ? <SettingsPlantSelector
             plants={allPlants.map((plant) => ({
