@@ -14,6 +14,15 @@ OPENAI_API_KEY=...
 OPENAI_TRANSLATION_MODEL=gpt-5.2
 ```
 
+Ou, com Claude (Anthropic):
+
+```env
+TRANSLATION_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+# Opcional; vazio = ANTHROPIC_MODEL
+ANTHROPIC_TRANSLATION_MODEL=
+```
+
 `TRANSLATION_PROVIDER=disabled` desativa a geração automática sem impedir a criação ou edição dos dados principais. `OPENAI_BASE_URL` pode apontar para um endpoint compatível. Nenhuma credencial deve ser adicionada ao repositório.
 
 Depois de aplicar a migration, gere o Prisma Client e reinicie a aplicação e o worker:

@@ -68,7 +68,7 @@ const envSchema = z
     AGENT_LOCAL_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(256),
     AGENT_MAX_OUTPUT_CHARS: z.coerce.number().int().positive().default(4000),
     OPENAI_API_KEY: z.string().optional(),
-    TRANSLATION_PROVIDER: z.enum(["openai", "disabled"]).default("openai"),
+    TRANSLATION_PROVIDER: z.enum(["openai", "anthropic", "disabled"]).default("openai"),
     OPENAI_AGENT_MODEL: z.string().default("gpt-5.4-mini"),
     OPENAI_TRANSLATION_MODEL: z.string().default("gpt-5.2"),
     OPENAI_EMBEDDING_MODEL: z.string().trim().min(1).default("text-embedding-3-small"),
@@ -77,6 +77,8 @@ const envSchema = z
     // callers can check it is configured before sending any request.
     ANTHROPIC_API_KEY: optionalTrimmedString,
     ANTHROPIC_MODEL: z.string().trim().min(1).default("claude-sonnet-5-5"),
+    // Optional model for TRANSLATION_PROVIDER=anthropic; empty = ANTHROPIC_MODEL.
+    ANTHROPIC_TRANSLATION_MODEL: optionalTrimmedString,
     // Structured extraction of historical incident PDFs. When unset, the legacy
     // behaviour applies (local Ollama only when AGENT_PROVIDER=ollama).
     INCIDENT_KNOWLEDGE_EXTRACTION_PROVIDER: z.preprocess(

@@ -18,7 +18,7 @@
 - O PDF original e evidências textuais brutas são servidos apenas aos revisores N0/N3 e os acessos ao PDF são auditados.
 - Perfis de consulta recebem texto filtrado e não recebem excertos brutos da extração.
 - Com o provider `ollama`, a extração estruturada só chama Ollama em `localhost`/loopback.
-- Com o provider `anthropic` (desde 2026-11-13), o texto do relatório é enviado à API da Anthropic, depois de sanitizado (`sanitizeIncidentKnowledgeExtractionText`): nomes, emails, telefones, números de trabalhador e datas de nascimento são removidos; as datas do incidente mantêm-se. O PDF original nunca é enviado. Validado localmente em 2026-11-13: relatório de 2 páginas extraído em cerca de 30 s (3 causas, 4 ações).
+- Com o provider `anthropic`, desde 2026-11-17 é enviado o **PDF original** (decisão validada pelo responsável). O Claude lê as páginas visualmente: caixas assinaladas, círculos, fotografias e esquemas, e também PDFs digitalizados sem texto. Os campos devolvidos são sanitizados (`sanitizeExtractedIncidentKnowledgeDraft`) e o responsável das ações fica sempre vazio. Sem PDF ou acima dos limites, envia-se só o texto sanitizado (`sanitizeIncidentKnowledgeExtractionText`), como antes. Validado localmente em 2026-11-17 com o relatório "07 ESV" (2 páginas, cerca de 45 s): tipo de evento, 3 causas raiz confirmadas, 4 ações com data prevista, e a descrição completada com a página 2.
 - A extração não envia o PDF para a API OpenAI. A OpenAI só é usada nos embeddings, depois da aprovação.
 
 ## Estados e falhas

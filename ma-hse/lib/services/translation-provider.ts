@@ -1,3 +1,6 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
 import { env } from "@/lib/env";
 import { locales, type AppLocale } from "@/lib/i18n/routing";
 
@@ -53,6 +56,9 @@ const SYSTEM_PROMPTS: Record<TranslationPurpose, string> = {
   "master-data":
     "Translate Plant Master Data names into the target language. Never translate or alter internal codes, identifiers, technical references, proper names, product names or acronyms. Keep established workplace-safety terminology natural and concise. If a value is already in the target language, return it unchanged. Return only the requested JSON schema output.",
 };
+
+const LANGUAGE_DETECTION_PROMPT =
+  "Detect the source language of each Plant Master Data value. Return the matching locale code only when it is one of pt, it, en, pl, de, ro or fr. Return unknown for codes, acronyms, proper names, product names, technical references or ambiguous text. Do not translate or rewrite the input.";
 
 class DisabledTranslationProvider implements TranslationProvider {
   async translateBatch(): Promise<string[]> {
@@ -168,8 +174,7 @@ class OpenAiTranslationProvider implements TranslationProvider {
     if (texts.length === 0) return [];
 
     const parsed = await this.requestStructured<LanguageDetectionResponse>({
-      systemPrompt:
-        "Detect the source language of each Plant Master Data value. Return the matching locale code only when it is one of pt, it, en, pl, de, ro or fr. Return unknown for codes, acronyms, proper names, product names, technical references or ambiguous text. Do not translate or rewrite the input.",
+      systemPrompt: LANGUAGE_DETECTION_PROMPT,
       payload: { texts },
       schemaName: "master_data_language_detection",
       schema: {
@@ -197,10 +202,108 @@ class OpenAiTranslationProvider implements TranslationProvider {
   }
 }
 
-const provider: TranslationProvider =
-  env.TRANSLATION_PROVIDER === "disabled"
-    ? new DisabledTranslationProvider()
-    : new OpenAiTranslationProvider();
+const ANTHROPIC_TRANSLATION_TIMEOUT_MS = 60_000;
+
+const anthropicTranslationSchema = z.object({ translations: z.array(z.string()) });
+const anthropicDetectionSchema = z.object({
+  locales: z.array(z.enum([...locales, "unknown"] as [string, ...string[]])),
+});
+
+export class AnthropicTranslationProvider implements TranslationProvider {
+  constructor(private readonly client?: Anthropic) {}
+
+  private getClient() {
+    if (this.client) return this.client;
+    if (!env.ANTHROPIC_API_KEY) {
+      throw new TranslationProviderError("ANTHROPIC_API_KEY is not configured");
+    }
+    return new Anthropic({
+      apiKey: env.ANTHROPIC_API_KEY,
+      timeout: ANTHROPIC_TRANSLATION_TIMEOUT_MS,
+      maxRetries: 2,
+    });
+  }
+
+  private async requestStructured<T>(input: {
+    systemPrompt: string;
+    payload: Record<string, unknown>;
+    schema: z.ZodType<T>;
+  }): Promise<T> {
+    const client = this.getClient();
+    try {
+      const response = await client.beta.messages.create({
+        model: env.ANTHROPIC_TRANSLATION_MODEL ?? env.ANTHROPIC_MODEL,
+        max_tokens: 8_000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: input.systemPrompt,
+        messages: [{ role: "user", content: JSON.stringify(input.payload) }],
+        output_config: { format: zodOutputFormat(input.schema) },
+      });
+
+      if (response.stop_reason === "refusal") {
+        throw new TranslationProviderError("Translation provider refused the request");
+      }
+      if (response.stop_reason === "max_tokens") {
+        throw new TranslationProviderError("Translation provider response was truncated");
+      }
+      const text = response.content.find((block) => block.type === "text");
+      if (!text || text.type !== "text" || !text.text.trim()) {
+        throw new TranslationProviderError("Translation provider returned an empty response");
+      }
+      const parsed = input.schema.safeParse(JSON.parse(text.text));
+      if (!parsed.success) {
+        throw new TranslationProviderError("Translation provider returned an invalid response");
+      }
+      return parsed.data;
+    } catch (error) {
+      if (error instanceof TranslationProviderError) throw error;
+      // Never include the translated content or the key in the message.
+      const status = error instanceof Anthropic.APIError ? ` (HTTP ${error.status ?? "?"})` : "";
+      throw new TranslationProviderError(`Translation provider request failed${status}`, { cause: error });
+    }
+  }
+
+  async translateBatch(input: TranslationBatchInput) {
+    if (input.texts.length === 0) return [];
+
+    const parsed = await this.requestStructured({
+      systemPrompt: `${SYSTEM_PROMPTS[input.purpose]} The "translations" array must have exactly one entry per input text, in the same order.`,
+      payload: { targetLanguage: input.targetLocale, texts: input.texts },
+      schema: anthropicTranslationSchema,
+    });
+
+    if (parsed.translations.length !== input.texts.length) {
+      throw new TranslationProviderError("Translation provider returned an invalid batch");
+    }
+    return parsed.translations.map((value, index) => value?.trim() || input.texts[index]);
+  }
+
+  async detectLocales(texts: string[]) {
+    if (texts.length === 0) return [];
+
+    const parsed = await this.requestStructured({
+      systemPrompt: `${LANGUAGE_DETECTION_PROMPT} The "locales" array must have exactly one entry per input text, in the same order.`,
+      payload: { texts },
+      schema: anthropicDetectionSchema,
+    });
+
+    if (parsed.locales.length !== texts.length) {
+      throw new TranslationProviderError("Translation provider returned an invalid language detection batch");
+    }
+    return parsed.locales.map((locale) =>
+      locales.includes(locale as AppLocale) ? (locale as AppLocale) : null,
+    );
+  }
+}
+
+function createTranslationProvider(): TranslationProvider {
+  if (env.TRANSLATION_PROVIDER === "disabled") return new DisabledTranslationProvider();
+  if (env.TRANSLATION_PROVIDER === "anthropic") return new AnthropicTranslationProvider();
+  return new OpenAiTranslationProvider();
+}
+
+const provider: TranslationProvider = createTranslationProvider();
 
 export function getTranslationProvider() {
   return provider;
