@@ -75,6 +75,8 @@ export function ActionFollowUp({
   const [closureFiles, setClosureFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState<"update" | "close" | null>(null);
   const [error, setError] = useState("");
+  // Set only when the action is closed in this visit (anchor for the demo training task).
+  const [closedHere, setClosedHere] = useState(false);
   const isClosed = status === "CLOSED";
 
   async function uploadFiles(selected: File[]) {
@@ -139,6 +141,7 @@ export function ActionFollowUp({
       if (!response.ok || !result?.ok) throw new Error(result?.message ?? labels.closeFailed);
       setClosureComment("");
       setClosureFiles([]);
+      setClosedHere(true);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : labels.closeFailed);
@@ -217,10 +220,10 @@ export function ActionFollowUp({
         </form>
       ) : null}
 
-      {isClosed ? <p className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{labels.closedMessage}</p> : null}
+      {isClosed ? <p data-onboarding={closedHere ? "action-closed-now" : undefined} className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{labels.closedMessage}</p> : null}
 
       {!isClosed && canClose ? (
-        <form onSubmit={closeAction} className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+        <form data-onboarding="action-close" onSubmit={closeAction} className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
           <h3 className="text-sm font-semibold text-slate-900">{labels.closeTitle}</h3>
           <label className="block space-y-1 text-sm">
             <span className="font-medium text-slate-700">{labels.closeDate}</span>

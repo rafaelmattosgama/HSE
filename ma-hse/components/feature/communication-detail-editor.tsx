@@ -73,7 +73,6 @@ type CommunicationRecord = {
   description: string;
   suggestedAction: string | null;
   severityPotential: "LOW" | "MED" | "HIGH" | null;
-  isContractor: boolean | null;
   bodyPartId: string | null;
   injuryTypeId: string | null;
   isFatal: boolean | null;
@@ -148,7 +147,6 @@ export function CommunicationDetailEditor({
   const [description, setDescription] = useState(communication.description);
   const [suggestedAction, setSuggestedAction] = useState(communication.suggestedAction ?? "");
   const [severityPotential, setSeverityPotential] = useState(communication.severityPotential ?? "");
-  const [isContractor, setIsContractor] = useState(Boolean(communication.isContractor));
   const [bodyPartId, setBodyPartId] = useState(communication.bodyPartId ?? "");
   const [injuryTypeId, setInjuryTypeId] = useState(communication.injuryTypeId ?? "");
   const [initialLostDays, setInitialLostDays] = useState(communication.initialLostDays?.toString() ?? "");
@@ -248,7 +246,6 @@ export function CommunicationDetailEditor({
           description,
           suggestedAction: suggestedAction || undefined,
           severityPotential: severityPotential || undefined,
-          isContractor,
           bodyPartId: needsClinicalFields ? bodyPartId || undefined : undefined,
           injuryTypeId: needsClinicalFields ? injuryTypeId || undefined : undefined,
           initialLostDays: type === "ACCIDENT" && initialLostDays ? Number(initialLostDays) : undefined,
@@ -340,7 +337,7 @@ export function CommunicationDetailEditor({
         {exportMessage ? <p className="text-sm text-red-700">{exportMessage}</p> : null}
 
         {canManageStatus ? (
-          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div data-onboarding="communication-status-valid" className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap items-center gap-3">
               <h3 className="text-sm font-semibold text-slate-900">{text.statusManagement}</h3>
               <span className="text-xs text-slate-500">
@@ -536,10 +533,6 @@ export function CommunicationDetailEditor({
                   <option key={injuryType.id} value={injuryType.id}>{injuryType.name}</option>
                 ))}
               </select>
-              <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                <input type="checkbox" checked={isContractor} onChange={(event) => setIsContractor(event.target.checked)} disabled={!canEdit} />
-                {text.contractorInvolved}
-              </label>
             </div>
             <BodyZonePicker bodyParts={bodyParts} value={bodyPartId} onChange={setBodyPartId} labels={bodyZonePickerLabels} />
             {type === "ACCIDENT" ? (
@@ -555,13 +548,6 @@ export function CommunicationDetailEditor({
               </div>
             ) : null}
           </div>
-        ) : null}
-
-        {!needsClinicalFields ? (
-          <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <input type="checkbox" checked={isContractor} onChange={(event) => setIsContractor(event.target.checked)} disabled={!canEdit} />
-            {text.contractorInvolved}
-          </label>
         ) : null}
 
         <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" disabled={!canEdit} required />

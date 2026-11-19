@@ -40,7 +40,6 @@ const baseCommunication = {
   description: "Minor injury treated on site.",
   suggestedAction: null,
   severityPotential: null,
-  isContractor: false,
   bodyPartId: "body-part-1",
   injuryTypeId: "injury-type-1",
   isFatal: false,

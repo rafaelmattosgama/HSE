@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertDemoModeSafe } from "@/lib/demo-mode";
 
 const productionRequiredValues = {
   NEXTAUTH_SECRET: "dev-secret-1234567890",
@@ -104,6 +105,8 @@ const envSchema = z
     SEED_DEFAULT_PASSWORD: z.string().default("ChangeMe123!"),
     N0_ADMIN_EMAIL: z.string().email().optional(),
     N0_PLANT_CODE: z.string().optional(),
+    // Local demo mode (npm run demo); see lib/demo-mode.ts and docs/modo-demo.md.
+    DEMO_MODE: z.string().optional().transform((value) => value === "true"),
   })
   .superRefine((value, ctx) => {
     if (!isProductionRuntime(value.NODE_ENV)) return;
@@ -120,3 +123,4 @@ const envSchema = z
   });
 
 export const env = envSchema.parse(process.env);
+assertDemoModeSafe(env);

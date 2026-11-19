@@ -252,7 +252,7 @@ export function GroupSafetyDashboard({ plants, locale, period, loadedAt, managem
     </div>
     {!selected.length ? <p className="app-empty" role="status">{plantCode === "group" ? text.noPlants : text.invalidScope}</p> : <>
       {data.missingHours.length > 0 && <aside className="flex gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" role="status"><AlertTriangle aria-hidden="true" className="mt-1 h-5 w-5 shrink-0" /><div><p className="text-sm font-bold">{text.missingHours}: {data.missingHours.map(plant => plant.name).join(", ")}</p><p className="mt-1 text-xs leading-5">{text.partialRates}</p></div></aside>}
-      <section aria-label={text[view]} className="space-y-5" data-testid={`view-${view}`}>
+      <section data-onboarding="corporate-comparison" aria-label={text[view]} className="space-y-5" data-testid={`view-${view}`}>
         {view === "executive" && <>
           <SafetyDaysOverview data={data} locale={locale} scope={scope} loadedAt={loadedAt} />
           <MetricCards data={data} locale={locale} period={period.label} updated={updated} />

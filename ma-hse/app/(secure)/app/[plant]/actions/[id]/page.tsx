@@ -87,7 +87,7 @@ export default async function ActionDetailPage({
 
   return (
     <>
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
+      <header data-onboarding="action-detail" className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">{actionsUi.detail.title}</h1>
       </header>
 

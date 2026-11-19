@@ -351,7 +351,7 @@ export function FireEquipmentList({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-sm">
+            <table data-onboarding="fire-equipment-list" className="w-full min-w-[1040px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase text-slate-500">
                   <th className="py-2 pr-3">

@@ -13,6 +13,8 @@ export type OnboardingTourCopy = {
   previous: string;
   next: string;
   finish: string;
+  skipTask: string;
+  sectionsTitle: string;
   exit: string;
   dialogLabel: string;
   progress: string;
@@ -65,6 +67,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Previous",
       next: "Next",
       finish: "Finish",
+      skipTask: "Skip task",
+      sectionsTitle: "Script sections",
       exit: "Exit guided tour",
       dialogLabel: "Guided tour: {title}",
       progress: "Step {current} of {total}",
@@ -102,6 +106,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Anterior",
       next: "Seguinte",
       finish: "Terminar",
+      skipTask: "Saltar tarefa",
+      sectionsTitle: "Secções do guião",
       exit: "Sair da visita guiada",
       dialogLabel: "Visita guiada: {title}",
       progress: "Passo {current} de {total}",
@@ -139,6 +145,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Precedente",
       next: "Avanti",
       finish: "Termina",
+      skipTask: "Skip task",
+      sectionsTitle: "Script sections",
       exit: "Esci dalla visita guidata",
       dialogLabel: "Visita guidata: {title}",
       progress: "Passaggio {current} di {total}",
@@ -176,6 +184,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Wstecz",
       next: "Dalej",
       finish: "Zakończ",
+      skipTask: "Skip task",
+      sectionsTitle: "Script sections",
       exit: "Opuść przewodnik",
       dialogLabel: "Przewodnik: {title}",
       progress: "Krok {current} z {total}",
@@ -213,6 +223,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Zurück",
       next: "Weiter",
       finish: "Beenden",
+      skipTask: "Skip task",
+      sectionsTitle: "Script sections",
       exit: "Geführte Tour verlassen",
       dialogLabel: "Geführte Tour: {title}",
       progress: "Schritt {current} von {total}",
@@ -250,6 +262,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Înapoi",
       next: "Următorul",
       finish: "Finalizare",
+      skipTask: "Skip task",
+      sectionsTitle: "Script sections",
       exit: "Ieșiți din turul ghidat",
       dialogLabel: "Tur ghidat: {title}",
       progress: "Pasul {current} din {total}",
@@ -287,6 +301,8 @@ const COPY: Record<AppLocale, OnboardingLocaleCopy> = {
       previous: "Précédent",
       next: "Suivant",
       finish: "Terminer",
+      skipTask: "Skip task",
+      sectionsTitle: "Script sections",
       exit: "Quitter la visite guidée",
       dialogLabel: "Visite guidée : {title}",
       progress: "Étape {current} sur {total}",
@@ -322,9 +338,7 @@ const MODULE_KEYS = {
   sewo: "sewo",
   smat: "smat",
   "monthly-inputs": "monthlyInputs",
-  contractors: "contractors",
   "occupational-health": "occupationalHealth",
-  mapa: "mapa",
   admin: "admin",
   corporate: "corporate",
   settings: "settings",

@@ -1296,12 +1296,12 @@ export default async function DashboardsPage({
         </form>
       </details>
 
-      <section className="space-y-2" aria-label={layoutCopy.wholePlant}>
+      <section data-onboarding="dashboard-kpis" className="space-y-2" aria-label={layoutCopy.wholePlant}>
         <SafetyDashboardOverview {...kpiGroupProps} sifPrevious={homologousSifPsifIndicators.overall.total ? homologousSifPsifIndicators.overall : undefined} />
         <SafetyDaysSpotlight plantName={plantRow.name} summary={safetyDays} labels={ui.dashboard} locale={uiLocale} compact />
       </section>
 
-      <section className="space-y-4" aria-labelledby="department-communications-heading">
+      <section data-onboarding="dashboard-pyramid" className="space-y-4" aria-labelledby="department-communications-heading">
         <div className="flex flex-col gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0"><h2 id="department-communications-heading" className="text-lg font-bold text-slate-950">{layoutCopy.communications}</h2><p className="mt-1 text-xs leading-5 text-slate-600">{ui.dashboard.departmentScopeHelp}</p></div>
           <DashboardDepartmentFilter

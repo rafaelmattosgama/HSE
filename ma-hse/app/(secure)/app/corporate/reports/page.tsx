@@ -101,7 +101,7 @@ export default async function CorporateReportsPage({
 
   return (
     <main className="mx-auto w-full max-w-none px-6 py-6">
-      <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+      <div data-onboarding="reports-page" className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Corporate Reports</h1>
@@ -113,7 +113,7 @@ export default async function CorporateReportsPage({
       </div>
 
       {params.generated ? (
-        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div data-onboarding="report-generated" className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           Report generated and shared automatically with the configured recipients.
         </div>
       ) : null}
@@ -124,7 +124,7 @@ export default async function CorporateReportsPage({
         </div>
       ) : null}
 
-      {access.canGenerate ? <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      {access.canGenerate ? <section data-onboarding="reports-generate" className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Generate Corporate Report</h2>
         </div>

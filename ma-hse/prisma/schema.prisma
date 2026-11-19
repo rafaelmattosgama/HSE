@@ -1,11 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
   extensions = [vector]
 }
 
@@ -32,8 +32,6 @@ model Plant {
   competenceWorkers                  CompetenceWorker[]
   employees                          EmployeeDirectory[]
   equipments                         Equipment[]
-  externalCompanies                  ExternalCompany[]
-  externalInvitations                ExternalCompanyInvitation[]
   fireChecklistExecutions            FireChecklistExecution[]
   fireChecklistTemplates             FireChecklistTemplate[]
   fireEquipment                      FireEquipment[]
@@ -43,9 +41,6 @@ model Plant {
   fireEquipmentTypes                 FireEquipmentType[]
   injuryTypes                        InjuryType[]
   lines                              Line[]
-  mapDocuments                       MapDocument[]
-  mapFeatures                        MapFeature[]
-  mapLayers                          MapLayer[]
   nearMissTypes                      NearMissType[]
   notifications                      Notification[]
   occupationalHealthWorkers          OccupationalHealthWorker[]
@@ -115,10 +110,6 @@ model User {
   communicationAtt                          CommunicationAttachment[]
   occupationalHealthWorkerAttachments       OccupationalHealthWorkerAttachment[]
   occupationalHealthExamAttachments         OccupationalHealthExamAttachment[]
-  contractorCompanies                       ExternalCompany[]                    @relation("ExternalContractorOwner")
-  reviewedExternalCompanyDocuments          ExternalCompanyDocument[]            @relation("ExternalCompanyDocumentReviewer")
-  contractorInvitationsSent                 ExternalCompanyInvitation[]          @relation("ExternalInvitationSponsor")
-  reviewedExternalWorkerDocuments           ExternalWorkerDocument[]             @relation("ExternalWorkerDocumentReviewer")
   notifications                             Notification[]
   sewoApproved                              SEWO[]                               @relation("SewoApprovedBy")
   sewoDeleted                               SEWO[]                               @relation("SewoDeletedBy")
@@ -207,7 +198,6 @@ model Area {
   communications                     Communication[]
   competenceWorkers                  CompetenceWorker[]
   fireEquipment                      FireEquipment[]
-  mapFeatures                        MapFeature[]
   sewoRecords                        SEWO[]
   userPlantRoles                     UserPlantRole[]
   safetyCommunicationAlertRecipients SafetyCommunicationAlertRecipient[] @relation("SafetyCommunicationAlertRecipientDepartment")
@@ -238,7 +228,6 @@ model Workstation {
   sourceLanguage            String?
   communications            Communication[]
   fireEquipment             FireEquipment[]
-  mapFeatures               MapFeature[]
   occupationalHealthWorkers OccupationalHealthWorker[]
   plant                     Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
@@ -479,7 +468,6 @@ model EmployeeDirectory {
   involvedCommunications       CommunicationInvolvedEmployee[]
   plant                        Plant                           @relation(fields: [plantId], references: [id], onDelete: Cascade)
   shift                        Shift?                          @relation(fields: [shiftId], references: [id])
-  contractorCompanyAssignments ExternalCompany[]               @relation("ExternalContractorSponsor")
   competenceWorkers            CompetenceWorker[]
   occupationalHealthWorker     OccupationalHealthWorker?
   linkedUser                   User?
@@ -1331,7 +1319,6 @@ model Communication {
   nearMissTypeId                   String?
   description                      String
   severityPotential                SeverityPotential?
-  isContractor                     Boolean?                          @default(false)
   bodyPartId                       String?
   injuryTypeId                     String?
   hasLeave                         Boolean?                          @default(false)
@@ -1379,7 +1366,6 @@ model Communication {
   workstation                      Workstation?                      @relation(fields: [workstationId], references: [id])
   attachments                      CommunicationAttachment[]
   involvedEmployees                CommunicationInvolvedEmployee[]
-  mapFeatures                      MapFeature[]
   sewoRecords                      SEWO[]
   sewoAutoCreationSuppression      SewoAutoCreationSuppression?
   safetyCommunicationNotifications SafetyCommunicationNotification[]
@@ -1423,43 +1409,43 @@ model CommunicationAttachment {
 }
 
 model Action {
-  id                  String                     @id @default(uuid())
-  plantId             String
-  sourceType          ActionSourceType
-  communicationId     String?
-  sewoId              String?
-  category            ActionCategory
-  priority            ActionPriority
-  title               String
-  description         String
-  ownerUserId         String
-  dueDate             DateTime
-  status              ActionStatus               @default(OPEN)
-  closedAt            DateTime?
-  closedBy            String?
-  closureComment      String?
-  reopenedAt          DateTime?
-  reopenedBy          String?
-  reopenReason        String?
-  createdAt           DateTime                   @default(now())
-  updatedAt           DateTime                   @updatedAt
-  sequenceNumber      Int?
-  level               RecordLevel?
-  manualOrigin        ActionManualOrigin?
-  closedByUser        User?                      @relation("ActionClosedBy", fields: [closedBy], references: [id])
-  communication       Communication?             @relation(fields: [communicationId], references: [id])
-  ownerUser           User                       @relation("ActionOwner", fields: [ownerUserId], references: [id])
-  plant               Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  reopenedByUser      User?                      @relation("ActionReopenedBy", fields: [reopenedBy], references: [id])
-  sewo                SEWO?                      @relation(fields: [sewoId], references: [id])
-  alertDeliveries     ActionAlertDelivery[]
-  coOwners            ActionCoOwner[]
-  evidenceAttachments ActionEvidenceAttachment[]
-  updates             ActionUpdate[]
-  sewoLinks           SEWOActionLink[]
-  smatLinks           SmatAuditActionLink[]
-  competenceLinks     CompetenceActionLink[]
-  fireEquipmentLinks  FireEquipmentActionLink[]
+  id                       String                     @id @default(uuid())
+  plantId                  String
+  sourceType               ActionSourceType
+  communicationId          String?
+  sewoId                   String?
+  category                 ActionCategory
+  priority                 ActionPriority
+  title                    String
+  description              String
+  ownerUserId              String
+  dueDate                  DateTime
+  status                   ActionStatus               @default(OPEN)
+  closedAt                 DateTime?
+  closedBy                 String?
+  closureComment           String?
+  reopenedAt               DateTime?
+  reopenedBy               String?
+  reopenReason             String?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  sequenceNumber           Int?
+  level                    RecordLevel?
+  manualOrigin             ActionManualOrigin?
+  closedByUser             User?                      @relation("ActionClosedBy", fields: [closedBy], references: [id])
+  communication            Communication?             @relation(fields: [communicationId], references: [id])
+  ownerUser                User                       @relation("ActionOwner", fields: [ownerUserId], references: [id])
+  plant                    Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  reopenedByUser           User?                      @relation("ActionReopenedBy", fields: [reopenedBy], references: [id])
+  sewo                     SEWO?                      @relation(fields: [sewoId], references: [id])
+  alertDeliveries          ActionAlertDelivery[]
+  coOwners                 ActionCoOwner[]
+  evidenceAttachments      ActionEvidenceAttachment[]
+  updates                  ActionUpdate[]
+  sewoLinks                SEWOActionLink[]
+  smatLinks                SmatAuditActionLink[]
+  competenceLinks          CompetenceActionLink[]
+  fireEquipmentLinks       FireEquipmentActionLink[]
   incidentKnowledgeActions IncidentKnowledgeAction[]
 
   @@unique([plantId, sequenceNumber])
@@ -1534,181 +1520,6 @@ model SmatAuditActionLink {
 
   @@unique([smatAuditId, actionId])
   @@index([actionId])
-}
-
-model ExternalCompany {
-  id                String                        @id @default(uuid())
-  plantId           String
-  sponsorUserId     String?
-  sponsorEmployeeId String?
-  email             String                        @unique
-  passwordHash      String
-  companyName       String
-  address           String
-  phone             String
-  taxId             String
-  socialSecurityId  String
-  contactName       String
-  isActive          Boolean                       @default(true)
-  approvalStatus    ExternalCompanyApprovalStatus @default(PENDING)
-  approvedUntil     DateTime?
-  createdAt         DateTime                      @default(now())
-  updatedAt         DateTime                      @updatedAt
-  plant             Plant                         @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  sponsorEmployee   EmployeeDirectory?            @relation("ExternalContractorSponsor", fields: [sponsorEmployeeId], references: [id])
-  sponsorUser       User?                         @relation("ExternalContractorOwner", fields: [sponsorUserId], references: [id])
-  documents         ExternalCompanyDocument[]
-  invitations       ExternalCompanyInvitation[]
-  sessions          ExternalCompanySession[]
-  workers           ExternalWorker[]
-}
-
-model ExternalCompanyInvitation {
-  id                String           @id @default(uuid())
-  plantId           String
-  sponsorUserId     String
-  email             String
-  tokenHash         String           @unique
-  requiredDocuments Json
-  sentAt            DateTime         @default(now())
-  acceptedAt        DateTime?
-  companyId         String?
-  company           ExternalCompany? @relation(fields: [companyId], references: [id])
-  plant             Plant            @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  sponsorUser       User             @relation("ExternalInvitationSponsor", fields: [sponsorUserId], references: [id], onDelete: Cascade)
-
-  @@index([plantId, email])
-}
-
-model ExternalCompanySession {
-  id           String          @id @default(uuid())
-  companyId    String
-  sessionToken String          @unique
-  expiresAt    DateTime
-  createdAt    DateTime        @default(now())
-  company      ExternalCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId, expiresAt])
-}
-
-model ExternalCompanyDocument {
-  id               String                        @id @default(uuid())
-  companyId        String
-  type             ExternalCompanyDocumentType
-  fileKey          String
-  fileName         String
-  contentType      String
-  validUntil       DateTime?
-  approvalStatus   ExternalCompanyApprovalStatus @default(PENDING)
-  approvalComment  String?
-  reviewedByUserId String?
-  reviewedAt       DateTime?
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
-  company          ExternalCompany               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  reviewedByUser   User?                         @relation("ExternalCompanyDocumentReviewer", fields: [reviewedByUserId], references: [id])
-
-  @@unique([companyId, type])
-}
-
-model ExternalWorker {
-  id             String                        @id @default(uuid())
-  companyId      String
-  name           String
-  birthDate      DateTime
-  isActive       Boolean                       @default(true)
-  approvalStatus ExternalCompanyApprovalStatus @default(PENDING)
-  approvedUntil  DateTime?
-  createdAt      DateTime                      @default(now())
-  updatedAt      DateTime                      @updatedAt
-  company        ExternalCompany               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  documents      ExternalWorkerDocument[]
-
-  @@index([companyId, isActive])
-}
-
-model ExternalWorkerDocument {
-  id               String                        @id @default(uuid())
-  workerId         String
-  type             ExternalWorkerDocumentType
-  fileKey          String
-  fileName         String
-  contentType      String
-  validUntil       DateTime?
-  approvalStatus   ExternalCompanyApprovalStatus @default(PENDING)
-  approvalComment  String?
-  reviewedByUserId String?
-  reviewedAt       DateTime?
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
-  reviewedByUser   User?                         @relation("ExternalWorkerDocumentReviewer", fields: [reviewedByUserId], references: [id])
-  worker           ExternalWorker                @relation(fields: [workerId], references: [id], onDelete: Cascade)
-
-  @@unique([workerId, type])
-}
-
-model MapDocument {
-  id                 String            @id @default(uuid())
-  plantId            String
-  title              String
-  fileKey            String
-  fileName           String
-  contentType        String
-  fileType           MapSourceFileType
-  importedLayerNames Json?
-  selectedLayerNames Json?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  plant              Plant             @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  layers             MapLayer[]
-
-  @@index([plantId, createdAt])
-}
-
-model MapLayer {
-  id               String             @id @default(uuid())
-  plantId          String
-  documentId       String?
-  name             String
-  description      String?
-  color            String             @default("#0f766e")
-  icon             String?
-  sourceType       MapLayerSourceType @default(MANUAL)
-  isVisibleDefault Boolean            @default(true)
-  sortOrder        Int                @default(0)
-  metadataJson     Json?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  features         MapFeature[]
-  document         MapDocument?       @relation(fields: [documentId], references: [id])
-  plant            Plant              @relation(fields: [plantId], references: [id], onDelete: Cascade)
-
-  @@index([plantId, sortOrder])
-}
-
-model MapFeature {
-  id              String         @id @default(uuid())
-  plantId         String
-  layerId         String?
-  featureType     MapFeatureType
-  label           String
-  icon            String?
-  color           String?
-  positionX       Float
-  positionY       Float
-  areaId          String?
-  workstationId   String?
-  communicationId String?
-  metadataJson    Json?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  area            Area?          @relation(fields: [areaId], references: [id])
-  communication   Communication? @relation(fields: [communicationId], references: [id])
-  layer           MapLayer?      @relation(fields: [layerId], references: [id])
-  plant           Plant          @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  workstation     Workstation?   @relation(fields: [workstationId], references: [id])
-
-  @@index([plantId, layerId])
 }
 
 model ActionCoOwner {
@@ -1994,9 +1805,9 @@ model AlertEvent {
 }
 
 model SEWO {
-  id                            String                  @id @default(uuid())
+  id                            String                     @id @default(uuid())
   plantId                       String
-  communicationId               String?                 @unique
+  communicationId               String?                    @unique
   eventClassification           String
   areaId                        String?
   lineId                        String?
@@ -2010,32 +1821,32 @@ model SEWO {
   whichText                     String?
   howText                       String
   immediateCorrectiveActionText String
-  status                        SEWOStatus              @default(DRAFT)
+  status                        SEWOStatus                 @default(DRAFT)
   approvedByUserId              String?
   approvedAt                    DateTime?
   approvalComment               String?
   causeCatalogVersionId         String
-  createdAt                     DateTime                @default(now())
-  updatedAt                     DateTime                @updatedAt
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
   deletedAt                     DateTime?
   deletedByUserId               String?
   templateData                  Json?
-  isAutoCreated                 Boolean                 @default(false)
-  codigoSewo                    String?                 @unique
+  isAutoCreated                 Boolean                    @default(false)
+  codigoSewo                    String?                    @unique
   tipo                          String?
   codigoFabrica                 String?
   ano                           Int?
   numeroSequencial              Int?
   actions                       Action[]
-  approvedBy                    User?                   @relation("SewoApprovedBy", fields: [approvedByUserId], references: [id])
-  deletedBy                     User?                   @relation("SewoDeletedBy", fields: [deletedByUserId], references: [id])
-  area                          Area?                   @relation(fields: [areaId], references: [id])
-  causeCatalogVersion           SEWOCauseCatalogVersion @relation(fields: [causeCatalogVersionId], references: [id])
-  communication                 Communication?          @relation(fields: [communicationId], references: [id])
-  line                          Line?                   @relation(fields: [lineId], references: [id])
-  performedBy                   User                    @relation("SewoPerformedBy", fields: [performedByUserId], references: [id])
-  plant                         Plant                   @relation(fields: [plantId], references: [id], onDelete: Cascade)
-  shift                         Shift?                  @relation(fields: [shiftId], references: [id])
+  approvedBy                    User?                      @relation("SewoApprovedBy", fields: [approvedByUserId], references: [id])
+  deletedBy                     User?                      @relation("SewoDeletedBy", fields: [deletedByUserId], references: [id])
+  area                          Area?                      @relation(fields: [areaId], references: [id])
+  causeCatalogVersion           SEWOCauseCatalogVersion    @relation(fields: [causeCatalogVersionId], references: [id])
+  communication                 Communication?             @relation(fields: [communicationId], references: [id])
+  line                          Line?                      @relation(fields: [lineId], references: [id])
+  performedBy                   User                       @relation("SewoPerformedBy", fields: [performedByUserId], references: [id])
+  plant                         Plant                      @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  shift                         Shift?                     @relation(fields: [shiftId], references: [id])
   actionLinks                   SEWOActionLink[]
   attachments                   SEWOAttachment[]
   causeSelections               SEWOCauseSelection[]
@@ -2189,31 +2000,31 @@ model IncidentKnowledgeDocument {
 }
 
 model IncidentKnowledgeRecord {
-  id                         String                    @id @default(uuid())
-  documentId                 String                    @unique
+  id                         String                      @id @default(uuid())
+  documentId                 String                      @unique
   plantId                    String
   incidentCode               String?
-  incidentDate               DateTime?                 @db.Date
+  incidentDate               DateTime?                   @db.Date
   department                 String?
   workstation                String?
   equipment                  String?
   shift                      String?
   operationType              String?
-  occurrenceDescription      String?                   @db.Text
-  occurrenceMechanism        String?                   @db.Text
+  occurrenceDescription      String?                     @db.Text
+  occurrenceMechanism        String?                     @db.Text
   injuryType                 String?
   bodyPart                   String?
-  consequence                String?                   @db.Text
-  immediateCorrectiveAction  String?                   @db.Text
-  lessonsLearned             String?                   @db.Text
-  previousRelatedOccurrences String?                   @db.Text
+  consequence                String?                     @db.Text
+  immediateCorrectiveAction  String?                     @db.Text
+  lessonsLearned             String?                     @db.Text
+  previousRelatedOccurrences String?                     @db.Text
   sifPsifClassification      String?
   extractionConfidence       Float?
   reviewedAt                 DateTime?
-  createdAt                  DateTime                  @default(now())
-  updatedAt                  DateTime                  @updatedAt
-  document                   IncidentKnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  plant                      Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  document                   IncidentKnowledgeDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  plant                      Plant                       @relation(fields: [plantId], references: [id], onDelete: Cascade)
   evidences                  IncidentKnowledgeEvidence[]
   causes                     IncidentKnowledgeCause[]
   actions                    IncidentKnowledgeAction[]
@@ -2283,22 +2094,22 @@ model IncidentKnowledgeAction {
 }
 
 model IncidentKnowledgeChunk {
-  id                  String                    @id @default(uuid())
+  id                  String                       @id @default(uuid())
   documentId          String
   plantId             String
   chunkIndex          Int
   sectionName         String?
   pageStart           Int?
   pageEnd             Int?
-  content             String                    @db.Text
-  sanitizedContent    String                    @db.Text
-  contentHash         String                    @db.Char(64)
+  content             String                       @db.Text
+  sanitizedContent    String                       @db.Text
+  contentHash         String                       @db.Char(64)
   embedding           Unsupported("vector(1536)")?
   embeddingModel      String?
-  embeddingDimensions Int                       @default(1536)
-  createdAt           DateTime                  @default(now())
-  document            IncidentKnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  plant               Plant                     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  embeddingDimensions Int                          @default(1536)
+  createdAt           DateTime                     @default(now())
+  document            IncidentKnowledgeDocument    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  plant               Plant                        @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, chunkIndex])
   @@index([plantId, documentId])
@@ -2805,46 +2616,4 @@ enum ReportType {
 enum ReportScope {
   PLANT
   CORPORATE
-}
-
-enum ExternalCompanyApprovalStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  EXPIRED
-}
-
-enum ExternalCompanyDocumentType {
-  ANEXO_D
-  RISK_ASSESSMENT
-  WORK_ACCIDENT_INSURANCE
-  CIVIL_LIABILITY_INSURANCE
-  SOCIAL_SECURITY_CLEARANCE
-  TAX_AUTHORITY_CLEARANCE
-}
-
-enum ExternalWorkerDocumentType {
-  MEDICAL_FITNESS
-  PPE_DELIVERY
-  TRAINING
-}
-
-enum MapSourceFileType {
-  PDF
-  DWG
-  IMAGE
-  OTHER
-}
-
-enum MapLayerSourceType {
-  DWG_IMPORTED
-  AUTO
-  MANUAL
-}
-
-enum MapFeatureType {
-  AREA
-  WORKSTATION
-  ICON
-  INCIDENT
 }

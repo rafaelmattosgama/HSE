@@ -101,7 +101,7 @@ export function ProfileAlertsPanel({
   }
 
   return (
-    <section className="app-panel overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section data-onboarding="alerts-panel" className="app-panel overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Alertas {scopeLabel}</h1>

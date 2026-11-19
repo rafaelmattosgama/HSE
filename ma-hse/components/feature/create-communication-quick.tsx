@@ -242,7 +242,7 @@ export function CreateCommunicationQuick({
   }
 
   return (
-    <details className="group/quick-communication rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <details data-onboarding="communication-create" className="group/quick-communication rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <summary
         aria-label={text.title}
         aria-controls={contentId}
@@ -442,7 +442,7 @@ export function CreateCommunicationQuick({
           <Button type="submit" size="sm" disabled={loading || !isReady}>
             {loading ? text.saving : text.create}
           </Button>
-          {message ? <p className="text-xs text-slate-600">{message}</p> : null}
+          {message ? <p className="text-xs text-slate-600" data-onboarding={message === text.created ? "communication-created" : undefined}>{message}</p> : null}
         </div>
       </form>
     </details>

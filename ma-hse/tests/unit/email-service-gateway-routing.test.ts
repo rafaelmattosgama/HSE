@@ -44,8 +44,8 @@ describe("emailService gateway routing", () => {
   it("routes emails with attachments through the HTTP gateway", async () => {
     const attachments = [{ filename: "doc.pdf", content: Buffer.from("x"), contentType: "application/pdf" }];
     await sendSystemEmail({
-      type: SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION,
-      to: "contractor@example.com",
+      type: SYSTEM_EMAIL_TYPES.NOTIFICATION,
+      to: "user@example.com",
       language: "en",
       data: { plant_name: "Plant 1", invitation_url: "https://example.test/invite" },
       attachments,

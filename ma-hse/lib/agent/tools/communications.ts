@@ -69,7 +69,6 @@ const createCommunicationToolInput = {
     description: { type: "string", minLength: 5 },
     suggestedAction: { type: "string" },
     severityPotential: { type: "string", enum: ["LOW", "MED", "HIGH"] },
-    isContractor: { type: "boolean" },
     bodyPartId: nullableUuidSchema,
     injuryTypeId: nullableUuidSchema,
     isFatal: { type: "boolean" },

@@ -234,7 +234,7 @@ export default async function AdminPage({
 
   return (
     <>
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
+      <header data-onboarding="plant-admin" className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">{ui.modules.admin}</h1>
       </header>
 
@@ -257,8 +257,8 @@ export default async function AdminPage({
         initialRoles={roleModuleConfig.roles}
         labels={masterDataUi}
         moduleLabels={{
-          MAPA: ui.modules.mapa, ACTIONS: ui.modules.actions, SEWO: ui.modules.sewo,
-          SMAT: ui.modules.smat, CONTRACTORS: ui.modules.contractors, COMMUNICATIONS: ui.modules.communications,
+          ACTIONS: ui.modules.actions, SEWO: ui.modules.sewo,
+          SMAT: ui.modules.smat, COMMUNICATIONS: ui.modules.communications,
           OCCUPATIONAL_HEALTH: ui.modules.occupationalHealth, COMPETENCE_AUTHORIZATIONS: ui.modules.competences,
           FIRE_SAFETY_EQUIPMENT: ui.modules.fireEquipment,
         }}
@@ -378,7 +378,7 @@ export default async function AdminPage({
         />
       ) : null}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section data-onboarding="alert-rules" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.dashboard.alertRules}</h2>
           <HelpPopover title={ui.dashboard.alertRules} body={masterDataUi.alertRulesHelp} buttonLabel={masterDataUi.helpButton} />

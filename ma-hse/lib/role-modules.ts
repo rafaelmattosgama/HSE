@@ -11,8 +11,8 @@ export type RoleModuleOverrides = Record<ManagedModuleRole, ModuleToggleOverride
 // These are the existing module permissions of each profile. N3 can restrict
 // access within them, but cannot grant a new capability to a profile.
 export const ROLE_MODULE_KEYS: Record<ManagedModuleRole, readonly ModuleToggleKey[]> = {
-  N4_SUPERVISOR: ["MAPA", "ACTIONS", "SMAT", "CONTRACTORS", "COMMUNICATIONS", "COMPETENCE_AUTHORIZATIONS", "FIRE_SAFETY_EQUIPMENT"],
-  N5_OPERATOR: ["MAPA", "ACTIONS", "COMMUNICATIONS", "COMPETENCE_AUTHORIZATIONS", "FIRE_SAFETY_EQUIPMENT"],
+  N4_SUPERVISOR: ["ACTIONS", "SMAT", "COMMUNICATIONS", "COMPETENCE_AUTHORIZATIONS", "FIRE_SAFETY_EQUIPMENT"],
+  N5_OPERATOR: ["ACTIONS", "COMMUNICATIONS", "COMPETENCE_AUTHORIZATIONS", "FIRE_SAFETY_EQUIPMENT"],
   N6_HR: ["ACTIONS", "SEWO", "COMMUNICATIONS", "OCCUPATIONAL_HEALTH", "COMPETENCE_AUTHORIZATIONS"],
 };
 

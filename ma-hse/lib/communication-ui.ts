@@ -142,7 +142,6 @@ export const BASE_COMMUNICATION_UI = {
     improvementSubtype: "Subtype",
     involvedWorker: "Involved worker",
     injuryType: "Injury type",
-    contractorInvolved: "Contractor involved",
     lostDays: "Lost days",
     fatalInjury: "Fatal injury",
     suggestedAction: "Suggested action",

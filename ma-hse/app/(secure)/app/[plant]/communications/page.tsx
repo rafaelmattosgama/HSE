@@ -188,7 +188,7 @@ export default async function CommunicationsPage({
 
   return (
     <>
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
+      <header data-onboarding="communications-list" className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">{ui.modules.communications}</h1>
       </header>
 

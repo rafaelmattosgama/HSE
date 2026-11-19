@@ -121,7 +121,7 @@ export default async function ValidationPage({
         </section>
       )}
 
-      <section className="space-y-4">
+      <section data-onboarding="validation-queue" className="space-y-4">
         <AppSectionHeader title={sewoUiResult.ui.n1ValidationCommunicationSection} />
         <ValidationQueue
           plant={plant}

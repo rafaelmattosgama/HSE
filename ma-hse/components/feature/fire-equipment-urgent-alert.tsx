@@ -34,6 +34,9 @@ export function FireEquipmentUrgentAlert({
   const [alerts, setAlerts] = useState<FireEquipmentUrgentFloatingAlertItem[]>([]);
   const [busyIds, setBusyIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  // Alerts already on screen when the user opened one: the panel stays hidden
+  // until a new alert arrives, so it does not cover the page they navigated to.
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!enabled) {
@@ -69,8 +72,22 @@ export function FireEquipmentUrgentAlert({
     };
   }, [enabled, plantCode]);
 
-  if (!enabled || alerts.length === 0) {
+  const hasNewAlert = alerts.some((alert) => !dismissedIds.includes(alert.id));
+  if (!enabled || alerts.length === 0 || !hasNewAlert) {
     return null;
+  }
+
+  function openAlert(notificationId: string) {
+    setDismissedIds(alerts.map((alert) => alert.id));
+    setAlerts((current) => current.filter((alert) => alert.id !== notificationId));
+    // Opening the record counts as reading the alert; keepalive lets the
+    // request finish even if the navigation unloads the page.
+    void fetch(`/api/plants/${plantCode}/notifications/acknowledge`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notificationIds: [notificationId] }),
+      keepalive: true,
+    }).catch(() => undefined);
   }
 
   async function acknowledge(notificationIds: string[]) {
@@ -124,6 +141,7 @@ export function FireEquipmentUrgentAlert({
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <Link
                         href={alert.actionUrl}
+                        onClick={() => openAlert(alert.id)}
                         className="inline-flex rounded-lg bg-[var(--brand-700)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-800)]"
                       >
                         {labels.urgentAlertOpenEquipment}

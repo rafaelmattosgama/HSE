@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 import type { TLSSocket } from "node:tls";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
 const PINNED_CERT_PATH = path.join(process.cwd(), "certs", "smtp-gateway.crt");
 const PINNED_CERT_FINGERPRINT_SHA256 =
@@ -186,6 +188,19 @@ function sleep(ms: number) {
 }
 
 export async function sendViaSmtpGateway(input: SmtpGatewaySendInput): Promise<{ messageId: string }> {
+  // Local demo: no email ever leaves the laptop, but flows behave as if sent.
+  if (env.DEMO_MODE) {
+    const recipients = Array.isArray(input.to) ? input.to : [input.to];
+    logger.info(
+      {
+        subject: input.subject,
+        recipientHashes: recipients.map((to) => createHash("sha256").update(to.toLowerCase()).digest("hex").slice(0, 12)),
+      },
+      "demo_email_suppressed",
+    );
+    return { messageId: "demo-suppressed" };
+  }
+
   if (!env.SMTP_GATEWAY_API_KEY) {
     throw new SmtpGatewayError("SMTP_GATEWAY_API_KEY is not configured", { retryable: false });
   }

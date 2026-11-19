@@ -1448,7 +1448,7 @@ export function CreateSewoQuick({
             </div>
           </section>
 
-          <section className="space-y-4 rounded-2xl border border-slate-200 p-4">
+          <section data-onboarding="sewo-root-causes" className="space-y-4 rounded-2xl border border-slate-200 p-4">
             <div>
               <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{ui.rootCauseAnalysis}</h4>
             </div>

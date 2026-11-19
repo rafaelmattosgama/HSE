@@ -129,7 +129,7 @@ export function CreateActionQuick({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <form data-onboarding="action-create" onSubmit={submit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-slate-900">
         {lockedCommunicationId ? text.newLinkedAction : text.newAction}
       </h3>
@@ -237,7 +237,7 @@ export function CreateActionQuick({
           <Button size="sm" type="submit" disabled={submitting || isRefreshing}>
             {submitting ? text.creatingAction : text.createAction}
           </Button>
-          {message ? <p className={`text-xs ${messageIsError ? "text-red-700" : "text-emerald-700"}`}>{message}</p> : null}
+          {message ? <p className={`text-xs ${messageIsError ? "text-red-700" : "text-emerald-700"}`} data-onboarding={messageIsError ? undefined : "action-created"}>{message}</p> : null}
         </div>
       </div>
     </form>

@@ -198,7 +198,7 @@ export function SewoWorkspace({
 
   return (
     <div className="space-y-6">
-      <section className="app-hero rounded-2xl p-6">
+      <section data-onboarding="sewo-list" className="app-hero rounded-2xl p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{ui.pageTitle}</h1>
@@ -280,7 +280,7 @@ export function SewoWorkspace({
       ) : null}
 
       {selectedSewo ? (
-        <section className="space-y-3">
+        <section data-onboarding="sewo-detail" className="space-y-3">
           <div className="app-panel rounded-2xl p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

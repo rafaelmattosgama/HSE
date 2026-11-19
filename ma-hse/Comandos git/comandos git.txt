@@ -33,4 +33,12 @@ palavra-passe: pNh68JBNTq
 
 
 
+npm run demo
+ http://localhost:3100.
+demo.apresentacao@maxsafety.demo (Corporate, para apresentações);
+demo.admin@… (Admin);
+demo.corporate@… (Corporate);
+demo.seguranca@… (Segurança, na fábrica Demo Lisboa).
 
+
+Demo2026!

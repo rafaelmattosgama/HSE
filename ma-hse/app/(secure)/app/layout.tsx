@@ -10,11 +10,13 @@ import { ProfileAlertsButton } from "@/components/layout/profile-alerts-button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UiLanguageRuntime } from "@/components/layout/ui-language-runtime";
 import { UserMenu } from "@/components/layout/user-menu";
+import { DemoBanner } from "@/components/layout/demo-banner";
 import { DashboardWidth } from "@/components/layout/dashboard-width";
 import { ONBOARDING_PERMISSIONS } from "@/components/onboarding/onboarding-config";
 import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
 import { canUseAgent } from "@/lib/agent/permissions";
 import { authOptions } from "@/lib/auth/options";
+import { getDemoScriptForEmail } from "@/lib/demo-mode";
 import { env } from "@/lib/env";
 import { ALL_PLANTS_SCOPE, LAST_PLANT_COOKIE } from "@/lib/plant-scope";
 import { prisma } from "@/lib/prisma";
@@ -83,6 +85,7 @@ export default async function SecureAppLayout({
 
   const appShell = (
     <div className="app-shell">
+      <DemoBanner />
       <UiLanguageRuntime locale={uiLocale} />
       <header className="app-topbar" data-onboarding="topbar">
         <DashboardWidth className="mx-auto flex w-full flex-wrap items-center justify-between gap-3 px-6 py-4">
@@ -125,6 +128,7 @@ export default async function SecureAppLayout({
         plantCode: onboardingPlantCode,
         permissions: onboardingPermissions,
         locale: uiLocale,
+        demoScript: env.DEMO_MODE ? getDemoScriptForEmail(session.user.email) : null,
       }}
     >
       {appShell}

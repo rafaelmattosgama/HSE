@@ -80,6 +80,7 @@ npm run test:unit   # Vitest unit tests
 npm run test:e2e    # Playwright e2e
 npm test            # Both unit + e2e
 npx prisma studio   # DB browser
+npm run demo        # Local demo (fictitious data, port 3100, own containers) — see docs/modo-demo.md
 ```
 
 ## Important Gotchas
@@ -91,6 +92,7 @@ npx prisma studio   # DB browser
 - SEWO statuses: DRAFT, IN_APPROVAL, APPROVED, REJECTED, CLOSED
 - Locale via cookie `ehs_locale`, resolved: cookie > Accept-Language > "pt"
 - `lib/i18n/request.ts` is the next-intl request config (NOT `lib/i18n/routing.ts`)
+- `DEMO_MODE=true` (only via `.env.demo`) suppresses all email sending, shows the demo banner/accounts and enables `/api/demo/reset`; `assertDemoModeSafe` refuses to start unless the DB is the local `ehs_demo`. Demo accounts follow the scripts in `components/onboarding/demo-scripts/` instead of the role tour.
 - Env vars Zod-validated in `lib/env.ts` — production rejects default dev values unless `ALLOW_DEV_DEFAULT_ENV=true`
 
 ## Recent Changes (Session 28 May 2026)

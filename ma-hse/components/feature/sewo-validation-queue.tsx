@@ -130,7 +130,7 @@ export function SewoValidationQueue({
 
   return (
     <div className="space-y-4">
-      {message ? <p className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm">{message}</p> : null}
+      {message ? <p className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm" data-onboarding={message === ui.n1ValidationSaved ? "sewo-approval-saved" : undefined}>{message}</p> : null}
 
       {rows.map((row) => {
         const priority = row.sifPsifResult === "SIF" || row.sifPsifResult === "PSIF";

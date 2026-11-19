@@ -215,7 +215,7 @@ export default async function CommunicationDetailPage({
 
   return (
     <div className="space-y-5">
-      <header className="rounded-2xl bg-white p-6 shadow-sm">
+      <header data-onboarding="communication-detail" className="rounded-2xl bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">{typeLabel}</h1>
         <p className="mt-2 text-sm font-semibold text-slate-600">{communicationCode}</p>
       </header>
@@ -249,7 +249,6 @@ export default async function CommunicationDetailPage({
           description: communication.description,
           suggestedAction: communication.suggestedAction,
           severityPotential: communication.severityPotential,
-          isContractor: communication.isContractor,
           bodyPartId: communication.bodyPartId,
           injuryTypeId: communication.injuryTypeId,
           isFatal: communication.isFatal,
@@ -280,7 +279,7 @@ export default async function CommunicationDetailPage({
       />
 
       {canValidate ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section data-onboarding="communication-validate" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{communicationUi.validationActions.title}</h2>
           <div className="mt-3">
             <ValidationActions plant={plant} communicationId={communication.id} labels={communicationUi.validationActions} onRejectedHref={backHref} />

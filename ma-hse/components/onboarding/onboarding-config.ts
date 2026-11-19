@@ -1,5 +1,7 @@
 import type { RoleCode } from "@prisma/client";
+import { getDemoScriptSteps } from "@/components/onboarding/demo-scripts";
 import { getOnboardingStepCopy } from "@/components/onboarding/onboarding-i18n";
+import { resolveOnboardingRoute } from "@/components/onboarding/onboarding-routes";
 import type { OnboardingStep, OnboardingUserContext, RoleOnboardingConfig } from "@/components/onboarding/onboarding-types";
 
 export const ONBOARDING_PERMISSIONS = {
@@ -189,7 +191,6 @@ const roleConfigs: Record<RoleCode, RoleOnboardingConfig> = {
       sidebarModule("sewo", "S-EWO", "Consulte análises estruturadas de ocorrências e respetivos planos de ação."),
       sidebarModule("smat", "Auditorias SMAT", "Registe e consulte auditorias comportamentais de segurança."),
       sidebarModule("monthly-inputs", "Indicadores mensais", "Registe os dados mensais usados nos indicadores da fábrica."),
-      sidebarModule("mapa", "MAPA", "Explore informação de segurança associada ao mapa da fábrica."),
       sidebarModule("admin", "Administração", "Consulte as configurações administrativas disponíveis para a gestão da fábrica."),
       sidebarModule("corporate", "Visão corporativa", "Regresse à visão agregada para comparar indicadores entre fábricas."),
       userMenuStep,
@@ -208,8 +209,6 @@ const roleConfigs: Record<RoleCode, RoleOnboardingConfig> = {
       sidebarModule("sewo", "S-EWO", "Investigue ocorrências e acompanhe causas e planos de ação."),
       sidebarModule("smat", "Auditorias SMAT", "Registe e consulte auditorias comportamentais de segurança."),
       sidebarModule("occupational-health", "Saúde ocupacional", "Acompanhe a informação de saúde ocupacional autorizada."),
-      sidebarModule("contractors", "Prestadores", "Acompanhe empresas externas, trabalhadores e documentação."),
-      sidebarModule("mapa", "MAPA", "Explore informação de segurança associada ao mapa da fábrica."),
       sidebarModule("admin", "Administração e dados de segurança", "Gira utilizadores permitidos, alertas e dados administrativos da fábrica."),
       agentStep,
       userMenuStep,
@@ -225,8 +224,6 @@ const roleConfigs: Record<RoleCode, RoleOnboardingConfig> = {
       sidebarModule("communications", "Comunicações", "Registe e consulte comunicações de segurança."),
       sidebarModule("actions", "Ações", "Crie, acompanhe e encerre as ações pelas quais é responsável."),
       sidebarModule("smat", "Auditorias SMAT", "Registe e consulte auditorias comportamentais de segurança."),
-      sidebarModule("contractors", "Prestadores", "Consulte e acompanhe os prestadores autorizados."),
-      sidebarModule("mapa", "MAPA", "Explore informação de segurança associada ao mapa da fábrica."),
       userMenuStep,
     ],
   },
@@ -238,7 +235,6 @@ const roleConfigs: Record<RoleCode, RoleOnboardingConfig> = {
       sidebarStep,
       sidebarModule("communications", "Comunicações", "Registe situações e sugestões de segurança e acompanhe o respetivo estado."),
       sidebarModule("actions", "Ações", "Consulte as ações associadas ao seu trabalho."),
-      sidebarModule("mapa", "MAPA", "Explore a informação disponível no mapa da fábrica."),
       userMenuStep,
     ],
   },
@@ -248,13 +244,10 @@ const roleConfigs: Record<RoleCode, RoleOnboardingConfig> = {
   },
 };
 
-export function resolveOnboardingRoute(route: string | undefined, plantCode: string | null) {
-  if (!route) return undefined;
-  if (!route.includes("{plant}")) return route;
-  return plantCode ? route.replaceAll("{plant}", encodeURIComponent(plantCode)) : undefined;
-}
+export { resolveOnboardingRoute };
 
 export function getOnboardingSteps(context: OnboardingUserContext) {
+  if (context.demoScript) return getDemoScriptSteps(context.demoScript, context.locale, context.plantCode);
   const permissionSet = new Set(context.permissions);
   const config = roleConfigs[context.role];
 

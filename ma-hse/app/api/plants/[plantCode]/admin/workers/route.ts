@@ -131,15 +131,14 @@ export async function DELETE(request: Request, context: { params: Promise<{ plan
     // Permanent deletion is intentionally conservative. Worker records are
     // referenced by clinical history, competences and safety records; those
     // must be retained, so the Admin can only delete an unused directory row.
-    const [users, communications, involved, competenceWorkers, healthWorkers, sponsoredCompanies] = await Promise.all([
+    const [users, communications, involved, competenceWorkers, healthWorkers] = await Promise.all([
       prisma.user.count({ where: { employeeDirectoryId: worker.id } }),
       prisma.communication.count({ where: { targetEmployeeId: worker.id } }),
       prisma.communicationInvolvedEmployee.count({ where: { employeeId: worker.id } }),
       prisma.competenceWorker.count({ where: { employeeDirectoryId: worker.id } }),
       prisma.occupationalHealthWorker.count({ where: { employeeDirectoryId: worker.id } }),
-      prisma.externalCompany.count({ where: { sponsorEmployeeId: worker.id } }),
     ]);
-    if (users + communications + involved + competenceWorkers + healthWorkers + sponsoredCompanies > 0) {
+    if (users + communications + involved + competenceWorkers + healthWorkers > 0) {
       return fail("WORKER_HAS_HISTORY", "Worker cannot be permanently deleted because linked history exists. Inactivate the worker instead.", 409);
     }
 

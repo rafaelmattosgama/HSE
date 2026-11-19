@@ -45,7 +45,6 @@ describe("onboarding role configuration", () => {
       "notifications",
       "sidebar-validation",
       "sidebar-occupational-health",
-      "sidebar-contractors",
       "ai-assistant",
     ]));
   });

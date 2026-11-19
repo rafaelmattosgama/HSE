@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-demo/
 /out/
 
 # production
@@ -36,6 +37,8 @@ tmp_transfer_*.json
 .env*
 !.env.example
 !.env.production.example
+# Local demo env (npm run demo): fictitious, local-only values, no secrets.
+!.env.demo
 
 # vercel
 .vercel

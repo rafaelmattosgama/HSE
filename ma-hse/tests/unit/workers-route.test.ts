@@ -21,7 +21,6 @@ const prismaMock = vi.hoisted(() => ({
   communicationInvolvedEmployee: { count: vi.fn() },
   competenceWorker: { count: vi.fn() },
   occupationalHealthWorker: { count: vi.fn() },
-  externalCompany: { count: vi.fn() },
 }));
 
 vi.mock("@/lib/rbac/guards", () => guardsMock);
@@ -105,7 +104,6 @@ describe("workers route", () => {
     prismaMock.communicationInvolvedEmployee.count.mockResolvedValue(0);
     prismaMock.competenceWorker.count.mockResolvedValue(0);
     prismaMock.occupationalHealthWorker.count.mockResolvedValue(0);
-    prismaMock.externalCompany.count.mockResolvedValue(0);
 
     const response = await DELETE(
       new Request("http://localhost/api/plants/pl1/admin/workers", {
