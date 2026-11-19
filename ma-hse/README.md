@@ -253,6 +253,17 @@ Observacao importante:
 - Rate limit em rotas `/r/*` por IP+planta.
 - Sessao protegida com NextAuth + adapter Prisma.
 
+## Modo demo
+
+Instalação local isolada, com dados fictícios, para apresentações e formação (guiões em PT/EN):
+
+```bash
+npm run demo          # arranca contentores próprios e a app em http://localhost:3100
+npm run demo:reset    # volta aos dados iniciais
+```
+
+Contas demo com password `Demo2026!`. Guia completo em [docs/modo-demo.md](docs/modo-demo.md).
+
 ## Testes
 
 - Unit (Vitest): auth config, RBAC, regras de workflow, hashing token, regra N6.

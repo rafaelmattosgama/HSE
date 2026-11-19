@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ClipboardCheck, Clock3, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,9 @@ export function ActionFloatingAlert({ enabled }: { enabled: boolean }) {
   const [alerts, setAlerts] = useState<ActionFloatingAlertItem[]>([]);
   const [busyIds, setBusyIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  // Alerts already on screen when the user opened one: the panel stays hidden
+  // until a new alert arrives, so it does not cover the page they navigated to.
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!enabled) {
@@ -54,8 +58,22 @@ export function ActionFloatingAlert({ enabled }: { enabled: boolean }) {
 
   const visibleAlerts = useMemo(() => alerts.slice(0, 3), [alerts]);
 
-  if (!enabled || visibleAlerts.length === 0) {
+  const hasNewAlert = alerts.some((alert) => !dismissedIds.includes(alert.id));
+  if (!enabled || visibleAlerts.length === 0 || !hasNewAlert) {
     return null;
+  }
+
+  function openAlert(notificationId: string) {
+    setDismissedIds(alerts.map((alert) => alert.id));
+    setAlerts((current) => current.filter((alert) => alert.id !== notificationId));
+    // Opening the action counts as reading the alert; keepalive lets the
+    // request finish even if the navigation unloads the page.
+    void fetch("/api/notifications/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ notificationIds: [notificationId] }),
+      keepalive: true,
+    }).catch(() => undefined);
   }
 
   async function acknowledge(notificationIds: string[]) {
@@ -98,12 +116,13 @@ export function ActionFloatingAlert({ enabled }: { enabled: boolean }) {
                 <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
                 <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{alert.body}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <a
+                  <Link
                     href={alert.actionUrl}
+                    onClick={() => openAlert(alert.id)}
                     className="inline-flex rounded-lg bg-[var(--brand-700)] px-3 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-800)]"
                   >
                     Abrir ação
-                  </a>
+                  </Link>
                   <Button
                     type="button"
                     size="sm"

@@ -183,7 +183,7 @@ export function CompetenceCellDetailPanel({
       : null;
 
   return (
-    <div className="fixed inset-0 z-[95] flex justify-end bg-slate-950/40 backdrop-blur-[2px]" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[95] flex justify-end bg-slate-950/40 backdrop-blur-[2px]" data-onboarding="competence-cell-panel" role="dialog" aria-modal="true">
       <div className="app-panel flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-l-2xl shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>

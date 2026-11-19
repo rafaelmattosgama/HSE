@@ -460,7 +460,6 @@ export const CommunicationService = {
           description: input.payload.description,
           suggestedAction: input.payload.suggestedAction,
           severityPotential: input.payload.severityPotential,
-          isContractor: input.payload.isContractor,
           bodyPartId: input.payload.bodyPartId,
           injuryTypeId: input.payload.injuryTypeId,
           isFatal: input.payload.isFatal,
@@ -717,11 +716,6 @@ export const CommunicationService = {
             id: true,
           },
         },
-        mapFeatures: {
-          select: {
-            id: true,
-          },
-        },
         sewoRecords: {
           select: {
             id: true,
@@ -776,10 +770,6 @@ export const CommunicationService = {
       }
 
       await tx.alertEvent.deleteMany({ where: { communicationId: input.communicationId } });
-      await tx.mapFeature.updateMany({
-        where: { communicationId: input.communicationId },
-        data: { communicationId: null },
-      });
       await tx.sEWO.updateMany({
         where: { communicationId: input.communicationId },
         data: { communicationId: null },
@@ -812,7 +802,6 @@ export const CommunicationService = {
         plantId: before.plantId,
         deletedLinkedActions: actionIds.length,
         deletedAlertEvents: before.alertEvents.length,
-        unlinkedMapFeatures: before.mapFeatures.length,
         unlinkedSewoRecords: before.sewoRecords.length,
         unlinkedSmatAudits: before.smatAudits.length,
       };
@@ -1070,7 +1059,6 @@ export const CommunicationService = {
         description: input.payload.description,
         suggestedAction: input.payload.suggestedAction?.trim() || null,
         severityPotential: input.payload.severityPotential ?? null,
-        isContractor: input.payload.isContractor ?? false,
         bodyPartId: needsClinicalFields ? input.payload.bodyPartId ?? null : null,
         injuryTypeId: needsClinicalFields ? input.payload.injuryTypeId ?? null : null,
         isFatal: needsClinicalFields ? input.payload.isFatal ?? false : false,

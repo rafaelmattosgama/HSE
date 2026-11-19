@@ -17,8 +17,6 @@ export const SYSTEM_EMAIL_TYPES = Object.freeze({
   SEWO_SUBMITTED_N1_VALIDATION: "SEWO_SUBMITTED_N1_VALIDATION",
   SEWO_VALIDATED_SUBMITTER: "SEWO_VALIDATED_SUBMITTER",
   SEWO_VALIDATED_DISTRIBUTION: "SEWO_VALIDATED_DISTRIBUTION",
-  CONTRACTOR_INVITATION: "CONTRACTOR_INVITATION",
-  CONTRACTOR_DOCUMENTATION_FOLLOWUP: "CONTRACTOR_DOCUMENTATION_FOLLOWUP",
 });
 
 const SUBJECTS = Object.freeze({
@@ -33,8 +31,6 @@ const SUBJECTS = Object.freeze({
     [SYSTEM_EMAIL_TYPES.SEWO_SUBMITTED_N1_VALIDATION]: "S-EWO para validacao N1 - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_SUBMITTER]: "S-EWO validado - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_DISTRIBUTION]: "S-EWO validado - {{sewo_code}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION]: "Pedido de documentacao - {{plant_name}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP]: "Seguimento de documentacao - {{plant_name}}",
   },
   en: {
     [SYSTEM_EMAIL_TYPES.CREDENTIALS]: "Access credentials",
@@ -47,8 +43,6 @@ const SUBJECTS = Object.freeze({
     [SYSTEM_EMAIL_TYPES.SEWO_SUBMITTED_N1_VALIDATION]: "S-EWO pending N1 validation - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_SUBMITTER]: "S-EWO validated - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_DISTRIBUTION]: "S-EWO validated - {{sewo_code}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION]: "Documentation request - {{plant_name}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP]: "Documentation follow-up - {{plant_name}}",
   },
   es: {
     [SYSTEM_EMAIL_TYPES.CREDENTIALS]: "Credenciales de acceso",
@@ -61,8 +55,6 @@ const SUBJECTS = Object.freeze({
     [SYSTEM_EMAIL_TYPES.SEWO_SUBMITTED_N1_VALIDATION]: "S-EWO pendiente de validacion N1 - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_SUBMITTER]: "S-EWO validado - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_DISTRIBUTION]: "S-EWO validado - {{sewo_code}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION]: "Solicitud de documentacion - {{plant_name}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP]: "Seguimiento de documentacion - {{plant_name}}",
   },
   fr: {
     [SYSTEM_EMAIL_TYPES.CREDENTIALS]: "Identifiants d'acces",
@@ -75,8 +67,6 @@ const SUBJECTS = Object.freeze({
     [SYSTEM_EMAIL_TYPES.SEWO_SUBMITTED_N1_VALIDATION]: "S-EWO en attente de validation N1 - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_SUBMITTER]: "S-EWO valide - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_DISTRIBUTION]: "S-EWO valide - {{sewo_code}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION]: "Demande de documentation - {{plant_name}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP]: "Suivi de documentation - {{plant_name}}",
   },
   it: {
     [SYSTEM_EMAIL_TYPES.CREDENTIALS]: "Credenziali di accesso",
@@ -89,8 +79,6 @@ const SUBJECTS = Object.freeze({
     [SYSTEM_EMAIL_TYPES.SEWO_SUBMITTED_N1_VALIDATION]: "S-EWO in attesa di validazione N1 - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_SUBMITTER]: "S-EWO validato - {{sewo_code}}",
     [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_DISTRIBUTION]: "S-EWO validato - {{sewo_code}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION]: "Richiesta documentazione - {{plant_name}}",
-    [SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP]: "Follow-up documentazione - {{plant_name}}",
   },
 });
 
@@ -134,14 +122,6 @@ const TEMPLATE_FILES = Object.freeze({
   [SYSTEM_EMAIL_TYPES.SEWO_VALIDATED_DISTRIBUTION]: {
     htmlTemplate: "sewoalert.html",
     textTemplate: "sewoalert.txt",
-  },
-  [SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION]: {
-    htmlTemplate: "event.html",
-    textTemplate: "event.txt",
-  },
-  [SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP]: {
-    htmlTemplate: "event.html",
-    textTemplate: "event.txt",
   },
 });
 

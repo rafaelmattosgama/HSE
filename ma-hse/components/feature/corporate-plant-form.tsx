@@ -252,7 +252,7 @@ export function CorporatePlantForm({
         {createMessage ? <p className="mt-4 text-sm text-slate-700">{createMessage}</p> : null}
 
         {generatedPasswords.length ? (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div data-onboarding="plant-created" className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">{labels.generatedPasswords}</p>
             {generatedPasswords.map((entry) => (
               <p key={`${entry.role}-${entry.email}`}>

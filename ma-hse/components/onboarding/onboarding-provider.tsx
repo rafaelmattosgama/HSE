@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getOnboardingSteps } from "@/components/onboarding/onboarding-config";
+import { DemoScriptIndex } from "@/components/onboarding/demo-script-index";
 import { getOnboardingCopy } from "@/components/onboarding/onboarding-i18n";
 import { OnboardingTour } from "@/components/onboarding/onboarding-tour";
 import type { OnboardingState, OnboardingUserContext } from "@/components/onboarding/onboarding-types";
@@ -161,6 +162,14 @@ export function OnboardingProvider({
         onComplete={complete}
         onExit={dismiss}
       />
+      {tourActive && userContext.demoScript ? (
+        <DemoScriptIndex
+          steps={steps}
+          currentStep={state?.currentOnboardingStep ?? 0}
+          title={copy.tour.sectionsTitle}
+          onJump={move}
+        />
+      ) : null}
     </OnboardingContext.Provider>
   );
 }

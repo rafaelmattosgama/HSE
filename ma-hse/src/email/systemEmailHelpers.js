@@ -59,48 +59,36 @@ const EVENT_COPY = {
     actionAssigned: "Foi-lhe atribuida uma nova acao.",
     actionDueToday: "Esta acao vence hoje.",
     actionDueInDays: (days) => `Esta acao vence dentro de ${days} dias.`,
-    documentationRequest: "Foi criado um pedido de documentacao.",
-    documentationFollowup: "Por favor reveja o estado atual da documentacao.",
   },
   en: {
     safetyReported: "A safety communication was reported and requires review.",
     actionAssigned: "A new action was assigned to you.",
     actionDueToday: "This action is due today.",
     actionDueInDays: (days) => `This action is due in ${days} days.`,
-    documentationRequest: "A documentation request was created.",
-    documentationFollowup: "Please review the current documentation status.",
   },
   "en-EN": {
     safetyReported: "A safety communication was reported and requires review.",
     actionAssigned: "A new action was assigned to you.",
     actionDueToday: "This action is due today.",
     actionDueInDays: (days) => `This action is due in ${days} days.`,
-    documentationRequest: "A documentation request was created.",
-    documentationFollowup: "Please review the current documentation status.",
   },
   es: {
     safetyReported: "Se registro una comunicacion de seguridad que requiere revision.",
     actionAssigned: "Se le asigno una nueva accion.",
     actionDueToday: "Esta accion vence hoy.",
     actionDueInDays: (days) => `Esta accion vence en ${days} dias.`,
-    documentationRequest: "Se creo una solicitud de documentacion.",
-    documentationFollowup: "Revise el estado actual de la documentacion.",
   },
   fr: {
     safetyReported: "Une communication securite a ete signalee et doit etre revue.",
     actionAssigned: "Une nouvelle action vous a ete assignee.",
     actionDueToday: "Cette action arrive a echeance aujourd'hui.",
     actionDueInDays: (days) => `Cette action arrive a echeance dans ${days} jours.`,
-    documentationRequest: "Une demande de documentation a ete creee.",
-    documentationFollowup: "Veuillez verifier l'etat actuel de la documentation.",
   },
   it: {
     safetyReported: "E stata registrata una comunicazione di sicurezza da verificare.",
     actionAssigned: "Ti e stata assegnata una nuova azione.",
     actionDueToday: "Questa azione scade oggi.",
     actionDueInDays: (days) => `Questa azione scade tra ${days} giorni.`,
-    documentationRequest: "E stata creata una richiesta di documentazione.",
-    documentationFollowup: "Verifica lo stato attuale della documentazione.",
   },
 };
 
@@ -348,50 +336,6 @@ export async function sendNotificationEmail(input) {
       action_url: actionUrl,
     },
     attachments,
-  });
-}
-
-/**
- * @param {{ to?: string | string[], user?: EmailUser | null, language?: string | null, plantName: string, mensagem: string, actionUrl?: string }} input
- */
-export async function sendContractorInvitationEmail(input) {
-  const recipient = resolveRecipient({ user: input.user ?? null, to: input.to, language: input.language });
-
-  return sendSystemEmail({
-    type: SYSTEM_EMAIL_TYPES.CONTRACTOR_INVITATION,
-    to: recipient.to,
-    language: recipient.language,
-    data: {
-      recipient_name: displayUserName(input.user),
-      event_title: "Documentation request",
-      event_intro: `${getEventCopy(recipient.language).documentationRequest} ${input.mensagem}`,
-      plant_name: input.plantName,
-      data_hora: displayDateTime(new Date()),
-      reference_code: input.plantName,
-      action_url: input.actionUrl ?? "",
-    },
-  });
-}
-
-/**
- * @param {{ to?: string | string[], user?: EmailUser | null, language?: string | null, plantName: string, mensagem: string, actionUrl?: string }} input
- */
-export async function sendContractorDocumentationFollowupEmail(input) {
-  const recipient = resolveRecipient({ user: input.user ?? null, to: input.to, language: input.language });
-
-  return sendSystemEmail({
-    type: SYSTEM_EMAIL_TYPES.CONTRACTOR_DOCUMENTATION_FOLLOWUP,
-    to: recipient.to,
-    language: recipient.language,
-    data: {
-      recipient_name: displayUserName(input.user),
-      event_title: "Documentation follow-up",
-      event_intro: `${getEventCopy(recipient.language).documentationFollowup} ${input.mensagem}`,
-      plant_name: input.plantName,
-      data_hora: displayDateTime(new Date()),
-      reference_code: input.plantName,
-      action_url: input.actionUrl ?? "",
-    },
   });
 }
 

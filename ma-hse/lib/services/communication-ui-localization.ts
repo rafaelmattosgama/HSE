@@ -150,7 +150,6 @@ const PT_COMMUNICATION_UI: PartialDeep<CommunicationUi> = {
     improvementSubtype: "Subtipo",
     involvedWorker: "Trabalhador envolvido",
     injuryType: "Tipo de lesao",
-    contractorInvolved: "Contratado envolvido",
     lostDays: "Dias perdidos",
     fatalInjury: "Lesao fatal",
     suggestedAction: "Acao sugerida",

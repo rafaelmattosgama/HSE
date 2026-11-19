@@ -248,7 +248,7 @@ export function ActionsTable({
             </div>
           </section>
 
-      <section className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section data-onboarding="actions-table" className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
           <p className="text-sm text-slate-600">{formatLabel(text.shownCount, { count: String(filteredActions.length), openCount: String(openActions.length) })}</p>
           <div className="flex flex-wrap gap-2">

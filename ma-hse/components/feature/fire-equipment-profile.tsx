@@ -386,7 +386,7 @@ export function FireEquipmentProfile({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="secondary" onClick={() => setEditOpen(true)}>{labels.editEquipmentButton}</Button>
-            <Button type="button" onClick={() => setFormOpen(true)}>{labels.profileNewVerification}</Button>
+            <Button data-onboarding="fire-new-inspection" type="button" onClick={() => setFormOpen(true)}>{labels.profileNewVerification}</Button>
           </div>
         }
       />

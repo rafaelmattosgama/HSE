@@ -191,7 +191,6 @@ async function writeBackup(source: PlantRef, target: PlantRef) {
     systemParameters,
     notifications,
     auditLogs,
-    externalInvitations,
   ] = await Promise.all([
     prisma.$queryRaw`
       SELECT *
@@ -226,7 +225,6 @@ async function writeBackup(source: PlantRef, target: PlantRef) {
       ORDER BY "createdAt", id
     `,
     prisma.$queryRaw`SELECT * FROM "AuditLog" WHERE "plantId" = ${source.id} ORDER BY "createdAt", id`,
-    prisma.$queryRaw`SELECT * FROM "ExternalCompanyInvitation" WHERE "plantId" = ${source.id} ORDER BY "sentAt", id`,
   ]);
 
   const backup = {
@@ -240,7 +238,6 @@ async function writeBackup(source: PlantRef, target: PlantRef) {
     systemParameters,
     notifications,
     auditLogs,
-    externalInvitations,
   };
 
   const backupPath = path.join(
@@ -575,16 +572,10 @@ async function moveRelatedRows(tx: Tx, source: PlantRef, target: PlantRef, commu
       AND body NOT ILIKE ${`%[SEED-MVP]%`}
   `;
 
-  const invitationResult = await tx.$executeRaw`
-    UPDATE "ExternalCompanyInvitation"
-    SET "plantId" = ${target.id}
-    WHERE "plantId" = ${source.id}
-  `;
 
   return {
     auditLogs: Number(auditCommunicationResult) + Number(auditActionResult),
     notifications: Number(notificationResult),
-    externalInvitations: Number(invitationResult),
   };
 }
 

@@ -37,6 +37,8 @@ const sameOriginPdfHeaders = securityHeaders.map((header) => {
 });
 
 const nextConfig: NextConfig = {
+  // The local demo (npm run demo) builds into .next-demo so it can run next to `npm run dev:all`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   serverExternalPackages: ["pdfkit"],
   env: {

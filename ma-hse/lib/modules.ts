@@ -1,12 +1,10 @@
 import { z } from "zod";
 
 export const DEFAULT_MODULE_TOGGLES = {
-  MAPA: true,
   VALIDATIONS: true,
   ACTIONS: true,
   SEWO: true,
   SMAT: true,
-  CONTRACTORS: true,
   COMMUNICATIONS: true,
   MONTHLY_INPUTS: true,
   ENVIRONMENT_DASHBOARD: true,
@@ -16,12 +14,10 @@ export const DEFAULT_MODULE_TOGGLES = {
 } as const;
 
 export const MODULE_OPTIONS = [
-  { key: "MAPA", label: "MAPA" },
   { key: "VALIDATIONS", label: "Validations" },
   { key: "ACTIONS", label: "Actions" },
   { key: "SEWO", label: "S-EWO" },
   { key: "SMAT", label: "SMAT" },
-  { key: "CONTRACTORS", label: "Contractors" },
   { key: "COMMUNICATIONS", label: "Communications" },
   { key: "MONTHLY_INPUTS", label: "Monthly Inputs" },
   { key: "ENVIRONMENT_DASHBOARD", label: "Dashboard de Ambiente" },
@@ -91,7 +87,6 @@ export function isModuleEnabled(module: ModuleToggleKey, ...values: unknown[]) {
 }
 
 export const PLANT_NAVIGATION_MODULES: Partial<Record<string, ModuleToggleKey>> = {
-  mapa: "MAPA",
   validation: "VALIDATIONS",
   actions: "ACTIONS",
   sewo: "SEWO",
@@ -99,7 +94,6 @@ export const PLANT_NAVIGATION_MODULES: Partial<Record<string, ModuleToggleKey>> 
   "occupational-health": "OCCUPATIONAL_HEALTH",
   competences: "COMPETENCE_AUTHORIZATIONS",
   "fire-equipment": "FIRE_SAFETY_EQUIPMENT",
-  contractors: "CONTRACTORS",
   communications: "COMMUNICATIONS",
   "monthly-inputs": "MONTHLY_INPUTS",
   "environment-dashboard": "ENVIRONMENT_DASHBOARD",

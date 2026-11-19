@@ -38,7 +38,7 @@ beforeEach(() => {
 
 describe("apply modules to all plants", () => {
   it("replaces existing overrides and creates missing configurations for every plant in one audited transaction", async () => {
-    const modules = resolveModuleToggles({ SEWO: false, MAPA: false });
+    const modules = resolveModuleToggles({ SEWO: false, SMAT: false });
     const response = await POST(request(modules));
 
     expect(response?.status).toBe(200);

@@ -512,7 +512,7 @@ export function IncidentKnowledgeWorkspace({
 
   return (
     <main className="space-y-5">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <header data-onboarding="knowledge-base" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h1 className="text-xl font-bold text-slate-900">{t.title}</h1><p className="mt-1 text-sm text-slate-500">{locale === "pt" ? "N0 · Base transversal a todas as plantas" : "N0 · Shared across all plants"}</p><p className="mt-2 text-sm text-slate-600">{t.subtitle}</p></div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{t.files}: {documents.length}{hasMoreDocuments ? "+" : ""}</span>

@@ -133,12 +133,10 @@ export default async function SettingsPage({
     readGeneralSewoRecipients(), listGeneralUsers(),
   ]) : null;
   const moduleLabels = {
-    MAPA: ui.modules.mapa,
     VALIDATIONS: ui.modules.validation,
     ACTIONS: ui.modules.actions,
     SEWO: ui.modules.sewo,
     SMAT: ui.modules.smat,
-    CONTRACTORS: ui.modules.contractors,
     COMMUNICATIONS: ui.modules.communications,
     MONTHLY_INPUTS: ui.modules.monthlyInputs,
     ENVIRONMENT_DASHBOARD: ui.modules.environmentDashboard,
@@ -153,7 +151,7 @@ export default async function SettingsPage({
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{masterDataUi.n0Admin}</p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-bold text-slate-900">{ui.modules.settings}</h1>
-              <Link href="/app/corporate/knowledge-base" className="app-toolbar text-blue-900">
+              <Link data-onboarding="settings-knowledge-base" href="/app/corporate/knowledge-base" className="app-toolbar text-blue-900">
                 <BookOpen aria-hidden="true" className="h-4 w-4" />
                 {ui.modules.knowledgeBase}
               </Link>

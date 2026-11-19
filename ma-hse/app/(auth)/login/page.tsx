@@ -6,6 +6,9 @@ import { getSession, signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { MaSymbol } from "@/components/branding/ma-symbol";
 import { LoginBuildInfo } from "@/components/auth/login-build-info";
+import { DemoAccounts } from "@/components/layout/demo-accounts";
+import { DemoBanner } from "@/components/layout/demo-banner";
+import { DEMO_PASSWORD } from "@/lib/demo-mode";
 
 const LOGIN_ERROR_MESSAGES: Record<string, string> = {
   CredentialsSignin: "Invalid email or password. Please try again.",
@@ -155,6 +158,7 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-[#061a52] px-2 py-2 md:px-4 md:py-4">
+      <DemoBanner />
       <div className="mx-auto grid min-h-[calc(100vh-1rem)] w-full max-w-[1420px] overflow-hidden rounded-[24px] bg-[#061a52] lg:grid-cols-[0.9fr_1.1fr]">
         <section className="relative flex min-h-[280px] items-center justify-center overflow-hidden rounded-[20px] bg-[radial-gradient(circle_at_30%_18%,rgba(42,97,255,0.28),transparent_30%),radial-gradient(circle_at_72%_58%,rgba(0,140,255,0.18),transparent_28%),linear-gradient(145deg,#061a52_0%,#03133e_55%,#03103a_100%)] px-5 py-8 text-white md:px-8 lg:rounded-r-none lg:px-10 xl:px-12">
           <div className="absolute inset-0 opacity-20">
@@ -247,6 +251,13 @@ export default function LoginPage() {
                 {loadingCredentials ? "Signing in..." : "Sign in"}
               </button>
             </form>
+
+            <DemoAccounts
+              onPick={(demoEmail) => {
+                setEmail(demoEmail);
+                setPassword(DEMO_PASSWORD);
+              }}
+            />
 
             <div className="my-5 flex items-center gap-4 text-[#5e6d92] md:my-6">
               <div className="h-px flex-1 bg-[#ccd5e8]" />

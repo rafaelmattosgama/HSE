@@ -894,7 +894,7 @@ export function PlantMonthlyInputsForm({
   }
 
   return (
-    <section className="space-y-5">
+    <section data-onboarding="monthly-inputs" className="space-y-5">
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-[linear-gradient(135deg,#0f766e_0%,#0f172a_58%,#f59e0b_100%)] p-5 text-white">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">

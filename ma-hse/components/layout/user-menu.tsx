@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, LogOut, RotateCcw, Settings } from "lucide-react";
+import { ChevronDown, DatabaseZap, LogOut, RotateCcw, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
+import { isClientDemoMode } from "@/components/layout/demo-banner";
 import { useOnboarding } from "@/components/onboarding/onboarding-provider";
 
 type UserMenuProps = {
@@ -14,6 +15,7 @@ export function UserMenu({ userName }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState("");
+  const [resettingDemo, setResettingDemo] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const { restartOnboarding, restarting, restartLabel, restartingLabel } = useOnboarding();
 
@@ -51,6 +53,22 @@ export function UserMenu({ userName }: UserMenuProps) {
     } catch {
       setLoggingOut(false);
       setError("Falha ao terminar sessao. Atualize a pagina e tente novamente.");
+    }
+  }
+
+  async function onResetDemo() {
+    if (!window.confirm("Reiniciar a demo? Todos os dados de demonstração voltam ao estado inicial.")) return;
+    setResettingDemo(true);
+    setError("");
+    try {
+      const response = await fetch("/api/demo/reset", { method: "POST" });
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) throw new Error(body?.message ?? "Não foi possível reiniciar a demo.");
+      await signOut({ redirect: false, callbackUrl: "/login" });
+      window.location.assign("/login");
+    } catch (resetError) {
+      setResettingDemo(false);
+      setError(resetError instanceof Error ? resetError.message : "Não foi possível reiniciar a demo.");
     }
   }
 
@@ -100,6 +118,17 @@ export function UserMenu({ userName }: UserMenuProps) {
               <RotateCcw className="h-4 w-4" />
               <span data-no-translate>{restarting ? restartingLabel : restartLabel}</span>
             </button>
+            {isClientDemoMode() ? (
+              <button
+                type="button"
+                onClick={() => void onResetDemo()}
+                disabled={resettingDemo}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-amber-800 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <DatabaseZap className="h-4 w-4" />
+                <span data-no-translate>{resettingDemo ? "A reiniciar a demo..." : "Reiniciar demo"}</span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void onLogout()}

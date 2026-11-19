@@ -354,7 +354,7 @@ export function CompetenceMatrixManager({
             {matrix.workers.length === 0 ? labels.noWorkersEnrolled : labels.noResultsForFilters}
           </p>
         ) : (
-          <div className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label={title}>
+          <div data-onboarding="competences-matrix" className="max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label={title}>
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase text-slate-500">

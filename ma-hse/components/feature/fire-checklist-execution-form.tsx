@@ -157,7 +157,7 @@ export function FireChecklistExecutionForm({
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-start justify-center bg-slate-950/40 px-4 py-10 backdrop-blur-[2px]">
+    <div data-onboarding="fire-inspection-form" className="fixed inset-0 z-[90] flex items-start justify-center bg-slate-950/40 px-4 py-10 backdrop-blur-[2px]">
       <div className="app-panel flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>

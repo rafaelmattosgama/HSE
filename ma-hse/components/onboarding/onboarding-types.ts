@@ -1,4 +1,5 @@
 import type { RoleCode } from "@prisma/client";
+import type { DemoScriptId } from "@/lib/demo-mode";
 import type { AppLocale } from "@/lib/i18n/routing";
 
 export type OnboardingStatusValue = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "DISMISSED";
@@ -19,6 +20,17 @@ export type OnboardingStep = {
   requiredPermission?: string;
   kind?: OnboardingExperienceKind;
   contextKey?: string;
+  /** Practical task: the step only advances once this holds (or the user skips it). */
+  completeWhen?: OnboardingTaskCondition;
+  /** Demo scripts: section name shown in the script index. */
+  section?: string;
+};
+
+export type OnboardingTaskCondition = {
+  /** Route pattern ("*" = one segment, trailing "/**" = any suffix). */
+  route?: string;
+  /** CSS selector of an element that only exists once the task is done. */
+  element?: string;
 };
 
 export type RoleOnboardingConfig = {
@@ -40,4 +52,6 @@ export type OnboardingUserContext = {
   plantCode: string | null;
   permissions: string[];
   locale: AppLocale;
+  /** Local demo accounts follow a named script instead of the role tour. */
+  demoScript?: DemoScriptId | null;
 };

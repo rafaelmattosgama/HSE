@@ -467,7 +467,7 @@ export function UserManager({ users, allowedCreateRoles, manageableRoles, plantC
 
       {popup ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl" data-onboarding={popup.tone === "success" ? "user-saved" : undefined}>
             <h3 className={`text-base font-semibold ${popup.tone === "success" ? "text-emerald-700" : "text-red-700"}`}>
               {popup.title}
             </h3>

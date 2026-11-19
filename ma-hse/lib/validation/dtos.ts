@@ -1,4 +1,4 @@
-import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, ExternalCompanyApprovalStatus, ExternalCompanyDocumentType, ExternalWorkerDocumentType, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MapFeatureType, MapLayerSourceType, MapSourceFileType, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
+import { ActionCategory, ActionManualOrigin, ActionPriority, AlertRuleTriggerType, CommunicationImprovementSubtype, CommunicationType, CompetenceAssessmentMethod, CompetenceAssessmentResult, CompetenceCategory, FireChecklistFrequency, FireChecklistItemValue, FireEquipmentCategory, FireEquipmentTagType, FireExtinguishingAgent, MasterDataEntityType, MasterDataTranslationField, RoleCode, SEWOStatus, TrainingResult } from "@prisma/client";
 import { z } from "zod";
 import { moduleTogglesInputSchema } from "@/lib/modules";
 import { requiresUserDepartment } from "@/lib/rbac/user-management";
@@ -45,7 +45,6 @@ const communicationInputShape = z.object({
     description: z.string().min(5),
     suggestedAction: z.string().optional(),
     severityPotential: z.enum(["LOW", "MED", "HIGH"]).optional(),
-    isContractor: z.boolean().optional(),
     bodyPartId: optionalUuid,
     injuryTypeId: optionalUuid,
     isFatal: z.boolean().optional(),
@@ -557,121 +556,6 @@ export const updatePlantUserInput = z.object({
 }).refine((data) => !requiresUserDepartment(data.role) || Boolean(data.departmentId), {
   message: "Select a department for N2 and N4 users.",
   path: ["departmentId"],
-});
-
-export const contractorRegisterInput = z.object({
-  invitationToken: z.string().min(10),
-  contactName: z.string().min(2),
-  password: z.string().min(8),
-  email: z.string().email(),
-  companyName: z.string().min(2),
-  address: z.string().min(3),
-  phone: z.string().min(3),
-  taxId: z.string().min(3),
-  socialSecurityId: z.string().min(3),
-});
-
-export const contractorLoginInput = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
-
-export const contractorInvitationInput = z.object({
-  email: z.string().email(),
-  requiredDocuments: z.array(z.nativeEnum(ExternalCompanyDocumentType)).default([
-    ExternalCompanyDocumentType.ANEXO_D,
-    ExternalCompanyDocumentType.RISK_ASSESSMENT,
-    ExternalCompanyDocumentType.WORK_ACCIDENT_INSURANCE,
-    ExternalCompanyDocumentType.CIVIL_LIABILITY_INSURANCE,
-    ExternalCompanyDocumentType.SOCIAL_SECURITY_CLEARANCE,
-    ExternalCompanyDocumentType.TAX_AUTHORITY_CLEARANCE,
-  ]),
-});
-
-export const contractorCompanyDocumentInput = z.object({
-  type: z.nativeEnum(ExternalCompanyDocumentType),
-  fileKey: z.string().min(3),
-  fileName: z.string().min(1),
-  contentType: z.string().min(3),
-  validUntil: z.coerce.date().optional(),
-});
-
-export const contractorWorkerInput = z.object({
-  name: z.string().min(2),
-  birthDate: z.coerce.date(),
-});
-
-export const contractorWorkerDocumentInput = z.object({
-  workerId: z.string().uuid(),
-  type: z.nativeEnum(ExternalWorkerDocumentType),
-  fileKey: z.string().min(3),
-  fileName: z.string().min(1),
-  contentType: z.string().min(3),
-  validUntil: z.coerce.date().optional(),
-});
-
-export const contractorApprovalInput = z.object({
-  approvalStatus: z.nativeEnum(ExternalCompanyApprovalStatus),
-  approvalComment: z.string().optional(),
-});
-
-export const contractorToggleActiveInput = z.object({
-  isActive: z.boolean(),
-});
-
-export const contractorCompanyUpdateInput = z
-  .object({
-    isActive: z.boolean().optional(),
-    sponsorUserId: z.string().uuid().nullable().optional(),
-  })
-  .refine((value) => value.isActive !== undefined || value.sponsorUserId !== undefined, {
-    message: "At least one field must be provided",
-  });
-
-export const createMapDocumentInput = z.object({
-  title: z.string().min(2),
-  fileKey: z.string().min(3),
-  fileName: z.string().min(1),
-  contentType: z.string().min(3),
-  fileType: z.nativeEnum(MapSourceFileType),
-  importedLayerNames: z.array(z.string().min(1)).optional(),
-  selectedLayerNames: z.array(z.string().min(1)).optional(),
-});
-
-export const createMapLayerInput = z.object({
-  documentId: z.string().uuid().optional().nullable(),
-  name: z.string().min(2),
-  description: z.string().optional(),
-  color: z.string().regex(/^#([0-9a-fA-F]{6})$/, "Use a 6-digit hex color"),
-  icon: z.string().max(8).optional(),
-  sourceType: z.nativeEnum(MapLayerSourceType).default(MapLayerSourceType.MANUAL),
-  isVisibleDefault: z.boolean().default(true),
-  sortOrder: z.number().int().min(0).default(0),
-  metadataJson: z.record(z.string(), z.any()).optional(),
-});
-
-export const createMapFeatureInput = z.object({
-  layerId: z.string().uuid().optional().nullable(),
-  featureType: z.nativeEnum(MapFeatureType),
-  label: z.string().min(1),
-  icon: z.string().max(8).optional(),
-  color: z.string().regex(/^#([0-9a-fA-F]{6})$/, "Use a 6-digit hex color").optional(),
-  positionX: z.number().min(0).max(100),
-  positionY: z.number().min(0).max(100),
-  areaId: z.string().uuid().optional().nullable(),
-  workstationId: z.string().uuid().optional().nullable(),
-  communicationId: z.string().uuid().optional().nullable(),
-  metadataJson: z.record(z.string(), z.any()).optional(),
-});
-
-export const updateMapFeatureInput = z.object({
-  label: z.string().min(1).optional(),
-  icon: z.string().max(8).optional().nullable(),
-  color: z.string().regex(/^#([0-9a-fA-F]{6})$/, "Use a 6-digit hex color").optional().nullable(),
-  positionX: z.number().min(0).max(100).optional(),
-  positionY: z.number().min(0).max(100).optional(),
-  layerId: z.string().uuid().optional().nullable(),
-  metadataJson: z.record(z.string(), z.any()).optional(),
 });
 
 export const createMasterDataItemInput = z.object({
@@ -1334,18 +1218,6 @@ export type UpdateActionInput = z.infer<typeof updateActionInput>;
 export type UpdateAlertRuleInput = z.infer<typeof updateAlertRuleInput>;
 export type UpdateRepeatabilityAlertConfigInput = z.infer<typeof updateRepeatabilityAlertConfigInput>;
 export type UploadAttachmentInput = z.infer<typeof uploadAttachmentInput>;
-export type ContractorRegisterInput = z.infer<typeof contractorRegisterInput>;
-export type ContractorLoginInput = z.infer<typeof contractorLoginInput>;
-export type ContractorInvitationInput = z.infer<typeof contractorInvitationInput>;
-export type ContractorCompanyDocumentInput = z.infer<typeof contractorCompanyDocumentInput>;
-export type ContractorWorkerInput = z.infer<typeof contractorWorkerInput>;
-export type ContractorWorkerDocumentInput = z.infer<typeof contractorWorkerDocumentInput>;
-export type ContractorApprovalInput = z.infer<typeof contractorApprovalInput>;
-export type ContractorToggleActiveInput = z.infer<typeof contractorToggleActiveInput>;
-export type CreateMapDocumentInput = z.infer<typeof createMapDocumentInput>;
-export type CreateMapLayerInput = z.infer<typeof createMapLayerInput>;
-export type CreateMapFeatureInput = z.infer<typeof createMapFeatureInput>;
-export type UpdateMapFeatureInput = z.infer<typeof updateMapFeatureInput>;
 export type CreatePlantUserInput = z.infer<typeof createPlantUserInput>;
 export type UpdatePlantUserInput = z.infer<typeof updatePlantUserInput>;
 export type CreateMasterDataItemInput = z.infer<typeof createMasterDataItemInput>;

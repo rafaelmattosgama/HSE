@@ -37,12 +37,12 @@ export default async function GlobalValidationPage() {
         actions={<span className="app-chip">{rows.length.toLocaleString()} {ui.pendingResult}</span>}
       />
 
-      <section className="space-y-4">
+      <section data-onboarding="sewo-approval-queue" className="space-y-4">
         <AppSectionHeader title={ui.n1ValidationSewoSection} />
         <SewoValidationQueue rows={rows} ui={ui} showPlant />
       </section>
 
-      <section className="space-y-4">
+      <section data-onboarding="sewo-approval-history" className="space-y-4">
         <AppSectionHeader title={ui.n1ValidationHistorySection} />
         <SewoValidationHistory rows={historyRows} ui={ui} />
       </section>
